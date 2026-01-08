@@ -20,147 +20,111 @@ export interface StyleConfiguration {
   promptBundle: any;
 }
 
-// Data structures for list-based UI features
-export interface VideoKeyframe {
-  id: string;
-  timestamp: string;
-  thumbnail: string;
-  description: string;
-}
-
-export interface EditLayer {
+export interface DetectedElement {
   id: string;
   name: string;
-  type: string;
-  visible: boolean;
+  confidence: number;
+  type: 'structural' | 'envelope' | 'interior' | 'site';
+  selected: boolean;
 }
 
-export interface LegendItem {
+export interface DetectedLayer {
   id: string;
-  zone: string;
+  name: string;
   color: string;
-  area: string;
+  type: 'wall' | 'window' | 'door' | 'stairs' | 'dims' | 'text';
+  visible: boolean;
 }
 
-export interface ExplodedLayer {
+export interface ZoneItem {
   id: string;
   name: string;
-  offset: number;
-  visible: boolean;
+  color: string;
+  type: 'residential' | 'commercial' | 'green' | 'mixed' | 'infra';
+  selected: boolean;
 }
 
 export interface WorkflowSettings {
-  // 1. 3D Render
-  renderMode: 'enhance' | 'stylize' | 'hybrid' | 'realism' | 'concept';
-  
-  // 2. CAD
-  drawingType: 'plan' | 'section' | 'elevation' | 'site' | 'detail';
+  // 1. 3D to Render
+  sourceType: 'revit' | 'rhino' | 'sketchup' | 'blender' | '3dsmax' | 'clay' | 'other';
+  viewType: 'exterior' | 'interior' | 'aerial' | 'detail';
+  detectedElements: DetectedElement[];
+  renderMode: 'enhance' | 'stylize' | 'hybrid' | 'strict-realism' | 'concept-push';
+  canvasSync: boolean;
+  compareMode: boolean;
+
+  // 2. CAD to Render
+  cadDrawingType: 'plan' | 'section' | 'elevation' | 'site';
   cadScale: string;
-  cadStyle: 'realistic' | 'conceptual' | 'diagram' | 'photo';
-  cadInterpretation: {
-    recognizeRooms: boolean;
-    recognizeOpenings: boolean;
-    ceilingHeight: number;
-    sillHeight: number;
-    furnishingLevel: 'none' | 'partial' | 'full';
-  };
-  
+  cadOrientation: number;
+  cadLayers: DetectedLayer[];
+  cadCamera: { height: number; angle: 'horizontal' | 'down' | 'up' };
+  cadSpatial: { ceilingHeight: number; floorThick: number; wallThick: number; style: number }; // style 0-100 conservative-creative
+  cadMaterialAssignments: Record<string, string>; // elementId -> materialId
+  cadFurnishing: { auto: boolean; styles: string[]; density: number };
+
   // 3. Masterplan
-  layoutType: 'site' | 'urban' | 'landscape' | 'zoning' | 'block';
+  mpPlanType: 'site' | 'urban' | 'zoning' | 'massing';
   mpScale: string;
-  mpInterpretation: {
-    zoneColorCoding: boolean;
-    areaCalculation: boolean;
-    roadHierarchy: boolean;
-  };
-  mpBuildings: {
-    massStyle: string;
-    heightVariation: number;
-    roofDetail: number;
-    shadowStudy: boolean;
-  };
-  legendItems: LegendItem[];
-  
+  mpZones: ZoneItem[];
+  mpContext: { location: string; loadBuildings: boolean; loadRoads: boolean; loadWater: boolean; loadTerrain: boolean };
+  mpOutputType: 'photorealistic' | 'diagrammatic' | 'hybrid' | 'illustrative';
+  mpBuildingStyle: { style: string; heightMode: 'uniform' | 'color' | 'random'; defaultHeight: number; roofType: 'flat' | 'gabled' };
+  mpExport: { topDown: boolean; aerialNE: boolean; aerialSW: boolean; eyeLevel: boolean };
+
   // 4. Visual Edit
-  activeTool: 'select' | 'brush' | 'lasso' | 'wand' | 'ai-select';
-  editOperation: 'texture' | 'lighting' | 'object' | 'material' | 'grade' | 'inpaint';
-  visualTools: {
-    brushSize: number;
-    tolerance: number;
-    aiPrompt: string;
-  };
-  editAdjustments: {
-    exposure: number;
-    contrast: number;
-    saturation: number;
-    temperature: number;
-    tint: number;
-  };
-  editStack: EditLayer[];
-  
+  activeTool: 'pan' | 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'adjust';
+  visualSelection: { mode: 'rect' | 'lasso' | 'ai'; feather: number };
+  visualMaterial: { current: string; replacement: string; intensity: number; preserveLight: boolean };
+  visualLighting: { mode: 'global' | 'local'; time: number; brightness: number; shadows: number };
+  visualSky: { auto: boolean; preset: string; blend: number };
+  visualObject: { category: string; scale: number; matchLight: boolean };
+  visualAdjust: { exposure: number; contrast: number; saturation: number; temp: number };
+  editLayers: { id: string; name: string; visible: boolean; locked: boolean }[];
+
   // 5. Exploded
-  explodeType: 'vertical' | 'horizontal' | 'radial' | 'custom';
-  explodedLayers: ExplodedLayer[];
-  explodedSpacing: {
-    distance: number;
-    mode: 'uniform' | 'progressive';
-    connectors: boolean;
-  };
-  explodedAnnotation: {
-    showLabels: boolean;
-    showLeaders: boolean;
-    showDimensions: boolean;
-    autoAnnotate: boolean;
-  };
-  
+  explodedComponents: { id: string; name: string; order: number; active: boolean }[];
+  explodedView: { type: 'axon' | 'perspective'; separation: number };
+  explodedStyle: { render: 'photo' | 'diagram' | 'tech'; color: 'material' | 'system'; labels: boolean; leaders: boolean };
+  explodedAnim: { generate: boolean; type: 'assembly' | 'explosion'; duration: number };
+
   // 6. Section
-  sectionType: 'building' | 'wall' | 'detail';
-  sectionStyle: 'line' | 'hatch' | 'poche' | 'color' | 'gradient';
-  sectionCutPlane: number;
-  
+  sectionCut: { type: 'vertical' | 'horizontal' | 'diagonal'; plane: number; depth: number; direction: 'fwd' | 'bwd' };
+  sectionStyle: { poche: 'black' | 'gray'; hatch: 'solid' | 'diag' | 'cross'; weight: 'heavy' | 'medium' | 'light'; showBeyond: number };
+
   // 7. Sketch
-  sketchType: 'arch' | 'interior' | 'landscape' | 'furniture' | 'abstract';
-  sketchFidelity: number;
-  sketchCleanup: { contrast: boolean; background: boolean; straighten: boolean };
-  
+  sketchType: 'exterior' | 'interior' | 'detail';
+  sketchConfidence: number;
+  sketchCleanup: { clean: boolean; lines: boolean };
+  sketchInterpretation: number; // 0-100 faithful-creative
+  sketchRefs: { id: string; url: string }[];
+  sketchRefInfluence: number;
+
   // 8. Upscale
   upscaleFactor: '2x' | '4x' | '8x';
-  upscaleDenoise: number;
-  upscaleSharpen: number;
-  upscaleEnhance: number;
-  upscaleFlags: {
-    faceRestoration: boolean;
-    removeArtifacts: boolean;
-  };
-  
+  upscaleMode: 'general' | 'arch' | 'photo';
+  upscaleCreativity: number;
+  upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing' }[];
+
   // 9. Image to CAD
-  imgToCadOutput: 'elevation' | 'plan' | 'section' | 'detail';
-  
+  imgToCadType: 'photo' | 'render';
+  imgToCadOutput: 'elevation' | 'plan' | 'detail';
+  imgToCadLine: { sensitivity: number; simplify: number; connect: boolean };
+  imgToCadLayers: { walls: boolean; windows: boolean; details: boolean; hidden: boolean };
+  imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
+
   // 10. Image to 3D
-  input3DType: 'single' | 'multi' | 'pano';
-  subject3D: 'exterior' | 'interior' | 'object' | 'furniture';
-  polyCount: 'low' | 'medium' | 'high';
-  imgTo3DConfig: {
-    meshQuality: number;
-    symmetry: boolean;
-    inferHidden: boolean;
-  };
-  
+  img3dInputs: { id: string; view: string; isPrimary: boolean }[];
+  img3dMesh: { type: 'organic' | 'arch'; edges: number; fill: boolean };
+  img3dOutput: { format: 'obj' | 'fbx' | 'gltf'; textureRes: number };
+
   // 11. Video
-  videoType: 'flythrough' | 'timelapse' | 'reveal' | 'construction' | 'custom';
-  videoKeyframes: VideoKeyframe[];
-  videoDuration: number;
-  videoMotion: {
-    pathType: 'orbit' | 'pan' | 'dolly';
-    speed: number;
-    ease: boolean;
-    lookAt: 'center' | 'cursor' | 'path';
-  };
-  videoEffects: {
-    seasonTransition: boolean;
-    timeLapseCloud: boolean;
-    lightCycle: boolean;
-  };
+  videoMode: 'animate' | 'path' | 'morph' | 'assembly';
+  videoMotion: { type: 'cinematic' | 'ken-burns' | 'parallax'; preset: string };
+  videoPath: { type: 'flyaround' | 'walkthrough'; smoothness: number };
+  videoMorph: { transitionTime: number };
+  videoAssembly: { type: 'construction' | 'assembly'; timing: 'seq' | 'group' };
+  videoOutput: { res: '1080p' | '4k'; fps: 24 | 30 | 60; quality: number };
 }
 
 export interface GeometryState {
@@ -172,15 +136,12 @@ export interface GeometryState {
   perspectiveAdherence: number;
   framingAdherence: number;
   edgeDefinition: 'sharp' | 'soft' | 'adaptive';
-  edgeStrength: number;
-  allowRefinement: boolean;
   suppressHallucinations: boolean;
-  allowReinterpretation: boolean;
 }
 
 export interface CameraState {
   fovMode: 'narrow' | 'normal' | 'wide' | 'ultra-wide' | 'custom';
-  viewType: 'eye-level' | 'aerial' | 'drone' | 'worm' | 'custom';
+  viewType: 'eye-level' | 'aerial' | 'drone' | 'worm';
   projection: 'perspective' | 'axonometric' | 'isometric' | 'two-point';
   depthOfField: boolean;
   dofStrength: number;

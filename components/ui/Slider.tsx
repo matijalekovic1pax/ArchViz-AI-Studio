@@ -10,11 +10,12 @@ interface SliderProps {
   onChange: (val: number) => void;
   label?: string;
   className?: string;
+  disabled?: boolean;
 }
 
-export const Slider: React.FC<SliderProps> = ({ value, min, max, step = 1, onChange, label, className }) => {
+export const Slider: React.FC<SliderProps> = ({ value, min, max, step = 1, onChange, label, className, disabled }) => {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-2", className, disabled && "opacity-50 pointer-events-none")}>
       <div className="flex justify-between text-xs">
         {label && <span className="text-foreground-secondary">{label}</span>}
         <span className="font-mono text-foreground-muted">{value}</span>
@@ -26,6 +27,7 @@ export const Slider: React.FC<SliderProps> = ({ value, min, max, step = 1, onCha
         min={min}
         step={step}
         onValueChange={(vals) => onChange(vals[0])}
+        disabled={disabled}
       >
         <SliderPrimitive.Track className="bg-border relative grow rounded-full h-[4px]">
           <SliderPrimitive.Range className="absolute bg-foreground rounded-full h-full" />

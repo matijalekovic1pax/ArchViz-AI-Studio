@@ -3,148 +3,125 @@ import { AppState, Action, GeometryState, CameraState, LightingState, MaterialSt
 import { generatePrompt } from './engine/promptEngine';
 
 const initialWorkflow: WorkflowSettings = {
-  // 1. 3D Render
+  // 1. 3D to Render
+  sourceType: 'rhino',
+  viewType: 'exterior',
+  detectedElements: [
+    { id: '1', name: 'Walls', type: 'structural', confidence: 0.9, selected: true },
+    { id: '2', name: 'Glass Curtain', type: 'envelope', confidence: 0.85, selected: true },
+    { id: '3', name: 'Roof Slab', type: 'structural', confidence: 0.92, selected: true },
+    { id: '4', name: 'Pavement', type: 'site', confidence: 0.7, selected: true },
+  ],
   renderMode: 'enhance',
-  
-  // 2. CAD
-  drawingType: 'plan',
+  canvasSync: true,
+  compareMode: false,
+
+  // 2. CAD to Render
+  cadDrawingType: 'plan',
   cadScale: '1:100',
-  cadStyle: 'realistic',
-  cadInterpretation: {
-    recognizeRooms: true,
-    recognizeOpenings: true,
-    ceilingHeight: 2.8,
-    sillHeight: 0.9,
-    furnishingLevel: 'partial'
-  },
-  
+  cadOrientation: 0,
+  cadLayers: [
+    { id: '1', name: 'Walls', color: '#000000', type: 'wall', visible: true },
+    { id: '2', name: 'Windows', color: '#0000FF', type: 'window', visible: true },
+    { id: '3', name: 'Doors', color: '#FF0000', type: 'door', visible: true },
+    { id: '4', name: 'Dims', color: '#888888', type: 'dims', visible: false },
+  ],
+  cadCamera: { height: 1.6, angle: 'horizontal' },
+  cadSpatial: { ceilingHeight: 2.8, floorThick: 0.3, wallThick: 0.2, style: 50 },
+  cadMaterialAssignments: { 'walls': 'White Plaster', 'floor': 'Oak Hardwood' },
+  cadFurnishing: { auto: true, styles: ['Modern'], density: 60 },
+
   // 3. Masterplan
-  layoutType: 'site',
+  mpPlanType: 'urban',
   mpScale: '1:500',
-  mpInterpretation: {
-    zoneColorCoding: true,
-    areaCalculation: true,
-    roadHierarchy: false,
-  },
-  mpBuildings: {
-    massStyle: 'White Box',
-    heightVariation: 40,
-    roofDetail: 20,
-    shadowStudy: false,
-  },
-  legendItems: [
-    { id: '1', zone: 'Residential', color: '#FEF08A', area: '12,400 m²' },
-    { id: '2', zone: 'Commercial', color: '#FCA5A5', area: '4,500 m²' },
-    { id: '3', zone: 'Green Space', color: '#86EFAC', area: '8,200 m²' },
+  mpZones: [
+    { id: '1', name: 'Residential', color: '#FFE4B5', type: 'residential', selected: true },
+    { id: '2', name: 'Commercial', color: '#87CEEB', type: 'commercial', selected: true },
+    { id: '3', name: 'Green Space', color: '#90EE90', type: 'green', selected: true },
   ],
-  
+  mpContext: { location: '', loadBuildings: true, loadRoads: true, loadWater: true, loadTerrain: false },
+  mpOutputType: 'diagrammatic',
+  mpBuildingStyle: { style: 'Contemporary', heightMode: 'color', defaultHeight: 24, roofType: 'flat' },
+  mpExport: { topDown: true, aerialNE: true, aerialSW: true, eyeLevel: false },
+
   // 4. Visual Edit
-  activeTool: 'select',
-  editOperation: 'texture',
-  visualTools: {
-    brushSize: 30,
-    tolerance: 15,
-    aiPrompt: '',
-  },
-  editAdjustments: {
-    exposure: 0,
-    contrast: 0,
-    saturation: 0,
-    temperature: 0,
-    tint: 0,
-  },
-  editStack: [
-    { id: '1', name: 'Color Grade', type: 'adjustment', visible: true },
-    { id: '2', name: 'Replace Sky', type: 'inpaint', visible: true },
+  activeTool: 'pan',
+  visualSelection: { mode: 'rect', feather: 0 },
+  visualMaterial: { current: 'Facade Wall', replacement: 'Brick', intensity: 80, preserveLight: true },
+  visualLighting: { mode: 'local', time: 50, brightness: 0, shadows: 0 },
+  visualSky: { auto: true, preset: 'Cloudy', blend: 50 },
+  visualObject: { category: 'People', scale: 1, matchLight: true },
+  visualAdjust: { exposure: 0, contrast: 0, saturation: 0, temp: 0 },
+  editLayers: [
+    { id: '1', name: 'Adjustments', visible: true, locked: false },
+    { id: '2', name: 'Sky Replacement', visible: true, locked: false },
+    { id: '3', name: 'Original Image', visible: true, locked: true },
   ],
-  
+
   // 5. Exploded
-  explodeType: 'vertical',
-  explodedLayers: [
-    { id: '1', name: 'Roof', offset: 100, visible: true },
-    { id: '2', name: 'Level 2', offset: 60, visible: true },
-    { id: '3', name: 'Level 1', offset: 20, visible: true },
-    { id: '4', name: 'Foundation', offset: 0, visible: true },
+  explodedComponents: [
+    { id: '1', name: 'Roof System', order: 0, active: true },
+    { id: '2', name: 'Structure', order: 1, active: true },
+    { id: '3', name: 'Facade', order: 2, active: true },
+    { id: '4', name: 'Floor Plates', order: 3, active: true },
   ],
-  explodedSpacing: {
-    distance: 50,
-    mode: 'uniform',
-    connectors: true,
-  },
-  explodedAnnotation: {
-    showLabels: true,
-    showLeaders: true,
-    showDimensions: false,
-    autoAnnotate: false,
-  },
-  
+  explodedView: { type: 'axon', separation: 50 },
+  explodedStyle: { render: 'diagram', color: 'system', labels: true, leaders: true },
+  explodedAnim: { generate: true, type: 'explosion', duration: 3.0 },
+
   // 6. Section
-  sectionType: 'building',
-  sectionStyle: 'line',
-  sectionCutPlane: 50,
-  
+  sectionCut: { type: 'horizontal', plane: 50, depth: 50, direction: 'fwd' },
+  sectionStyle: { poche: 'black', hatch: 'solid', weight: 'medium', showBeyond: 50 },
+
   // 7. Sketch
-  sketchType: 'arch',
-  sketchFidelity: 50,
-  sketchCleanup: { contrast: true, background: false, straighten: false },
-  
+  sketchType: 'interior',
+  sketchConfidence: 70,
+  sketchCleanup: { clean: true, lines: true },
+  sketchInterpretation: 40,
+  sketchRefs: [],
+  sketchRefInfluence: 50,
+
   // 8. Upscale
-  upscaleFactor: '2x',
-  upscaleDenoise: 30,
-  upscaleSharpen: 20,
-  upscaleEnhance: 50,
-  upscaleFlags: {
-    faceRestoration: true,
-    removeArtifacts: true,
-  },
-  
-  // 9. Image to CAD
-  imgToCadOutput: 'plan',
-  
-  // 10. Image to 3D
-  input3DType: 'single',
-  subject3D: 'exterior',
-  polyCount: 'medium',
-  imgTo3DConfig: {
-    meshQuality: 75,
-    symmetry: false,
-    inferHidden: true,
-  },
-  
-  // 11. Video
-  videoType: 'flythrough',
-  videoDuration: 10,
-  videoKeyframes: [
-    { id: '1', timestamp: '00:00', thumbnail: '', description: 'Orbit Start' },
-    { id: '2', timestamp: '00:04', thumbnail: '', description: 'Pan Entrance' },
-    { id: '3', timestamp: '00:10', thumbnail: '', description: 'Zoom End' },
+  upscaleFactor: '4x',
+  upscaleMode: 'arch',
+  upscaleCreativity: 20,
+  upscaleBatch: [
+    { id: '1', name: 'Render_001.png', status: 'done' },
+    { id: '2', name: 'Render_002.png', status: 'processing' },
+    { id: '3', name: 'Render_003.png', status: 'queued' },
   ],
-  videoMotion: {
-    pathType: 'orbit',
-    speed: 50,
-    ease: true,
-    lookAt: 'center',
-  },
-  videoEffects: {
-    seasonTransition: false,
-    timeLapseCloud: true,
-    lightCycle: false,
-  }
+
+  // 9. Image to CAD
+  imgToCadType: 'render',
+  imgToCadOutput: 'detail',
+  imgToCadLine: { sensitivity: 50, simplify: 20, connect: true },
+  imgToCadLayers: { walls: true, windows: true, details: true, hidden: false },
+  imgToCadFormat: 'dxf',
+
+  // 10. Image to 3D
+  img3dInputs: [{ id: '1', view: 'Front', isPrimary: true }],
+  img3dMesh: { type: 'arch', edges: 80, fill: true },
+  img3dOutput: { format: 'obj', textureRes: 2048 },
+
+  // 11. Video
+  videoMode: 'path',
+  videoMotion: { type: 'cinematic', preset: 'Orbit' },
+  videoPath: { type: 'flyaround', smoothness: 60 },
+  videoMorph: { transitionTime: 2.0 },
+  videoAssembly: { type: 'assembly', timing: 'seq' },
+  videoOutput: { res: '1080p', fps: 30, quality: 80 },
 };
 
 const initialGeometry: GeometryState = {
   lockGeometry: true,
   lockPerspective: true,
-  lockCameraPosition: true,
+  lockCameraPosition: false,
   lockFraming: true,
   geometryPreservation: 80,
   perspectiveAdherence: 80,
   framingAdherence: 80,
   edgeDefinition: 'sharp',
-  edgeStrength: 50,
-  allowRefinement: true,
   suppressHallucinations: true,
-  allowReinterpretation: false,
 };
 
 const initialCamera: CameraState = {
