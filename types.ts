@@ -93,7 +93,7 @@ export interface WorkflowSettings {
   sectionStyle: { poche: 'black' | 'gray'; hatch: 'solid' | 'diag' | 'cross'; weight: 'heavy' | 'medium' | 'light'; showBeyond: number };
 
   // 7. Sketch
-  sketchType: 'exterior' | 'interior' | 'detail';
+  sketchType: 'interior';
   sketchConfidence: number;
   sketchCleanup: { clean: boolean; lines: boolean };
   sketchInterpretation: number; // 0-100 faithful-creative
@@ -123,7 +123,7 @@ export interface WorkflowSettings {
   videoMotion: { type: 'cinematic' | 'ken-burns' | 'parallax'; preset: string };
   videoPath: { type: 'flyaround' | 'walkthrough'; smoothness: number };
   videoMorph: { transitionTime: number };
-  videoAssembly: { type: 'construction' | 'assembly'; timing: 'seq' | 'group' };
+  videoAssembly: { type: 'assembly' | 'construction'; timing: 'seq' | 'group' };
   videoOutput: { res: '1080p' | '4k'; fps: 24 | 30 | 60; quality: number };
 }
 
@@ -187,6 +187,14 @@ export interface OutputState {
   seedLocked: boolean;
 }
 
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  thumbnail: string; // Base64
+  prompt: string;
+  mode: GenerationMode;
+}
+
 export interface AppState {
   mode: GenerationMode;
   activeStyleId: string;
@@ -203,6 +211,8 @@ export interface AppState {
   materials: MaterialState;
   context: ContextState;
   output: OutputState;
+  
+  history: HistoryItem[];
 
   leftSidebarWidth: number;
   rightPanelWidth: number;
@@ -227,4 +237,7 @@ export type Action =
   | { type: 'UPDATE_OUTPUT'; payload: Partial<OutputState> }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
   | { type: 'SET_ACTIVE_BOTTOM_TAB'; payload: string }
-  | { type: 'TOGGLE_BOTTOM_PANEL' };
+  | { type: 'TOGGLE_BOTTOM_PANEL' }
+  | { type: 'ADD_HISTORY'; payload: HistoryItem }
+  | { type: 'LOAD_PROJECT'; payload: AppState }
+  | { type: 'RESET_PROJECT' };

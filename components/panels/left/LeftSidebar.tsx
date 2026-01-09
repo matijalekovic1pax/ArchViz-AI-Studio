@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../../../store';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { 
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical, 
   Pencil, Maximize, PenTool, Cuboid, Video, Hand, MousePointer, 
-  Paintbrush, Sun, Home, Cloud, Trash2, Wrench, Plus, RotateCw, Grid
+  Paintbrush, Sun, Home, Cloud, Trash2, Wrench, Plus, RotateCw, Grid, Check
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode, StyleConfiguration } from '../../../types';
 import { Slider } from '../../ui/Slider';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
+import { nanoid } from 'nanoid/non-secure';
 
 // --- Workflow Navigation ---
 const WORKFLOWS: { id: GenerationMode; label: string; icon: React.ElementType }[] = [
@@ -32,43 +33,62 @@ const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
   <h3 className="text-[10px] font-bold text-foreground-muted mb-2 uppercase tracking-widest">{title}</h3>
 );
 
-// --- Shared: Style Grid (Subtle Version) ---
-const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => void; onBrowse: () => void }> = ({ activeId, onSelect, onBrowse }) => (
-  <div className="space-y-2">
-    <div className="grid grid-cols-2 gap-2">
-      {BUILT_IN_STYLES.slice(0, 4).map((style) => (
-        <button
-          key={style.id}
-          onClick={() => onSelect(style.id)}
-          className={cn(
-            "relative h-14 rounded overflow-hidden border transition-all text-left flex items-center group",
-            activeId === style.id ? "border-foreground ring-1 ring-foreground" : "border-border hover:border-border-strong"
-          )}
-        >
-          {/* Background Preview */}
-          <div className="absolute inset-0 z-0 opacity-80" style={{ background: style.previewUrl }} />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent z-0" />
-          
-          <div className="relative z-10 px-2 py-1 w-full">
-            <p className="text-white text-[10px] font-semibold leading-tight truncate w-full group-hover:text-accent-muted transition-colors">{style.name}</p>
-            <p className="text-white/60 text-[8px] truncate">{style.category}</p>
-          </div>
-          
-          {activeId === style.id && (
-             <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-white rounded-full z-20 shadow-sm" />
-          )}
-        </button>
-      ))}
+// --- Shared: Style Grid (Updated for dynamic selection & visibility) ---
+const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => void; onBrowse: () => void }> = ({ activeId, onSelect, onBrowse }) => {
+  // Logic to always show the active style, swapping the last item if necessary
+  const displayStyles = useMemo(() => {
+    const defaultStyles = BUILT_IN_STYLES.slice(0, 4);
+    const activeStyle = BUILT_IN_STYLES.find(s => s.id === activeId);
+    
+    // If active style exists and is not in the default list
+    if (activeStyle && !defaultStyles.find(s => s.id === activeId)) {
+       return [...defaultStyles.slice(0, 3), activeStyle];
+    }
+    
+    return defaultStyles;
+  }, [activeId]);
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        {displayStyles.map((style) => (
+          <button
+            key={style.id}
+            onClick={() => onSelect(style.id)}
+            className={cn(
+              "relative h-14 rounded-md overflow-hidden border transition-all duration-200 text-left flex items-center group",
+              activeId === style.id 
+                 ? "border-foreground ring-2 ring-foreground shadow-md opacity-100 z-10 scale-[1.02]" 
+                 : "border-border opacity-90 hover:opacity-100 hover:border-foreground-muted hover:scale-[1.01]"
+            )}
+          >
+            {/* Background Preview */}
+            <div className="absolute inset-0 z-0 transition-transform duration-500 group-hover:scale-105" style={{ background: style.previewUrl }} />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent z-0" />
+            
+            <div className="relative z-10 px-2 py-1 w-full">
+              <p className="text-white text-[10px] font-bold leading-tight truncate w-full shadow-sm group-hover:text-accent-muted transition-colors">{style.name}</p>
+              <p className="text-white/80 text-[8px] truncate shadow-sm font-medium">{style.category}</p>
+            </div>
+            
+            {activeId === style.id && (
+               <div className="absolute top-1 right-1 w-4 h-4 bg-foreground text-background rounded-full flex items-center justify-center z-20 shadow-sm animate-scale-in">
+                  <Check size={8} strokeWidth={3} />
+               </div>
+            )}
+          </button>
+        ))}
+      </div>
+      <button 
+        onClick={onBrowse}
+        className="w-full h-8 flex items-center justify-center gap-2 rounded border border-dashed border-border text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted hover:bg-surface-elevated transition-all"
+      >
+        <Grid size={12} />
+        <span>Browse All Styles</span>
+      </button>
     </div>
-    <button 
-      onClick={onBrowse}
-      className="w-full h-8 flex items-center justify-center gap-2 rounded border border-dashed border-border text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted hover:bg-surface-elevated transition-all"
-    >
-      <Grid size={12} />
-      <span>Browse All Styles</span>
-    </button>
-  </div>
-);
+  );
+};
 
 // --- 1. 3D to Render Panel ---
 const Render3DPanel = () => {
@@ -117,7 +137,7 @@ const Render3DPanel = () => {
       <div>
         <div className="flex items-center justify-between mb-2">
            <SectionHeader title="Style" />
-           <span className="text-[9px] text-foreground-muted">{state.activeStyleId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')}</span>
+           <span className="text-[9px] text-foreground-muted font-mono">{state.activeStyleId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')}</span>
         </div>
         <StyleGrid 
           activeId={state.activeStyleId} 
@@ -238,6 +258,21 @@ const MasterplanPanel = () => {
   const { state, dispatch } = useAppStore();
   const wf = state.workflow;
 
+  const handleAddZone = () => {
+    const newZone: any = { 
+      id: nanoid(), 
+      name: 'New Zone', 
+      color: '#cccccc', 
+      type: 'mixed', 
+      selected: true 
+    };
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: [...wf.mpZones, newZone] } });
+  };
+
+  const handleRemoveZone = (id: string) => {
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: wf.mpZones.filter(z => z.id !== id) } });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -245,14 +280,20 @@ const MasterplanPanel = () => {
         <div className="space-y-2">
            {wf.mpZones.map(zone => (
               <div key={zone.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded group hover:border-foreground-muted transition-colors">
-                 <div className="w-3 h-3 rounded shadow-sm" style={{ backgroundColor: zone.color }} />
+                 <div className="w-3 h-3 rounded shadow-sm cursor-pointer" style={{ backgroundColor: zone.color }} />
                  <span className="text-xs font-medium flex-1 text-foreground">{zone.name}</span>
                  <select className="text-[10px] h-5 bg-transparent border-none text-right focus:outline-none text-foreground-muted cursor-pointer">
                     <option>{zone.type}</option>
                  </select>
+                 <button onClick={() => handleRemoveZone(zone.id)} className="opacity-0 group-hover:opacity-100 text-foreground-muted hover:text-red-500">
+                    <Trash2 size={12} />
+                 </button>
               </div>
            ))}
-           <button className="w-full py-2 border border-dashed border-border rounded text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted flex items-center justify-center gap-1 transition-all">
+           <button 
+             onClick={handleAddZone}
+             className="w-full py-2 border border-dashed border-border rounded text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted flex items-center justify-center gap-1 transition-all"
+           >
              <Plus size={12} /> Add Zone
            </button>
         </div>
@@ -324,6 +365,11 @@ const ExplodedViewPanel = () => {
   const { state, dispatch } = useAppStore();
   const wf = state.workflow;
 
+  const handleAddComponent = () => {
+    const newComp = { id: nanoid(), name: 'New Component', order: wf.explodedComponents.length, active: true };
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { explodedComponents: [...wf.explodedComponents, newComp] } });
+  };
+
   return (
     <div className="space-y-6">
        <div>
@@ -336,7 +382,10 @@ const ExplodedViewPanel = () => {
                   <div className="w-2 h-2 rounded-full bg-green-500" />
                </div>
             ))}
-            <button className="w-full py-2 text-xs text-foreground-muted border border-dashed border-border rounded mt-2 hover:text-foreground hover:border-foreground-muted transition-all">
+            <button 
+               onClick={handleAddComponent}
+               className="w-full py-2 text-xs text-foreground-muted border border-dashed border-border rounded mt-2 hover:text-foreground hover:border-foreground-muted transition-all"
+            >
                + Add Component
             </button>
          </div>
@@ -488,6 +537,11 @@ const ImageTo3DPanel = () => {
   const { state, dispatch } = useAppStore();
   const wf = state.workflow;
 
+  const handleAddView = () => {
+     const newView = { id: nanoid(), view: 'New View', isPrimary: false };
+     dispatch({ type: 'UPDATE_WORKFLOW', payload: { img3dInputs: [...wf.img3dInputs, newView] } });
+  };
+
   return (
     <div className="space-y-6">
        <div>
@@ -503,7 +557,10 @@ const ImageTo3DPanel = () => {
                    {img.isPrimary && <div className="text-[10px] bg-accent text-white px-1.5 rounded self-start">Primary</div>}
                 </div>
              ))}
-             <button className="w-full py-2 border border-dashed border-border text-foreground-muted text-xs rounded hover:text-foreground hover:border-foreground-muted transition-colors">
+             <button 
+                onClick={handleAddView}
+                className="w-full py-2 border border-dashed border-border text-foreground-muted text-xs rounded hover:text-foreground hover:border-foreground-muted transition-colors"
+             >
                 + Add View
              </button>
           </div>

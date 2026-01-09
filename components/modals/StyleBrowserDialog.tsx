@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, X, Grid, Box } from 'lucide-react';
+import { Search, X, Grid, Box, Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { BUILT_IN_STYLES } from '../../engine/promptEngine';
 
@@ -37,74 +37,74 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-[600px] h-[450px] bg-background flex flex-col rounded-lg shadow-2xl overflow-hidden border border-border animate-scale-in">
+      <div className="w-[800px] h-[600px] bg-background flex flex-col rounded-xl shadow-2xl overflow-hidden border border-border animate-scale-in">
         
-        {/* Header - Compact */}
-        <div className="h-10 border-b border-border flex items-center justify-between px-3 bg-surface-elevated shrink-0">
-          <div className="flex items-center gap-2">
-             <div className="w-6 h-6 rounded bg-surface-sunken flex items-center justify-center text-foreground-secondary">
-                <Grid size={14} />
+        {/* Header */}
+        <div className="h-14 border-b border-border flex items-center justify-between px-4 bg-surface-elevated shrink-0">
+          <div className="flex items-center gap-3">
+             <div className="w-8 h-8 rounded-lg bg-surface-sunken flex items-center justify-center text-foreground-secondary">
+                <Grid size={18} />
              </div>
-             <h2 className="text-xs font-semibold tracking-wide">Style Library</h2>
-             <span className="text-[10px] text-foreground-muted bg-surface-sunken px-1.5 rounded-full">
-                {BUILT_IN_STYLES.length}
-             </span>
+             <div>
+                <h2 className="text-sm font-bold tracking-tight">Style Library</h2>
+                <span className="text-[10px] text-foreground-muted">{BUILT_IN_STYLES.length} styles available</span>
+             </div>
           </div>
           
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-foreground-muted" size={12} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" size={14} />
               <input 
                 type="text" 
-                placeholder="Search..." 
-                className="h-6 pl-7 pr-2 text-[10px] bg-surface-sunken border-transparent rounded focus:bg-surface-elevated focus:border-accent focus:outline-none transition-all w-32"
+                placeholder="Search styles..." 
+                className="h-8 pl-9 pr-3 text-xs bg-surface-sunken border-transparent rounded-lg focus:bg-surface-elevated focus:border-accent focus:outline-none transition-all w-48"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <button 
               onClick={onClose}
-              className="p-1 hover:bg-surface-sunken rounded text-foreground-muted hover:text-foreground transition-colors"
+              className="p-2 hover:bg-surface-sunken rounded-lg text-foreground-muted hover:text-foreground transition-colors"
             >
-              <X size={14} />
+              <X size={18} />
             </button>
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar Categories - Compact */}
-          <div className="w-32 bg-surface-sunken border-r border-border p-2 flex flex-col gap-0.5 shrink-0 overflow-y-auto">
-            <div className="text-[9px] font-bold text-foreground-muted uppercase tracking-wider mb-1 px-2 pt-1">Categories</div>
+          {/* Sidebar Categories */}
+          <div className="w-40 bg-surface-sunken border-r border-border p-3 flex flex-col gap-1 shrink-0 overflow-y-auto">
+            <div className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider mb-2 px-2">Categories</div>
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  "flex items-center justify-between px-2 py-1.5 text-[10px] font-medium rounded transition-all text-left group",
+                  "flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-all text-left group",
                   activeCategory === cat 
-                    ? "bg-surface-elevated text-foreground shadow-subtle" 
-                    : "text-foreground-secondary hover:bg-background/50 hover:text-foreground"
+                    ? "bg-surface-elevated text-foreground shadow-subtle border border-border-subtle" 
+                    : "text-foreground-secondary hover:bg-surface-elevated/50 hover:text-foreground"
                 )}
               >
                 <span>{cat}</span>
-                {activeCategory === cat && <div className="w-1 h-1 rounded-full bg-accent" />}
+                {activeCategory === cat && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
               </button>
             ))}
           </div>
 
-          {/* Grid Content - Compact */}
-          <div className="flex-1 bg-surface-elevated p-3 overflow-y-auto custom-scrollbar">
+          {/* Grid Content */}
+          <div className="flex-1 bg-surface-elevated p-4 overflow-y-auto custom-scrollbar">
             {filteredStyles.length > 0 ? (
-               <div className="grid grid-cols-3 gap-2">
+               <div className="grid grid-cols-3 gap-3">
                {filteredStyles.map(style => (
                   <button
                      key={style.id}
                      onClick={() => { onSelect(style.id); onClose(); }}
                      className={cn(
-                     "group relative aspect-[16/10] flex flex-col text-left border rounded overflow-hidden transition-all duration-200",
+                     "group relative aspect-[16/10] flex flex-col text-left border rounded-lg overflow-hidden transition-all duration-200",
                      activeStyleId === style.id 
-                        ? "border-foreground ring-1 ring-foreground" 
-                        : "border-border hover:border-foreground-muted hover:shadow-subtle"
+                        ? "border-foreground ring-2 ring-foreground shadow-lg scale-[0.98] z-10" 
+                        : "border-border hover:border-foreground-muted hover:shadow-md hover:scale-[1.01]"
                      )}
                   >
                      {/* Preview Gradient */}
@@ -116,31 +116,40 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
                      
                      {/* Active Indicator */}
                      {activeStyleId === style.id && (
-                     <div className="absolute top-1 right-1 w-3 h-3 bg-foreground text-background rounded-full flex items-center justify-center shadow-sm">
-                        <div className="w-1 h-1 bg-white rounded-full" />
+                     <div className="absolute top-2 right-2 w-6 h-6 bg-foreground text-background rounded-full flex items-center justify-center shadow-md z-20 animate-scale-in">
+                        <Check size={14} strokeWidth={3} />
                      </div>
                      )}
 
-                     <div className="absolute bottom-0 left-0 right-0 p-2">
-                     <p className="text-white text-[11px] font-semibold mb-0 leading-tight">{style.name}</p>
-                     <p className="text-white/70 text-[9px] line-clamp-1 mt-0.5">{style.category}</p>
+                     <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <p className="text-white text-sm font-bold mb-0.5 leading-tight shadow-sm">{style.name}</p>
+                        <p className="text-white/80 text-[10px] line-clamp-2 leading-relaxed">{style.description}</p>
                      </div>
                   </button>
                ))}
                </div>
             ) : (
                <div className="h-full flex flex-col items-center justify-center text-foreground-muted">
-                  <Box size={32} className="mb-2 opacity-20" />
-                  <p className="text-xs">No styles found</p>
+                  <Box size={40} className="mb-3 opacity-20" />
+                  <p className="text-sm">No styles found matching "{searchQuery}"</p>
+                  <button 
+                     onClick={() => { setSearchQuery(''); setActiveCategory('All'); }}
+                     className="mt-2 text-xs text-accent hover:underline"
+                  >
+                     Clear filters
+                  </button>
                </div>
             )}
           </div>
         </div>
         
-        {/* Footer - Compact */}
-        <div className="h-7 bg-surface-sunken border-t border-border flex items-center justify-between px-3 text-[9px] text-foreground-muted shrink-0">
-           <span>Select to apply</span>
-           <span>Esc to close</span>
+        {/* Footer */}
+        <div className="h-9 bg-surface-sunken border-t border-border flex items-center justify-between px-4 text-[10px] text-foreground-muted shrink-0">
+           <span>Select a style to immediately apply its parameters.</span>
+           <div className="flex gap-4">
+              <span className="flex items-center gap-1"><span className="w-4 h-4 border border-border rounded flex items-center justify-center bg-surface-elevated">↵</span> Select</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 border border-border rounded flex items-center justify-center bg-surface-elevated">Esc</span> Cancel</span>
+           </div>
         </div>
       </div>
     </div>

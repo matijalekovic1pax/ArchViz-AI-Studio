@@ -186,6 +186,7 @@ const initialState: AppState = {
   materials: initialMaterials,
   context: initialContext,
   output: initialOutput,
+  history: [],
   leftSidebarWidth: 280,
   rightPanelWidth: 320,
   bottomPanelHeight: 200,
@@ -211,6 +212,9 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_ACTIVE_TAB': return { ...state, activeRightTab: action.payload };
     case 'SET_ACTIVE_BOTTOM_TAB': return { ...state, activeBottomTab: action.payload };
     case 'TOGGLE_BOTTOM_PANEL': return { ...state, bottomPanelCollapsed: !state.bottomPanelCollapsed };
+    case 'ADD_HISTORY': return { ...state, history: [action.payload, ...state.history].slice(0, 20) }; // Keep max 20 items
+    case 'LOAD_PROJECT': return { ...action.payload };
+    case 'RESET_PROJECT': return { ...initialState };
     default: return state;
   }
 }

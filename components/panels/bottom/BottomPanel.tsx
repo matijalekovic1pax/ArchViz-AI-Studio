@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
-import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
 
@@ -13,7 +13,7 @@ export const BottomPanel: React.FC = () => {
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
   const showEditStack = state.mode === 'visual-edit';
-  const showCleanup = state.mode === 'render-sketch';
+  const showCleanup = state.mode === 'render-sketch' || state.mode === 'img-to-cad';
 
   const renderContent = () => {
     if (state.activeBottomTab === 'prompt') {
@@ -79,13 +79,13 @@ export const BottomPanel: React.FC = () => {
                </tr>
              </thead>
              <tbody className="divide-y divide-border-subtle">
-               {state.workflow.legendItems.map((item) => (
-                 <tr key={item.id} className="group hover:bg-surface-sunken">
-                   <td className="py-2 pl-2 font-medium">{item.zone}</td>
+               {state.workflow.mpZones.map((item: any) => (
+                 <tr key={item.id} className="group hover:bg-surface-sunken transition-colors">
+                   <td className="py-2 pl-2 font-medium">{item.name}</td>
                    <td className="py-2">
                       <div className="w-4 h-4 rounded border border-black/10 shadow-sm" style={{ backgroundColor: item.color }}/>
                    </td>
-                   <td className="py-2 font-mono text-foreground-secondary">{item.area}</td>
+                   <td className="py-2 font-mono text-foreground-secondary">12,500 m²</td>
                    <td className="py-2 text-right pr-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="text-foreground-muted hover:text-foreground px-1">Edit</button>
                    </td>
@@ -93,9 +93,6 @@ export const BottomPanel: React.FC = () => {
                ))}
              </tbody>
            </table>
-           <button className="mt-4 text-xs flex items-center gap-1 text-accent hover:text-accent-hover font-medium">
-             <div className="border border-current rounded p-0.5"><div className="w-2 h-2 bg-current" /></div> Add Zone
-           </button>
          </div>
        );
     }
@@ -104,7 +101,7 @@ export const BottomPanel: React.FC = () => {
        return (
           <div className="absolute inset-0 p-4 overflow-y-auto">
              <div className="space-y-2 max-w-lg">
-                {state.workflow.editStack.map((layer, i) => (
+                {state.workflow.editLayers.map((layer: any, i: number) => (
                    <div key={layer.id} className="flex items-center gap-3 p-2 bg-surface-elevated border border-border rounded shadow-sm group">
                       <GripVertical size={14} className="text-foreground-muted cursor-grab" />
                       <div className="w-8 h-8 bg-surface-sunken rounded flex items-center justify-center text-xs font-mono text-foreground-muted">
@@ -112,7 +109,7 @@ export const BottomPanel: React.FC = () => {
                       </div>
                       <div className="flex-1">
                          <div className="text-sm font-medium">{layer.name}</div>
-                         <div className="text-[10px] text-foreground-muted uppercase tracking-wider">{layer.type}</div>
+                         <div className="text-[10px] text-foreground-muted uppercase tracking-wider">{layer.locked ? 'Locked' : 'Editable'}</div>
                       </div>
                       <button className="text-foreground-muted hover:text-foreground">
                          {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -124,25 +121,54 @@ export const BottomPanel: React.FC = () => {
        );
     }
 
+    if (state.activeBottomTab === 'cleanup') {
+      return (
+         <div className="absolute inset-0 p-4 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-4">
+               {['Denoise', 'Sharpen Lines', 'Close Gaps', 'Remove Grid'].map(fix => (
+                  <button key={fix} className="flex flex-col items-center justify-center p-4 border border-border rounded-lg bg-surface-elevated hover:border-foreground-muted hover:bg-surface-sunken transition-all group">
+                     <Wand2 size={20} className="mb-2 text-accent group-hover:text-foreground transition-colors" />
+                     <span className="text-xs font-medium">{fix}</span>
+                  </button>
+               ))}
+            </div>
+         </div>
+      );
+    }
+
     if (state.activeBottomTab === 'history') {
       return (
         <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
-          {[1, 2, 3].map((v) => (
-            <div key={v} className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden">
-               {/* Mock Thumbnail */}
-              <div className="absolute inset-0 bg-surface-sunken" />
-              <div className="relative z-10 flex flex-col items-center">
-                 <div className="w-8 h-8 rounded-full bg-surface-elevated flex items-center justify-center text-foreground-muted mb-2 shadow-sm">
-                   <Clock size={16} />
-                 </div>
-                 <span className="text-xs font-medium text-foreground-secondary">Version {v}</span>
-                 <span className="text-[10px] text-foreground-muted">2 mins ago</span>
-              </div>
-            </div>
-          ))}
-          <div className="min-w-[140px] aspect-video rounded-lg border border-dashed border-border-strong flex flex-col items-center justify-center gap-2 text-foreground-muted hover:bg-surface-sunken transition-colors cursor-pointer">
-             <span className="text-xs">Generate to add history</span>
-          </div>
+          {state.history.length === 0 ? (
+             <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
+                <Clock size={24} className="opacity-20" />
+                <span className="text-xs">No history in this session.</span>
+             </div>
+          ) : (
+             state.history.map((item) => (
+               <div 
+                  key={item.id} 
+                  className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden"
+                  onClick={() => {
+                     // In a real app, this would load the history state
+                     if (confirm("Load this historical state? Current unsaved changes will be lost.")) {
+                        dispatch({ type: 'LOAD_PROJECT', payload: { ...state, workflow: item.settings, uploadedImage: item.thumbnail } });
+                     }
+                  }}
+               >
+                  {/* Thumbnail */}
+                  <div className="absolute inset-0 bg-surface-sunken">
+                     <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  
+                  {/* Overlay Info */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                     <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
+                     <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
+                  </div>
+               </div>
+             ))
+          )}
         </div>
       );
     }
@@ -158,7 +184,7 @@ export const BottomPanel: React.FC = () => {
       )}
     >
       <div className="h-9 flex items-center justify-between px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
-        <div className="flex h-full">
+        <div className="flex h-full overflow-x-auto no-scrollbar">
            <button 
              onClick={() => dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: 'prompt' })}
              className={cn(

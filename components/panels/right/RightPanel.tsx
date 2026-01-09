@@ -214,6 +214,59 @@ const ContextBlock = ({ dispatch, state }: any) => (
    </div>
 );
 
+// --- CAD Specific Blocks ---
+
+const CADGeometryBlock = ({ state, dispatch }: any) => {
+   const wf = state.workflow;
+   const update = (key: string, val: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadSpatial: { ...wf.cadSpatial, [key]: val } } });
+   
+   return (
+      <div className="space-y-4">
+         <div>
+            <label className="text-xs text-foreground-secondary block mb-2">Spatial Settings</label>
+            <Slider label="Ceiling Height" value={wf.cadSpatial.ceilingHeight} min={2} max={6} step={0.1} onChange={(v) => update('ceilingHeight', v)} />
+            <div className="h-2" />
+            <Slider label="Creative Freedom" value={wf.cadSpatial.style} min={0} max={100} onChange={(v) => update('style', v)} />
+         </div>
+         <div className="bg-surface-sunken p-3 rounded border border-border-subtle">
+             <label className="text-xs text-foreground-secondary block mb-2">Structural Thickness</label>
+             <Slider label="Walls" value={wf.cadSpatial.wallThick} min={0.1} max={0.5} step={0.05} onChange={(v) => update('wallThick', v)} />
+             <div className="h-2" />
+             <Slider label="Floors" value={wf.cadSpatial.floorThick} min={0.1} max={0.5} step={0.05} onChange={(v) => update('floorThick', v)} />
+         </div>
+      </div>
+   );
+};
+
+const CADCameraBlock = ({ state, dispatch }: any) => {
+   const wf = state.workflow;
+   return (
+      <div className="space-y-4">
+         <div className="bg-surface-sunken p-3 rounded space-y-3">
+            <div className="h-24 border border-dashed border-border rounded flex items-center justify-center text-xs text-foreground-muted relative group cursor-crosshair hover:border-accent transition-colors">
+               <Camera size={16} className="mb-1" />
+               <span className="absolute bottom-2 text-[10px]">Drag to Position</span>
+            </div>
+            <div className="space-y-2 pt-1">
+               <div className="flex justify-between items-center text-xs">
+                  <span>View Height</span>
+                  <span className="font-mono text-foreground-muted">{wf.cadCamera.height}m</span>
+               </div>
+               <Slider value={wf.cadCamera.height} min={1} max={50} step={0.5} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadCamera: { ...wf.cadCamera, height: v } } })} />
+            </div>
+             <div className="space-y-2 pt-1">
+               <label className="text-xs">Angle</label>
+               <SegmentedControl 
+                  value={wf.cadCamera.angle} 
+                  onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadCamera: { ...wf.cadCamera, angle: v } } })} 
+                  options={[{label:'Horizontal', value:'horizontal'}, {label:'Down', value:'down'}, {label:'Up', value:'up'}]} 
+               />
+            </div>
+         </div>
+      </div>
+   );
+};
+
 // --- Feature Specific Right Panels ---
 
 // 1. 3D to Render
@@ -236,37 +289,19 @@ const Render3DControls = ({ state, dispatch }: any) => {
 
 // 2. CAD to Render
 const RenderCADControls = ({ state, dispatch }: any) => {
-   const wf = state.workflow;
-   const update = (key: string, val: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadSpatial: { ...wf.cadSpatial, [key]: val } } });
-   
-   return (
-      <div className="space-y-6">
-         <div>
-            <h4 className="text-xs font-semibold text-foreground-secondary uppercase tracking-wider mb-3">Camera Position</h4>
-            <div className="bg-surface-sunken p-3 rounded space-y-3">
-               <div className="h-24 border border-dashed border-border rounded flex items-center justify-center text-xs text-foreground-muted">
-                  [Interactive Plan Cam]
-               </div>
-               <div className="flex justify-between items-center text-xs">
-                  <span>Height</span>
-                  <input className="w-16 bg-transparent text-right font-mono" value={wf.cadCamera.height + "m"} readOnly />
-               </div>
-            </div>
-         </div>
-         
-         <div>
-            <h4 className="text-xs font-semibold text-foreground-secondary uppercase tracking-wider mb-3">Spatial Interpretation</h4>
-            <div className="space-y-3">
-               <Slider label="Ceiling Height" value={wf.cadSpatial.ceilingHeight} min={2} max={5} step={0.1} onChange={(v) => update('ceilingHeight', v)} />
-               <Slider label="Interpretation Style" labelRight="Creative" value={wf.cadSpatial.style} min={0} max={100} onChange={(v) => update('style', v)} />
-            </div>
-         </div>
+   const items = [
+      { id: 'geometry', title: 'Geometry & Spatial', content: <CADGeometryBlock state={state} dispatch={dispatch} /> },
+      { id: 'camera', title: 'Camera Setup', content: <CADCameraBlock state={state} dispatch={dispatch} /> },
+      { id: 'lighting', title: 'Lighting', content: <LightingBlock state={state} dispatch={dispatch} /> },
+      { id: 'materials', title: 'Materials', content: <MaterialBlock state={state} dispatch={dispatch} /> },
+      { id: 'context', title: 'Context', content: <ContextBlock state={state} dispatch={dispatch} /> },
+   ];
 
-         {/* Re-use Lighting Block for CAD workflow */}
-         <div className="border-t border-border pt-4">
-            <Accordion items={[{ id: 'lighting', title: 'Lighting Setup', content: <LightingBlock state={state} dispatch={dispatch} /> }]} />
-         </div>
-      </div>
+   return (
+      <>
+         <StyleSelector state={state} dispatch={dispatch} />
+         <Accordion items={items} defaultValue="geometry" />
+      </>
    );
 };
 
@@ -323,6 +358,11 @@ const VisualEditControls = ({ state, dispatch }: any) => {
    const tool = state.workflow.activeTool;
    const wf = state.workflow;
 
+   const toggleLayer = (id: string) => {
+      const newLayers = wf.editLayers.map((l: any) => l.id === id ? { ...l, visible: !l.visible } : l);
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { editLayers: newLayers } });
+   };
+
    const renderToolOptions = () => {
       switch (tool) {
          case 'select': return (
@@ -367,12 +407,12 @@ const VisualEditControls = ({ state, dispatch }: any) => {
          </div>
          <div>
             <h4 className="flex justify-between items-center text-xs font-semibold text-foreground-secondary uppercase tracking-wider mb-3">
-               Layers <span className="text-[10px] bg-surface-sunken px-1 rounded cursor-pointer">+</span>
+               Layers <span className="text-[10px] bg-surface-sunken px-1 rounded cursor-pointer hover:bg-surface-elevated border border-transparent hover:border-border transition-colors">+</span>
             </h4>
             <div className="space-y-1">
                {wf.editLayers.map((l: any) => (
                   <div key={l.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded text-xs">
-                     <button>{l.visible ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
+                     <button onClick={() => toggleLayer(l.id)}>{l.visible ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
                      <span className="flex-1">{l.name}</span>
                      {l.locked && <span className="text-[10px]">🔒</span>}
                   </div>
