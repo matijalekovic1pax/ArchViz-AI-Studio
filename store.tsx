@@ -1,6 +1,7 @@
 
+
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
@@ -139,36 +140,74 @@ const initialWorkflow: WorkflowSettings = {
   videoState: initialVideoState,
 };
 
+const initialMaterialValidation: MaterialValidationState = {
+  activeTab: 'materials',
+  documents: {
+    terminal: true, // Mock pre-loaded
+    cargo: true,    // Mock pre-loaded
+    boq: true       // Mock pre-loaded
+  },
+  stats: {
+    total: 38,
+    validated: 42,
+    warnings: 8,
+    errors: 3
+  },
+  selectedMaterialCode: null
+};
+
 const initialGeometry: GeometryState = {
   lockGeometry: true,
   lockPerspective: true,
   lockCameraPosition: false,
   lockFraming: true,
+  allowMinorRefinement: false,
+  allowReinterpretation: false,
+  suppressHallucinations: true,
   geometryPreservation: 80,
   perspectiveAdherence: 80,
   framingAdherence: 80,
   edgeDefinition: 'sharp',
-  suppressHallucinations: true,
+  edgeStrength: 50,
 };
 
 const initialCamera: CameraState = {
+  fov: 50,
   fovMode: 'normal',
   viewType: 'eye-level',
+  cameraHeight: 1.6,
   projection: 'perspective',
+  verticalCorrection: true,
+  verticalCorrectionStrength: 100,
+  horizonLock: true,
+  horizonPosition: 50,
   depthOfField: false,
   dofStrength: 30,
-  horizonLock: true,
-  verticalCorrection: true,
+  focalPoint: 'center',
 };
 
 const initialLighting: LightingState = {
   timeOfDay: 'morning',
+  customTime: 10,
   sunAzimuth: 135,
   sunAltitude: 45,
+  cloudCover: 20,
+  cloudType: 'scattered',
   shadowSoftness: 20,
   shadowIntensity: 60,
+  ambientGIStrength: 50,
+  bounceLight: true,
+  bounceLightIntensity: 50,
   fog: false,
+  fogDensity: 30,
+  fogDistance: 50,
+  haze: false,
+  hazeIntensity: 20,
   weather: 'clear',
+  rainIntensity: 'moderate',
+  snowIntensity: 'moderate',
+  enforcePhysicalPlausibility: true,
+  allowDramaticLighting: false,
 };
 
 const initialMaterials: MaterialState = {
@@ -178,23 +217,44 @@ const initialMaterials: MaterialState = {
   glassEmphasis: 50,
   woodEmphasis: 50,
   metalEmphasis: 50,
+  stoneEmphasis: 50,
+  compositeEmphasis: 50,
   reflectivityBias: 0,
+  cleanVsRaw: 50,
 };
 
 const initialContext: ContextState = {
   people: false,
   peopleDensity: 'sparse',
+  peopleScale: 'accurate',
+  peopleStyle: 'photorealistic',
+  peoplePlacement: 'auto',
+  
   vegetation: true,
+  vegetationDensity: 50,
   season: 'summer',
+  vegetationHealth: 'lush',
+  
   vehicles: false,
+  vehicleDensity: 'few',
+  
   urbanFurniture: false,
+  urbanFurnitureStyle: 'contemporary',
+  
   scaleCheck: true,
+  noIrrelevantProps: true,
+  architectureDominant: true,
+  contextSubtlety: 80,
 };
 
 const initialOutput: OutputState = {
   resolution: '4k',
+  customResolution: { width: 1920, height: 1080 },
   aspectRatio: '16:9',
+  customAspectRatio: { width: 16, height: 9 },
   format: 'png',
+  jpgQuality: 95,
+  embedMetadata: true,
   seed: 123456,
   seedLocked: false,
 };
@@ -212,6 +272,7 @@ const initialState: AppState = {
   progress: 0,
   prompt: '',
   workflow: initialWorkflow,
+  materialValidation: initialMaterialValidation,
   geometry: initialGeometry,
   camera: initialCamera,
   lighting: initialLighting,
@@ -241,6 +302,9 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'UPDATE_VIDEO_STATE': return { ...state, workflow: { ...state.workflow, videoState: { ...state.workflow.videoState, ...action.payload } } };
     case 'UPDATE_VIDEO_CAMERA': return { ...state, workflow: { ...state.workflow, videoState: { ...state.workflow.videoState, camera: { ...state.workflow.videoState.camera, ...action.payload } } } };
     case 'UPDATE_VIDEO_TIMELINE': return { ...state, workflow: { ...state.workflow, videoState: { ...state.workflow.videoState, timeline: { ...state.workflow.videoState.timeline, ...action.payload } } } };
+
+    // Material Validation Reducer
+    case 'UPDATE_MATERIAL_VALIDATION': return { ...state, materialValidation: { ...state.materialValidation, ...action.payload } };
 
     case 'UPDATE_GEOMETRY': return { ...state, geometry: { ...state.geometry, ...action.payload } };
     case 'UPDATE_CAMERA': return { ...state, camera: { ...state.camera, ...action.payload } };

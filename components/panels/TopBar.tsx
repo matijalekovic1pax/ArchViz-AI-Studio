@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, Upload, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -248,7 +248,7 @@ export const TopBar: React.FC = () => {
               className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
               title="Load Project"
             >
-              <Upload size={16} />
+              <FolderOpen size={16} />
             </button>
 
             {/* Save Project Button */}

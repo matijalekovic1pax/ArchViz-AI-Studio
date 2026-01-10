@@ -1,4 +1,5 @@
 
+
 export type GenerationMode = 
   | 'render-3d' 
   | 'render-cad' 
@@ -10,7 +11,8 @@ export type GenerationMode =
   | 'upscale' 
   | 'img-to-cad' 
   | 'img-to-3d' 
-  | 'video';
+  | 'video'
+  | 'material-validation';
 
 export interface StyleConfiguration {
   id: string;
@@ -161,36 +163,123 @@ export interface VideoState {
   generatedVideoUrl: string | null;
 }
 
+// --- Material Validation Types ---
+
+export type ValidationStatus = 'pass' | 'warning' | 'error' | 'pending' | 'info';
+export type MaterialCategory = 'FF' | 'WF' | 'IC' | 'WP' | 'RF' | 'L';
+
+export interface ValidationIssue {
+  id: string;
+  code: string;
+  type: 'technical' | 'boq' | 'drawing' | 'documentation';
+  severity: ValidationStatus;
+  message: string;
+  details?: string;
+  recommendation?: string;
+  sourceDocument?: string;
+  resolved: boolean;
+  date?: string;
+}
+
+export interface ParsedMaterial {
+  code: string;
+  name: string;
+  category: MaterialCategory;
+  description: string;
+  referenceProduct: {
+    type: string;
+    brand: string;
+  };
+  drawingRef: string;
+  source: 'terminal' | 'cargo';
+  dimensions?: string;
+  notes: string[];
+}
+
+export interface BoQItem {
+  code: string;
+  section: string;
+  description: string;
+  materialRef: string;
+  product: {
+    type: string;
+    brand: string;
+  };
+  quantity: {
+    terminal?: number;
+    cargo?: number;
+    unit: string;
+  };
+}
+
+export interface MaterialValidationState {
+  activeTab: 'dashboard' | 'documents' | 'materials' | 'drawings' | 'boq' | 'issues' | 'reports';
+  documents: {
+    terminal: boolean;
+    cargo: boolean;
+    boq: boolean;
+  };
+  stats: {
+    total: number;
+    validated: number;
+    warnings: number;
+    errors: number;
+  };
+  selectedMaterialCode: string | null;
+}
+
 export interface GeometryState {
   lockGeometry: boolean;
   lockPerspective: boolean;
   lockCameraPosition: boolean;
   lockFraming: boolean;
+  allowMinorRefinement: boolean;
+  allowReinterpretation: boolean;
+  suppressHallucinations: boolean;
   geometryPreservation: number;
   perspectiveAdherence: number;
   framingAdherence: number;
   edgeDefinition: 'sharp' | 'soft' | 'adaptive';
-  suppressHallucinations: boolean;
+  edgeStrength: number;
 }
 
 export interface CameraState {
+  fov: number;
   fovMode: 'narrow' | 'normal' | 'wide' | 'ultra-wide' | 'custom';
-  viewType: 'eye-level' | 'aerial' | 'drone' | 'worm';
+  viewType: 'eye-level' | 'aerial' | 'drone' | 'worm' | 'custom';
+  cameraHeight: number;
   projection: 'perspective' | 'axonometric' | 'isometric' | 'two-point';
+  verticalCorrection: boolean;
+  verticalCorrectionStrength: number;
+  horizonLock: boolean;
+  horizonPosition: number;
   depthOfField: boolean;
   dofStrength: number;
-  horizonLock: boolean;
-  verticalCorrection: boolean;
+  focalPoint: 'center' | 'subject' | 'foreground' | 'background';
 }
 
 export interface LightingState {
-  timeOfDay: 'morning' | 'midday' | 'afternoon' | 'golden-hour' | 'blue-hour' | 'night' | 'overcast';
+  timeOfDay: 'morning' | 'midday' | 'afternoon' | 'golden-hour' | 'blue-hour' | 'night' | 'overcast' | 'custom';
+  customTime: number;
   sunAzimuth: number;
   sunAltitude: number;
+  cloudCover: number;
+  cloudType: 'clear' | 'scattered' | 'overcast' | 'dramatic' | 'stormy';
   shadowSoftness: number;
   shadowIntensity: number;
+  ambientGIStrength: number;
+  bounceLight: boolean;
+  bounceLightIntensity: number;
   fog: boolean;
+  fogDensity: number;
+  fogDistance: number;
+  haze: boolean;
+  hazeIntensity: number;
   weather: 'clear' | 'cloudy' | 'rain' | 'snow';
+  rainIntensity: 'light' | 'moderate' | 'heavy';
+  snowIntensity: 'light' | 'moderate' | 'heavy';
+  enforcePhysicalPlausibility: boolean;
+  allowDramaticLighting: boolean;
 }
 
 export interface MaterialState {
@@ -200,23 +289,44 @@ export interface MaterialState {
   glassEmphasis: number;
   woodEmphasis: number;
   metalEmphasis: number;
+  stoneEmphasis: number;
+  compositeEmphasis: number;
   reflectivityBias: number;
+  cleanVsRaw: number;
 }
 
 export interface ContextState {
   people: boolean;
-  peopleDensity: 'sparse' | 'moderate' | 'busy';
+  peopleDensity: 'sparse' | 'moderate' | 'busy' | 'crowded';
+  peopleScale: 'accurate' | 'smaller' | 'larger';
+  peopleStyle: 'photorealistic' | 'silhouette' | 'minimal' | 'artistic';
+  peoplePlacement: 'auto' | 'foreground' | 'midground' | 'background';
+  
   vegetation: boolean;
+  vegetationDensity: number;
   season: 'spring' | 'summer' | 'autumn' | 'winter';
+  vegetationHealth: 'lush' | 'natural' | 'sparse';
+  
   vehicles: boolean;
+  vehicleDensity: 'few' | 'moderate' | 'traffic';
+  
   urbanFurniture: boolean;
+  urbanFurnitureStyle: 'minimal' | 'contemporary' | 'classic' | 'industrial';
+  
   scaleCheck: boolean;
+  noIrrelevantProps: boolean;
+  architectureDominant: boolean;
+  contextSubtlety: number;
 }
 
 export interface OutputState {
-  resolution: '2k' | '4k' | '8k';
-  aspectRatio: '1:1' | '16:9' | '4:5' | '9:16';
+  resolution: '2k' | '4k' | '8k' | 'custom';
+  customResolution: { width: number; height: number };
+  aspectRatio: '1:1' | '16:9' | '4:5' | '9:16' | 'custom';
+  customAspectRatio: { width: number; height: number };
   format: 'png' | 'jpg';
+  jpgQuality: number;
+  embedMetadata: boolean;
   seed: number;
   seedLocked: boolean;
 }
@@ -244,6 +354,7 @@ export interface AppState {
   prompt: string;
   
   workflow: WorkflowSettings;
+  materialValidation: MaterialValidationState;
   
   geometry: GeometryState;
   camera: CameraState;
@@ -273,6 +384,7 @@ export type Action =
   | { type: 'UPDATE_VIDEO_STATE'; payload: Partial<VideoState> }
   | { type: 'UPDATE_VIDEO_CAMERA'; payload: Partial<VideoState['camera']> }
   | { type: 'UPDATE_VIDEO_TIMELINE'; payload: Partial<VideoState['timeline']> }
+  | { type: 'UPDATE_MATERIAL_VALIDATION'; payload: Partial<MaterialValidationState> }
   | { type: 'UPDATE_GEOMETRY'; payload: Partial<GeometryState> }
   | { type: 'UPDATE_CAMERA'; payload: Partial<CameraState> }
   | { type: 'UPDATE_LIGHTING'; payload: Partial<LightingState> }

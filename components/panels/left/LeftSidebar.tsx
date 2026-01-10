@@ -8,10 +8,12 @@ import {
   Pencil, Maximize, PenTool, Cuboid, Video, Hand, MousePointer, 
   Paintbrush, Sun, Home, Cloud, Trash2, Wrench, Plus, RotateCw, Grid, Check,
   ZoomIn, ZoomOut, MoveRight, MoveLeft, MoveUp, MoveDown, RotateCcw, RotateCw as RotateCwIcon, Sliders, Image as ImageIcon, Camera,
-  RefreshCw, MousePointerClick
+  RefreshCw, MousePointerClick, ClipboardCheck, Zap,
+  Layout as LayoutIcon, Scissors as ScissorsIcon, Building as BuildingIcon, Map as MapIcon, Box as BoxIcon,
+  PlayCircle, Film, Wand2, Eye, FileDigit, ScanLine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { GenerationMode, VideoInputMode } from '../../../types';
+import { GenerationMode, VideoInputMode, ZoneItem } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Slider } from '../../ui/Slider';
@@ -23,6 +25,7 @@ const WORKFLOWS: { id: GenerationMode; label: string; icon: React.ElementType }[
   { id: 'render-cad', label: 'CAD to Render', icon: FileCode },
   { id: 'masterplan', label: 'Masterplans', icon: Map },
   { id: 'visual-edit', label: 'Visual Editor', icon: Eraser },
+  { id: 'material-validation', label: 'Material Validation', icon: ClipboardCheck },
   { id: 'exploded', label: 'Exploded Views', icon: Layers },
   { id: 'section', label: 'Render to Section', icon: RectangleVertical },
   { id: 'render-sketch', label: 'Sketch to Render', icon: Pencil },
@@ -88,15 +91,14 @@ const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => void; on
   );
 };
 
-// ... [Previous panels: Render3DPanel, RenderCADPanel, MasterplanPanel, VisualEditPanel, ExplodedViewPanel, SectionPanel, SketchPanel, UpscalePanel, ImageToCADPanel, ImageTo3DPanel] ...
-// Re-declaring for completeness as we are updating the entire file content structure if needed, 
-// but to respect "Only return files... that need to be updated", I will paste the full file content including the new VideoPanel.
+// --- FEATURE PANELS ---
 
 const Render3DPanel = () => {
-    // (Existing Render3DPanel logic placeholder - assumes it exists)
     const { state, dispatch } = useAppStore();
     const [isBrowserOpen, setIsBrowserOpen] = useState(false);
     const wf = state.workflow;
+    
+    const updateWf = (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
   
     return (
       <div className="space-y-6">
@@ -106,7 +108,7 @@ const Render3DPanel = () => {
            activeStyleId={state.activeStyleId}
            onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
         />
-  
+
         <div>
           <SectionHeader title="Source Analysis" />
           <div className="space-y-3">
@@ -115,12 +117,15 @@ const Render3DPanel = () => {
               <select 
                 className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
                 value={wf.sourceType}
-                onChange={(e) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sourceType: e.target.value as any } })}
+                onChange={(e) => updateWf({ sourceType: e.target.value as any })}
               >
                 <option value="rhino">Rhino</option>
                 <option value="revit">Revit</option>
                 <option value="sketchup">SketchUp</option>
                 <option value="blender">Blender</option>
+                <option value="3dsmax">3ds Max</option>
+                <option value="archicad">ArchiCAD</option>
+                <option value="cinema4d">Cinema 4D</option>
                 <option value="clay">Clay Render</option>
                 <option value="other">Other</option>
               </select>
@@ -129,7 +134,7 @@ const Render3DPanel = () => {
                <label className="text-xs text-foreground-muted mb-1 block">View Type</label>
                <SegmentedControl 
                  value={wf.viewType}
-                 onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { viewType: v } })}
+                 onChange={(v) => updateWf({ viewType: v })}
                  options={[{label:'Exterior', value:'exterior'}, {label:'Interior', value:'interior'}, {label:'Aerial', value:'aerial'}]}
                />
             </div>
@@ -147,7 +152,7 @@ const Render3DPanel = () => {
             onBrowse={() => setIsBrowserOpen(true)}
           />
         </div>
-  
+
         <div>
           <SectionHeader title="Detected Elements" />
           <div className="space-y-1">
@@ -156,7 +161,7 @@ const Render3DPanel = () => {
                  key={el.id} 
                  onClick={() => {
                    const newElements = wf.detectedElements.map(e => e.id === el.id ? { ...e, selected: !e.selected } : e);
-                   dispatch({ type: 'UPDATE_WORKFLOW', payload: { detectedElements: newElements } });
+                   updateWf({ detectedElements: newElements });
                  }}
                  className={cn(
                    "flex items-center justify-between p-2 rounded text-xs cursor-pointer border transition-colors",
@@ -179,137 +184,218 @@ const Render3DPanel = () => {
 };
 
 const RenderCADPanel = () => {
-  const { state, dispatch } = useAppStore();
-  const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-  const wf = state.workflow;
-
-  const toggleLayer = (id: string) => {
-    const newLayers = wf.cadLayers.map(l => l.id === id ? { ...l, visible: !l.visible } : l);
-    dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadLayers: newLayers } });
-  };
-
-  return (
-    <div className="space-y-6">
-      <StyleBrowserDialog 
-         isOpen={isBrowserOpen} 
-         onClose={() => setIsBrowserOpen(false)} 
-         activeStyleId={state.activeStyleId}
-         onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
-      />
-      <div>
-        <SectionHeader title="Drawing Setup" />
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          {['Plan', 'Section', 'Elevation', 'Site'].map(t => (
-            <button 
-              key={t}
-              onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadDrawingType: t.toLowerCase() as any } })}
-              className={cn("text-xs py-2 rounded border transition-colors", 
-                wf.cadDrawingType === t.toLowerCase() ? "bg-foreground text-background border-foreground" : "bg-surface-elevated border-border hover:border-foreground-muted"
-              )}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <div className="space-y-3">
-          <SegmentedControl 
-             value={wf.cadScale}
-             onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadScale: v } })}
-             options={[{label:'1:50', value:'1:50'}, {label:'1:100', value:'1:100'}, {label:'1:200', value:'1:200'}]}
-          />
-          <div className="flex items-center justify-between bg-surface-sunken p-2 rounded">
-             <span className="text-xs text-foreground-secondary">Orientation</span>
-             <button 
-               className="p-1 hover:bg-surface-elevated rounded active:bg-border transition-colors"
-               onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { cadOrientation: (wf.cadOrientation + 90) % 360 } })}
-             >
-               <RotateCw size={14} className="text-foreground-secondary" />
-             </button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <SectionHeader title="Style" />
-        <StyleGrid 
-          activeId={state.activeStyleId} 
-          onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })} 
-          onBrowse={() => setIsBrowserOpen(true)}
-        />
-      </div>
-
-      <div>
-        <SectionHeader title="Layer Detection" />
-        <div className="space-y-1">
-           {wf.cadLayers.map(layer => (
-             <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: layer.color }} />
-                <span className="text-xs flex-1">{layer.name}</span>
-                <Toggle label="" checked={layer.visible} onChange={() => toggleLayer(layer.id)} />
-             </div>
-           ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const MasterplanPanel = () => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
+    const updateWf = (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
   
-    const handleAddZone = () => {
-      const newZone: any = { 
-        id: nanoid(), 
-        name: 'New Zone', 
-        color: '#cccccc', 
-        type: 'mixed', 
-        selected: true 
-      };
-      dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: [...wf.mpZones, newZone] } });
-    };
-  
-    const handleRemoveZone = (id: string) => {
-      dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: wf.mpZones.filter(z => z.id !== id) } });
+    const toggleLayer = (id: string) => {
+      const newLayers = wf.cadLayers.map(l => l.id === id ? { ...l, visible: !l.visible } : l);
+      updateWf({ cadLayers: newLayers });
     };
   
     return (
       <div className="space-y-6">
         <div>
-          <SectionHeader title="Detected Zones" />
-          <div className="space-y-2">
-             {wf.mpZones.map(zone => (
-                <div key={zone.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded group hover:border-foreground-muted transition-colors">
-                   <div className="w-3 h-3 rounded shadow-sm cursor-pointer" style={{ backgroundColor: zone.color }} />
-                   <span className="text-xs font-medium flex-1 text-foreground">{zone.name}</span>
-                   <select className="text-[10px] h-5 bg-transparent border-none text-right focus:outline-none text-foreground-muted cursor-pointer">
-                      <option>{zone.type}</option>
-                   </select>
-                   <button onClick={() => handleRemoveZone(zone.id)} className="opacity-0 group-hover:opacity-100 text-foreground-muted hover:text-red-500">
-                      <Trash2 size={12} />
+          <SectionHeader title="Drawing Type" />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[
+              { id: 'plan', label: 'Floor Plan', icon: LayoutIcon },
+              { id: 'section', label: 'Section', icon: ScissorsIcon },
+              { id: 'elevation', label: 'Elevation', icon: BuildingIcon },
+              { id: 'site', label: 'Site Plan', icon: MapIcon }
+            ].map(t => (
+              <button 
+                key={t.id}
+                onClick={() => updateWf({ cadDrawingType: t.id as any })}
+                className={cn(
+                  "text-xs py-2 px-2 rounded border transition-all flex flex-col items-center gap-1.5 h-16 justify-center", 
+                  wf.cadDrawingType === t.id 
+                    ? "bg-foreground text-background border-foreground shadow-sm" 
+                    : "bg-surface-elevated border-border hover:border-foreground-muted hover:bg-surface-sunken"
+                )}
+              >
+                <t.icon size={16} />
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-foreground-muted mb-1 block">Scale</label>
+              <select 
+                className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
+                value={wf.cadScale}
+                onChange={(e) => updateWf({ cadScale: e.target.value })}
+              >
+                <option value="1:50">1:50</option>
+                <option value="1:100">1:100</option>
+                <option value="1:200">1:200</option>
+                <option value="1:500">1:500</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            
+            <div>
+               <label className="text-xs text-foreground-muted mb-1 block">Orientation</label>
+               <div className="flex gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle justify-between">
+                 {[0, 90, 180, 270].map(deg => (
+                   <button
+                    key={deg}
+                    onClick={() => updateWf({ cadOrientation: deg })}
+                    className={cn(
+                      "w-7 h-7 rounded text-[10px] font-mono flex items-center justify-center transition-colors",
+                      wf.cadOrientation === deg 
+                        ? "bg-foreground text-background font-bold" 
+                        : "hover:bg-surface-elevated text-foreground-muted"
+                    )}
+                   >
+                     {deg}°
                    </button>
-                </div>
-             ))}
-             <button 
-               onClick={handleAddZone}
-               className="w-full py-2 border border-dashed border-border rounded text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted flex items-center justify-center gap-1 transition-all"
-             >
-               <Plus size={12} /> Add Zone
-             </button>
+                 ))}
+               </div>
+            </div>
           </div>
         </div>
   
         <div>
-          <SectionHeader title="Context Loading" />
-          <div className="bg-surface-sunken p-3 rounded-lg space-y-2">
-             <button className="w-full py-2 bg-foreground text-background rounded text-xs font-medium mb-2 hover:bg-foreground/90 transition-colors">
-                Locate Site
-             </button>
-             <Toggle label="Surrounding Buildings" checked={wf.mpContext.loadBuildings} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadBuildings: v } } })} />
-             <Toggle label="Roads" checked={wf.mpContext.loadRoads} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadRoads: v } } })} />
-             <Toggle label="Water Bodies" checked={wf.mpContext.loadWater} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadWater: v } } })} />
-             <Toggle label="Terrain" checked={wf.mpContext.loadTerrain} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadTerrain: v } } })} />
+          <SectionHeader title="Layer Detection" />
+          <div className="space-y-1">
+             {wf.cadLayers.map(layer => (
+               <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded hover:border-foreground-muted transition-colors">
+                  <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: layer.color }} />
+                  <span className="text-xs flex-1 font-medium">{layer.name}</span>
+                  <Toggle label="" checked={layer.visible} onChange={() => toggleLayer(layer.id)} />
+               </div>
+             ))}
           </div>
+        </div>
+      </div>
+    );
+};
+
+const MasterplanPanel = () => {
+    const { state, dispatch } = useAppStore();
+    const wf = state.workflow;
+
+    const [isAdding, setIsAdding] = useState(false);
+    const [newZoneName, setNewZoneName] = useState('');
+    const [newZoneColor, setNewZoneColor] = useState('#CCCCCC');
+
+    const handleAddZone = () => {
+        if (!newZoneName.trim()) return;
+        
+        const newZone: ZoneItem = {
+            id: nanoid(),
+            name: newZoneName,
+            color: newZoneColor,
+            type: 'mixed',
+            selected: true
+        };
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: [...wf.mpZones, newZone] } });
+        
+        setIsAdding(false);
+        setNewZoneName('');
+        setNewZoneColor('#CCCCCC');
+    };
+
+    const cancelAdd = () => {
+        setIsAdding(false);
+        setNewZoneName('');
+        setNewZoneColor('#CCCCCC');
+    };
+
+    const toggleZone = (id: string) => {
+        const newZones = wf.mpZones.map(z => z.id === id ? { ...z, selected: !z.selected } : z);
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: newZones } });
+    };
+    
+    return (
+      <div className="space-y-6">
+        <div>
+           <SectionHeader title="Plan Type" />
+           <div className="grid grid-cols-2 gap-2">
+              {[
+                {id: 'site', label: 'Site Plan'}, 
+                {id: 'urban', label: 'Urban'}, 
+                {id: 'zoning', label: 'Zoning'}, 
+                {id: 'massing', label: 'Massing'}
+              ].map(t => (
+                 <button 
+                   key={t.id}
+                   onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpPlanType: t.id as any } })}
+                   className={cn(
+                     "py-2 px-3 text-xs rounded border text-center transition-colors",
+                     wf.mpPlanType === t.id ? "bg-foreground text-background border-foreground" : "bg-surface-elevated border-border hover:bg-surface-sunken"
+                   )}
+                 >
+                   {t.label}
+                 </button>
+              ))}
+           </div>
+        </div>
+
+        <div>
+           <SectionHeader title="Zone Detection" />
+           <div className="space-y-2">
+              {wf.mpZones.map(zone => (
+                 <div key={zone.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded">
+                    <div className="w-4 h-4 rounded shadow-sm border border-black/10" style={{ backgroundColor: zone.color }} />
+                    <span className="text-xs font-medium flex-1">{zone.name}</span>
+                    <Toggle label="" checked={zone.selected} onChange={() => toggleZone(zone.id)} />
+                 </div>
+              ))}
+              
+              {isAdding ? (
+                  <div className="p-2 bg-surface-elevated border border-border rounded animate-fade-in space-y-2">
+                      <div className="flex items-center gap-2">
+                          <div className="relative w-6 h-6 rounded overflow-hidden shadow-sm border border-border">
+                             <input 
+                                 type="color" 
+                                 value={newZoneColor}
+                                 onChange={(e) => setNewZoneColor(e.target.value)}
+                                 className="absolute -top-1 -left-1 w-8 h-8 p-0 border-0 cursor-pointer" 
+                             />
+                          </div>
+                          <input 
+                              type="text" 
+                              value={newZoneName}
+                              onChange={(e) => setNewZoneName(e.target.value)}
+                              placeholder="Zone Name" 
+                              className="flex-1 text-xs bg-surface-sunken border border-border rounded px-2 h-7 focus:outline-none focus:border-accent transition-colors"
+                              autoFocus
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddZone()}
+                          />
+                      </div>
+                      <div className="flex gap-2">
+                          <button onClick={handleAddZone} className="flex-1 py-1.5 bg-foreground text-background text-[10px] font-medium rounded hover:bg-foreground/90 transition-colors">Confirm</button>
+                          <button onClick={cancelAdd} className="flex-1 py-1.5 bg-surface-sunken text-foreground-secondary text-[10px] font-medium rounded hover:bg-border transition-colors">Cancel</button>
+                      </div>
+                  </div>
+              ) : (
+                  <button 
+                    onClick={() => setIsAdding(true)}
+                    className="w-full py-2 border border-dashed border-border text-xs text-foreground-muted rounded hover:bg-surface-elevated transition-colors"
+                  >
+                     + Add Zone
+                  </button>
+              )}
+           </div>
+        </div>
+
+        <div>
+           <SectionHeader title="Context Loading" />
+           <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
+              <button className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors">
+                 <MapIcon size={14} /> Load from Location
+              </button>
+              <div className="space-y-2 pt-2 border-t border-border-subtle">
+                 <Toggle label="Surrounding Buildings" checked={wf.mpContext.loadBuildings} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadBuildings: v } } })} />
+                 <Toggle label="Road Network" checked={wf.mpContext.loadRoads} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadRoads: v } } })} />
+                 <Toggle label="Water Bodies" checked={wf.mpContext.loadWater} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadWater: v } } })} />
+                 <Toggle label="Terrain Elevation" checked={wf.mpContext.loadTerrain} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadTerrain: v } } })} />
+              </div>
+           </div>
         </div>
       </div>
     );
@@ -320,372 +406,382 @@ const VisualEditPanel = () => {
     const wf = state.workflow;
     
     const tools = [
-      { id: 'pan', icon: Hand, label: 'Pan' },
-      { id: 'select', icon: MousePointer, label: 'Select' },
-      { id: 'material', icon: Palette, label: 'Material' },
-      { id: 'lighting', icon: Sun, label: 'Lighting' },
-      { id: 'object', icon: Home, label: 'Object' },
-      { id: 'sky', icon: Cloud, label: 'Sky' },
-      { id: 'remove', icon: Trash2, label: 'Remove' },
-      { id: 'adjust', icon: Wrench, label: 'Adjust' },
+       { id: 'pan', icon: Hand, label: 'Pan' },
+       { id: 'select', icon: MousePointer, label: 'Select' },
+       { id: 'material', icon: Paintbrush, label: 'Material' },
+       { id: 'lighting', icon: Sun, label: 'Lighting' },
+       { id: 'object', icon: Home, label: 'Object' },
+       { id: 'sky', icon: Cloud, label: 'Sky' },
+       { id: 'remove', icon: Trash2, label: 'Remove' },
+       { id: 'adjust', icon: Wrench, label: 'Adjust' },
     ];
-  
+
     return (
       <div className="space-y-6">
-        <div>
-          <SectionHeader title="Tools" />
-          <div className="grid grid-cols-2 gap-2">
-             {tools.map(t => (
-               <button 
-                 key={t.id}
-                 onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { activeTool: t.id as any } })}
-                 className={cn("flex flex-col items-center justify-center p-3 rounded-lg border transition-all active:scale-95", 
-                   wf.activeTool === t.id 
-                     ? "bg-foreground text-background border-foreground shadow-md" 
-                     : "bg-surface-elevated border-border text-foreground-muted hover:border-foreground-secondary hover:bg-surface-sunken"
-                 )}
-               >
-                 <t.icon size={20} className="mb-1.5" />
-                 <span className="text-[10px] font-medium uppercase tracking-wide">{t.label}</span>
-               </button>
-             ))}
-          </div>
-        </div>
-        
-        <div className="bg-surface-sunken p-3 rounded text-xs text-foreground-muted leading-relaxed border border-border-subtle">
-           Select a tool above to configure its specific options in the Right Panel. Use masks to isolate edits.
-        </div>
+         <div>
+            <SectionHeader title="Tools" />
+            <div className="grid grid-cols-4 gap-2">
+               {tools.map(tool => (
+                  <button 
+                     key={tool.id}
+                     onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { activeTool: tool.id as any } })}
+                     className={cn(
+                        "flex flex-col items-center justify-center p-2 rounded-lg border transition-all aspect-square",
+                        wf.activeTool === tool.id 
+                           ? "bg-foreground text-background border-foreground shadow-md scale-105" 
+                           : "bg-surface-elevated border-border text-foreground-muted hover:bg-surface-sunken hover:text-foreground"
+                     )}
+                  >
+                     <tool.icon size={20} strokeWidth={1.5} />
+                     <span className="text-[9px] mt-1 font-medium">{tool.label}</span>
+                  </button>
+               ))}
+            </div>
+         </div>
+
+         <div>
+            <div className="flex items-center justify-between mb-2">
+               <SectionHeader title="Layers" />
+               <button className="p-1 hover:bg-surface-sunken rounded"><Plus size={14}/></button>
+            </div>
+            <div className="space-y-1">
+               {wf.editLayers.map(layer => (
+                  <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded group hover:border-foreground-muted transition-colors">
+                     <button className="text-foreground-muted hover:text-foreground">
+                        <Eye size={14} />
+                     </button>
+                     <span className="text-xs flex-1 truncate">{layer.name}</span>
+                     {layer.locked && <span className="text-[10px] text-foreground-muted bg-surface-sunken px-1 rounded">Locked</span>}
+                  </div>
+               ))}
+            </div>
+         </div>
       </div>
     );
 };
 
 const ExplodedViewPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const wf = state.workflow;
-  
-    const handleAddComponent = () => {
-      const newComp = { id: nanoid(), name: 'New Component', order: wf.explodedComponents.length, active: true };
-      dispatch({ type: 'UPDATE_WORKFLOW', payload: { explodedComponents: [...wf.explodedComponents, newComp] } });
-    };
-  
-    return (
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
       <div className="space-y-6">
          <div>
-           <SectionHeader title="Explosion Order" />
-           <div className="space-y-1">
-              {wf.explodedComponents.map((comp, i) => (
-                 <div key={comp.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded cursor-grab active:cursor-grabbing hover:border-foreground-muted transition-colors">
-                    <div className="text-foreground-muted font-mono text-[10px] w-4">{i+1}</div>
-                    <div className="flex-1 text-xs font-medium">{comp.name}</div>
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                 </div>
-              ))}
-              <button 
-                 onClick={handleAddComponent}
-                 className="w-full py-2 text-xs text-foreground-muted border border-dashed border-border rounded mt-2 hover:text-foreground hover:border-foreground-muted transition-all"
-              >
-                 + Add Component
-              </button>
-           </div>
+            <SectionHeader title="Component Setup" />
+            <div className="space-y-3 mb-4">
+               <button className="w-full py-2 bg-surface-elevated border border-dashed border-border rounded text-xs text-foreground-muted hover:text-foreground transition-colors">
+                  Upload Source Model
+               </button>
+            </div>
+            
+            <SectionHeader title="Explosion Order" />
+            <div className="space-y-2">
+               {wf.explodedComponents.sort((a,b) => a.order - b.order).map((comp) => (
+                  <div key={comp.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded cursor-grab active:cursor-grabbing hover:shadow-sm transition-all">
+                     <div className="flex flex-col gap-0.5 text-foreground-muted cursor-grab">
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                     </div>
+                     <span className="text-xs font-medium flex-1">{comp.name}</span>
+                     <Toggle label="" checked={comp.active} onChange={()=>{}} />
+                  </div>
+               ))}
+               <button className="w-full py-1.5 border border-dashed border-border text-[10px] text-foreground-muted rounded hover:bg-surface-elevated transition-colors">
+                  + Add Component
+               </button>
+            </div>
          </div>
       </div>
-    );
+   );
 };
 
 const SectionPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const wf = state.workflow;
-  
-    return (
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
       <div className="space-y-6">
          <div>
             <SectionHeader title="Cut Definition" />
-            <div className="bg-surface-sunken p-3 rounded-lg space-y-4">
+            <div className="space-y-4">
                <div>
                   <label className="text-xs text-foreground-muted mb-2 block">Cut Type</label>
                   <SegmentedControl 
                      value={wf.sectionCut.type}
+                     options={[{label: 'Vertical', value: 'vertical'}, {label: 'Horizontal', value: 'horizontal'}, {label: 'Diagonal', value: 'diagonal'}]}
                      onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, type: v } } })}
-                     options={[{label:'Vert', value:'vertical'}, {label:'Horiz', value:'horizontal'}, {label:'Diag', value:'diagonal'}]}
                   />
                </div>
-               <Slider 
-                 label="Cut Plane Position" 
-                 value={wf.sectionCut.plane} min={0} max={100} 
-                 onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, plane: v } } })} 
-               />
-               <Slider 
-                 label="Cut Depth" 
-                 value={wf.sectionCut.depth} min={0} max={100} 
-                 onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, depth: v } } })} 
-               />
-               <div className="flex items-center justify-between text-xs">
-                  <span className="text-foreground-secondary">Look Direction</span>
-                  <div className="flex bg-surface-elevated rounded border border-border">
-                     <button 
-                       onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, direction: 'fwd' } } })}
-                       className={cn("px-2 py-1 border-r border-border transition-colors", wf.sectionCut.direction === 'fwd' ? "bg-surface-sunken text-foreground" : "text-foreground-muted hover:text-foreground")}
-                     >
-                       Fwd
-                     </button>
-                     <button 
-                       onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, direction: 'bwd' } } })}
-                       className={cn("px-2 py-1 transition-colors", wf.sectionCut.direction === 'bwd' ? "bg-surface-sunken text-foreground" : "text-foreground-muted hover:text-foreground")}
-                     >
-                       Bwd
-                     </button>
+               
+               <Slider label="Cut Plane Position" value={wf.sectionCut.plane} min={0} max={100} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, plane: v } } })} />
+               
+               <Slider label="View Depth" value={wf.sectionCut.depth} min={0} max={100} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sectionCut: { ...wf.sectionCut, depth: v } } })} />
+               
+               <div className="flex items-center justify-between">
+                  <span className="text-xs text-foreground-secondary">Look Direction</span>
+                  <div className="flex gap-1 bg-surface-sunken p-1 rounded">
+                     <button className="px-3 py-1 bg-surface-elevated rounded shadow-sm text-xs font-medium">Forward</button>
+                     <button className="px-3 py-1 text-foreground-muted hover:text-foreground text-xs font-medium">Backward</button>
                   </div>
                </div>
             </div>
          </div>
       </div>
-    );
+   );
 };
 
 const SketchPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-    const wf = state.workflow;
-  
-    return (
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
       <div className="space-y-6">
-        <StyleBrowserDialog 
-           isOpen={isBrowserOpen} 
-           onClose={() => setIsBrowserOpen(false)} 
-           activeStyleId={state.activeStyleId}
-           onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
-        />
          <div>
             <SectionHeader title="Sketch Analysis" />
-            <div className="space-y-3">
-               <SegmentedControl 
-                 value={wf.sketchType}
-                 onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sketchType: v } })}
-                 options={[{label:'Ext', value:'exterior'}, {label:'Int', value:'interior'}, {label:'Det', value:'detail'}]}
-               />
+            <div className="space-y-4">
+               <div>
+                  <label className="text-xs text-foreground-muted mb-2 block">Sketch Type</label>
+                  <SegmentedControl 
+                     value={wf.sketchType}
+                     options={[{label: 'Exterior', value: 'exterior'}, {label: 'Interior', value: 'interior'}, {label: 'Detail', value: 'detail'}]}
+                     onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sketchType: v } })}
+                  />
+               </div>
+               
                <Slider label="Line Confidence" value={wf.sketchConfidence} min={0} max={100} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sketchConfidence: v } })} />
-               <div className="bg-surface-sunken p-2 rounded space-y-2">
+               
+               <div className="space-y-2 pt-2 border-t border-border-subtle">
                   <Toggle label="Clean Noise" checked={wf.sketchCleanup.clean} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sketchCleanup: { ...wf.sketchCleanup, clean: v } } })} />
                   <Toggle label="Enhance Lines" checked={wf.sketchCleanup.lines} onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { sketchCleanup: { ...wf.sketchCleanup, lines: v } } })} />
                </div>
             </div>
          </div>
-         <div>
-          <SectionHeader title="Style" />
-          <StyleGrid 
-            activeId={state.activeStyleId} 
-            onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })} 
-            onBrowse={() => setIsBrowserOpen(true)}
-          />
-        </div>
+
          <div>
             <SectionHeader title="References" />
-            <div className="grid grid-cols-3 gap-2">
-               <div className="aspect-square border border-dashed border-border rounded flex items-center justify-center text-foreground-muted hover:text-foreground cursor-pointer hover:border-accent transition-colors">
-                  <Plus size={16} />
+            <div className="grid grid-cols-3 gap-2 mb-2">
+               <div className="aspect-square bg-surface-sunken rounded-lg border border-dashed border-border flex items-center justify-center hover:bg-surface-elevated cursor-pointer transition-colors text-foreground-muted hover:text-foreground">
+                  <Plus size={20} />
                </div>
-               {/* Placeholder refs */}
-               <div className="aspect-square bg-surface-elevated rounded border border-border" />
+               {/* Placeholders for added refs */}
+               <div className="aspect-square bg-surface-elevated rounded-lg border border-border relative group">
+                  <div className="absolute inset-0 bg-black/10 rounded-lg" />
+                  <button className="absolute top-1 right-1 p-1 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-sm"><Trash2 size={10} /></button>
+               </div>
             </div>
          </div>
       </div>
-    );
+   );
 };
 
-const UpscalePanel = () => (
-    <div className="flex flex-col items-center justify-center h-40 text-center p-4">
-       <div className="w-12 h-12 bg-surface-sunken rounded-full flex items-center justify-center text-foreground-muted mb-2">
-          <Maximize size={24} />
-       </div>
-       <p className="text-xs text-foreground-secondary">
-          Drag and drop images onto the canvas to begin batch upscaling.
-       </p>
-    </div>
-);
+const UpscalePanel = () => {
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
+      <div className="space-y-6">
+         <div>
+            <SectionHeader title="Batch Queue" />
+            <div className="space-y-2">
+               {wf.upscaleBatch.map(item => (
+                  <div key={item.id} className="flex items-center gap-3 p-2 bg-surface-elevated border border-border rounded">
+                     <div className="w-8 h-8 bg-surface-sunken rounded flex items-center justify-center">
+                        <ImageIcon size={14} className="text-foreground-muted" />
+                     </div>
+                     <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate">{item.name}</div>
+                        <div className="text-[10px] text-foreground-muted capitalize flex items-center gap-1">
+                           {item.status === 'done' && <Check size={10} className="text-green-500" />}
+                           {item.status === 'processing' && <RefreshCw size={10} className="animate-spin text-blue-500" />}
+                           {item.status}
+                        </div>
+                     </div>
+                     {item.status === 'queued' && <button className="text-foreground-muted hover:text-red-500"><Trash2 size={14} /></button>}
+                  </div>
+               ))}
+               <button className="w-full py-2 border border-dashed border-border text-xs text-foreground-muted rounded hover:bg-surface-elevated transition-colors">
+                  + Add Images
+               </button>
+            </div>
+         </div>
+         
+         <div className="bg-surface-sunken p-3 rounded-lg text-[10px] text-foreground-secondary leading-relaxed">
+            <span className="font-bold">Note:</span> Upscaling large batches may take several minutes. You can continue working in other tabs while processing.
+         </div>
+      </div>
+   );
+};
 
 const ImageToCADPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const wf = state.workflow;
-  
-    return (
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
       <div className="space-y-6">
          <div>
             <SectionHeader title="Image Setup" />
-            <div className="space-y-3">
-               <SegmentedControl 
-                 value={wf.imgToCadType}
-                 onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { imgToCadType: v } })}
-                 options={[{label:'Photo', value:'photo'}, {label:'Render', value:'render'}]}
-               />
-               <button className="w-full py-2 border border-border bg-surface-elevated rounded text-xs hover:border-foreground transition-colors">
-                  Auto-Correct Perspective
-               </button>
+            <div className="space-y-4">
+               <div>
+                  <label className="text-xs text-foreground-muted mb-2 block">Image Type</label>
+                  <SegmentedControl 
+                     value={wf.imgToCadType}
+                     options={[{label: 'Photo', value: 'photo'}, {label: 'Render', value: 'render'}]}
+                     onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { imgToCadType: v } })}
+                  />
+               </div>
+               
+               <div className="flex items-center justify-between p-2 bg-surface-elevated border border-border rounded">
+                  <span className="text-xs">Perspective Correction</span>
+                  <div className="flex gap-2 text-[10px]">
+                     <button className="px-2 py-1 bg-surface-sunken rounded hover:bg-background-tertiary">Auto</button>
+                     <button className="px-2 py-1 text-foreground-muted hover:text-foreground">Manual</button>
+                  </div>
+               </div>
             </div>
          </div>
       </div>
-    );
+   );
 };
 
 const ImageTo3DPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const wf = state.workflow;
-  
-    const handleAddView = () => {
-       const newView = { id: nanoid(), view: 'New View', isPrimary: false };
-       dispatch({ type: 'UPDATE_WORKFLOW', payload: { img3dInputs: [...wf.img3dInputs, newView] } });
-    };
-  
-    return (
+   const { state, dispatch } = useAppStore();
+   const wf = state.workflow;
+
+   return (
       <div className="space-y-6">
          <div>
             <SectionHeader title="Input Images" />
-            <div className="space-y-2">
-               {wf.img3dInputs.map(img => (
-                  <div key={img.id} className="flex gap-2 p-2 bg-surface-elevated border border-border rounded">
-                     <div className="w-10 h-10 bg-surface-sunken rounded shrink-0" />
-                     <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate">{img.id}</div>
-                        <div className="text-[10px] text-foreground-muted truncate">{img.view}</div>
+            <div className="space-y-3">
+               {wf.img3dInputs.map((input, idx) => (
+                  <div key={input.id} className="relative group">
+                     <div className="aspect-[4/3] bg-surface-elevated border border-border rounded-lg flex items-center justify-center overflow-hidden">
+                        <ImageIcon size={24} className="text-foreground-muted opacity-20" />
+                        <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                           Img {idx + 1}
+                        </div>
+                        {input.isPrimary && (
+                           <div className="absolute top-2 right-2 bg-accent text-white text-[10px] px-1.5 py-0.5 rounded shadow-sm">
+                              Primary
+                           </div>
+                        )}
                      </div>
-                     {img.isPrimary && <div className="text-[10px] bg-accent text-white px-1.5 rounded self-start">Primary</div>}
+                     <div className="mt-1 flex items-center gap-2">
+                        <select className="flex-1 h-6 text-[10px] bg-surface-sunken border border-border rounded px-1">
+                           <option>Front View</option>
+                           <option>Side View</option>
+                           <option>Perspective</option>
+                        </select>
+                        <button className="p-1 hover:bg-red-50 hover:text-red-500 rounded"><Trash2 size={12} /></button>
+                     </div>
                   </div>
                ))}
-               <button 
-                  onClick={handleAddView}
-                  className="w-full py-2 border border-dashed border-border text-foreground-muted text-xs rounded hover:text-foreground hover:border-foreground-muted transition-colors"
-               >
-                  + Add View
+               <button className="w-full py-8 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 text-foreground-muted hover:border-foreground-muted hover:bg-surface-sunken transition-all">
+                  <Plus size={24} />
+                  <span className="text-xs">Add Reference Image</span>
                </button>
             </div>
          </div>
       </div>
-    );
+   );
 };
 
-// --- 11. Video Panel (Updated) ---
 const VideoPanel = () => {
-  const { state, dispatch } = useAppStore();
-  const videoState = state.workflow.videoState;
+   const { state, dispatch } = useAppStore();
+   const video = state.workflow.videoState;
+   const updateVideo = (payload: Partial<typeof video>) => dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
 
-  const motionPresets = [
-    { id: 'zoom-in', icon: ZoomIn, label: 'Zoom In' },
-    { id: 'zoom-out', icon: ZoomOut, label: 'Zoom Out' },
-    { id: 'pan-right', icon: MoveRight, label: 'Pan R' },
-    { id: 'pan-left', icon: MoveLeft, label: 'Pan L' },
-    { id: 'rise', icon: MoveUp, label: 'Rise' },
-    { id: 'fall', icon: MoveDown, label: 'Fall' },
-    { id: 'orbit-left', icon: RotateCcw, label: 'Orbit L' },
-    { id: 'orbit-right', icon: RotateCwIcon, label: 'Orbit R' },
-    { id: 'custom', icon: Sliders, label: 'Custom' },
-  ];
-
-  return (
-    <div className="space-y-6">
-       <div>
-          <SectionHeader title="Input Mode" />
-          <div className="space-y-2">
-             {[
-               {id:'image-animate', label:'Image Animate', icon: ImageIcon}, 
-               {id:'camera-path', label:'Camera Path', icon: Camera}, 
-               {id:'image-morph', label:'Image Morph', icon: RefreshCw}, 
-               {id:'multi-shot', label:'Multi-Shot', icon: Layers}
-             ].map(m => (
-                <button 
-                  key={m.id}
-                  onClick={() => dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { inputMode: m.id as VideoInputMode } })}
-                  className={cn("w-full flex items-center gap-3 p-2.5 rounded border transition-all text-left", 
-                    videoState.inputMode === m.id 
-                      ? "bg-surface-elevated border-foreground shadow-sm" 
-                      : "border-transparent hover:bg-surface-elevated hover:border-border text-foreground-secondary"
-                  )}
-                >
-                   <div className={cn("w-6 h-6 rounded-md flex items-center justify-center transition-colors", videoState.inputMode === m.id ? "bg-accent text-white" : "bg-surface-sunken")}>
-                      <m.icon size={14} />
-                   </div>
-                   <span className="text-xs font-medium">{m.label}</span>
-                </button>
-             ))}
-          </div>
-       </div>
-
-       <div>
-          <SectionHeader title="Scenario" />
-          <textarea
-            className="w-full h-24 bg-surface-elevated border border-border rounded p-2 text-xs text-foreground resize-none focus:outline-none focus:border-accent placeholder:text-foreground-muted/50 font-sans"
-            placeholder="Describe the movement, events, lighting, and atmosphere of the video..."
-            value={videoState.scenario}
-            onChange={(e) => dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { scenario: e.target.value } })}
-          />
-       </div>
-
-       {videoState.inputMode === 'image-animate' && (
-         <>
-           <div>
-             <SectionHeader title="Source Image" />
-             {state.uploadedImage ? (
-                <div className="aspect-video bg-surface-sunken rounded border border-border overflow-hidden relative group">
-                  <img src={state.uploadedImage} className="w-full h-full object-cover" alt="Source" />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button className="px-3 py-1.5 bg-white text-black text-xs font-medium rounded shadow-sm hover:scale-105 transition-transform">Replace</button>
-                  </div>
-                </div>
-             ) : (
-                <div className="aspect-video bg-surface-sunken rounded border border-dashed border-border flex flex-col items-center justify-center text-foreground-muted gap-2 hover:border-foreground transition-colors cursor-pointer">
-                  <ImageIcon size={24} />
-                  <span className="text-xs">Select Source Image</span>
-                </div>
-             )}
-           </div>
-
-           <div>
-             <SectionHeader title="Motion Presets" />
-             <div className="grid grid-cols-3 gap-2">
-               {motionPresets.map(preset => (
-                 <button
-                   key={preset.id}
-                   className="flex flex-col items-center justify-center p-2 rounded border border-border bg-surface-elevated hover:border-foreground-muted hover:bg-surface-sunken transition-all aspect-square"
-                   title={preset.label}
-                 >
-                   <preset.icon size={18} className="text-foreground-secondary mb-1" />
-                   <span className="text-[9px] font-medium text-foreground-muted text-center leading-none">{preset.label}</span>
-                 </button>
+   return (
+      <div className="space-y-6">
+         <div>
+            <SectionHeader title="Video Mode" />
+            <div className="space-y-2">
+               {[
+                  {id: 'image-animate', label: 'Image Animate', icon: Wand2},
+                  {id: 'camera-path', label: 'Camera Path', icon: Camera},
+                  {id: 'image-morph', label: 'Morph Sequence', icon: Layers},
+                  {id: 'multi-shot', label: 'Multi-Shot', icon: Film},
+               ].map(m => (
+                  <button 
+                     key={m.id}
+                     onClick={() => updateVideo({ inputMode: m.id as any })}
+                     className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                        video.inputMode === m.id 
+                           ? "bg-surface-elevated border-foreground shadow-sm" 
+                           : "bg-background-tertiary border-transparent hover:bg-surface-elevated hover:border-border"
+                     )}
+                  >
+                     <div className={cn("p-2 rounded-full", video.inputMode === m.id ? "bg-foreground text-background" : "bg-surface-sunken text-foreground-muted")}>
+                        <m.icon size={16} />
+                     </div>
+                     <div>
+                        <div className="text-xs font-bold">{m.label}</div>
+                        <div className="text-[10px] text-foreground-muted">
+                           {m.id === 'image-animate' && "Add motion to still image"}
+                           {m.id === 'camera-path' && "Flythrough from 3D/Image"}
+                           {m.id === 'image-morph' && "Transition between views"}
+                           {m.id === 'multi-shot' && "Assembly of clips"}
+                        </div>
+                     </div>
+                  </button>
                ))}
+            </div>
+         </div>
+      </div>
+   );
+};
+
+const MaterialValidationPanel = () => {
+    const { state, dispatch } = useAppStore();
+    const mv = state.materialValidation;
+
+    return (
+      <div className="space-y-6">
+        <div>
+           <SectionHeader title="Validation Scope" />
+           <div className="bg-surface-sunken p-3 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground-secondary">Terminal Materials</span>
+                <div className={cn("w-2 h-2 rounded-full", mv.documents.terminal ? "bg-green-500" : "bg-red-500")} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground-secondary">Cargo Materials</span>
+                <div className={cn("w-2 h-2 rounded-full", mv.documents.cargo ? "bg-green-500" : "bg-red-500")} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-foreground-secondary">Bill of Quantities</span>
+                <div className={cn("w-2 h-2 rounded-full", mv.documents.boq ? "bg-green-500" : "bg-red-500")} />
+              </div>
+              <button className="w-full py-2 border border-dashed border-border text-xs rounded hover:bg-surface-elevated transition-colors">
+                + Add Document
+              </button>
+           </div>
+        </div>
+
+        <div>
+           <SectionHeader title="Quick Stats" />
+           <div className="grid grid-cols-2 gap-2">
+             <div className="bg-surface-elevated p-2 rounded border border-border">
+                <div className="text-[10px] text-foreground-muted uppercase">Validated</div>
+                <div className="text-lg font-bold text-green-600">{mv.stats.validated}</div>
+             </div>
+             <div className="bg-surface-elevated p-2 rounded border border-border">
+                <div className="text-[10px] text-foreground-muted uppercase">Warnings</div>
+                <div className="text-lg font-bold text-yellow-600">{mv.stats.warnings}</div>
+             </div>
+             <div className="bg-surface-elevated p-2 rounded border border-border">
+                <div className="text-[10px] text-foreground-muted uppercase">Errors</div>
+                <div className="text-lg font-bold text-red-600">{mv.stats.errors}</div>
+             </div>
+             <div className="bg-surface-elevated p-2 rounded border border-border">
+                <div className="text-[10px] text-foreground-muted uppercase">Total</div>
+                <div className="text-lg font-bold text-foreground">{mv.stats.total}</div>
              </div>
            </div>
-         </>
-       )}
-
-       {videoState.inputMode === 'camera-path' && (
-          <div>
-            <SectionHeader title="Keyframes" />
-            <div className="space-y-2">
-               <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                  {[1, 2, 3, 4].map(i => (
-                     <div key={i} className="w-16 h-16 shrink-0 bg-surface-sunken rounded border border-border flex items-center justify-center text-xs font-mono text-foreground-muted relative">
-                        {i}
-                        <div className="absolute bottom-1 right-1 text-[8px] bg-black/50 text-white px-1 rounded">{(i-1)*2}s</div>
-                     </div>
-                  ))}
-                  <button className="w-16 h-16 shrink-0 border border-dashed border-border rounded flex items-center justify-center hover:bg-surface-elevated text-foreground-muted">
-                     <Plus size={16} />
-                  </button>
-               </div>
-               <button className="w-full py-2 bg-foreground text-background rounded text-xs">Open Path Editor</button>
-            </div>
-          </div>
-       )}
-
-       {videoState.inputMode === 'image-morph' && (
-         <div>
-           <SectionHeader title="Transition" />
-           <div className="bg-surface-sunken p-3 rounded space-y-3">
-              <SegmentedControl value="morph" options={[{label:'Crossfade', value:'crossfade'}, {label:'Morph', value:'morph'}]} onChange={()=>{}} />
-              <Toggle label="Preserve Geometry" checked={true} onChange={()=>{}} />
-           </div>
-         </div>
-       )}
-    </div>
-  );
+        </div>
+      </div>
+    );
 };
 
 
@@ -697,6 +793,7 @@ export const LeftSidebar: React.FC = () => {
     switch (state.mode) {
       case 'render-3d': return <Render3DPanel />;
       case 'render-cad': return <RenderCADPanel />;
+      case 'material-validation': return <MaterialValidationPanel />;
       case 'masterplan': return <MasterplanPanel />;
       case 'visual-edit': return <VisualEditPanel />;
       case 'exploded': return <ExplodedViewPanel />;

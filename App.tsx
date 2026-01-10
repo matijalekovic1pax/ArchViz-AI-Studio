@@ -1,3 +1,5 @@
+
+
 import React, { useEffect } from 'react';
 import { AppProvider, useAppStore } from './store';
 import { TopBar } from './components/panels/TopBar';
@@ -5,6 +7,7 @@ import { LeftSidebar } from './components/panels/left/LeftSidebar';
 import { RightPanel } from './components/panels/right/RightPanel';
 import { BottomPanel } from './components/panels/bottom/BottomPanel';
 import { ImageCanvas } from './components/canvas/ImageCanvas';
+import { MaterialValidationView } from './components/MaterialValidationView';
 import { GenerationMode } from './types';
 
 const ShortcutsListener: React.FC = () => {
@@ -59,6 +62,8 @@ const ShortcutsListener: React.FC = () => {
 };
 
 const Layout: React.FC = () => {
+  const { state } = useAppStore();
+
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans selection:bg-accent selection:text-foreground">
       <TopBar />
@@ -66,7 +71,11 @@ const Layout: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         <LeftSidebar />
         <div className="flex-1 flex flex-col min-w-0 relative">
-          <ImageCanvas />
+          {state.mode === 'material-validation' ? (
+             <MaterialValidationView />
+          ) : (
+             <ImageCanvas />
+          )}
           <BottomPanel />
         </div>
         <RightPanel />
