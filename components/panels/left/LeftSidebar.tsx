@@ -10,7 +10,9 @@ import {
   ZoomIn, ZoomOut, MoveRight, MoveLeft, MoveUp, MoveDown, RotateCcw, RotateCw as RotateCwIcon, Sliders, Image as ImageIcon, Camera,
   RefreshCw, MousePointerClick, ClipboardCheck, Zap,
   Layout as LayoutIcon, Scissors as ScissorsIcon, Building as BuildingIcon, Map as MapIcon, Box as BoxIcon,
-  PlayCircle, Film, Wand2, Eye, FileDigit, ScanLine
+  PlayCircle, Film, Wand2, Eye, EyeOff, FileDigit, ScanLine, Expand,
+  FileText, FileSpreadsheet, UploadCloud, MoreHorizontal, FileCheck,
+  ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode, VideoInputMode, ZoneItem } from '../../../types';
@@ -414,44 +416,58 @@ const VisualEditPanel = () => {
        { id: 'sky', icon: Cloud, label: 'Sky' },
        { id: 'remove', icon: Trash2, label: 'Remove' },
        { id: 'adjust', icon: Wrench, label: 'Adjust' },
+       { id: 'extend', icon: Expand, label: 'Extend' },
     ];
 
     return (
       <div className="space-y-6">
          <div>
-            <SectionHeader title="Tools" />
-            <div className="grid grid-cols-4 gap-2">
+            <SectionHeader title="Tool Palette" />
+            <div className="flex flex-col gap-2">
                {tools.map(tool => (
                   <button 
                      key={tool.id}
                      onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { activeTool: tool.id as any } })}
                      className={cn(
-                        "flex flex-col items-center justify-center p-2 rounded-lg border transition-all aspect-square",
+                        "flex items-center gap-4 px-3 py-3 rounded-lg border transition-all group",
                         wf.activeTool === tool.id 
-                           ? "bg-foreground text-background border-foreground shadow-md scale-105" 
+                           ? "bg-foreground text-background border-foreground shadow-md" 
                            : "bg-surface-elevated border-border text-foreground-muted hover:bg-surface-sunken hover:text-foreground"
                      )}
                   >
                      <tool.icon size={20} strokeWidth={1.5} />
-                     <span className="text-[9px] mt-1 font-medium">{tool.label}</span>
+                     <span className={cn("text-xs font-medium", wf.activeTool !== tool.id && "opacity-80")}>{tool.label}</span>
+                     
+                     {wf.activeTool === tool.id && (
+                        <div className="ml-auto w-1.5 h-1.5 bg-background rounded-full animate-pulse" />
+                     )}
                   </button>
                ))}
             </div>
          </div>
 
-         <div>
-            <div className="flex items-center justify-between mb-2">
+         <div className="pt-4 border-t border-border-subtle">
+            <div className="flex items-center justify-between mb-3">
                <SectionHeader title="Layers" />
-               <button className="p-1 hover:bg-surface-sunken rounded"><Plus size={14}/></button>
+               <button className="p-1 hover:bg-surface-sunken rounded hover:text-foreground text-foreground-muted transition-colors"><Plus size={14}/></button>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
                {wf.editLayers.map(layer => (
-                  <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded group hover:border-foreground-muted transition-colors">
+                  <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded group hover:border-foreground-muted transition-colors relative">
                      <button className="text-foreground-muted hover:text-foreground">
-                        <Eye size={14} />
+                        {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
                      </button>
-                     <span className="text-xs flex-1 truncate">{layer.name}</span>
-                     {layer.locked && <span className="text-[10px] text-foreground-muted bg-surface-sunken px-1 rounded">Locked</span>}
+                     
+                     <div className="w-8 h-8 rounded bg-surface-sunken shrink-0 flex items-center justify-center">
+                        <Layers size={14} className="opacity-20" />
+                     </div>
+                     
+                     <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate">{layer.name}</div>
+                        <div className="text-[9px] text-foreground-muted uppercase tracking-wider">{layer.type}</div>
+                     </div>
+                     
+                     {layer.locked && <span className="text-foreground-muted"><ScanLine size={12} /></span>}
                   </div>
                ))}
             </div>
@@ -733,51 +749,72 @@ const VideoPanel = () => {
 };
 
 const MaterialValidationPanel = () => {
-    const { state, dispatch } = useAppStore();
-    const mv = state.materialValidation;
+    // Mock Documents
+    const documents = [
+       { id: '1', name: 'Terminal_Materials.pdf', type: 'pdf', items: 26, status: 'synced', date: 'Today, 10:23 AM' },
+       { id: '2', name: 'Cargo_Materials.pdf', type: 'pdf', items: 12, status: 'synced', date: 'Yesterday, 4:15 PM' },
+       { id: '3', name: 'MQT_BoQ.xlsx', type: 'xls', items: 89, status: 'synced', date: 'Jan 8, 2024' },
+    ];
 
     return (
       <div className="space-y-6">
         <div>
-           <SectionHeader title="Validation Scope" />
-           <div className="bg-surface-sunken p-3 rounded-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground-secondary">Terminal Materials</span>
-                <div className={cn("w-2 h-2 rounded-full", mv.documents.terminal ? "bg-green-500" : "bg-red-500")} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground-secondary">Cargo Materials</span>
-                <div className={cn("w-2 h-2 rounded-full", mv.documents.cargo ? "bg-green-500" : "bg-red-500")} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground-secondary">Bill of Quantities</span>
-                <div className={cn("w-2 h-2 rounded-full", mv.documents.boq ? "bg-green-500" : "bg-red-500")} />
-              </div>
-              <button className="w-full py-2 border border-dashed border-border text-xs rounded hover:bg-surface-elevated transition-colors">
-                + Add Document
-              </button>
+           <SectionHeader title="Project Documents" />
+           <div className="space-y-2 mb-4">
+              {documents.map(doc => (
+                 <div key={doc.id} className="p-2.5 bg-surface-elevated border border-border rounded-lg group hover:border-foreground-muted transition-colors relative">
+                    <div className="flex items-start gap-3">
+                       <div className={cn(
+                          "w-8 h-8 rounded flex items-center justify-center text-xs font-bold uppercase",
+                          doc.type === 'pdf' ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+                       )}>
+                          {doc.type === 'pdf' ? <FileText size={14} /> : <FileSpreadsheet size={14} />}
+                       </div>
+                       <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium truncate text-foreground">{doc.name}</div>
+                          <div className="text-[10px] text-foreground-muted flex items-center gap-1.5 mt-0.5">
+                             <span>{doc.items} items</span>
+                             <span className="w-0.5 h-0.5 rounded-full bg-border-strong" />
+                             <span>{doc.date}</span>
+                          </div>
+                       </div>
+                       <button className="text-foreground-muted hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreHorizontal size={14} />
+                       </button>
+                    </div>
+                    {/* Status Indicator */}
+                    <div className="absolute top-2 right-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 ring-2 ring-white" title="Synced" />
+                    </div>
+                 </div>
+              ))}
            </div>
+
+           <button className="w-full py-3 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-1 text-foreground-muted hover:text-foreground hover:bg-surface-elevated hover:border-foreground-muted transition-all">
+              <UploadCloud size={20} className="mb-1" />
+              <span className="text-xs font-medium">Upload Document</span>
+              <span className="text-[9px] text-foreground-muted/80">PDF, Excel, CSV</span>
+           </button>
         </div>
 
         <div>
-           <SectionHeader title="Quick Stats" />
-           <div className="grid grid-cols-2 gap-2">
-             <div className="bg-surface-elevated p-2 rounded border border-border">
-                <div className="text-[10px] text-foreground-muted uppercase">Validated</div>
-                <div className="text-lg font-bold text-green-600">{mv.stats.validated}</div>
-             </div>
-             <div className="bg-surface-elevated p-2 rounded border border-border">
-                <div className="text-[10px] text-foreground-muted uppercase">Warnings</div>
-                <div className="text-lg font-bold text-yellow-600">{mv.stats.warnings}</div>
-             </div>
-             <div className="bg-surface-elevated p-2 rounded border border-border">
-                <div className="text-[10px] text-foreground-muted uppercase">Errors</div>
-                <div className="text-lg font-bold text-red-600">{mv.stats.errors}</div>
-             </div>
-             <div className="bg-surface-elevated p-2 rounded border border-border">
-                <div className="text-[10px] text-foreground-muted uppercase">Total</div>
-                <div className="text-lg font-bold text-foreground">{mv.stats.total}</div>
-             </div>
+           <SectionHeader title="Validation Scope" />
+           <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                 <Toggle label="" checked={true} onChange={()=>{}} />
+                 <div className="flex-1">
+                    <div className="text-xs font-medium group-hover:text-foreground">Cross-Reference BoQ</div>
+                    <div className="text-[10px] text-foreground-muted">Compare against Bill of Quantities</div>
+                 </div>
+              </label>
+              <div className="h-px bg-border-subtle" />
+              <label className="flex items-center gap-2 cursor-pointer group">
+                 <Toggle label="" checked={true} onChange={()=>{}} />
+                 <div className="flex-1">
+                    <div className="text-xs font-medium group-hover:text-foreground">Tech. Specification</div>
+                    <div className="text-[10px] text-foreground-muted">Validate norms & standards</div>
+                 </div>
+              </label>
            </div>
         </div>
       </div>
@@ -788,6 +825,7 @@ const MaterialValidationPanel = () => {
 // --- Main LeftSidebar Component ---
 export const LeftSidebar: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { leftSidebarOpen } = state;
 
   const renderPanel = () => {
     switch (state.mode) {
@@ -811,7 +849,7 @@ export const LeftSidebar: React.FC = () => {
 
   return (
     <div className="flex shrink-0 h-full">
-      {/* Feature Switcher Rail */}
+      {/* Feature Switcher Rail - Always visible for navigation */}
       <div className="w-14 bg-surface-elevated border-r border-border flex flex-col items-center py-4 gap-4 z-20 shadow-subtle overflow-y-auto no-scrollbar group hover:w-[200px] transition-all duration-300 ease-out">
         {WORKFLOWS.map((workflow) => {
           const Icon = workflow.icon;
@@ -841,21 +879,48 @@ export const LeftSidebar: React.FC = () => {
         })}
       </div>
 
-      {/* Specific Workflow Content */}
-      <div className={cn(
-        "bg-background-tertiary border-r border-border flex flex-col overflow-hidden transition-all",
-        state.leftSidebarWidth ? `w-[${state.leftSidebarWidth}px]` : "w-[280px]"
-      )}>
-         {/* Fixed Header */}
-         <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle z-10">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">{activeWorkflowLabel}</h2>
-         </div>
-         
-         {/* Scrollable Content */}
-         <div className="flex-1 overflow-y-auto p-5 pt-4 custom-scrollbar">
-           {renderPanel()}
-         </div>
-      </div>
+      {/* Specific Workflow Content Panel */}
+      {leftSidebarOpen ? (
+        <div className={cn(
+          "bg-background-tertiary border-r border-border flex flex-col overflow-hidden transition-all relative",
+          state.leftSidebarWidth ? `w-[${state.leftSidebarWidth}px]` : "w-[280px]"
+        )}>
+           {/* Fixed Header */}
+           <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle z-10 flex justify-between items-center">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">{activeWorkflowLabel}</h2>
+              <button 
+                onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
+                className="text-foreground-muted hover:text-foreground hover:bg-surface-sunken p-1 rounded-md transition-colors"
+                title="Collapse Sidebar"
+              >
+                <ChevronsLeft size={16} />
+              </button>
+           </div>
+           
+           {/* Scrollable Content */}
+           <div className="flex-1 overflow-y-auto p-5 pt-4 custom-scrollbar">
+             {renderPanel()}
+           </div>
+        </div>
+      ) : (
+        <div className="w-10 bg-background-tertiary border-r border-border relative flex flex-col items-center">
+           <button 
+             onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
+             className="mt-4 p-1 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-md transition-all z-30"
+             title="Expand Sidebar"
+           >
+             <ChevronsRight size={16} />
+           </button>
+           <div className="flex-1 flex items-center justify-center">
+              <div 
+                className="whitespace-nowrap text-xs font-bold text-foreground-muted uppercase tracking-wider" 
+                style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+              >
+                {activeWorkflowLabel}
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

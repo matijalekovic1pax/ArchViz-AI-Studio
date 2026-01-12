@@ -1,5 +1,4 @@
 
-
 export type GenerationMode = 
   | 'render-3d' 
   | 'render-cad' 
@@ -76,14 +75,17 @@ export interface WorkflowSettings {
   mpExport: { topDown: boolean; aerialNE: boolean; aerialSW: boolean; eyeLevel: boolean };
 
   // 4. Visual Edit
-  activeTool: 'pan' | 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'adjust';
-  visualSelection: { mode: 'rect' | 'lasso' | 'ai'; feather: number };
-  visualMaterial: { current: string; replacement: string; intensity: number; preserveLight: boolean };
-  visualLighting: { mode: 'global' | 'local'; time: number; brightness: number; shadows: number };
-  visualSky: { auto: boolean; preset: string; blend: number };
-  visualObject: { category: string; scale: number; matchLight: boolean };
-  visualAdjust: { exposure: number; contrast: number; saturation: number; temp: number };
-  editLayers: { id: string; name: string; visible: boolean; locked: boolean }[];
+  activeTool: 'pan' | 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'adjust' | 'extend';
+  visualPrompt: string; // The specific prompt for the active operation
+  visualSelection: { mode: 'rect' | 'brush' | 'polygon' | 'ai'; brushSize: number; hardness: number; flow: number };
+  visualMaterial: { surfaceType: string; category: string; materialId: string; scale: number; rotation: number; roughness: number };
+  visualLighting: { mode: 'global' | 'local'; time: number; weather: string; intensity: number; warmth: number };
+  visualSky: { category: string; preset: string; horizonLine: number; atmosphere: number };
+  visualObject: { category: string; scale: number; autoPerspective: boolean; shadow: boolean };
+  visualRemove: { mode: 'fill' | 'clone'; autoDetect: string[] };
+  visualAdjust: { exposure: number; contrast: number; saturation: number; temp: number; styleStrength: number };
+  visualExtend: { top: number; right: number; bottom: number; left: number };
+  editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];
 
   // 5. Exploded
   explodedComponents: { id: string; name: string; order: number; active: boolean }[];
@@ -368,6 +370,11 @@ export interface AppState {
 
   leftSidebarWidth: number;
   rightPanelWidth: number;
+  
+  // NEW STATE
+  leftSidebarOpen: boolean;
+  rightPanelOpen: boolean;
+
   bottomPanelHeight: number;
   bottomPanelCollapsed: boolean;
   activeRightTab: string;
@@ -396,6 +403,9 @@ export type Action =
   | { type: 'SET_ACTIVE_TAB'; payload: string }
   | { type: 'SET_ACTIVE_BOTTOM_TAB'; payload: string }
   | { type: 'TOGGLE_BOTTOM_PANEL' }
+  // NEW ACTIONS
+  | { type: 'TOGGLE_LEFT_SIDEBAR' }
+  | { type: 'TOGGLE_RIGHT_PANEL' }
   | { type: 'ADD_HISTORY'; payload: HistoryItem }
   | { type: 'LOAD_PROJECT'; payload: AppState }
   | { type: 'RESET_PROJECT' };

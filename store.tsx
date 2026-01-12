@@ -1,5 +1,4 @@
 
-
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
 import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState } from './types';
 import { generatePrompt } from './engine/promptEngine';
@@ -79,16 +78,19 @@ const initialWorkflow: WorkflowSettings = {
 
   // 4. Visual Edit
   activeTool: 'pan',
-  visualSelection: { mode: 'rect', feather: 0 },
-  visualMaterial: { current: 'Facade Wall', replacement: 'Brick', intensity: 80, preserveLight: true },
-  visualLighting: { mode: 'local', time: 50, brightness: 0, shadows: 0 },
-  visualSky: { auto: true, preset: 'Cloudy', blend: 50 },
-  visualObject: { category: 'People', scale: 1, matchLight: true },
-  visualAdjust: { exposure: 0, contrast: 0, saturation: 0, temp: 0 },
+  visualPrompt: '',
+  visualSelection: { mode: 'rect', brushSize: 120, hardness: 75, flow: 100 },
+  visualMaterial: { surfaceType: 'auto', category: 'Flooring', materialId: 'oak', scale: 100, rotation: 0, roughness: 60 },
+  visualLighting: { mode: 'global', time: 14.5, weather: 'clear', intensity: 70, warmth: 50 },
+  visualSky: { category: 'Clear Sky', preset: 'Blue Sky', horizonLine: 50, atmosphere: 40 },
+  visualObject: { category: 'Furniture', scale: 100, autoPerspective: true, shadow: true },
+  visualRemove: { mode: 'fill', autoDetect: [] },
+  visualAdjust: { exposure: 0, contrast: 0, saturation: 0, temp: 0, styleStrength: 50 },
+  visualExtend: { top: 0, right: 0, bottom: 0, left: 0 },
   editLayers: [
-    { id: '1', name: 'Adjustments', visible: true, locked: false },
-    { id: '2', name: 'Sky Replacement', visible: true, locked: false },
-    { id: '3', name: 'Original Image', visible: true, locked: true },
+    { id: '1', name: 'Material - Floor', type: 'material', visible: true, locked: false },
+    { id: '2', name: 'Lighting Adj', type: 'lighting', visible: true, locked: false },
+    { id: '3', name: 'Original', type: 'background', visible: true, locked: true },
   ],
 
   // 5. Exploded
@@ -281,8 +283,12 @@ const initialState: AppState = {
   output: initialOutput,
   canvas: initialCanvas,
   history: [],
+  
   leftSidebarWidth: 280,
   rightPanelWidth: 320,
+  leftSidebarOpen: true,
+  rightPanelOpen: true,
+
   bottomPanelHeight: 200,
   bottomPanelCollapsed: false,
   activeRightTab: 'geometry',
@@ -317,6 +323,11 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_ACTIVE_TAB': return { ...state, activeRightTab: action.payload };
     case 'SET_ACTIVE_BOTTOM_TAB': return { ...state, activeBottomTab: action.payload };
     case 'TOGGLE_BOTTOM_PANEL': return { ...state, bottomPanelCollapsed: !state.bottomPanelCollapsed };
+    
+    // Toggle Actions
+    case 'TOGGLE_LEFT_SIDEBAR': return { ...state, leftSidebarOpen: !state.leftSidebarOpen };
+    case 'TOGGLE_RIGHT_PANEL': return { ...state, rightPanelOpen: !state.rightPanelOpen };
+
     case 'ADD_HISTORY': return { ...state, history: [action.payload, ...state.history].slice(0, 20) };
     case 'LOAD_PROJECT': return { ...action.payload };
     case 'RESET_PROJECT': return { ...initialState };
