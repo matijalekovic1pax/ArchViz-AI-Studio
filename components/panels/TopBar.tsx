@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -25,6 +25,15 @@ export const TopBar: React.FC = () => {
   const handleZoom = (delta: number) => {
     const newZoom = Math.max(0.1, Math.min(8, state.canvas.zoom + delta));
     dispatch({ type: 'SET_CANVAS_ZOOM', payload: newZoom });
+  };
+
+  const handleFitToScreen = () => {
+    dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+    dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+  };
+
+  const handleToggleSplit = () => {
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { canvasSync: !state.workflow.canvasSync } });
   };
 
   const handleClearImage = () => {
@@ -252,6 +261,41 @@ export const TopBar: React.FC = () => {
           >
              <Trash2 size={14} />
           </button>
+
+          <div className="w-px h-3 bg-border mx-1" />
+
+          {/* Canvas Controls: Fit & Split */}
+          <button 
+            onClick={handleFitToScreen}
+            disabled={!state.uploadedImage}
+            className={cn(
+               "p-1.5 rounded-md transition-all",
+               !state.uploadedImage
+                  ? "text-foreground-muted/30 cursor-not-allowed"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+            )}
+            title="Fit to Screen"
+          >
+            <Minimize2 size={14} />
+          </button>
+
+          {!isVideoMode && (
+            <button
+               onClick={handleToggleSplit}
+               disabled={!state.uploadedImage}
+               className={cn(
+                  "p-1.5 rounded-md transition-all",
+                  !state.uploadedImage
+                     ? "text-foreground-muted/30 cursor-not-allowed"
+                     : state.workflow.canvasSync
+                        ? "text-foreground bg-surface-elevated shadow-sm"
+                        : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+               )}
+               title="Toggle Split View"
+            >
+               <Columns size={14} />
+            </button>
+          )}
 
           <div className="w-px h-3 bg-border mx-1" />
 

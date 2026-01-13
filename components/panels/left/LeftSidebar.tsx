@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useAppStore } from '../../../store';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
@@ -19,7 +18,7 @@ import { GenerationMode, VideoInputMode, ZoneItem } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Slider } from '../../ui/Slider';
-import { nanoid } from 'nanoid/non-secure';
+import { nanoid } from 'nanoid';
 
 // --- Workflow Navigation ---
 const WORKFLOWS: { id: GenerationMode; label: string; icon: React.ElementType }[] = [
@@ -195,7 +194,6 @@ const Render3DPanel = () => {
     );
 };
 
-// ... (Rest of the components remain largely the same, just keeping the structure)
 const RenderCADPanel = () => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
@@ -717,7 +715,7 @@ const VideoPanel = () => {
    const { state, dispatch } = useAppStore();
    const video = state.workflow.videoState;
    const updateVideo = (payload: Partial<typeof video>) => dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
-   const fileInputRef = React.useRef<HTMLInputElement>(null);
+   const fileInputRef = useRef<HTMLInputElement>(null);
 
    const handleAddKeyframe = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {

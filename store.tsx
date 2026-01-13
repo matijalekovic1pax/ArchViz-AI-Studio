@@ -295,7 +295,7 @@ const initialState: AppState = {
   rightPanelOpen: true,
 
   bottomPanelHeight: 200,
-  bottomPanelCollapsed: false,
+  bottomPanelCollapsed: true,
   activeRightTab: 'geometry',
   activeBottomTab: 'prompt',
 };

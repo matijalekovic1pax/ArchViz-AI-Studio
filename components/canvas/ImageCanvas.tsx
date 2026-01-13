@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { nanoid } from 'nanoid/non-secure';
+import { nanoid } from 'nanoid';
 
 // --- Floating Prompt Bar Component ---
 
@@ -262,39 +262,6 @@ const StandardCanvas: React.FC = () => {
 
   return (
     <div className="flex-1 bg-[#F5F5F3] relative overflow-hidden flex flex-col h-full w-full">
-       
-       {state.uploadedImage && (
-           <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-white/80 backdrop-blur border border-border/50 rounded-lg p-1 shadow-sm select-none transition-opacity hover:opacity-100 opacity-60">
-              <button 
-                 className="flex items-center gap-1 px-2 py-1 text-xs font-medium hover:bg-black/5 rounded text-foreground-secondary active:scale-95 transition-transform" 
-                 title="Fit to Screen (100%)"
-                 onClick={handleFitToScreen}
-                 onMouseDown={(e) => e.stopPropagation()} 
-              >
-                 <Minimize2 size={14} /> Fit
-              </button>
-              
-              {!isVideo && (
-                 <>
-                   <div className="w-px h-4 bg-border" />
-                   <button 
-                     className={cn(
-                       "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors active:scale-95",
-                       state.workflow.canvasSync ? "bg-foreground text-background" : "hover:bg-black/5 text-foreground-secondary"
-                     )}
-                     onClick={(e) => {
-                        e.stopPropagation();
-                        dispatch({ type: 'UPDATE_WORKFLOW', payload: { canvasSync: !state.workflow.canvasSync } });
-                     }}
-                     onMouseDown={(e) => e.stopPropagation()} 
-                   >
-                      <Columns size={14} /> Split
-                   </button>
-                 </>
-              )}
-           </div>
-       )}
-
       <div 
          ref={containerRef}
          className={cn(

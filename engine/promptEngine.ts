@@ -1,7 +1,8 @@
+
 import { AppState, StyleConfiguration } from '../types';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
-  // --- ARCHITECTURAL STYLES (ORIGINAL SET) ---
+  // --- EXISTING STYLES (14) ---
   {
     id: 'contemporary-minimalist',
     name: 'Contemporary Minimalist',
@@ -294,6 +295,567 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
       },
       cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['wide landscape'] },
       renderingLanguage: { quality: ['high contrast'], atmosphere: ['dry', 'hot', 'silent'], detail: ['sand grains', 'heat haze'] }
+    }
+  },
+  // --- NEW STYLES (40) ---
+  {
+    id: 'art-deco',
+    name: 'Art Deco',
+    category: 'Historical',
+    description: 'Geometric patterns, bold vertical lines, decorative ornamentation',
+    previewUrl: 'https://images.unsplash.com/photo-1550417761-e945c997cefa?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['geometric patterns', 'vertical emphasis', 'ziggurat forms', 'decorative', 'streamlined'],
+      materialBias: { primary: ['limestone', 'chrome', 'glass block'], secondary: ['brass', 'terrazzo'], avoid: ['minimalism'] },
+      lightingBias: { preferred: ['dramatic up-lighting', 'neon accents'], avoid: ['soft diffuse'] },
+      cameraBias: { preferredAngles: ['low angle', 'front'], preferredFraming: ['symmetrical'] },
+      renderingLanguage: { quality: ['cinematic'], atmosphere: ['glamorous', 'bold'], detail: ['ornamental'] }
+    }
+  },
+  {
+    id: 'beaux-arts',
+    name: 'Beaux-Arts',
+    category: 'Historical',
+    description: 'Grandeur, symmetry, elaborate ornamentation, classical roots',
+    previewUrl: 'https://images.unsplash.com/photo-1565060169192-3e2d19459529?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['symmetry', 'columns', 'cornices', 'grand entrance', 'sculptural details'],
+      materialBias: { primary: ['limestone', 'marble', 'granite'], secondary: ['bronze'], avoid: ['exposed steel'] },
+      lightingBias: { preferred: ['natural daylight', 'chandelier glow'], avoid: ['neon'] },
+      cameraBias: { preferredAngles: ['eye-level', 'front'], preferredFraming: ['centered'] },
+      renderingLanguage: { quality: ['detailed'], atmosphere: ['monumental', 'formal'], detail: ['carved stone'] }
+    }
+  },
+  {
+    id: 'gothic-revival',
+    name: 'Gothic Revival',
+    category: 'Historical',
+    description: 'Pointed arches, steep gables, intricate tracery',
+    previewUrl: 'https://images.unsplash.com/photo-1548625361-9878201a052c?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['pointed arches', 'steep roofs', 'tracery', 'verticality', 'spires'],
+      materialBias: { primary: ['stone', 'brick'], secondary: ['stained glass', 'slate'], avoid: ['concrete'] },
+      lightingBias: { preferred: ['mysterious', 'shadowy'], avoid: ['bright flat light'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['vertical'] },
+      renderingLanguage: { quality: ['dramatic'], atmosphere: ['imposing', 'historic'], detail: ['intricate'] }
+    }
+  },
+  {
+    id: 'victorian',
+    name: 'Victorian',
+    category: 'Historical',
+    description: 'Asymmetrical, decorative trim, steep roofs, bay windows',
+    previewUrl: 'https://images.unsplash.com/photo-1597552945209-173de71ce74d?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['asymmetry', 'decorative trim', 'turrets', 'bay windows', 'porches'],
+      materialBias: { primary: ['painted wood', 'brick'], secondary: ['shingles', 'stained glass'], avoid: ['glass curtain wall'] },
+      lightingBias: { preferred: ['warm', 'inviting'], avoid: ['cool industrial'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['contextual'] },
+      renderingLanguage: { quality: ['nostalgic'], atmosphere: ['charming', 'detailed'], detail: ['ornate'] }
+    }
+  },
+  {
+    id: 'mediterranean',
+    name: 'Mediterranean Revival',
+    category: 'Residential',
+    description: 'Stucco walls, red tile roofs, arched windows',
+    previewUrl: 'https://images.unsplash.com/photo-1523456397395-88849646487e?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['arches', 'courtyards', 'red tile roof', 'balconies'],
+      materialBias: { primary: ['stucco', 'terracotta'], secondary: ['wrought iron', 'wood'], avoid: ['siding'] },
+      lightingBias: { preferred: ['warm sun', 'dappled shade'], avoid: ['gloomy'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['garden context'] },
+      renderingLanguage: { quality: ['vibrant'], atmosphere: ['sunny', 'relaxed'], detail: ['textured'] }
+    }
+  },
+  {
+    id: 'tudor',
+    name: 'Tudor Revival',
+    category: 'Residential',
+    description: 'Decorative half-timbering, steep gables, masonry chimneys',
+    previewUrl: 'https://images.unsplash.com/photo-1596489886364-4e788c1c4f51?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['half-timbering', 'steep gables', 'prominent chimneys', 'leaded glass'],
+      materialBias: { primary: ['brick', 'stucco', 'wood'], secondary: ['stone'], avoid: ['modern materials'] },
+      lightingBias: { preferred: ['warm', 'cozy'], avoid: ['harsh'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['picturesque'] },
+      renderingLanguage: { quality: ['classic'], atmosphere: ['fairytale', 'historic'], detail: ['craftsmanship'] }
+    }
+  },
+  {
+    id: 'craftsman',
+    name: 'Craftsman',
+    category: 'Residential',
+    description: 'Low-pitched roofs, exposed beams, front porches, natural materials',
+    previewUrl: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['low-pitched roof', 'exposed rafters', 'tapered columns', 'porch'],
+      materialBias: { primary: ['wood', 'stone'], secondary: ['brick', 'shingle'], avoid: ['steel'] },
+      lightingBias: { preferred: ['warm'], avoid: ['cool'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['welcoming'] },
+      renderingLanguage: { quality: ['warm'], atmosphere: ['homely', 'natural'], detail: ['joinery'] }
+    }
+  },
+  {
+    id: 'prairie',
+    name: 'Prairie Style',
+    category: 'Residential',
+    description: 'Horizontal lines, flat or hipped roofs, integration with landscape',
+    previewUrl: 'https://images.unsplash.com/photo-1625604107572-132d0f509e50?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['horizontal lines', 'cantilevers', 'open plan', 'organic architecture'],
+      materialBias: { primary: ['brick', 'wood'], secondary: ['art glass'], avoid: ['verticality'] },
+      lightingBias: { preferred: ['natural'], avoid: ['artificial'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['landscape'] },
+      renderingLanguage: { quality: ['organic'], atmosphere: ['grounded', 'peaceful'], detail: ['linear'] }
+    }
+  },
+  {
+    id: 'international',
+    name: 'International Style',
+    category: 'Modern',
+    description: 'Rectilinear forms, light surfaces, open interior spaces, lack of ornamentation',
+    previewUrl: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['rectilinear', 'volume over mass', 'regularity', 'no ornament'],
+      materialBias: { primary: ['glass', 'steel', 'concrete'], secondary: ['white render'], avoid: ['texture'] },
+      lightingBias: { preferred: ['even'], avoid: ['dramatic'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['objective'] },
+      renderingLanguage: { quality: ['clean'], atmosphere: ['rational', 'efficient'], detail: ['precise'] }
+    }
+  },
+  {
+    id: 'deconstructivism',
+    name: 'Deconstructivism',
+    category: 'Conceptual',
+    description: 'Fragmentation, non-rectilinear shapes, manipulated surface skin',
+    previewUrl: 'https://images.unsplash.com/photo-1525936451670-3490795c644d?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['fragmentation', 'non-linear', 'distortion', 'dislocation'],
+      materialBias: { primary: ['titanium', 'steel', 'glass'], secondary: ['concrete'], avoid: ['symmetry'] },
+      lightingBias: { preferred: ['dynamic'], avoid: ['flat'] },
+      cameraBias: { preferredAngles: ['dynamic'], preferredFraming: ['unconventional'] },
+      renderingLanguage: { quality: ['artistic'], atmosphere: ['chaotic', 'innovative'], detail: ['complex'] }
+    }
+  },
+  {
+    id: 'high-tech',
+    name: 'High-Tech',
+    category: 'Modern',
+    description: 'Exposed structure and services, industrial materials',
+    previewUrl: 'https://images.unsplash.com/photo-1506456073715-9c8397a6e118?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['exposed structure', 'functionalism', 'industrial aesthetic', 'flexibility'],
+      materialBias: { primary: ['steel', 'glass', 'aluminum'], secondary: ['bright colors'], avoid: ['masonry'] },
+      lightingBias: { preferred: ['technical'], avoid: ['soft'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['structural'] },
+      renderingLanguage: { quality: ['precise'], atmosphere: ['engineered', 'advanced'], detail: ['mechanical'] }
+    }
+  },
+  {
+    id: 'postmodern',
+    name: 'Postmodernism',
+    category: 'Modern',
+    description: 'Wit, ornament, reference to history, colorful',
+    previewUrl: 'https://images.unsplash.com/photo-1545558014-8692077e9b5c?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['historical reference', 'color', 'playfulness', 'irony'],
+      materialBias: { primary: ['stucco', 'stone veneer'], secondary: ['tile'], avoid: ['pure minimalism'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['pop'] },
+      renderingLanguage: { quality: ['graphic'], atmosphere: ['playful', 'eclectic'], detail: ['stylized'] }
+    }
+  },
+  {
+    id: 'metabolism',
+    name: 'Metabolism',
+    category: 'Conceptual',
+    description: 'Modular, biological growth, adaptable structures',
+    previewUrl: 'https://images.unsplash.com/photo-1552553748-0387d5dc7498?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['capsules', 'modularity', 'growth', 'megastructure'],
+      materialBias: { primary: ['concrete', 'pre-fab units'], secondary: ['steel'], avoid: ['traditional'] },
+      lightingBias: { preferred: ['natural'], avoid: ['artificial'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['repetitive'] },
+      renderingLanguage: { quality: ['utopian'], atmosphere: ['futuristic', 'organic'], detail: ['cellular'] }
+    }
+  },
+  {
+    id: 'eco-brutalism',
+    name: 'Eco-Brutalism',
+    category: 'Sustainable',
+    description: 'Raw concrete structures integrated with heavy vegetation',
+    previewUrl: 'https://images.unsplash.com/photo-1599809275372-b7f58957816e?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['concrete', 'vegetation', 'overgrown', 'monolithic'],
+      materialBias: { primary: ['concrete', 'plants'], secondary: ['water'], avoid: ['plastic'] },
+      lightingBias: { preferred: ['dappled'], avoid: ['sterile'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['nature-dominant'] },
+      renderingLanguage: { quality: ['atmospheric'], atmosphere: ['post-apocalyptic', 'serene'], detail: ['weathering'] }
+    }
+  },
+  {
+    id: 'tiny-house',
+    name: 'Tiny House',
+    category: 'Residential',
+    description: 'Compact, efficient living, clever storage, mobile',
+    previewUrl: 'https://images.unsplash.com/photo-1512915990740-8b150937c541?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['compact', 'efficient', 'loft', 'wheels'],
+      materialBias: { primary: ['wood'], secondary: ['metal'], avoid: ['excess'] },
+      lightingBias: { preferred: ['cozy'], avoid: ['cold'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['intimate'] },
+      renderingLanguage: { quality: ['charming'], atmosphere: ['simple', 'free'], detail: ['clever'] }
+    }
+  },
+  {
+    id: 'shipping-container',
+    name: 'Container Arch',
+    category: 'Sustainable',
+    description: 'Modular structures built from repurposed shipping containers',
+    previewUrl: 'https://images.unsplash.com/photo-1529307474898-eeb5a539b252?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['modular', 'industrial', 'corrugated', 'stacked'],
+      materialBias: { primary: ['metal', 'glass'], secondary: ['wood deck'], avoid: ['stone'] },
+      lightingBias: { preferred: ['natural'], avoid: ['dim'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['geometric'] },
+      renderingLanguage: { quality: ['modern'], atmosphere: ['innovative', 'upcycled'], detail: ['corrugation'] }
+    }
+  },
+  {
+    id: 'earthship',
+    name: 'Earthship',
+    category: 'Sustainable',
+    description: 'Earth-bermed, recycled materials, off-grid',
+    previewUrl: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['earth-bermed', 'passive solar', 'recycled', 'organic'],
+      materialBias: { primary: ['tires', 'adobe', 'glass bottles'], secondary: ['wood'], avoid: ['industrial'] },
+      lightingBias: { preferred: ['natural'], avoid: ['artificial'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['landscape'] },
+      renderingLanguage: { quality: ['organic'], atmosphere: ['sustainable', 'rugged'], detail: ['handmade'] }
+    }
+  },
+  {
+    id: 'bamboo',
+    name: 'Bamboo Architecture',
+    category: 'Sustainable',
+    description: 'Organic forms, sustainable material, open structures',
+    previewUrl: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['organic', 'curved', 'open air', 'sustainable'],
+      materialBias: { primary: ['bamboo'], secondary: ['thatch'], avoid: ['concrete'] },
+      lightingBias: { preferred: ['warm'], avoid: ['cool'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['upward'] },
+      renderingLanguage: { quality: ['natural'], atmosphere: ['tropical', 'serene'], detail: ['joints'] }
+    }
+  },
+  {
+    id: 'nordic-noir',
+    name: 'Nordic Noir',
+    category: 'Residential',
+    description: 'Black timber, minimalist, moody, integrated with nature',
+    previewUrl: 'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['minimalist', 'dark exterior', 'cozy interior', 'nature'],
+      materialBias: { primary: ['charred wood', 'glass'], secondary: ['concrete'], avoid: ['color'] },
+      lightingBias: { preferred: ['moody'], avoid: ['bright'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['isolated'] },
+      renderingLanguage: { quality: ['cinematic'], atmosphere: ['quiet', 'mysterious'], detail: ['texture'] }
+    }
+  },
+  {
+    id: 'a-frame',
+    name: 'A-Frame',
+    category: 'Residential',
+    description: 'Triangular shape, steep roof, large windows',
+    previewUrl: 'https://images.unsplash.com/photo-1527030280862-64139fba04ca?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['triangular', 'steep roof', 'open gable', 'deck'],
+      materialBias: { primary: ['wood', 'glass'], secondary: ['metal roof'], avoid: ['flat roof'] },
+      lightingBias: { preferred: ['warm'], avoid: ['cool'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['centered'] },
+      renderingLanguage: { quality: ['cozy'], atmosphere: ['cabin', 'retreat'], detail: ['wood'] }
+    }
+  },
+  {
+    id: 'geodesic',
+    name: 'Geodesic Dome',
+    category: 'Conceptual',
+    description: 'Spherical lattice shell, efficient, futuristic',
+    previewUrl: 'https://images.unsplash.com/photo-1532053177659-197e743a6d71?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['spherical', 'triangular lattice', 'efficient', 'dome'],
+      materialBias: { primary: ['glass', 'steel'], secondary: ['ETFE'], avoid: ['brick'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['geometric'] },
+      renderingLanguage: { quality: ['tech'], atmosphere: ['futuristic', 'scientific'], detail: ['structure'] }
+    }
+  },
+  {
+    id: 'parametric-timber',
+    name: 'Parametric Timber',
+    category: 'Conceptual',
+    description: 'Fluid wooden forms, computational design, warm aesthetic',
+    previewUrl: 'https://images.unsplash.com/photo-1533552277498-8547b31c513e?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['fluid', 'computational', 'layered', 'organic'],
+      materialBias: { primary: ['wood'], secondary: ['glass'], avoid: ['block'] },
+      lightingBias: { preferred: ['warm'], avoid: ['cold'] },
+      cameraBias: { preferredAngles: ['dynamic'], preferredFraming: ['flowing'] },
+      renderingLanguage: { quality: ['high-end'], atmosphere: ['innovative', 'natural'], detail: ['grain'] }
+    }
+  },
+  {
+    id: 'floating-home',
+    name: 'Floating Arch',
+    category: 'Residential',
+    description: 'Structures on water, buoyant, connection to aquatic environment',
+    previewUrl: 'https://images.unsplash.com/photo-1559827291-72ee739d0d9a?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['floating', 'buoyant', 'deck', 'water view'],
+      materialBias: { primary: ['wood', 'composite'], secondary: ['glass'], avoid: ['heavy stone'] },
+      lightingBias: { preferred: ['reflected'], avoid: ['dull'] },
+      cameraBias: { preferredAngles: ['water-level'], preferredFraming: ['reflection'] },
+      renderingLanguage: { quality: ['serene'], atmosphere: ['peaceful', 'aquatic'], detail: ['reflection'] }
+    }
+  },
+  {
+    id: 'mars-habitat',
+    name: 'Mars Habitat',
+    category: 'Conceptual',
+    description: '3D printed regolith, protective shells, red planet context',
+    previewUrl: 'https://images.unsplash.com/photo-1614728263952-84ea256f9679?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['3D printed', 'protective', 'dome', 'pressurized'],
+      materialBias: { primary: ['regolith', 'composite'], secondary: ['glass'], avoid: ['wood'] },
+      lightingBias: { preferred: ['artificial', 'reddish'], avoid: ['blue sky'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['landscape'] },
+      renderingLanguage: { quality: ['sci-fi'], atmosphere: ['hostile', 'advanced'], detail: ['texture'] }
+    }
+  },
+  {
+    id: 'solarpunk',
+    name: 'Solarpunk',
+    category: 'Conceptual',
+    description: 'Green technology, art nouveau influence, sustainable utopia',
+    previewUrl: 'https://images.unsplash.com/photo-1629806346740-d99f2c253676?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['green tech', 'organic curves', 'stained glass', 'solar'],
+      materialBias: { primary: ['glass', 'plants', 'wood'], secondary: ['solar panels'], avoid: ['grunge'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['aerial'], preferredFraming: ['lush'] },
+      renderingLanguage: { quality: ['optimistic'], atmosphere: ['utopian', 'vibrant'], detail: ['vegetation'] }
+    }
+  },
+  {
+    id: 'steampunk',
+    name: 'Steampunk',
+    category: 'Conceptual',
+    description: 'Victorian sci-fi, brass, steam, gears, industrial',
+    previewUrl: 'https://images.unsplash.com/photo-1549487779-130c01a55f58?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['industrial', 'victorian', 'gears', 'pipes'],
+      materialBias: { primary: ['brass', 'copper', 'iron'], secondary: ['brick'], avoid: ['plastic'] },
+      lightingBias: { preferred: ['warm', 'hazy'], avoid: ['clean'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['detailed'] },
+      renderingLanguage: { quality: ['gritty'], atmosphere: ['retro-future', 'mechanical'], detail: ['pipes'] }
+    }
+  },
+  {
+    id: 'islamic-modern',
+    name: 'Islamic Modern',
+    category: 'Cultural',
+    description: 'Geometric patterns, mashrabiya, light filtration, courtyards',
+    previewUrl: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['geometry', 'pattern', 'screening', 'courtyard'],
+      materialBias: { primary: ['stone', 'screen'], secondary: ['water'], avoid: ['plain'] },
+      lightingBias: { preferred: ['filtered', 'shadow patterns'], avoid: ['flat'] },
+      cameraBias: { preferredAngles: ['interior'], preferredFraming: ['symmetrical'] },
+      renderingLanguage: { quality: ['intricate'], atmosphere: ['spiritual', 'cool'], detail: ['pattern'] }
+    }
+  },
+  {
+    id: 'chinese-modern',
+    name: 'Chinese Modern',
+    category: 'Cultural',
+    description: 'Traditional rooflines, wooden brackets, courtyard layout',
+    previewUrl: 'https://images.unsplash.com/photo-1518136247453-74e7b5095e52?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['sweeping roof', 'brackets', 'courtyard', 'symmetry'],
+      materialBias: { primary: ['wood', 'tile'], secondary: ['stone'], avoid: ['concrete block'] },
+      lightingBias: { preferred: ['soft'], avoid: ['harsh'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['balanced'] },
+      renderingLanguage: { quality: ['elegant'], atmosphere: ['peaceful', 'historic'], detail: ['woodwork'] }
+    }
+  },
+  {
+    id: 'wabi-sabi',
+    name: 'Wabi-Sabi',
+    category: 'Cultural',
+    description: 'Beauty in imperfection, aged materials, simplicity',
+    previewUrl: 'https://images.unsplash.com/photo-1598928636135-d146006ff4be?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['imperfection', 'simplicity', 'natural aging', 'rough'],
+      materialBias: { primary: ['aged wood', 'rough plaster'], secondary: ['stone'], avoid: ['shiny'] },
+      lightingBias: { preferred: ['shadowy'], avoid: ['bright'] },
+      cameraBias: { preferredAngles: ['interior'], preferredFraming: ['detail'] },
+      renderingLanguage: { quality: ['textured'], atmosphere: ['quiet', 'melancholy'], detail: ['patina'] }
+    }
+  },
+  {
+    id: 'memphis',
+    name: 'Memphis Group',
+    category: 'Modern',
+    description: 'Colorful, geometric, pop-art influence, playful',
+    previewUrl: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['geometric', 'colorful', 'pattern', 'asymmetry'],
+      materialBias: { primary: ['laminate', 'terrazzo'], secondary: ['plastic'], avoid: ['natural'] },
+      lightingBias: { preferred: ['bright'], avoid: ['moody'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['graphic'] },
+      renderingLanguage: { quality: ['vibrant'], atmosphere: ['fun', 'bold'], detail: ['pattern'] }
+    }
+  },
+  {
+    id: 'art-nouveau',
+    name: 'Art Nouveau',
+    category: 'Historical',
+    description: 'Whiplash curves, organic motifs, decorative ironwork',
+    previewUrl: 'https://images.unsplash.com/photo-1558237305-6f981dd90c37?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['curves', 'organic lines', 'floral motifs', 'asymmetry'],
+      materialBias: { primary: ['stone', 'iron', 'glass'], secondary: ['ceramic'], avoid: ['rectilinear'] },
+      lightingBias: { preferred: ['soft'], avoid: ['harsh'] },
+      cameraBias: { preferredAngles: ['low angle'], preferredFraming: ['fluid'] },
+      renderingLanguage: { quality: ['elegant'], atmosphere: ['romantic', 'flowery'], detail: ['curve'] }
+    }
+  },
+  {
+    id: 'neoclassical',
+    name: 'Neoclassical',
+    category: 'Historical',
+    description: 'Columns, pediments, symmetry, grand scale',
+    previewUrl: 'https://images.unsplash.com/photo-1524330687720-4c311c1d8825?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['columns', 'pediment', 'symmetry', 'dome'],
+      materialBias: { primary: ['stone', 'marble'], secondary: ['white paint'], avoid: ['wood'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['symmetrical'] },
+      renderingLanguage: { quality: ['formal'], atmosphere: ['imposing', 'stately'], detail: ['order'] }
+    }
+  },
+  {
+    id: 'colonial',
+    name: 'Colonial Revival',
+    category: 'Residential',
+    description: 'Symmetrical facade, shutters, gabled roof, brick or siding',
+    previewUrl: 'https://images.unsplash.com/photo-1605276373954-0c4a0dac5b12?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['symmetry', 'shutters', 'dormers', 'columns'],
+      materialBias: { primary: ['brick', 'siding'], secondary: ['shingles'], avoid: ['modern'] },
+      lightingBias: { preferred: ['daylight'], avoid: ['neon'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['centered'] },
+      renderingLanguage: { quality: ['classic'], atmosphere: ['traditional', 'stately'], detail: ['trim'] }
+    }
+  },
+  {
+    id: 'ranch',
+    name: 'Ranch Style',
+    category: 'Residential',
+    description: 'Single story, long facade, low roof, open layout',
+    previewUrl: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['single story', 'horizontal', 'low roof', 'patio'],
+      materialBias: { primary: ['brick', 'wood'], secondary: ['glass'], avoid: ['vertical'] },
+      lightingBias: { preferred: ['sunny'], avoid: ['gloomy'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['wide'] },
+      renderingLanguage: { quality: ['suburban'], atmosphere: ['relaxed', 'spacious'], detail: ['horizontal'] }
+    }
+  },
+  {
+    id: 'swiss-chalet',
+    name: 'Swiss Chalet',
+    category: 'Residential',
+    description: 'Wide eaves, decorative carving, balconies, timber',
+    previewUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['wide eaves', 'balconies', 'decorative carving', 'gables'],
+      materialBias: { primary: ['wood'], secondary: ['stone'], avoid: ['concrete'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['scenic'] },
+      renderingLanguage: { quality: ['picturesque'], atmosphere: ['alpine', 'charming'], detail: ['carving'] }
+    }
+  },
+  {
+    id: 'pueblo',
+    name: 'Pueblo Revival',
+    category: 'Residential',
+    description: 'Adobe walls, rounded edges, flat roofs, vigas',
+    previewUrl: 'https://images.unsplash.com/photo-1534237710431-e2fc698436d0?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['adobe', 'rounded edges', 'flat roof', 'vigas'],
+      materialBias: { primary: ['stucco', 'wood'], secondary: ['tile'], avoid: ['siding'] },
+      lightingBias: { preferred: ['sunlight'], avoid: ['cloudy'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['landscape'] },
+      renderingLanguage: { quality: ['warm'], atmosphere: ['desert', 'soft'], detail: ['texture'] }
+    }
+  },
+  {
+    id: 'greek-revival',
+    name: 'Greek Revival',
+    category: 'Historical',
+    description: 'Temple front, columns, pediment, white painted',
+    previewUrl: 'https://images.unsplash.com/photo-1560179707-f14e90ef3dab?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['temple front', 'columns', 'pediment', 'white'],
+      materialBias: { primary: ['wood', 'stucco'], secondary: ['stone'], avoid: ['brick'] },
+      lightingBias: { preferred: ['bright'], avoid: ['dark'] },
+      cameraBias: { preferredAngles: ['front'], preferredFraming: ['symmetrical'] },
+      renderingLanguage: { quality: ['stately'], atmosphere: ['historic', 'formal'], detail: ['columns'] }
+    }
+  },
+  {
+    id: 'italianate',
+    name: 'Italianate',
+    category: 'Historical',
+    description: 'Low-pitched roofs, wide eaves with brackets, tall windows',
+    previewUrl: 'https://images.unsplash.com/photo-1572953109213-3be62398eb95?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['brackets', 'tall windows', 'low roof', 'cupola'],
+      materialBias: { primary: ['brick', 'stucco', 'wood'], secondary: ['iron'], avoid: ['glass'] },
+      lightingBias: { preferred: ['warm'], avoid: ['cool'] },
+      cameraBias: { preferredAngles: ['eye-level'], preferredFraming: ['vertical'] },
+      renderingLanguage: { quality: ['ornate'], atmosphere: ['elegant', 'tall'], detail: ['brackets'] }
+    }
+  },
+  {
+    id: 'futuristic-organic',
+    name: 'Futuristic Organic',
+    category: 'Conceptual',
+    description: 'White curves, seamless forms, Zaha Hadid influence',
+    previewUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['fluid', 'seamless', 'curved', 'white'],
+      materialBias: { primary: ['corian', 'fiberglass', 'concrete'], secondary: ['glass'], avoid: ['brick'] },
+      lightingBias: { preferred: ['diffused'], avoid: ['hard shadows'] },
+      cameraBias: { preferredAngles: ['dynamic'], preferredFraming: ['flowing'] },
+      renderingLanguage: { quality: ['pristine'], atmosphere: ['future', 'clean'], detail: ['smooth'] }
+    }
+  },
+  {
+    id: 'cyber-organic',
+    name: 'Cyber-Organic',
+    category: 'Conceptual',
+    description: 'Integration of technology and biological forms',
+    previewUrl: 'https://images.unsplash.com/photo-1480074568708-e7b720bb3f09?auto=format&fit=crop&w=600&q=80',
+    promptBundle: {
+      architectureVocabulary: ['tech', 'biology', 'integrated', 'complex'],
+      materialBias: { primary: ['bioplastic', 'metal'], secondary: ['light'], avoid: ['traditional'] },
+      lightingBias: { preferred: ['glowing'], avoid: ['flat'] },
+      cameraBias: { preferredAngles: ['close-up'], preferredFraming: ['detail'] },
+      renderingLanguage: { quality: ['complex'], atmosphere: ['hybrid', 'advanced'], detail: ['structure'] }
     }
   }
 ];

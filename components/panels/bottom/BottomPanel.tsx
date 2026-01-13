@@ -1,9 +1,11 @@
 
+
 import React from 'react';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
 import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { Slider } from '../../ui/Slider';
 
 export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -194,10 +196,3 @@ export const BottomPanel: React.FC = () => {
     </div>
   );
 };
-
-// Helper slider component just for this file if not imported (but assuming generic UI exists)
-const Slider = ({value, min, max, onChange, className}: any) => (
-  <div className={cn("relative w-full h-1 bg-border rounded", className)}>
-    <div className="absolute h-full bg-foreground rounded" style={{width: '50%'}} />
-  </div>
-);

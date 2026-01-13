@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
 import { Toggle } from '../../ui/Toggle';
@@ -13,109 +13,252 @@ import {
   Trash2, Wrench, Expand, Maximize2, Video, MousePointer, Aperture, Settings,
   ArrowRight, Download, Play, CheckCircle2, AlertTriangle, XCircle, FileText,
   Minimize, MoreHorizontal, HelpCircle, Share2, MonitorPlay, Zap, Image as ImageIcon,
-  Move, RotateCcw, Focus
+  Move, RotateCcw, Focus, Moon, CloudSun, Sunrise, Shuffle, Clock, Gem, Plus, Check, ChevronDown,
+  Monitor, Globe, Film, RotateCw, Eye, Thermometer, Droplets, Trees, User, Car, Sofa, Wind, Mountain,
+  Plane
 } from 'lucide-react';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 
 // --- Shared Components ---
 
+const QuickActionBtn: React.FC<{ label: string, icon?: React.ElementType, onClick?: () => void, className?: string }> = ({ label, icon: Icon, onClick, className }) => (
+  <button 
+    onClick={onClick}
+    className={cn(
+      "flex items-center justify-center gap-2 px-3 py-2 bg-surface-elevated border border-border rounded text-[10px] font-bold uppercase tracking-wider text-foreground-secondary hover:text-foreground hover:border-foreground-muted transition-all shadow-sm flex-1",
+      className
+    )}
+  >
+    {Icon && <Icon size={12} />}
+    {label}
+  </button>
+);
+
+const SectionDesc: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-[10px] text-foreground-muted leading-relaxed mb-3 italic">
+    {children}
+  </p>
+);
+
+// --- SPECIFICATION COMPONENTS ---
+
+// 4. SliderControl
+interface SliderControlProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+const SliderControl: React.FC<SliderControlProps> = ({ label, value, min, max, step, unit, onChange, disabled, className }) => (
+  <div className={cn("space-y-2 mb-3", className, disabled && "opacity-50 pointer-events-none")}>
+    <div className="flex justify-between items-baseline">
+      <label className="text-xs font-medium text-foreground">{label}</label>
+      <span className="text-[10px] font-mono text-foreground-muted">{value}{unit}</span>
+    </div>
+    <Slider value={value} min={min} max={max} step={step} onChange={onChange} />
+  </div>
+);
+
+// Sun Widget
+const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; onChange: (az: number, el: number) => void }> = ({ azimuth, elevation, onChange }) => {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleMove = (e: MouseEvent | React.MouseEvent) => {
+    if (!boxRef.current) return;
+    const rect = boxRef.current.getBoundingClientRect();
+    const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width);
+    const y = Math.min(Math.max(0, e.clientY - rect.top), rect.height);
+    
+    // Map x to Azimuth (0-360)
+    const newAz = Math.round((x / rect.width) * 360);
+    // Map y to Elevation (90-0) - Top is 90 deg
+    const newEl = Math.round(90 - (y / rect.height) * 90);
+    
+    onChange(newAz, newEl);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    handleMove(e);
+  };
+
+  useEffect(() => {
+    const up = () => setIsDragging(false);
+    const move = (e: MouseEvent) => {
+      if (isDragging) handleMove(e);
+    };
+    window.addEventListener('mouseup', up);
+    window.addEventListener('mousemove', move);
+    return () => {
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('mousemove', move);
+    };
+  }, [isDragging]);
+
+  // Calculate position percentage
+  const left = (azimuth / 360) * 100;
+  const top = ((90 - elevation) / 90) * 100;
+
+  return (
+    <div 
+      ref={boxRef}
+      className="relative h-24 bg-surface-sunken border border-border rounded-lg overflow-hidden cursor-crosshair mb-4 shadow-inner"
+      onMouseDown={handleMouseDown}
+    >
+      {/* Grid Lines */}
+      <div className="absolute inset-0 pointer-events-none opacity-20" 
+           style={{ backgroundImage: 'linear-gradient(to right, #888 1px, transparent 1px), linear-gradient(to bottom, #888 1px, transparent 1px)', backgroundSize: '25% 33%' }} />
+      
+      {/* Directions */}
+      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">N</span>
+      <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">S</span>
+      <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">W</span>
+      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">E</span>
+
+      {/* Sun Handle */}
+      <div 
+        className="absolute w-4 h-4 bg-yellow-400 rounded-full shadow-[0_0_12px_rgba(250,204,21,0.8)] border-2 border-white z-10 transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
+        style={{ left: `${left}%`, top: `${top}%` }}
+      />
+      
+      {/* Info Tag */}
+      <div className="absolute bottom-1 right-1 bg-background/80 backdrop-blur px-1.5 py-0.5 rounded text-[9px] font-mono border border-border pointer-events-none">
+        Az:{azimuth}° El:{elevation}°
+      </div>
+    </div>
+  );
+};
+
+// --- ADDITIONAL SHARED COMPONENTS ---
+
 interface VerticalCardProps {
   label: string;
-  description?: string;
+  description: string;
   selected: boolean;
   onClick: () => void;
 }
 
 const VerticalCard: React.FC<VerticalCardProps> = ({ label, description, selected, onClick }) => (
-  <button 
+  <button
     onClick={onClick}
     className={cn(
-      "w-full text-left p-3 rounded-lg border transition-all mb-2 last:mb-0",
-      selected 
-        ? "bg-foreground text-background border-foreground shadow-md" 
-        : "bg-surface-elevated border-border hover:border-foreground-muted hover:bg-surface-sunken text-foreground"
+      "w-full text-left p-3 rounded-lg border transition-all mb-2 flex flex-col gap-1",
+      selected
+        ? "bg-foreground text-background border-foreground shadow-sm"
+        : "bg-surface-elevated border-border hover:border-foreground-muted"
     )}
   >
-    <div className="text-xs font-bold">{label}</div>
-    {description && <div className={cn("text-[10px] mt-1", selected ? "text-white/70" : "text-foreground-muted")}>{description}</div>}
+    <span className="text-xs font-bold">{label}</span>
+    <span className={cn("text-[10px] leading-relaxed", selected ? "text-white/80" : "text-foreground-muted")}>
+      {description}
+    </span>
   </button>
 );
 
-const ColorPicker = ({ color, onChange, className }: { color?: string, onChange?: (c: string) => void, className?: string }) => (
-  <div className={cn("w-6 h-6 rounded border border-border cursor-pointer shadow-sm relative overflow-hidden", className)}>
-    <input 
-        type="color" 
-        value={color || '#ffffff'} 
-        onChange={(e) => onChange && onChange && onChange(e.target.value)}
-        className="absolute -top-2 -left-2 w-10 h-10 p-0 border-0 opacity-0 cursor-pointer"
-    />
-    <div className="w-full h-full" style={{ backgroundColor: color || '#ffffff' }} />
-  </div>
-);
-
-const NumberInput = ({ label, value, onChange, min, max, step, unit }: { label?: string, value: number, onChange: (v: number) => void, min?: number, max?: number, step?: number, unit?: string }) => (
-  <div className="flex items-center justify-between gap-2">
-    {label && <label className="text-xs text-foreground-muted flex-1 truncate">{label}</label>}
-    <div className="flex items-center gap-1">
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-14 h-7 text-[10px] bg-surface-sunken border border-border rounded px-1 text-right focus:border-accent outline-none"
-      />
-      {unit && <span className="text-[10px] text-foreground-muted w-3">{unit}</span>}
+const ColorPicker: React.FC<{ color: string; onChange: (c: string) => void }> = ({ color, onChange }) => {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-8 h-6 rounded border border-border shadow-sm overflow-hidden relative">
+         <input type="color" value={color} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+         <div className="w-full h-full" style={{ backgroundColor: color }} />
+      </div>
     </div>
-  </div>
-);
-
-const StyleSelector = () => {
-    const { state, dispatch } = useAppStore();
-    const [isOpen, setIsOpen] = useState(false);
-    const activeStyle = BUILT_IN_STYLES.find(s => s.id === state.activeStyleId) || BUILT_IN_STYLES[0];
-
-    return (
-        <>
-            <StyleBrowserDialog 
-                isOpen={isOpen} 
-                onClose={() => setIsOpen(false)} 
-                activeStyleId={state.activeStyleId} 
-                onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })} 
-            />
-            <div className="mb-4">
-                <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Style</label>
-                <button 
-                    onClick={() => setIsOpen(true)}
-                    className="w-full flex items-center gap-3 p-2 bg-surface-elevated border border-border rounded-lg hover:border-foreground transition-all group"
-                >
-                    <div 
-                        className="w-10 h-10 rounded bg-cover bg-center shrink-0 border border-border"
-                        style={{ backgroundImage: `url(${activeStyle.previewUrl})` }} 
-                    />
-                    <div className="flex-1 text-left min-w-0">
-                        <div className="text-xs font-bold truncate group-hover:text-accent transition-colors">{activeStyle.name}</div>
-                        <div className="text-[10px] text-foreground-muted truncate">{activeStyle.category}</div>
-                    </div>
-                    <Settings size={14} className="text-foreground-muted" />
-                </button>
-            </div>
-        </>
-    );
+  );
 };
 
-// --- FEATURE 1: 3D TO RENDER ---
+interface NumberInputProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (val: number) => void;
+}
+
+const NumberInput: React.FC<NumberInputProps> = ({ label, value, min, max, step = 1, onChange }) => (
+  <div className="flex items-center justify-between">
+    <label className="text-xs font-medium text-foreground">{label}</label>
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-16 h-7 bg-surface-sunken border border-border rounded px-2 text-xs text-right focus:border-accent outline-none"
+    />
+  </div>
+);
+
+// --- MAIN FEATURE COMPONENT ---
+
 const Render3DPanel = () => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
-    const update = (p: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: p });
+    const updateWf = (p: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: p });
 
-    // Mock state for internal panel controls
-    const [transform, setTransform] = useState({ x: 0, y: 0, z: 0, scale: 100 });
+    // Local State strictly following specifications
+    const [settings, setSettings] = useState({
+      geometry: {
+        edgeMode: 'subtle', // subtle, medium, strong, technical
+        edgeStrength: 30,
+        cornerSharpness: 50,
+        structuralGrid: false,
+        wireframe: false,
+        optimization: 'high'
+      },
+      lighting: {
+        sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
+        shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
+        ambient: { intensity: 40, occlusion: 50 },
+        preset: 'custom'
+      },
+      camera: {
+        preset: 'eye-level',
+        lens: 35, // 12, 16, 24, 35, 50
+        fov: 63,
+        autoCorrect: true,
+        dof: { enabled: false, aperture: 2.8, focusDist: 5 }
+      },
+      materials: {
+        category: 'Concrete',
+        reflectivity: 50,
+        roughness: 50,
+        weathering: { enabled: false, intensity: 30 }
+      },
+      atmosphere: {
+        mood: 'natural',
+        fog: { enabled: false, density: 20 },
+        bloom: { enabled: true, intensity: 30 },
+        temp: 0 // -100 to 100
+      },
+      scenery: {
+        people: { enabled: false, count: 20 },
+        trees: { enabled: true, count: 50 },
+        cars: { enabled: false, count: 10 },
+        preset: 'residential'
+      },
+      render: {
+        resolution: '1080p',
+        format: 'png',
+        quality: 'production'
+      }
+    });
+
+    const updateSection = (section: keyof typeof settings, updates: any) => {
+      setSettings(prev => ({ ...prev, [section]: { ...prev[section], ...updates } }));
+    };
 
     return (
         <div className="space-y-6">
+            {/* Preserved Generation Mode Section */}
             <div>
                 <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Generation Mode</label>
                 <div className="space-y-1">
@@ -131,86 +274,374 @@ const Render3DPanel = () => {
                             label={m.label} 
                             description={m.desc} 
                             selected={wf.renderMode === m.id} 
-                            onClick={() => update({ renderMode: m.id as any })} 
+                            onClick={() => updateWf({ renderMode: m.id as any })} 
                         />
                     ))}
                 </div>
             </div>
 
-            <StyleSelector />
-
+            {/* 7 Redesigned Collapsible Sections */}
             <Accordion items={[
-                { id: 'geo', title: 'Geometry', content: (
-                    <div className="space-y-3">
-                        <div className="grid grid-cols-3 gap-2">
-                            <NumberInput label="X" value={transform.x} onChange={(v) => setTransform({...transform, x: v})} />
-                            <NumberInput label="Y" value={transform.y} onChange={(v) => setTransform({...transform, y: v})} />
-                            <NumberInput label="Z" value={transform.z} onChange={(v) => setTransform({...transform, z: v})} />
-                        </div>
-                        <Slider label="Scale (%)" value={transform.scale} min={1} max={1000} onChange={(v) => setTransform({...transform, scale: v})} />
-                        <div className="pt-2 border-t border-border-subtle space-y-1">
-                            <Toggle label="Wireframe Overlay" checked={false} onChange={()=>{}} />
-                            <Toggle label="Ground Plane" checked={true} onChange={()=>{}} />
-                            <Toggle label="Auto-Center" checked={true} onChange={()=>{}} />
-                        </div>
+                // 1. GEOMETRY
+                { id: 'geometry', title: 'Geometry', content: (
+                    <div>
+                       <SectionDesc>Preserve architectural precision and structure.</SectionDesc>
+                       
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Edge Mode</label>
+                          <SegmentedControl 
+                             value={settings.geometry.edgeMode}
+                             options={[
+                                {label: 'Subtle', value: 'subtle'}, {label: 'Med', value: 'medium'}, {label: 'Bold', value: 'strong'}, {label: 'Tech', value: 'technical'}
+                             ]}
+                             onChange={(v) => updateSection('geometry', { edgeMode: v })}
+                          />
+                       </div>
+
+                       <SliderControl label="Edge Strength" value={settings.geometry.edgeStrength} min={0} max={100} step={1} onChange={(v) => updateSection('geometry', { edgeStrength: v })} />
+                       <SliderControl label="Corner Sharpness" value={settings.geometry.cornerSharpness} min={0} max={100} step={1} onChange={(v) => updateSection('geometry', { cornerSharpness: v })} />
+                       
+                       <div className="space-y-2 pt-2 border-t border-border-subtle mt-2">
+                          <Toggle label="Wireframe Overlay" checked={settings.geometry.wireframe} onChange={(v) => updateSection('geometry', { wireframe: v })} />
+                          <Toggle label="Structural Grid" checked={settings.geometry.structuralGrid} onChange={(v) => updateSection('geometry', { structuralGrid: v })} />
+                       </div>
                     </div>
                 )},
-                { id: 'cam', title: 'Camera', content: (
-                    <div className="space-y-4">
-                        <Slider label="Field of View" value={50} min={15} max={120} onChange={()=>{}} />
-                        <Slider label="Camera Height (m)" value={1.6} min={0.1} max={100} onChange={()=>{}} />
-                        <SegmentedControl value="persp" options={[{label:'Perspective', value:'persp'}, {label:'Two-Point', value:'2pt'}, {label:'Ortho', value:'ortho'}]} onChange={()=>{}} />
-                        <div className="space-y-1">
-                            <Toggle label="Vertical Correction" checked={true} onChange={()=>{}} />
-                            <Toggle label="Depth of Field" checked={false} onChange={()=>{}} />
-                        </div>
+
+                // 2. LIGHTING
+                { id: 'lighting', title: 'Lighting', content: (
+                    <div>
+                       <SectionDesc>Natural and artificial illumination control.</SectionDesc>
+                       
+                       {/* Sun Widget */}
+                       <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold flex items-center gap-1.5"><Sun size={12} className="text-accent"/> Sun Position</span>
+                          <Toggle label="" checked={settings.lighting.sun.enabled} onChange={(v) => updateSection('lighting', { sun: { ...settings.lighting.sun, enabled: v } })} />
+                       </div>
+                       
+                       {settings.lighting.sun.enabled && (
+                          <div className="animate-fade-in">
+                             <SunPositionWidget 
+                                azimuth={settings.lighting.sun.azimuth} 
+                                elevation={settings.lighting.sun.elevation}
+                                onChange={(az, el) => updateSection('lighting', { sun: { ...settings.lighting.sun, azimuth: az, elevation: el } })}
+                             />
+                             
+                             <SliderControl label="Intensity" value={settings.lighting.sun.intensity} min={0} max={200} step={1} unit="%" onChange={(v) => updateSection('lighting', { sun: { ...settings.lighting.sun, intensity: v } })} />
+                             
+                             <div className="mb-4">
+                                <div className="flex justify-between items-baseline mb-2">
+                                   <label className="text-xs font-medium text-foreground">Color Temp</label>
+                                   <span className="text-[10px] font-mono text-foreground-muted">{settings.lighting.sun.colorTemp}K</span>
+                                </div>
+                                <div className="h-4 rounded-full w-full relative overflow-hidden ring-1 ring-border">
+                                   <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, #ff6b35, #ffd4a3, #ffffff, #9dc4ff)' }} />
+                                   <input 
+                                      type="range" 
+                                      min={2000} max={12000} step={100} 
+                                      value={settings.lighting.sun.colorTemp} 
+                                      onChange={(e) => updateSection('lighting', { sun: { ...settings.lighting.sun, colorTemp: parseInt(e.target.value) } })}
+                                      className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                                   />
+                                </div>
+                             </div>
+                          </div>
+                       )}
+
+                       <div className="border-t border-border-subtle pt-3 mt-3">
+                          <div className="flex justify-between items-center mb-2">
+                             <span className="text-xs font-bold text-foreground-secondary">Shadows</span>
+                             <Toggle label="" checked={settings.lighting.shadows.enabled} onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, enabled: v } })} />
+                          </div>
+                          {settings.lighting.shadows.enabled && (
+                             <div className="space-y-3">
+                                <SliderControl label="Opacity" value={settings.lighting.shadows.intensity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, intensity: v } })} />
+                                <SliderControl label="Softness" value={settings.lighting.shadows.softness} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, softness: v } })} />
+                             </div>
+                          )}
+                       </div>
+
+                       <div className="mt-4 grid grid-cols-3 gap-2">
+                          {['Golden', 'Noon', 'Blue', 'Overcast', 'Night'].map(p => (
+                             <button 
+                                key={p}
+                                className="px-2 py-1.5 text-[9px] font-bold border border-border rounded hover:bg-surface-elevated hover:text-foreground text-foreground-muted transition-colors"
+                                onClick={() => updateSection('lighting', { preset: p.toLowerCase() })}
+                             >
+                                {p}
+                             </button>
+                          ))}
+                       </div>
                     </div>
                 )},
-                { id: 'lit', title: 'Lighting', content: (
-                    <div className="space-y-4">
-                        <Slider label="Sun Azimuth" value={135} min={0} max={360} onChange={()=>{}} />
-                        <Slider label="Sun Altitude" value={45} min={0} max={90} onChange={()=>{}} />
-                        <Slider label="Intensity" value={1.0} min={0} max={5} step={0.1} onChange={()=>{}} />
-                        <div className="space-y-2">
-                            <label className="text-xs text-foreground-muted">HDRI Environment</label>
-                            <select className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"><option>Studio Soft</option><option>Urban Day</option><option>Forest</option><option>Night City</option></select>
-                        </div>
-                        <Toggle label="Cast Shadows" checked={true} onChange={()=>{}} />
+
+                // 3. CAMERA
+                { id: 'camera', title: 'Camera', content: (
+                    <div>
+                       <SectionDesc>Composition and perspective settings.</SectionDesc>
+                       
+                       <div className="grid grid-cols-3 gap-2 mb-4">
+                          {[
+                             {id: 'eye-level', label: 'Eye Level', icon: User},
+                             {id: 'elevated', label: 'Elevated', icon: Box},
+                             {id: 'birds-eye', label: 'Bird\'s Eye', icon: Plane},
+                             {id: 'worms-eye', label: 'Worm\'s Eye', icon: ArrowRight},
+                             {id: 'corner', label: 'Corner', icon: Box},
+                             {id: 'straight', label: 'Straight', icon: Grid},
+                          ].map(p => (
+                             <button
+                                key={p.id}
+                                onClick={() => updateSection('camera', { preset: p.id })}
+                                className={cn(
+                                   "flex flex-col items-center justify-center p-2 rounded border transition-all h-14",
+                                   settings.camera.preset === p.id 
+                                      ? "bg-foreground text-background border-foreground shadow-sm" 
+                                      : "bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted"
+                                )}
+                             >
+                                <p.icon size={14} className="mb-1" />
+                                <span className="text-[9px] font-medium">{p.label}</span>
+                             </button>
+                          ))}
+                       </div>
+
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Lens (Focal Length)</label>
+                          <div className="flex gap-1 bg-surface-sunken p-1 rounded-md">
+                             {[12, 16, 24, 35, 50, 85].map(mm => (
+                                <button
+                                   key={mm}
+                                   onClick={() => updateSection('camera', { lens: mm, fov: Math.round(2 * Math.atan(36/(2*mm)) * (180/Math.PI)) })}
+                                   className={cn(
+                                      "flex-1 py-1 text-[9px] font-mono rounded transition-colors",
+                                      settings.camera.lens === mm ? "bg-white shadow-sm text-foreground font-bold" : "text-foreground-muted hover:text-foreground"
+                                   )}
+                                >
+                                   {mm}
+                                </button>
+                             ))}
+                          </div>
+                       </div>
+
+                       <SliderControl label="Field of View" value={settings.camera.fov} min={10} max={120} step={1} unit="°" onChange={(v) => updateSection('camera', { fov: v })} />
+                       
+                       <div className="space-y-1 pt-2 border-t border-border-subtle">
+                          <Toggle label="Auto-Correct Perspective" checked={settings.camera.autoCorrect} onChange={(v) => updateSection('camera', { autoCorrect: v })} />
+                          <Toggle label="Depth of Field" checked={settings.camera.dof.enabled} onChange={(v) => updateSection('camera', { dof: { ...settings.camera.dof, enabled: v } })} />
+                          
+                          {settings.camera.dof.enabled && (
+                             <div className="pl-2 border-l-2 border-border-subtle mt-2 space-y-2 animate-fade-in">
+                                <SliderControl label="Aperture" value={settings.camera.dof.aperture} min={1.4} max={22} step={0.1} unit="f/" onChange={(v) => updateSection('camera', { dof: { ...settings.camera.dof, aperture: v } })} />
+                                <SliderControl label="Focus Dist" value={settings.camera.dof.focusDist} min={0.5} max={50} step={0.5} unit="m" onChange={(v) => updateSection('camera', { dof: { ...settings.camera.dof, focusDist: v } })} />
+                             </div>
+                          )}
+                       </div>
                     </div>
                 )},
-                { id: 'mat', title: 'Materials', content: (
-                    <div className="space-y-3">
-                        <SegmentedControl value="orig" options={[{label:'Original', value:'orig'}, {label:'Clay', value:'clay'}, {label:'Override', value:'ovr'}]} onChange={()=>{}} />
-                        <div className="p-2 bg-surface-sunken rounded border border-border-subtle text-xs text-foreground-muted">
-                            <Toggle label="Keep Glass" checked={true} onChange={()=>{}} />
-                            <Toggle label="Keep Emission" checked={true} onChange={()=>{}} />
-                        </div>
-                        <button className="w-full py-2 border border-dashed border-border rounded text-xs text-foreground-muted hover:bg-surface-elevated">+ Material Override</button>
+
+                // 4. MATERIALS
+                { id: 'materials', title: 'Materials', content: (
+                    <div>
+                       <SectionDesc>Surface appearance and weathering.</SectionDesc>
+                       
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Category Override</label>
+                          <select 
+                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                             value={settings.materials.category}
+                             onChange={(e) => updateSection('materials', { category: e.target.value })}
+                          >
+                             {['Concrete', 'Wood', 'Metal', 'Glass', 'Stone', 'Brick', 'Tile', 'Fabric', 'Paint', 'Flooring'].map(c => (
+                                <option key={c} value={c}>{c}</option>
+                             ))}
+                          </select>
+                       </div>
+
+                       <SliderControl label="Global Reflectivity" value={settings.materials.reflectivity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('materials', { reflectivity: v })} />
+                       <SliderControl label="Surface Roughness" value={settings.materials.roughness} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('materials', { roughness: v })} />
+                       
+                       <div className="pt-2 border-t border-border-subtle mt-3">
+                          <div className="flex justify-between items-center mb-2">
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Droplets size={12}/> Weathering</span>
+                             <Toggle label="" checked={settings.materials.weathering.enabled} onChange={(v) => updateSection('materials', { weathering: { ...settings.materials.weathering, enabled: v } })} />
+                          </div>
+                          
+                          {settings.materials.weathering.enabled && (
+                             <div className="space-y-3 animate-fade-in">
+                                <SliderControl label="Intensity" value={settings.materials.weathering.intensity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('materials', { weathering: { ...settings.materials.weathering, intensity: v } })} />
+                                <div className="grid grid-cols-2 gap-2">
+                                   {['Dirt', 'Moss', 'Rust', 'Cracks'].map(w => (
+                                      <button key={w} className="px-2 py-1.5 border border-border rounded text-[10px] text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors">{w}</button>
+                                   ))}
+                                </div>
+                             </div>
+                          )}
+                       </div>
                     </div>
                 )},
-                { id: 'ctx', title: 'Context', content: (
-                    <div className="space-y-3">
-                        <Slider label="Vegetation" value={0} min={0} max={100} onChange={()=>{}} />
-                        <Slider label="Cars" value={0} min={0} max={100} onChange={()=>{}} />
-                        <Slider label="People" value={0} min={0} max={100} onChange={()=>{}} />
-                        <div className="pt-2 border-t border-border-subtle">
-                            <label className="text-xs text-foreground-muted mb-1 block">Background</label>
-                            <select className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"><option>Transparent</option><option>Sky Gradient</option><option>Cityscape</option><option>Nature</option></select>
-                        </div>
+
+                // 5. ATMOSPHERE
+                { id: 'atmosphere', title: 'Atmosphere', content: (
+                    <div>
+                       <SectionDesc>Mood, tone, and environmental effects.</SectionDesc>
+                       
+                       <div className="grid grid-cols-3 gap-2 mb-4">
+                          {[
+                             {id: 'warm', label: 'Warm'}, {id: 'cool', label: 'Cool'}, {id: 'dramatic', label: 'Dramatic'},
+                             {id: 'soft', label: 'Soft'}, {id: 'moody', label: 'Moody'}, {id: 'luxury', label: 'Luxury'}
+                          ].map(m => (
+                             <button 
+                                key={m.id}
+                                className={cn(
+                                   "py-2 px-1 text-[10px] font-bold border rounded transition-all",
+                                   settings.atmosphere.mood.includes(m.id) 
+                                      ? "bg-surface-sunken text-foreground border-foreground/50" 
+                                      : "bg-surface-elevated text-foreground-muted border-border hover:border-foreground-muted"
+                                )}
+                                onClick={() => updateSection('atmosphere', { mood: m.id })}
+                             >
+                                {m.label}
+                             </button>
+                          ))}
+                       </div>
+
+                       <SliderControl label="Temperature" value={settings.atmosphere.temp} min={-100} max={100} step={1} onChange={(v) => updateSection('atmosphere', { temp: v })} />
+                       
+                       <div className="space-y-3 pt-2 border-t border-border-subtle mt-2">
+                          <div className="flex items-center justify-between">
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Wind size={12}/> Fog</span>
+                             <Toggle label="" checked={settings.atmosphere.fog.enabled} onChange={(v) => updateSection('atmosphere', { fog: { ...settings.atmosphere.fog, enabled: v } })} />
+                          </div>
+                          {settings.atmosphere.fog.enabled && (
+                             <SliderControl className="mb-0" label="Density" value={settings.atmosphere.fog.density} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('atmosphere', { fog: { ...settings.atmosphere.fog, density: v } })} />
+                          )}
+
+                          <div className="flex items-center justify-between">
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Sparkle size={12}/> Bloom</span>
+                             <Toggle label="" checked={settings.atmosphere.bloom.enabled} onChange={(v) => updateSection('atmosphere', { bloom: { ...settings.atmosphere.bloom, enabled: v } })} />
+                          </div>
+                          {settings.atmosphere.bloom.enabled && (
+                             <SliderControl className="mb-0" label="Intensity" value={settings.atmosphere.bloom.intensity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('atmosphere', { bloom: { ...settings.atmosphere.bloom, intensity: v } })} />
+                          )}
+                       </div>
                     </div>
                 )},
-                { id: 'out', title: 'Output', content: (
-                    <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-2">
-                            <NumberInput label="Width" value={1920} onChange={()=>{}} />
-                            <NumberInput label="Height" value={1080} onChange={()=>{}} />
-                        </div>
-                        <select className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"><option>PNG - Lossless</option><option>JPG - High</option><option>EXR - Linear</option></select>
-                        <Toggle label="Include Alpha" checked={true} onChange={()=>{}} />
-                        <Toggle label="Denoise" checked={true} onChange={()=>{}} />
+
+                // 6. SCENERY
+                { id: 'scenery', title: 'Scenery', content: (
+                    <div>
+                       <SectionDesc>Populate scene with context.</SectionDesc>
+                       
+                       <div className="space-y-4">
+                          <div className="bg-surface-elevated border border-border rounded p-2">
+                             <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold flex items-center gap-2"><User size={12}/> People</span>
+                                <Toggle label="" checked={settings.scenery.people.enabled} onChange={(v) => updateSection('scenery', { people: { ...settings.scenery.people, enabled: v } })} />
+                             </div>
+                             {settings.scenery.people.enabled && (
+                                <SliderControl className="mb-0" label="Count" value={settings.scenery.people.count} min={0} max={100} step={1} onChange={(v) => updateSection('scenery', { people: { ...settings.scenery.people, count: v } })} />
+                             )}
+                          </div>
+
+                          <div className="bg-surface-elevated border border-border rounded p-2">
+                             <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold flex items-center gap-2"><Trees size={12}/> Vegetation</span>
+                                <Toggle label="" checked={settings.scenery.trees.enabled} onChange={(v) => updateSection('scenery', { trees: { ...settings.scenery.trees, enabled: v } })} />
+                             </div>
+                             {settings.scenery.trees.enabled && (
+                                <SliderControl className="mb-0" label="Density" value={settings.scenery.trees.count} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('scenery', { trees: { ...settings.scenery.trees, count: v } })} />
+                             )}
+                          </div>
+
+                          <div className="bg-surface-elevated border border-border rounded p-2">
+                             <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold flex items-center gap-2"><Car size={12}/> Vehicles</span>
+                                <Toggle label="" checked={settings.scenery.cars.enabled} onChange={(v) => updateSection('scenery', { cars: { ...settings.scenery.cars, enabled: v } })} />
+                             </div>
+                             {settings.scenery.cars.enabled && (
+                                <SliderControl className="mb-0" label="Count" value={settings.scenery.cars.count} min={0} max={50} step={1} onChange={(v) => updateSection('scenery', { cars: { ...settings.scenery.cars, count: v } })} />
+                             )}
+                          </div>
+                       </div>
+
+                       <div className="mt-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Context Preset</label>
+                          <select 
+                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                             value={settings.scenery.preset}
+                             onChange={(e) => updateSection('scenery', { preset: e.target.value })}
+                          >
+                             <option value="residential">Residential Suburban</option>
+                             <option value="commercial">Urban Commercial</option>
+                             <option value="interior">Interior Living</option>
+                             <option value="empty">Empty / Studio</option>
+                          </select>
+                       </div>
                     </div>
                 )},
-            ]} defaultValue="cam" />
+
+                // 7. RENDER
+                { id: 'render', title: 'Render Quality', content: (
+                    <div>
+                       <SectionDesc>Output specifications and export.</SectionDesc>
+                       
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Resolution</label>
+                          <SegmentedControl 
+                             value={settings.render.resolution}
+                             options={[
+                                {label: 'HD', value: '720p'}, {label: 'FHD', value: '1080p'}, {label: '4K', value: '4k'}, {label: 'Print', value: 'print'}
+                             ]}
+                             onChange={(v) => updateSection('render', { resolution: v })}
+                          />
+                       </div>
+
+                       <div className="flex gap-4 mb-4">
+                          <div className="flex-1">
+                             <label className="text-xs font-medium text-foreground mb-1.5 block">Format</label>
+                             <select 
+                                className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                                value={settings.render.format}
+                                onChange={(e) => updateSection('render', { format: e.target.value })}
+                             >
+                                <option value="png">PNG (Lossless)</option>
+                                <option value="jpg">JPG (Compact)</option>
+                                <option value="tiff">TIFF (High Bit)</option>
+                                <option value="exr">EXR (Linear)</option>
+                             </select>
+                          </div>
+                          <div className="flex-1">
+                             <label className="text-xs font-medium text-foreground mb-1.5 block">Quality</label>
+                             <select 
+                                className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                                value={settings.render.quality}
+                                onChange={(e) => updateSection('render', { quality: e.target.value })}
+                             >
+                                <option value="draft">Draft (Fast)</option>
+                                <option value="preview">Preview</option>
+                                <option value="production">Production</option>
+                                <option value="ultra">Ultra</option>
+                             </select>
+                          </div>
+                       </div>
+
+                       <div className="space-y-2 mt-4">
+                          <button className="w-full py-3 bg-foreground text-background rounded-lg flex items-center justify-center gap-2 text-xs font-bold hover:bg-foreground/90 transition-colors shadow-md">
+                             <Camera size={16} /> Render Image
+                          </button>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                             <button className="py-2.5 bg-surface-elevated border border-border rounded-lg flex items-center justify-center gap-2 text-xs font-medium hover:bg-surface-sunken hover:border-foreground-muted transition-all">
+                                <Globe size={14} /> 360° Pano
+                             </button>
+                             <button className="py-2.5 bg-surface-elevated border border-border rounded-lg flex items-center justify-center gap-2 text-xs font-medium hover:bg-surface-sunken hover:border-foreground-muted transition-all">
+                                <Film size={14} /> Animation
+                             </button>
+                          </div>
+                       </div>
+                    </div>
+                )}
+            ]} defaultValue="geometry" />
         </div>
     );
 };
@@ -536,7 +967,7 @@ const SectionPanel = () => {
                 <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Cut Style</label>
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-xs">Poche Color</span>
-                    <ColorPicker color="#000000" />
+                    <ColorPicker color="#000000" onChange={()=>{}} />
                 </div>
                 <div className="grid grid-cols-4 gap-2 mb-3">
                     {['Solid', 'Diag', 'Cross', 'Conc'].map(p => <button key={p} className="h-8 border rounded bg-surface-elevated text-[10px]">{p}</button>)}
@@ -585,8 +1016,6 @@ const SketchPanel = () => {
                 <div className="flex justify-between text-[10px] text-foreground-muted mb-1"><span>Faithful</span><span>Creative</span></div>
                 <Slider value={50} min={0} max={100} onChange={()=>{}} />
             </div>
-
-            <StyleSelector />
 
             <Accordion items={[
                 { id: 'mat', title: 'Materials', content: (
@@ -845,29 +1274,14 @@ const ValidationPanel = () => {
     );
 };
 
-// --- GENERATE TEXT PANEL (Placeholder) ---
-const GeneratePanel = () => {
-    const { state } = useAppStore();
-    return (
-        <div className="space-y-6">
-            <StyleSelector />
-            <Accordion items={[
-                { id: 'sets', title: 'Image Settings', content: (
-                    <div className="space-y-4">
-                        <SegmentedControl value="16:9" options={[{label:'16:9', value:'16:9'}, {label:'4:3', value:'4:3'}, {label:'1:1', value:'1:1'}, {label:'9:16', value:'9:16'}]} onChange={()=>{}} />
-                        <select className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"><option>Standard</option><option>High Res</option></select>
-                    </div>
-                )},
-            ]} defaultValue="sets" />
-        </div>
-    );
-};
-
 // --- MAIN RIGHT PANEL ---
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { rightPanelOpen, rightPanelWidth, mode } = state;
+
+  // Hide Right Panel in 'generate-text' mode
+  if (mode === 'generate-text') return null;
 
   if (!rightPanelOpen) {
     return (
@@ -896,7 +1310,7 @@ export const RightPanel: React.FC = () => {
   let PanelIcon = Settings;
 
   switch (mode) {
-      case 'generate-text': panelTitle = "Image Generation"; PanelIcon = Sparkle; panelContent = <GeneratePanel />; break;
+      case 'generate-text': panelTitle = "Image Generation"; PanelIcon = Sparkle; panelContent = null; break; // This case is technically unreachable now
       case 'render-3d': panelTitle = "3D to Render"; PanelIcon = Box; panelContent = <Render3DPanel />; break;
       case 'render-cad': panelTitle = "CAD to Render"; PanelIcon = FileCode; panelContent = <CadToRenderPanel />; break;
       case 'masterplan': panelTitle = "Masterplan"; PanelIcon = Grid; panelContent = <MasterplanPanel />; break;
