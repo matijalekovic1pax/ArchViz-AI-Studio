@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
@@ -35,6 +35,86 @@ const initialVideoState: VideoState = {
   generatedVideoUrl: null,
 };
 
+const initialRender3D: Render3DSettings = {
+  geometry: {
+    edgeMode: 'medium',
+    strictPreservation: true,
+    geometryFreedom: 50,
+    lod: {
+      level: 'medium',
+      preserveOrnaments: true,
+      preserveMoldings: true,
+      preserveTrim: true,
+    },
+    smoothing: {
+      enabled: true,
+      intensity: 50,
+      preserveHardEdges: true,
+      threshold: 30,
+    },
+    depthLayers: {
+      enabled: false,
+      foreground: 100,
+      midground: 70,
+      background: 40,
+    },
+    displacement: {
+      enabled: false,
+      strength: 30,
+      scale: 'medium',
+      adaptToMaterial: true,
+    },
+  },
+  lighting: {
+    sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
+    shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
+    ambient: { intensity: 40, occlusion: 50 },
+    preset: 'early-morning',
+  },
+  camera: {
+    preset: 'eye-level',
+    lens: 35,
+    fov: 63,
+    autoCorrect: true,
+    dof: { enabled: false, aperture: 2.8, focusDist: 5 },
+  },
+  materials: {
+    emphasis: {
+      concrete: 50,
+      wood: 50,
+      metal: 50,
+      glass: 50,
+      stone: 50,
+      brick: 50,
+      tile: 50,
+      fabric: 50,
+      paint: 50,
+      flooring: 50,
+    },
+    reflectivity: 50,
+    roughness: 50,
+    weathering: { enabled: false, intensity: 30 },
+  },
+  atmosphere: {
+    mood: 'natural',
+    fog: { enabled: false, density: 20 },
+    bloom: { enabled: true, intensity: 30 },
+    temp: 0,
+  },
+  scenery: {
+    people: { enabled: false, count: 20 },
+    trees: { enabled: true, count: 50 },
+    cars: { enabled: false, count: 10 },
+    preset: 'departure-hall',
+  },
+  render: {
+    resolution: '1080p',
+    aspectRatio: '16:9',
+    viewType: 'passenger-pov',
+    quality: 'production',
+  },
+};
+
 const initialWorkflow: WorkflowSettings = {
   // 0. Text to Image
   textPrompt: '',
@@ -42,6 +122,7 @@ const initialWorkflow: WorkflowSettings = {
   // 1. 3D to Render
   sourceType: 'rhino',
   viewType: 'exterior',
+  prioritizationEnabled: false,
   detectedElements: [
     { id: '1', name: 'Walls', type: 'structural', confidence: 0.9, selected: true },
     { id: '2', name: 'Glass Curtain', type: 'envelope', confidence: 0.85, selected: true },
@@ -51,6 +132,7 @@ const initialWorkflow: WorkflowSettings = {
   renderMode: 'enhance',
   canvasSync: false,
   compareMode: false,
+  render3d: initialRender3D,
 
   // 2. CAD to Render
   cadDrawingType: 'plan',
@@ -175,6 +257,30 @@ const initialGeometry: GeometryState = {
   framingAdherence: 80,
   edgeDefinition: 'sharp',
   edgeStrength: 50,
+  lod: {
+    level: 'medium',
+    preserveOrnaments: true,
+    preserveMoldings: true,
+    preserveTrim: true,
+  },
+  smoothing: {
+    enabled: true,
+    intensity: 50,
+    preserveHardEdges: true,
+    threshold: 30,
+  },
+  depthLayers: {
+    enabled: false,
+    foreground: 100,
+    midground: 70,
+    background: 40,
+  },
+  displacement: {
+    enabled: false,
+    strength: 30,
+    scale: 'medium',
+    adaptToMaterial: true,
+  },
 };
 
 const initialCamera: CameraState = {
@@ -272,7 +378,7 @@ const initialCanvas: CanvasState = {
 
 const initialState: AppState = {
   mode: 'generate-text', // CHANGED: Set to 'generate-text' for default starting tab
-  activeStyleId: 'contemporary-minimalist',
+  activeStyleId: 'no-style',
   uploadedImage: null,
   isGenerating: false,
   progress: 0,
@@ -280,6 +386,7 @@ const initialState: AppState = {
   workflow: initialWorkflow,
   materialValidation: initialMaterialValidation,
   chatMessages: [],
+  customStyles: [],
   geometry: initialGeometry,
   camera: initialCamera,
   lighting: initialLighting,
@@ -326,6 +433,7 @@ function appReducer(state: AppState, action: Action): AppState {
           msg.id === action.payload.id ? { ...msg, ...action.payload.updates } : msg
         ) 
       };
+    case 'ADD_CUSTOM_STYLE': return { ...state, customStyles: [action.payload, ...state.customStyles] };
 
     case 'UPDATE_GEOMETRY': return { ...state, geometry: { ...state.geometry, ...action.payload } };
     case 'UPDATE_CAMERA': return { ...state, camera: { ...state.camera, ...action.payload } };

@@ -57,17 +57,114 @@ export interface ZoneItem {
   selected: boolean;
 }
 
+// Render 3D Panel Settings
+export interface Render3DGeometry {
+  edgeMode: 'soft' | 'medium' | 'sharp';
+  strictPreservation: boolean;
+  geometryFreedom: number;
+  lod: {
+    level: 'minimal' | 'low' | 'medium' | 'high' | 'ultra';
+    preserveOrnaments: boolean;
+    preserveMoldings: boolean;
+    preserveTrim: boolean;
+  };
+  smoothing: {
+    enabled: boolean;
+    intensity: number;
+    preserveHardEdges: boolean;
+    threshold: number;
+  };
+  depthLayers: {
+    enabled: boolean;
+    foreground: number;
+    midground: number;
+    background: number;
+  };
+  displacement: {
+    enabled: boolean;
+    strength: number;
+    scale: 'fine' | 'medium' | 'coarse';
+    adaptToMaterial: boolean;
+  };
+}
+
+export interface Render3DLighting {
+  sun: { enabled: boolean; azimuth: number; elevation: number; intensity: number; colorTemp: number; softness: number };
+  shadows: { enabled: boolean; intensity: number; softness: number; color: string };
+  ambient: { intensity: number; occlusion: number };
+  preset: string;
+}
+
+export interface Render3DCamera {
+  preset: string;
+  lens: number;
+  fov: number;
+  autoCorrect: boolean;
+  dof: { enabled: boolean; aperture: number; focusDist: number };
+}
+
+export interface Render3DMaterials {
+  emphasis: {
+    concrete: number;
+    wood: number;
+    metal: number;
+    glass: number;
+    stone: number;
+    brick: number;
+    tile: number;
+    fabric: number;
+    paint: number;
+    flooring: number;
+  };
+  reflectivity: number;
+  roughness: number;
+  weathering: { enabled: boolean; intensity: number };
+}
+
+export interface Render3DAtmosphere {
+  mood: string;
+  fog: { enabled: boolean; density: number };
+  bloom: { enabled: boolean; intensity: number };
+  temp: number;
+}
+
+export interface Render3DScenery {
+  people: { enabled: boolean; count: number };
+  trees: { enabled: boolean; count: number };
+  cars: { enabled: boolean; count: number };
+  preset: string;
+}
+
+export interface Render3DFormat {
+  resolution: '720p' | '1080p' | '4k' | 'print';
+  aspectRatio: '16:9' | '4:3' | '3:2' | '1:1' | '21:9' | '9:16';
+  viewType: string;
+  quality: 'draft' | 'preview' | 'production' | 'ultra';
+}
+
+export interface Render3DSettings {
+  geometry: Render3DGeometry;
+  lighting: Render3DLighting;
+  camera: Render3DCamera;
+  materials: Render3DMaterials;
+  atmosphere: Render3DAtmosphere;
+  scenery: Render3DScenery;
+  render: Render3DFormat;
+}
+
 export interface WorkflowSettings {
   // 0. Text to Image
   textPrompt: string;
 
   // 1. 3D to Render
-  sourceType: 'revit' | 'rhino' | 'sketchup' | 'blender' | '3dsmax' | 'clay' | 'other';
+  sourceType: 'revit' | 'rhino' | 'sketchup' | 'blender' | '3dsmax' | 'archicad' | 'cinema4d' | 'clay' | 'other';
   viewType: 'exterior' | 'interior' | 'aerial' | 'detail';
+  prioritizationEnabled: boolean;
   detectedElements: DetectedElement[];
   renderMode: 'enhance' | 'stylize' | 'hybrid' | 'strict-realism' | 'concept-push';
   canvasSync: boolean; // Used for Split View toggle
   compareMode: boolean;
+  render3d: Render3DSettings;
 
   // 2. CAD to Render
   cadDrawingType: 'plan' | 'section' | 'elevation' | 'site';
@@ -258,6 +355,30 @@ export interface GeometryState {
   framingAdherence: number;
   edgeDefinition: 'sharp' | 'soft' | 'adaptive';
   edgeStrength: number;
+  lod: {
+    level: 'minimal' | 'low' | 'medium' | 'high' | 'ultra';
+    preserveOrnaments: boolean;
+    preserveMoldings: boolean;
+    preserveTrim: boolean;
+  };
+  smoothing: {
+    enabled: boolean;
+    intensity: number;
+    preserveHardEdges: boolean;
+    threshold: number;
+  };
+  depthLayers: {
+    enabled: boolean;
+    foreground: number;
+    midground: number;
+    background: number;
+  };
+  displacement: {
+    enabled: boolean;
+    strength: number;
+    scale: 'fine' | 'medium' | 'coarse';
+    adaptToMaterial: boolean;
+  };
 }
 
 export interface CameraState {
@@ -358,6 +479,7 @@ export interface HistoryItem {
   timestamp: number;
   thumbnail: string; // Base64
   prompt: string;
+  attachments?: string[];
   mode: GenerationMode;
   settings?: any;
 }
@@ -374,6 +496,7 @@ export interface AppState {
   materialValidation: MaterialValidationState;
   
   chatMessages: ChatMessage[];
+  customStyles: StyleConfiguration[];
 
   geometry: GeometryState;
   camera: CameraState;
@@ -411,6 +534,7 @@ export type Action =
   | { type: 'UPDATE_MATERIAL_VALIDATION'; payload: Partial<MaterialValidationState> }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'UPDATE_CHAT_MESSAGE'; payload: { id: string; updates: Partial<ChatMessage> } }
+  | { type: 'ADD_CUSTOM_STYLE'; payload: StyleConfiguration }
   | { type: 'UPDATE_GEOMETRY'; payload: Partial<GeometryState> }
   | { type: 'UPDATE_CAMERA'; payload: Partial<CameraState> }
   | { type: 'UPDATE_LIGHTING'; payload: Partial<LightingState> }

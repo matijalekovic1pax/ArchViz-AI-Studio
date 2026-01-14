@@ -1,13 +1,21 @@
 
-import { AppState, StyleConfiguration } from '../types';
+import { AppState, StyleConfiguration, Render3DSettings } from '../types';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
+  {
+    id: 'no-style',
+    name: 'No Style',
+    category: 'Base',
+    description: 'No style. Use the raw prompt without stylistic bias.',
+    previewUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500' viewBox='0 0 800 500'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%23eef2f7'/><stop offset='100%25' stop-color='%23dce4ef'/></linearGradient></defs><rect width='800' height='500' fill='url(%23g)'/><text x='40' y='70' font-family='Arial' font-size='24' fill='%23859bb5'>No Style</text></svg>",
+    promptBundle: {}
+  },
   // --- EXISTING STYLES (14) ---
   {
     id: 'contemporary-minimalist',
     name: 'Contemporary Minimalist',
     category: 'Residential',
-    description: 'Clean lines, neutral palettes, emphasis on light and space',
+    description: 'Style: Contemporary Minimalist. Architectural vocabulary of clean lines, minimal ornamentation, open plan. Material palette of white plaster, floor-to-ceiling glass with secondary materials like warm oak accents, matte black steel. Lighting favors soft natural light, diffused daylight. Overall mood is serene, sophisticated.',
     previewUrl: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['clean lines', 'minimal ornamentation', 'open plan', 'floating planes', 'cubic forms'],
@@ -28,8 +36,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'brutalist',
     name: 'Neo-Brutalist',
     category: 'Cultural',
-    description: 'Raw concrete, massive forms, honest materiality',
-    previewUrl: 'https://images.unsplash.com/photo-1533630764724-5c9a633a6967?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Neo-Brutalist. Architectural vocabulary of massive forms, monolithic, geometric. Material palette of exposed concrete, raw timber with secondary materials like weathered steel, glass. Lighting favors dramatic shadows, contrast. Overall mood is imposing, atmospheric.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/A_hotel_%28known_as_Fullerton_Hotel%29_looks_grand_and_imposing_at_the_time_of_dusk.jpg',
     promptBundle: {
       architectureVocabulary: ['massive forms', 'monolithic', 'geometric', 'raw materiality', 'heavy volumes'],
       materialBias: {
@@ -49,7 +57,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'parametric',
     name: 'Parametric Fluidity',
     category: 'Conceptual',
-    description: 'Organic forms, flowing geometries, computational aesthetics',
+    description: 'Style: Parametric Fluidity. Architectural vocabulary of organic curves, parametric facade, flowing geometry. Material palette of white corian, curved glass with secondary materials like perforated metal, fiber composites. Lighting favors soft gradients, ambient glow. Overall mood is futuristic, ethereal.',
     previewUrl: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['organic curves', 'parametric facade', 'flowing geometry', 'biomimetic', 'voronoi pattern'],
@@ -70,7 +78,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'vernacular',
     name: 'Modern Vernacular',
     category: 'Residential',
-    description: 'Local materials, traditional forms, modern interpretation',
+    description: 'Style: Modern Vernacular. Architectural vocabulary of gabled roof, local adaptation, warm tones. Material palette of brick, stone with secondary materials like copper, slate. Lighting favors golden hour, warm interior glow. Overall mood is inviting, cozy.',
     previewUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['gabled roof', 'local adaptation', 'warm tones', 'tactile', 'pitched roof'],
@@ -91,8 +99,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'scandinavian',
     name: 'Scandinavian',
     category: 'Residential',
-    description: 'Hygge, light woods, functional simplicity, cozy',
-    previewUrl: 'https://images.unsplash.com/photo-1595515106967-14348984f548?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Scandinavian. Architectural vocabulary of simple forms, functionalism, hygge. Material palette of pine wood, white walls with secondary materials like wool, linen. Lighting favors diffused north light, bright interiors. Overall mood is cozy, clean.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f6/Castle_Rising%2C_St._Lawrence%27s_Church%2C_The_Norman_Nave_Arch_4%2C_Scandinavian_style_capital_carving_-_geograph.org.uk_-_5109279.jpg',
     promptBundle: {
       architectureVocabulary: ['simple forms', 'functionalism', 'hygge', 'connection to nature'],
       materialBias: {
@@ -112,8 +120,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'industrial-loft',
     name: 'Industrial Loft',
     category: 'Commercial',
-    description: 'Exposed structure, brick, metal, repurposed spaces',
-    previewUrl: 'https://images.unsplash.com/photo-1623631484762-b9b53239a3f2?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Industrial Loft. Architectural vocabulary of adaptive reuse, open ceilings, large windows. Material palette of exposed brick, steel beams with secondary materials like ductwork, distressed leather. Lighting favors large daylighting, edison bulbs. Overall mood is urban, raw.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/HeinzLofts.jpg',
     promptBundle: {
       architectureVocabulary: ['adaptive reuse', 'open ceilings', 'large windows', 'structural honesty'],
       materialBias: {
@@ -133,7 +141,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'biophilic',
     name: 'Biophilic Design',
     category: 'Sustainable',
-    description: 'Integration of nature, living walls, natural light',
+    description: 'Style: Biophilic Design. Architectural vocabulary of vertical gardens, indoor-outdoor flow, organic patterns. Material palette of living walls, natural wood with secondary materials like water features, bamboo. Lighting favors dappled sunlight, skylights. Overall mood is lush, restorative.',
     previewUrl: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['vertical gardens', 'indoor-outdoor flow', 'organic patterns', 'nature integration'],
@@ -154,7 +162,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'mid-century',
     name: 'Mid-Century Modern',
     category: 'Residential',
-    description: 'Retro-futurism, organic curves, contrasting textures',
+    description: 'Style: Mid-Century Modern. Architectural vocabulary of cantilevered, flat planes, integration with landscape. Material palette of teak, glass with secondary materials like brass, terrazzo. Lighting favors warm sunlight, globe lights. Overall mood is nostalgic, stylish.',
     previewUrl: 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['cantilevered', 'flat planes', 'integration with landscape', 'retro aesthetic'],
@@ -175,8 +183,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'japanese-zen',
     name: 'Japanese Zen',
     category: 'Cultural',
-    description: 'Minimalism, natural materials, shadow and light, serenity',
-    previewUrl: 'https://images.unsplash.com/photo-1522771759335-5028489708b7?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Japanese Zen. Architectural vocabulary of engawa, shoji screens, minimalist. Material palette of hinoki wood, tatami with secondary materials like river stones, paper. Lighting favors diffused soft light, shadow play. Overall mood is peaceful, meditative.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/11/Architectural_Detail_-_Kennin-ji_Zen_Temple_-_Kyoto_-_Japan_%2847929070538%29.jpg',
     promptBundle: {
       architectureVocabulary: ['engawa', 'shoji screens', 'minimalist', 'connection to garden'],
       materialBias: {
@@ -196,7 +204,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'cyberpunk',
     name: 'Cyberpunk',
     category: 'Conceptual',
-    description: 'High-tech low-life, neon, dystopian, metallic',
+    description: 'Style: Cyberpunk. Architectural vocabulary of megastructure, dense urban, high-tech. Material palette of metal, glass with secondary materials like holograms, wires. Lighting favors neon pink, cyan glow. Overall mood is dark, gritty.',
     previewUrl: 'https://images.unsplash.com/photo-1515630278258-407f66498911?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['megastructure', 'dense urban', 'high-tech', 'dystopian'],
@@ -217,8 +225,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'bauhaus',
     name: 'Bauhaus',
     category: 'Cultural',
-    description: 'Form follows function, primary colors, simple geometry',
-    previewUrl: 'https://images.unsplash.com/photo-1589923188900-85dae5233271?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Bauhaus. Architectural vocabulary of geometric, functionalism, asymmetry. Material palette of white stucco, steel with secondary materials like primary color accents, concrete. Lighting favors clear daylight, studio lighting. Overall mood is rational, modern.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/12/20er_Bauhaus.png',
     promptBundle: {
       architectureVocabulary: ['geometric', 'functionalism', 'asymmetry', 'industrial'],
       materialBias: {
@@ -238,7 +246,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'tropical-modern',
     name: 'Tropical Modernism',
     category: 'Residential',
-    description: 'Open air, overhangs, concrete and wood, lush context',
+    description: 'Style: Tropical Modernism. Architectural vocabulary of large overhangs, passive ventilation, open spaces. Material palette of concrete, tropical hardwood with secondary materials like water, vegetation. Lighting favors bright sun, deep shade. Overall mood is humid, lush.',
     previewUrl: 'https://images.unsplash.com/photo-1516455590571-18256e5bb9ff?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['large overhangs', 'passive ventilation', 'open spaces', 'breeze blocks'],
@@ -259,8 +267,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'alpine-chalet',
     name: 'Alpine Chalet',
     category: 'Residential',
-    description: 'Modern mountain home, snow, timber, warmth',
-    previewUrl: 'https://images.unsplash.com/photo-1518732679287-35359b32975e?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Alpine Chalet. Architectural vocabulary of steep roof, panoramic windows, mountain retreat. Material palette of timber cladding, slate with secondary materials like glass, fur. Lighting favors warm interior light, blue hour snow. Overall mood is cold outside warm inside, majestic.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Alpine_flowers_and_gardens_%28IA_alpineflowersgar00flemrich%29.pdf',
     promptBundle: {
       architectureVocabulary: ['steep roof', 'panoramic windows', 'mountain retreat'],
       materialBias: {
@@ -280,8 +288,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'desert-modern',
     name: 'Desert Modernism',
     category: 'Residential',
-    description: 'Blending with arid landscape, earth tones, horizontal lines',
-    previewUrl: 'https://images.unsplash.com/photo-1523677462372-748980892095?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Desert Modernism. Architectural vocabulary of horizontal planes, earth shelter, arid landscape. Material palette of rammed earth, corten steel with secondary materials like glass, succulents. Lighting favors hard sunlight, long shadows. Overall mood is dry, hot.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Architect_and_engineer_%28IA_architectenginee11333sanf%29.pdf',
     promptBundle: {
       architectureVocabulary: ['horizontal planes', 'earth shelter', 'arid landscape', 'shadow patterns'],
       materialBias: {
@@ -302,8 +310,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'art-deco',
     name: 'Art Deco',
     category: 'Historical',
-    description: 'Geometric patterns, bold vertical lines, decorative ornamentation',
-    previewUrl: 'https://images.unsplash.com/photo-1550417761-e945c997cefa?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Art Deco. Architectural vocabulary of geometric patterns, vertical emphasis, ziggurat forms. Material palette of limestone, chrome with secondary materials like brass, terrazzo. Lighting favors dramatic up-lighting, neon accents. Overall mood is glamorous, bold.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Art_Deco_Building_on_1_Fifth_Avenue_behind_Washington_Square_Arch_2019-09-29_23-34.jpg',
     promptBundle: {
       architectureVocabulary: ['geometric patterns', 'vertical emphasis', 'ziggurat forms', 'decorative', 'streamlined'],
       materialBias: { primary: ['limestone', 'chrome', 'glass block'], secondary: ['brass', 'terrazzo'], avoid: ['minimalism'] },
@@ -316,8 +324,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'beaux-arts',
     name: 'Beaux-Arts',
     category: 'Historical',
-    description: 'Grandeur, symmetry, elaborate ornamentation, classical roots',
-    previewUrl: 'https://images.unsplash.com/photo-1565060169192-3e2d19459529?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Beaux-Arts. Architectural vocabulary of symmetry, columns, cornices. Material palette of limestone, marble with secondary materials like bronze. Lighting favors natural daylight, chandelier glow. Overall mood is monumental, formal.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/7/77/%28Narbonne%29_Mgr_Jules_de_M%C3%A9dicis_-_Mus%C3%A9e_des_Beaux-Arts_de_Narbonne.jpg',
     promptBundle: {
       architectureVocabulary: ['symmetry', 'columns', 'cornices', 'grand entrance', 'sculptural details'],
       materialBias: { primary: ['limestone', 'marble', 'granite'], secondary: ['bronze'], avoid: ['exposed steel'] },
@@ -330,8 +338,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'gothic-revival',
     name: 'Gothic Revival',
     category: 'Historical',
-    description: 'Pointed arches, steep gables, intricate tracery',
-    previewUrl: 'https://images.unsplash.com/photo-1548625361-9878201a052c?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Gothic Revival. Architectural vocabulary of pointed arches, steep roofs, tracery. Material palette of stone, brick with secondary materials like stained glass, slate. Lighting favors mysterious, shadowy. Overall mood is imposing, historic.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b2/Kenilwood-gothic-revival-architecture.jpg',
     promptBundle: {
       architectureVocabulary: ['pointed arches', 'steep roofs', 'tracery', 'verticality', 'spires'],
       materialBias: { primary: ['stone', 'brick'], secondary: ['stained glass', 'slate'], avoid: ['concrete'] },
@@ -344,8 +352,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'victorian',
     name: 'Victorian',
     category: 'Historical',
-    description: 'Asymmetrical, decorative trim, steep roofs, bay windows',
-    previewUrl: 'https://images.unsplash.com/photo-1597552945209-173de71ce74d?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Victorian. Architectural vocabulary of asymmetry, decorative trim, turrets. Material palette of painted wood, brick with secondary materials like shingles, stained glass. Lighting favors warm, inviting light. Overall mood is charming, detailed.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/9e/Osborne_Street_Victorian%2C_Danbury%2C_Connecticut.jpg',
     promptBundle: {
       architectureVocabulary: ['asymmetry', 'decorative trim', 'turrets', 'bay windows', 'porches'],
       materialBias: { primary: ['painted wood', 'brick'], secondary: ['shingles', 'stained glass'], avoid: ['glass curtain wall'] },
@@ -358,8 +366,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'mediterranean',
     name: 'Mediterranean Revival',
     category: 'Residential',
-    description: 'Stucco walls, red tile roofs, arched windows',
-    previewUrl: 'https://images.unsplash.com/photo-1523456397395-88849646487e?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Mediterranean Revival. Architectural vocabulary of arches, courtyards, red tile roof. Material palette of stucco, terracotta with secondary materials like wrought iron, wood. Lighting favors warm sun, dappled shade. Overall mood is sunny, relaxed.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/6/60/%281%29Mediterranean_Revival_style-1.jpg',
     promptBundle: {
       architectureVocabulary: ['arches', 'courtyards', 'red tile roof', 'balconies'],
       materialBias: { primary: ['stucco', 'terracotta'], secondary: ['wrought iron', 'wood'], avoid: ['siding'] },
@@ -372,8 +380,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'tudor',
     name: 'Tudor Revival',
     category: 'Residential',
-    description: 'Decorative half-timbering, steep gables, masonry chimneys',
-    previewUrl: 'https://images.unsplash.com/photo-1596489886364-4e788c1c4f51?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Tudor Revival. Architectural vocabulary of half-timbering, steep gables, prominent chimneys. Material palette of brick, stucco with secondary materials like stone. Lighting favors warm, cozy light. Overall mood is fairytale, historic.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f9/An_example_of_Tudor_Revival_architecture_in_the_Belle_Meade_Links_neighborhood_%28Nashville%2C_Tennessee%29.jpg',
     promptBundle: {
       architectureVocabulary: ['half-timbering', 'steep gables', 'prominent chimneys', 'leaded glass'],
       materialBias: { primary: ['brick', 'stucco', 'wood'], secondary: ['stone'], avoid: ['modern materials'] },
@@ -386,7 +394,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'craftsman',
     name: 'Craftsman',
     category: 'Residential',
-    description: 'Low-pitched roofs, exposed beams, front porches, natural materials',
+    description: 'Style: Craftsman. Architectural vocabulary of low-pitched roof, exposed rafters, tapered columns. Material palette of wood, stone with secondary materials like brick, shingle. Lighting favors warm light. Overall mood is homely, natural.',
     previewUrl: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['low-pitched roof', 'exposed rafters', 'tapered columns', 'porch'],
@@ -400,8 +408,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'prairie',
     name: 'Prairie Style',
     category: 'Residential',
-    description: 'Horizontal lines, flat or hipped roofs, integration with landscape',
-    previewUrl: 'https://images.unsplash.com/photo-1625604107572-132d0f509e50?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Prairie Style. Architectural vocabulary of horizontal lines, cantilevers, open plan. Material palette of brick, wood with secondary materials like art glass. Lighting favors natural light. Overall mood is grounded, peaceful.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Frank_Lloyd_Wright_Prairie_Style_Marysville.jpg',
     promptBundle: {
       architectureVocabulary: ['horizontal lines', 'cantilevers', 'open plan', 'organic architecture'],
       materialBias: { primary: ['brick', 'wood'], secondary: ['art glass'], avoid: ['verticality'] },
@@ -414,7 +422,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'international',
     name: 'International Style',
     category: 'Modern',
-    description: 'Rectilinear forms, light surfaces, open interior spaces, lack of ornamentation',
+    description: 'Style: International Style. Architectural vocabulary of rectilinear, volume over mass, regularity. Material palette of glass, steel with secondary materials like white render. Lighting favors even light. Overall mood is rational, efficient.',
     previewUrl: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['rectilinear', 'volume over mass', 'regularity', 'no ornament'],
@@ -428,8 +436,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'deconstructivism',
     name: 'Deconstructivism',
     category: 'Conceptual',
-    description: 'Fragmentation, non-rectilinear shapes, manipulated surface skin',
-    previewUrl: 'https://images.unsplash.com/photo-1525936451670-3490795c644d?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Deconstructivism. Architectural vocabulary of fragmentation, non-linear, distortion. Material palette of titanium, steel with secondary materials like concrete. Lighting favors dynamic light. Overall mood is chaotic, innovative.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/df/0156-Stuttgart-Hysolar.jpg',
     promptBundle: {
       architectureVocabulary: ['fragmentation', 'non-linear', 'distortion', 'dislocation'],
       materialBias: { primary: ['titanium', 'steel', 'glass'], secondary: ['concrete'], avoid: ['symmetry'] },
@@ -442,8 +450,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'high-tech',
     name: 'High-Tech',
     category: 'Modern',
-    description: 'Exposed structure and services, industrial materials',
-    previewUrl: 'https://images.unsplash.com/photo-1506456073715-9c8397a6e118?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: High-Tech. Architectural vocabulary of exposed structure, functionalism, industrial aesthetic. Material palette of steel, glass with secondary materials like bright colors. Lighting favors technical light. Overall mood is engineered, advanced.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/7/7f/Futuristic_architecture_at_Holm_Island_-_geograph.org.uk_-_5246329.jpg',
     promptBundle: {
       architectureVocabulary: ['exposed structure', 'functionalism', 'industrial aesthetic', 'flexibility'],
       materialBias: { primary: ['steel', 'glass', 'aluminum'], secondary: ['bright colors'], avoid: ['masonry'] },
@@ -456,7 +464,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'postmodern',
     name: 'Postmodernism',
     category: 'Modern',
-    description: 'Wit, ornament, reference to history, colorful',
+    description: 'Style: Postmodernism. Architectural vocabulary of historical reference, color, playfulness. Material palette of stucco, stone veneer with secondary materials like tile. Lighting favors bright light. Overall mood is playful, eclectic.',
     previewUrl: 'https://images.unsplash.com/photo-1545558014-8692077e9b5c?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['historical reference', 'color', 'playfulness', 'irony'],
@@ -470,8 +478,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'metabolism',
     name: 'Metabolism',
     category: 'Conceptual',
-    description: 'Modular, biological growth, adaptable structures',
-    previewUrl: 'https://images.unsplash.com/photo-1552553748-0387d5dc7498?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Metabolism. Architectural vocabulary of capsules, modularity, growth. Material palette of concrete, pre-fab units with secondary materials like steel. Lighting favors natural light. Overall mood is futuristic, organic.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/bf/Albendazole_metabolism_%28blank%29.svg',
     promptBundle: {
       architectureVocabulary: ['capsules', 'modularity', 'growth', 'megastructure'],
       materialBias: { primary: ['concrete', 'pre-fab units'], secondary: ['steel'], avoid: ['traditional'] },
@@ -484,8 +492,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'eco-brutalism',
     name: 'Eco-Brutalism',
     category: 'Sustainable',
-    description: 'Raw concrete structures integrated with heavy vegetation',
-    previewUrl: 'https://images.unsplash.com/photo-1599809275372-b7f58957816e?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Eco-Brutalism. Architectural vocabulary of concrete, vegetation, overgrown. Material palette of concrete, plants with secondary materials like water. Lighting favors dappled light. Overall mood is post-apocalyptic, serene.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Architectural_record_%28IA_architecturalrec5319unse%29.pdf',
     promptBundle: {
       architectureVocabulary: ['concrete', 'vegetation', 'overgrown', 'monolithic'],
       materialBias: { primary: ['concrete', 'plants'], secondary: ['water'], avoid: ['plastic'] },
@@ -498,8 +506,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'tiny-house',
     name: 'Tiny House',
     category: 'Residential',
-    description: 'Compact, efficient living, clever storage, mobile',
-    previewUrl: 'https://images.unsplash.com/photo-1512915990740-8b150937c541?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Tiny House. Architectural vocabulary of compact, efficient, loft. Material palette of wood with secondary materials like metal. Lighting favors cozy light. Overall mood is simple, free.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/The_Tiny_House_at_SMAK%27s_Hotel.jpg',
     promptBundle: {
       architectureVocabulary: ['compact', 'efficient', 'loft', 'wheels'],
       materialBias: { primary: ['wood'], secondary: ['metal'], avoid: ['excess'] },
@@ -512,8 +520,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'shipping-container',
     name: 'Container Arch',
     category: 'Sustainable',
-    description: 'Modular structures built from repurposed shipping containers',
-    previewUrl: 'https://images.unsplash.com/photo-1529307474898-eeb5a539b252?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Container Arch. Architectural vocabulary of modular, industrial, corrugated. Material palette of metal, glass with secondary materials like wood deck. Lighting favors natural light. Overall mood is innovative, upcycled.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/8b/Architectural_Review_and_American_Builders%27_Journal%2C_Volume_1%2C_1869.pdf',
     promptBundle: {
       architectureVocabulary: ['modular', 'industrial', 'corrugated', 'stacked'],
       materialBias: { primary: ['metal', 'glass'], secondary: ['wood deck'], avoid: ['stone'] },
@@ -526,7 +534,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'earthship',
     name: 'Earthship',
     category: 'Sustainable',
-    description: 'Earth-bermed, recycled materials, off-grid',
+    description: 'Style: Earthship. Architectural vocabulary of earth-bermed, passive solar, recycled. Material palette of tires, adobe with secondary materials like wood. Lighting favors natural light. Overall mood is sustainable, rugged.',
     previewUrl: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['earth-bermed', 'passive solar', 'recycled', 'organic'],
@@ -540,7 +548,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'bamboo',
     name: 'Bamboo Architecture',
     category: 'Sustainable',
-    description: 'Organic forms, sustainable material, open structures',
+    description: 'Style: Bamboo Architecture. Architectural vocabulary of organic, curved, open air. Material palette of bamboo with secondary materials like thatch. Lighting favors warm light. Overall mood is tropical, serene.',
     previewUrl: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['organic', 'curved', 'open air', 'sustainable'],
@@ -554,7 +562,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'nordic-noir',
     name: 'Nordic Noir',
     category: 'Residential',
-    description: 'Black timber, minimalist, moody, integrated with nature',
+    description: 'Style: Nordic Noir. Architectural vocabulary of minimalist, dark exterior, cozy interior. Material palette of charred wood, glass with secondary materials like concrete. Lighting favors moody light. Overall mood is quiet, mysterious.',
     previewUrl: 'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['minimalist', 'dark exterior', 'cozy interior', 'nature'],
@@ -568,7 +576,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'a-frame',
     name: 'A-Frame',
     category: 'Residential',
-    description: 'Triangular shape, steep roof, large windows',
+    description: 'Style: A-Frame. Architectural vocabulary of triangular, steep roof, open gable. Material palette of wood, glass with secondary materials like metal roof. Lighting favors warm light. Overall mood is cabin, retreat.',
     previewUrl: 'https://images.unsplash.com/photo-1527030280862-64139fba04ca?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['triangular', 'steep roof', 'open gable', 'deck'],
@@ -582,8 +590,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'geodesic',
     name: 'Geodesic Dome',
     category: 'Conceptual',
-    description: 'Spherical lattice shell, efficient, futuristic',
-    previewUrl: 'https://images.unsplash.com/photo-1532053177659-197e743a6d71?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Geodesic Dome. Architectural vocabulary of spherical, triangular lattice, efficient. Material palette of glass, steel with secondary materials like ETFE. Lighting favors bright light. Overall mood is futuristic, scientific.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/43/Geodesic_Dome_Tent.webp',
     promptBundle: {
       architectureVocabulary: ['spherical', 'triangular lattice', 'efficient', 'dome'],
       materialBias: { primary: ['glass', 'steel'], secondary: ['ETFE'], avoid: ['brick'] },
@@ -596,8 +604,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'parametric-timber',
     name: 'Parametric Timber',
     category: 'Conceptual',
-    description: 'Fluid wooden forms, computational design, warm aesthetic',
-    previewUrl: 'https://images.unsplash.com/photo-1533552277498-8547b31c513e?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Parametric Timber. Architectural vocabulary of fluid, computational, layered. Material palette of wood with secondary materials like glass. Lighting favors warm light. Overall mood is innovative, natural.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/Computational_analysis_of_hygromorphic_self-shaping_wood_gridshell_structures.pdf',
     promptBundle: {
       architectureVocabulary: ['fluid', 'computational', 'layered', 'organic'],
       materialBias: { primary: ['wood'], secondary: ['glass'], avoid: ['block'] },
@@ -610,7 +618,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'floating-home',
     name: 'Floating Arch',
     category: 'Residential',
-    description: 'Structures on water, buoyant, connection to aquatic environment',
+    description: 'Style: Floating Arch. Architectural vocabulary of floating, buoyant, deck. Material palette of wood, composite with secondary materials like glass. Lighting favors reflected light. Overall mood is peaceful, aquatic.',
     previewUrl: 'https://images.unsplash.com/photo-1559827291-72ee739d0d9a?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['floating', 'buoyant', 'deck', 'water view'],
@@ -624,7 +632,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'mars-habitat',
     name: 'Mars Habitat',
     category: 'Conceptual',
-    description: '3D printed regolith, protective shells, red planet context',
+    description: 'Style: Mars Habitat. Architectural vocabulary of 3D printed, protective, dome. Material palette of regolith, composite with secondary materials like glass. Lighting favors artificial, reddish light. Overall mood is hostile, advanced.',
     previewUrl: 'https://images.unsplash.com/photo-1614728263952-84ea256f9679?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['3D printed', 'protective', 'dome', 'pressurized'],
@@ -638,8 +646,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'solarpunk',
     name: 'Solarpunk',
     category: 'Conceptual',
-    description: 'Green technology, art nouveau influence, sustainable utopia',
-    previewUrl: 'https://images.unsplash.com/photo-1629806346740-d99f2c253676?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Solarpunk. Architectural vocabulary of green tech, organic curves, stained glass. Material palette of glass, plants with secondary materials like solar panels. Lighting favors bright light. Overall mood is utopian, vibrant.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/f8/Casa_Terracota_in_Villa_de_Leyva.jpg',
     promptBundle: {
       architectureVocabulary: ['green tech', 'organic curves', 'stained glass', 'solar'],
       materialBias: { primary: ['glass', 'plants', 'wood'], secondary: ['solar panels'], avoid: ['grunge'] },
@@ -652,8 +660,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'steampunk',
     name: 'Steampunk',
     category: 'Conceptual',
-    description: 'Victorian sci-fi, brass, steam, gears, industrial',
-    previewUrl: 'https://images.unsplash.com/photo-1549487779-130c01a55f58?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Steampunk. Architectural vocabulary of industrial, victorian, gears. Material palette of brass, copper with secondary materials like brick. Lighting favors warm, hazy light. Overall mood is retro-future, mechanical.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/10/Steampunk_festival_in_Lincoln_2014_-_Photo_39_-_geograph.org.uk_-_4170042.jpg',
     promptBundle: {
       architectureVocabulary: ['industrial', 'victorian', 'gears', 'pipes'],
       materialBias: { primary: ['brass', 'copper', 'iron'], secondary: ['brick'], avoid: ['plastic'] },
@@ -666,7 +674,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'islamic-modern',
     name: 'Islamic Modern',
     category: 'Cultural',
-    description: 'Geometric patterns, mashrabiya, light filtration, courtyards',
+    description: 'Style: Islamic Modern. Architectural vocabulary of geometry, pattern, screening. Material palette of stone, screen with secondary materials like water. Lighting favors filtered, shadow patterns. Overall mood is spiritual, cool.',
     previewUrl: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['geometry', 'pattern', 'screening', 'courtyard'],
@@ -680,8 +688,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'chinese-modern',
     name: 'Chinese Modern',
     category: 'Cultural',
-    description: 'Traditional rooflines, wooden brackets, courtyard layout',
-    previewUrl: 'https://images.unsplash.com/photo-1518136247453-74e7b5095e52?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Chinese Modern. Architectural vocabulary of sweeping roof, brackets, courtyard. Material palette of wood, tile with secondary materials like stone. Lighting favors soft light. Overall mood is peaceful, historic.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/6/61/20240729_Sign_of_Badaguan_Modern_Architectures.jpg',
     promptBundle: {
       architectureVocabulary: ['sweeping roof', 'brackets', 'courtyard', 'symmetry'],
       materialBias: { primary: ['wood', 'tile'], secondary: ['stone'], avoid: ['concrete block'] },
@@ -694,7 +702,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'wabi-sabi',
     name: 'Wabi-Sabi',
     category: 'Cultural',
-    description: 'Beauty in imperfection, aged materials, simplicity',
+    description: 'Style: Wabi-Sabi. Architectural vocabulary of imperfection, simplicity, natural aging. Material palette of aged wood, rough plaster with secondary materials like stone. Lighting favors shadowy. Overall mood is quiet, melancholy.',
     previewUrl: 'https://images.unsplash.com/photo-1598928636135-d146006ff4be?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['imperfection', 'simplicity', 'natural aging', 'rough'],
@@ -708,7 +716,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'memphis',
     name: 'Memphis Group',
     category: 'Modern',
-    description: 'Colorful, geometric, pop-art influence, playful',
+    description: 'Style: Memphis Group. Architectural vocabulary of geometric, colorful, pattern. Material palette of laminate, terrazzo with secondary materials like plastic. Lighting favors bright light. Overall mood is fun, bold.',
     previewUrl: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['geometric', 'colorful', 'pattern', 'asymmetry'],
@@ -722,8 +730,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'art-nouveau',
     name: 'Art Nouveau',
     category: 'Historical',
-    description: 'Whiplash curves, organic motifs, decorative ironwork',
-    previewUrl: 'https://images.unsplash.com/photo-1558237305-6f981dd90c37?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Art Nouveau. Architectural vocabulary of curves, organic lines, floral motifs. Material palette of stone, iron with secondary materials like ceramic. Lighting favors soft light. Overall mood is romantic, flowery.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/46/Art_Nouveau_Riga_17.jpg',
     promptBundle: {
       architectureVocabulary: ['curves', 'organic lines', 'floral motifs', 'asymmetry'],
       materialBias: { primary: ['stone', 'iron', 'glass'], secondary: ['ceramic'], avoid: ['rectilinear'] },
@@ -736,8 +744,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'neoclassical',
     name: 'Neoclassical',
     category: 'Historical',
-    description: 'Columns, pediments, symmetry, grand scale',
-    previewUrl: 'https://images.unsplash.com/photo-1524330687720-4c311c1d8825?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Neoclassical. Architectural vocabulary of columns, pediment, symmetry. Material palette of stone, marble with secondary materials like white paint. Lighting favors bright light. Overall mood is imposing, stately.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/92/Neo-Classical_-_Seattle%2C_WA_-_Smith_Tower_%281%29.jpg',
     promptBundle: {
       architectureVocabulary: ['columns', 'pediment', 'symmetry', 'dome'],
       materialBias: { primary: ['stone', 'marble'], secondary: ['white paint'], avoid: ['wood'] },
@@ -750,7 +758,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'colonial',
     name: 'Colonial Revival',
     category: 'Residential',
-    description: 'Symmetrical facade, shutters, gabled roof, brick or siding',
+    description: 'Style: Colonial Revival. Architectural vocabulary of symmetry, shutters, dormers. Material palette of brick, siding with secondary materials like shingles. Lighting favors daylight. Overall mood is traditional, stately.',
     previewUrl: 'https://images.unsplash.com/photo-1605276373954-0c4a0dac5b12?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['symmetry', 'shutters', 'dormers', 'columns'],
@@ -764,7 +772,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'ranch',
     name: 'Ranch Style',
     category: 'Residential',
-    description: 'Single story, long facade, low roof, open layout',
+    description: 'Style: Ranch Style. Architectural vocabulary of single story, horizontal, low roof. Material palette of brick, wood with secondary materials like glass. Lighting favors sunny. Overall mood is relaxed, spacious.',
     previewUrl: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['single story', 'horizontal', 'low roof', 'patio'],
@@ -778,7 +786,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'swiss-chalet',
     name: 'Swiss Chalet',
     category: 'Residential',
-    description: 'Wide eaves, decorative carving, balconies, timber',
+    description: 'Style: Swiss Chalet. Architectural vocabulary of wide eaves, balconies, decorative carving. Material palette of wood with secondary materials like stone. Lighting favors bright light. Overall mood is alpine, charming.',
     previewUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['wide eaves', 'balconies', 'decorative carving', 'gables'],
@@ -792,7 +800,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'pueblo',
     name: 'Pueblo Revival',
     category: 'Residential',
-    description: 'Adobe walls, rounded edges, flat roofs, vigas',
+    description: 'Style: Pueblo Revival. Architectural vocabulary of adobe, rounded edges, flat roof. Material palette of stucco, wood with secondary materials like tile. Lighting favors sunlight. Overall mood is desert, soft.',
     previewUrl: 'https://images.unsplash.com/photo-1534237710431-e2fc698436d0?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['adobe', 'rounded edges', 'flat roof', 'vigas'],
@@ -806,8 +814,8 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'greek-revival',
     name: 'Greek Revival',
     category: 'Historical',
-    description: 'Temple front, columns, pediment, white painted',
-    previewUrl: 'https://images.unsplash.com/photo-1560179707-f14e90ef3dab?auto=format&fit=crop&w=600&q=80',
+    description: 'Style: Greek Revival. Architectural vocabulary of temple front, columns, pediment. Material palette of wood, stucco with secondary materials like stone. Lighting favors bright light. Overall mood is historic, formal.',
+    previewUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Best_Lucas_House_-_Galveston.jpg',
     promptBundle: {
       architectureVocabulary: ['temple front', 'columns', 'pediment', 'white'],
       materialBias: { primary: ['wood', 'stucco'], secondary: ['stone'], avoid: ['brick'] },
@@ -820,7 +828,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'italianate',
     name: 'Italianate',
     category: 'Historical',
-    description: 'Low-pitched roofs, wide eaves with brackets, tall windows',
+    description: 'Style: Italianate. Architectural vocabulary of brackets, tall windows, low roof. Material palette of brick, stucco with secondary materials like iron. Lighting favors warm light. Overall mood is elegant, tall.',
     previewUrl: 'https://images.unsplash.com/photo-1572953109213-3be62398eb95?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['brackets', 'tall windows', 'low roof', 'cupola'],
@@ -834,7 +842,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'futuristic-organic',
     name: 'Futuristic Organic',
     category: 'Conceptual',
-    description: 'White curves, seamless forms, Zaha Hadid influence',
+    description: 'Style: Futuristic Organic. Architectural vocabulary of fluid, seamless, curved. Material palette of corian, fiberglass with secondary materials like glass. Lighting favors diffused light. Overall mood is future, clean.',
     previewUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['fluid', 'seamless', 'curved', 'white'],
@@ -848,7 +856,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     id: 'cyber-organic',
     name: 'Cyber-Organic',
     category: 'Conceptual',
-    description: 'Integration of technology and biological forms',
+    description: 'Style: Cyber-Organic. Architectural vocabulary of tech, biology, integrated. Material palette of bioplastic, metal with secondary materials like light. Lighting favors glowing. Overall mood is hybrid, advanced.',
     previewUrl: 'https://images.unsplash.com/photo-1480074568708-e7b720bb3f09?auto=format&fit=crop&w=600&q=80',
     promptBundle: {
       architectureVocabulary: ['tech', 'biology', 'integrated', 'complex'],
@@ -860,37 +868,341 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
   }
 ];
 
+// Helper functions for prompt generation
+const formatViewType = (viewType: string): string => {
+  const viewDescriptions: Record<string, string> = {
+    'passenger-pov': 'eye-level passenger perspective walking through the space',
+    'concourse-walk': 'corridor perspective along the main concourse',
+    'atrium-overview': 'ground level looking up at the atrium',
+    'gate-seating': 'seated passenger viewpoint at the gate area',
+    'lounge-interior': 'luxury lounge interior from seated angle',
+    'mezzanine-view': 'elevated mezzanine view looking down',
+    'drone-low': 'low-altitude drone shot capturing the facade',
+    'drone-high': 'high-altitude aerial showing full terminal context',
+    'section-cut': 'architectural section cut revealing interior spaces',
+    'spherical-360': '360-degree spherical panorama for VR',
+  };
+  return viewDescriptions[viewType] || viewType.replace(/-/g, ' ');
+};
+
+const formatTimePreset = (preset: string): string => {
+  const timeDescriptions: Record<string, string> = {
+    'pre-dawn': 'pre-dawn twilight with deep blue sky',
+    'sunrise': 'sunrise with warm orange and pink tones',
+    'early-morning': 'early morning with soft golden light',
+    'high-noon': 'high noon with direct overhead sunlight',
+    'late-afternoon': 'late afternoon with warm directional light',
+    'golden-hour': 'golden hour with rich amber tones',
+    'sunset-glow': 'sunset glow with dramatic warm colors',
+    'blue-hour': 'blue hour with cool twilight atmosphere',
+    'moonlit-night': 'moonlit night scene with artificial lighting',
+  };
+  return timeDescriptions[preset] || preset.replace(/-/g, ' ');
+};
+
+const formatContextPreset = (preset: string): string => {
+  return preset.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const formatMood = (mood: string): string => {
+  const moodDescriptions: Record<string, string> = {
+    'natural': 'natural balanced tones',
+    'warm': 'warm inviting atmosphere',
+    'cool': 'cool contemporary feel',
+    'dramatic': 'dramatic high-contrast lighting',
+    'soft': 'soft diffused ambiance',
+    'moody': 'moody atmospheric shadows',
+    'luxury': 'luxurious high-end finish',
+    'cinematic': 'cinematic wide dynamic range',
+    'hazy': 'hazy atmospheric depth',
+    'crisp': 'crisp sharp clarity',
+    'stormy': 'stormy dramatic skies',
+    'noir': 'noir-style dramatic shadows',
+  };
+  return moodDescriptions[mood] || mood;
+};
+
+const getEmphasisMaterials = (emphasis: Record<string, number>): string[] => {
+  return Object.entries(emphasis)
+    .filter(([_, value]) => value > 60)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([key, _]) => key);
+};
+
+// Generate comprehensive prompt for 3D Render mode
+function generate3DRenderPrompt(state: AppState): string {
+  const { workflow, activeStyleId, customStyles } = state;
+  const r3d = workflow.render3d;
+
+  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+
+  const parts: string[] = [];
+
+  // 1. SUBJECT & SOURCE
+  const sourceMap: Record<string, string> = {
+    'rhino': 'Rhino 3D model',
+    'revit': 'Revit BIM model',
+    'sketchup': 'SketchUp model',
+    'blender': 'Blender scene',
+    '3dsmax': '3ds Max model',
+    'archicad': 'ArchiCAD model',
+    'cinema4d': 'Cinema 4D scene',
+    'clay': 'clay render base',
+    'other': '3D model',
+  };
+
+  const viewMap: Record<string, string> = {
+    'exterior': 'exterior',
+    'interior': 'interior',
+    'aerial': 'aerial',
+    'detail': 'detail',
+  };
+
+  parts.push(`Photorealistic architectural ${viewMap[workflow.viewType] || 'exterior'} rendering from ${sourceMap[workflow.sourceType] || '3D model'}.`);
+
+  // 2. STYLE
+  if (!isNoStyle && style) {
+    parts.push(style.description);
+    if (style.promptBundle?.renderingLanguage?.atmosphere) {
+      parts.push(`Atmosphere: ${style.promptBundle.renderingLanguage.atmosphere.join(', ')}.`);
+    }
+  }
+
+  // 3. GENERATION MODE
+  const modeDescriptions: Record<string, string> = {
+    'enhance': 'Enhance existing textures and lighting while strictly preserving geometry.',
+    'stylize': 'Apply artistic interpretation while maintaining architectural accuracy.',
+    'hybrid': 'Balance structural precision with creative material and lighting enhancements.',
+    'strict-realism': 'Maximum photographic realism with minimal AI interpretation.',
+    'concept-push': 'Creative exploration allowing form refinement and artistic details.',
+  };
+  parts.push(modeDescriptions[workflow.renderMode] || '');
+
+  // 4. GEOMETRY
+  const geo = r3d.geometry;
+  const geoDesc: string[] = [];
+
+  geoDesc.push(`${geo.edgeMode} edge definition`);
+  if (geo.strictPreservation) {
+    geoDesc.push('strict geometry preservation');
+  }
+  geoDesc.push(`${geo.lod.level} level of detail`);
+
+  const lodFeatures: string[] = [];
+  if (geo.lod.preserveOrnaments) lodFeatures.push('ornaments');
+  if (geo.lod.preserveMoldings) lodFeatures.push('moldings');
+  if (geo.lod.preserveTrim) lodFeatures.push('trim details');
+  if (lodFeatures.length > 0) {
+    geoDesc.push(`preserving ${lodFeatures.join(', ')}`);
+  }
+
+  if (geo.smoothing.enabled) {
+    geoDesc.push(`${geo.smoothing.intensity}% surface smoothing${geo.smoothing.preserveHardEdges ? ' with preserved hard edges' : ''}`);
+  }
+
+  if (geo.depthLayers.enabled) {
+    geoDesc.push(`depth-aware rendering (FG ${geo.depthLayers.foreground}%, MG ${geo.depthLayers.midground}%, BG ${geo.depthLayers.background}%)`);
+  }
+
+  if (geo.displacement.enabled) {
+    geoDesc.push(`${geo.displacement.scale} scale displacement at ${geo.displacement.strength}%${geo.displacement.adaptToMaterial ? ' adapting to materials' : ''}`);
+  }
+
+  parts.push(`Geometry: ${geoDesc.join(', ')}.`);
+
+  if (workflow.prioritizationEnabled) {
+    const prioritized = workflow.detectedElements.filter(el => el.selected);
+    if (prioritized.length > 0) {
+      parts.push(`Priority focus: ${prioritized.map(el => el.name).join(', ')}.`);
+    }
+  }
+
+  // 5. LIGHTING
+  const light = r3d.lighting;
+  const lightDesc: string[] = [];
+
+  lightDesc.push(formatTimePreset(light.preset));
+
+  if (light.sun.enabled) {
+    lightDesc.push(`sun at ${light.sun.azimuth}° azimuth and ${light.sun.elevation}° elevation`);
+    lightDesc.push(`${light.sun.intensity}% intensity`);
+    const tempDesc = light.sun.colorTemp < 4000 ? 'warm' : light.sun.colorTemp > 6500 ? 'cool' : 'neutral';
+    lightDesc.push(`${tempDesc} ${light.sun.colorTemp}K color temperature`);
+  }
+
+  if (light.shadows.enabled) {
+    lightDesc.push(`${light.shadows.softness > 50 ? 'soft' : 'sharp'} shadows at ${light.shadows.intensity}% opacity`);
+  }
+
+  parts.push(`Lighting: ${lightDesc.join(', ')}.`);
+
+  // 6. CAMERA
+  const cam = r3d.camera;
+  const camDesc: string[] = [];
+
+  camDesc.push(`${cam.lens}mm lens`);
+  camDesc.push(`${cam.fov}° field of view`);
+
+  if (cam.autoCorrect) {
+    camDesc.push('perspective-corrected verticals');
+  }
+
+  if (cam.dof.enabled) {
+    camDesc.push(`depth of field at f/${cam.dof.aperture}`);
+    camDesc.push(`${cam.dof.focusDist}m focus distance`);
+  }
+
+  parts.push(`Camera: ${camDesc.join(', ')}.`);
+
+  // 7. MATERIALS
+  const mat = r3d.materials;
+  const matDesc: string[] = [];
+
+  const emphasizedMats = getEmphasisMaterials(mat.emphasis);
+  if (emphasizedMats.length > 0) {
+    matDesc.push(`emphasizing ${emphasizedMats.join(', ')}`);
+  }
+
+  if (mat.reflectivity !== 50) {
+    matDesc.push(`${mat.reflectivity > 50 ? 'enhanced' : 'reduced'} reflectivity`);
+  }
+
+  if (mat.roughness !== 50) {
+    matDesc.push(`${mat.roughness > 50 ? 'rougher' : 'smoother'} surfaces`);
+  }
+
+  if (mat.weathering.enabled) {
+    matDesc.push(`${mat.weathering.intensity}% weathering and aging`);
+  }
+
+  if (matDesc.length > 0) {
+    parts.push(`Materials: ${matDesc.join(', ')}.`);
+  }
+
+  // 8. ATMOSPHERE & MOOD
+  const atm = r3d.atmosphere;
+  const atmDesc: string[] = [];
+
+  atmDesc.push(formatMood(atm.mood));
+
+  if (atm.temp !== 0) {
+    atmDesc.push(`${atm.temp > 0 ? 'warmer' : 'cooler'} color temperature`);
+  }
+
+  if (atm.fog.enabled) {
+    atmDesc.push(`${atm.fog.density}% fog density`);
+  }
+
+  if (atm.bloom.enabled) {
+    atmDesc.push(`${atm.bloom.intensity}% bloom effect`);
+  }
+
+  parts.push(`Atmosphere: ${atmDesc.join(', ')}.`);
+
+  // 9. SCENERY & CONTEXT
+  const scene = r3d.scenery;
+  const sceneDesc: string[] = [];
+
+  sceneDesc.push(`${formatContextPreset(scene.preset)} setting`);
+
+  if (scene.people.enabled) {
+    const density = scene.people.count > 50 ? 'busy' : scene.people.count > 20 ? 'moderate' : 'sparse';
+    sceneDesc.push(`${density} pedestrian activity`);
+  }
+
+  if (scene.trees.enabled) {
+    const density = scene.trees.count > 70 ? 'lush' : scene.trees.count > 30 ? 'moderate' : 'minimal';
+    sceneDesc.push(`${density} vegetation`);
+  }
+
+  if (scene.cars.enabled) {
+    sceneDesc.push(`vehicles present`);
+  }
+
+  parts.push(`Context: ${sceneDesc.join(', ')}.`);
+
+  // 10. RENDER FORMAT & VIEW TYPE
+  const rend = r3d.render;
+  const rendDesc: string[] = [];
+
+  const resMap: Record<string, string> = {
+    '720p': '1280x720',
+    '1080p': '1920x1080',
+    '4k': '3840x2160',
+    'print': '6000x4000 print-ready',
+  };
+
+  rendDesc.push(resMap[rend.resolution] || rend.resolution);
+  rendDesc.push(`${rend.aspectRatio} aspect ratio`);
+  rendDesc.push(formatViewType(rend.viewType));
+  rendDesc.push(`${rend.quality} quality render`);
+
+  parts.push(`Output: ${rendDesc.join(', ')}.`);
+
+  // 11. TECHNICAL QUALITY
+  const detailPhrase =
+    rend.resolution === '1080p' || rend.resolution === '4k'
+      ? 'when i zoom in i want to be able to see every detail'
+      : '8K resolution details';
+  parts.push(`High-fidelity photorealistic architectural visualization, professional archviz quality, ray-traced global illumination, physically accurate materials, ${detailPhrase}.`);
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 export function generatePrompt(state: AppState): string {
   const { workflow, activeStyleId, lighting, context, materials, camera } = state;
-  
+
   // If user provided a specific text prompt in text-to-image mode or visual edit, prioritize it or combine it.
   if (state.mode === 'generate-text' && workflow.textPrompt) {
      return workflow.textPrompt;
   }
-  
+
   if (state.mode === 'visual-edit' && workflow.visualPrompt) {
      return workflow.visualPrompt;
   }
 
-  // Find active style
-  const style = BUILT_IN_STYLES.find(s => s.id === activeStyleId);
-  
+  // Use specialized prompt generator for 3D Render mode
+  if (state.mode === 'render-3d') {
+    return generate3DRenderPrompt(state);
+  }
+
+  const availableStyles = [...BUILT_IN_STYLES, ...(state.customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+
   let promptParts: string[] = [];
 
   // 1. Base Prompt / Subject
   if (state.prompt) {
     promptParts.push(state.prompt);
-  } else if (style) {
+  } else if (style && !isNoStyle) {
     promptParts.push(`A ${style.name.toLowerCase()} architectural rendering`);
   } else {
     promptParts.push('Architectural rendering');
   }
 
   // 2. Style Specifics
-  if (style) {
-    const { architectureVocabulary, materialBias } = style.promptBundle;
-    promptParts.push(`Architecture: ${architectureVocabulary.slice(0, 3).join(', ')}.`);
-    promptParts.push(`Materials: ${materialBias.primary.join(', ')} and ${materialBias.secondary.slice(0, 2).join(', ')}.`);
+  if (!isNoStyle && style?.description) {
+    const styleDescription = style.description.trim();
+    promptParts.push(styleDescription.endsWith('.') ? styleDescription : `${styleDescription}.`);
+  }
+  if (!isNoStyle && style?.promptBundle) {
+    const architectureVocabulary = style.promptBundle.architectureVocabulary || [];
+    const materialBias = style.promptBundle.materialBias || {};
+    if (architectureVocabulary.length > 0) {
+      promptParts.push(`Architecture: ${architectureVocabulary.slice(0, 3).join(', ')}.`);
+    }
+    const primaryMaterials = materialBias.primary || [];
+    const secondaryMaterials = materialBias.secondary || [];
+    if (primaryMaterials.length > 0 || secondaryMaterials.length > 0) {
+      const primaryText = primaryMaterials.length > 0 ? primaryMaterials.join(', ') : 'balanced materials';
+      const secondaryText = secondaryMaterials.slice(0, 2).join(', ');
+      const materialsText = secondaryText ? `${primaryText} and ${secondaryText}` : primaryText;
+      promptParts.push(`Materials: ${materialsText}.`);
+    }
   }
 
   // 3. Lighting
@@ -910,6 +1222,6 @@ export function generatePrompt(state: AppState): string {
 
   // Manual Adjustments from Workflow (e.g. materials emphasis)
   if (materials.concreteEmphasis > 70) promptParts.push('emphasizing concrete textures');
-  
+
   return promptParts.join(' ');
 }

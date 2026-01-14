@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../../store';
-import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser } from 'lucide-react';
+import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
 
@@ -11,13 +11,45 @@ const PromptBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]); 
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const historyContainerRef = useRef<HTMLDivElement>(null);
+  const historyItems = state.history;
+
+  const formatModeLabel = (mode: string) => mode.replace(/-/g, ' ');
+  const truncatePrompt = (text: string, maxChars = 220) => {
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars).trimEnd()}...`;
+  };
+
+  useEffect(() => {
+    if (!isHistoryOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (historyContainerRef.current && !historyContainerRef.current.contains(target)) {
+        setIsHistoryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isHistoryOpen]);
 
   const handleGenerate = () => {
     if ((!inputText.trim() && attachments.length === 0) || state.isGenerating) return;
 
+    const promptText = inputText;
+    const promptAttachments = attachments.slice();
     dispatch({ type: 'SET_GENERATING', payload: true });
+
+    setInputText('');
+    setAttachments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     
     setTimeout(() => {
         dispatch({ type: 'SET_GENERATING', payload: false });
@@ -32,7 +64,8 @@ const PromptBar: React.FC = () => {
                 id: nanoid(),
                 timestamp: Date.now(),
                 thumbnail: mockImageUrl,
-                prompt: inputText,
+                prompt: promptText,
+                attachments: promptAttachments,
                 mode: state.mode
             }
         });
@@ -72,66 +105,143 @@ const PromptBar: React.FC = () => {
       e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
-  return (
-    <div className="w-full max-w-2xl pointer-events-auto transform transition-all duration-300 hover:scale-[1.005]">
-        <div className={cn(
-            "bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 ring-1 ring-black/5 flex flex-col overflow-hidden transition-shadow duration-300",
-            (inputText || attachments.length > 0) ? "shadow-2xl ring-black/10 bg-white" : "hover:bg-white/95"
-        )}>
-            {attachments.length > 0 && (
-                <div className="flex gap-3 px-4 pt-4 pb-1 overflow-x-auto custom-scrollbar">
-                    {attachments.map((att, idx) => (
-                        <div key={idx} className="relative group w-14 h-14 shrink-0 animate-scale-in">
-                            <img src={att} className="w-full h-full object-cover rounded-xl border border-black/10 shadow-sm" />
-                            <button 
-                                onClick={() => removeAttachment(idx)}
-                                className="absolute -top-1.5 -right-1.5 bg-white text-foreground border border-border rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-600 hover:scale-110 z-10"
-                            >
-                                <X size={12} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
+  const handleHistorySelect = (prompt: string, historyAttachments?: string[]) => {
+      setInputText(prompt);
+      setAttachments(historyAttachments ?? []);
+      setIsHistoryOpen(false);
+      requestAnimationFrame(() => {
+          if (textareaRef.current) {
+              textareaRef.current.style.height = 'auto';
+              textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+              textareaRef.current.focus();
+          }
+      });
+  };
 
-            <div className="flex items-end gap-1 p-2 pl-3">
-                <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-3 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-all shrink-0 active:scale-95"
-                    title="Add Reference Image"
-                >
-                    <Plus size={20} strokeWidth={2.5} />
-                </button>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileSelect} />
-                
-                <textarea
-                    ref={textareaRef}
-                    value={inputText}
-                    onChange={handleInput}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Describe your architectural vision..."
-                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-2 max-h-[140px] text-[15px] leading-relaxed custom-scrollbar placeholder:text-foreground-muted/60 font-medium text-foreground"
-                    rows={1}
-                />
-                
-                <button 
-                    onClick={handleGenerate}
-                    disabled={(!inputText.trim() && attachments.length === 0) || state.isGenerating}
+  return (
+    <div className="w-full max-w-[770px] pointer-events-auto transform transition-all duration-300 hover:scale-[1.005]">
+        <div className="relative flex items-center gap-3">
+            <div className="relative shrink-0" ref={historyContainerRef}>
+                <button
+                    onClick={() => setIsHistoryOpen((prev) => !prev)}
                     className={cn(
-                        "p-3 rounded-full transition-all shrink-0 mb-0.5 flex items-center justify-center relative overflow-hidden group",
-                        (!inputText.trim() && attachments.length === 0) || state.isGenerating
-                            ? "bg-transparent text-foreground-muted"
-                            : "bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+                        "w-12 h-12 rounded-full bg-white/90 backdrop-blur-xl border border-white/70 shadow-xl flex items-center justify-center transition-all",
+                        "hover:bg-white hover:shadow-2xl hover:scale-105 active:scale-95",
+                        isHistoryOpen ? "ring-2 ring-accent/40" : "ring-1 ring-black/5"
                     )}
+                    title="Prompt History"
+                    aria-expanded={isHistoryOpen}
                 >
-                    {state.isGenerating ? (
-                        <RefreshCw size={20} className="animate-spin" />
-                    ) : (
-                        <div className="relative">
-                            <Sparkles size={20} className={cn((inputText || attachments.length > 0) && "text-accent fill-accent animate-pulse-subtle")} />
-                        </div>
-                    )}
+                    <History size={18} className="text-foreground" />
                 </button>
+
+                {isHistoryOpen && (
+                    <div className="absolute bottom-full left-0 mb-3 z-50">
+                        <div className="w-[420px] max-w-[85vw] max-h-[60vh] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/70 ring-1 ring-black/5 overflow-hidden flex flex-col">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle/60">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-foreground-muted">Prompt History</div>
+                                <button
+                                    onClick={() => setIsHistoryOpen(false)}
+                                    className="p-1 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
+                                    title="Close"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
+                                {historyItems.length === 0 ? (
+                                    <div className="py-10 text-center text-foreground-muted">
+                                        <div className="text-xs font-semibold uppercase tracking-wider">No prompts yet</div>
+                                        <div className="text-[11px] mt-2">Your recent prompts will appear here.</div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {historyItems.map((item) => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => handleHistorySelect(item.prompt, item.attachments)}
+                                                className="w-full text-left rounded-xl border border-border bg-white/80 p-3 shadow-sm hover:shadow-md hover:border-foreground/20 transition-all"
+                                            >
+                                                <div className="flex items-center justify-between text-[10px] text-foreground-muted font-semibold uppercase tracking-wider">
+                                                    <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span>{formatModeLabel(item.mode)}</span>
+                                                </div>
+                                                <div
+                                                    className="mt-2 text-sm leading-relaxed text-foreground whitespace-pre-wrap"
+                                                    title={item.prompt}
+                                                >
+                                                    {truncatePrompt(item.prompt)}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className={cn(
+                "flex-1 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 ring-0 flex flex-col overflow-hidden transition-shadow duration-300",
+                (inputText || attachments.length > 0) ? "shadow-2xl bg-white" : "hover:bg-white/95"
+            )}>
+                {attachments.length > 0 && (
+                    <div className="flex gap-3 px-4 pt-4 pb-1 overflow-x-auto custom-scrollbar">
+                        {attachments.map((att, idx) => (
+                            <div key={idx} className="relative group w-14 h-14 shrink-0 animate-scale-in">
+                                <img src={att} className="w-full h-full object-cover rounded-xl border border-black/10 shadow-sm" />
+                                <button 
+                                    onClick={() => removeAttachment(idx)}
+                                    className="absolute -top-1.5 -right-1.5 bg-white text-foreground border border-border rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-600 hover:scale-110 z-10"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex items-center gap-1 p-2 pl-3">
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-3 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-all shrink-0 active:scale-95"
+                        title="Add Reference Image"
+                    >
+                        <Plus size={20} strokeWidth={2.5} />
+                    </button>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileSelect} />
+                    
+                    <textarea
+                        ref={textareaRef}
+                        value={inputText}
+                        onChange={handleInput}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Describe your architectural vision..."
+                        className="flex-1 bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-2 max-h-[140px] text-[15px] leading-relaxed custom-scrollbar placeholder:text-foreground-muted/60 font-medium text-foreground"
+                        rows={1}
+                    />
+                    
+                    <button 
+                        onClick={handleGenerate}
+                        disabled={(!inputText.trim() && attachments.length === 0) || state.isGenerating}
+                        className={cn(
+                        "p-3 rounded-full transition-all shrink-0 flex items-center justify-center relative overflow-hidden group",
+                            (!inputText.trim() && attachments.length === 0) || state.isGenerating
+                                ? "bg-transparent text-foreground-muted"
+                                : "bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+                        )}
+                    >
+                        {state.isGenerating ? (
+                            <RefreshCw size={20} className="animate-spin" />
+                        ) : (
+                            <div className="relative">
+                                <Sparkles size={20} className={cn((inputText || attachments.length > 0) && "text-accent fill-accent animate-pulse-subtle")} />
+                            </div>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
         <div className="text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-500">
@@ -149,6 +259,7 @@ const StandardCanvas: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const analysisTimerRef = useRef<number | null>(null);
   
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -161,6 +272,77 @@ const StandardCanvas: React.FC = () => {
   const isVideo = state.mode === 'video';
   const showCompare = state.workflow.videoState?.compareMode || state.mode === 'upscale';
   const showSplit = state.workflow.canvasSync && !isVideo && !showCompare;
+
+  const buildPriorityElements = useCallback(() => {
+    const presets: Record<string, { name: string; type: 'structural' | 'envelope' | 'interior' | 'site' }[]> = {
+      exterior: [
+        { name: 'Facade', type: 'envelope' },
+        { name: 'Glazing', type: 'envelope' },
+        { name: 'Roofline', type: 'structural' },
+        { name: 'Primary Structure', type: 'structural' },
+        { name: 'Entry Canopy', type: 'structural' },
+        { name: 'Site Paving', type: 'site' },
+        { name: 'Landscape', type: 'site' }
+      ],
+      interior: [
+        { name: 'Primary Structure', type: 'structural' },
+        { name: 'Ceiling', type: 'interior' },
+        { name: 'Lighting', type: 'interior' },
+        { name: 'Seating', type: 'interior' },
+        { name: 'Flooring', type: 'interior' },
+        { name: 'Glazing', type: 'envelope' },
+        { name: 'Wayfinding', type: 'interior' }
+      ],
+      aerial: [
+        { name: 'Roofscape', type: 'structural' },
+        { name: 'Massing', type: 'structural' },
+        { name: 'Site Context', type: 'site' },
+        { name: 'Circulation', type: 'site' },
+        { name: 'Landscape', type: 'site' },
+        { name: 'Parking', type: 'site' }
+      ],
+      detail: [
+        { name: 'Material Detailing', type: 'envelope' },
+        { name: 'Joints and Trim', type: 'structural' },
+        { name: 'Fenestration', type: 'envelope' },
+        { name: 'Surface Texture', type: 'interior' }
+      ]
+    };
+    const list = presets[state.workflow.viewType] || presets.exterior;
+    return list.map((item, index) => ({
+      id: nanoid(),
+      name: item.name,
+      type: item.type,
+      confidence: Math.max(0.65, 0.92 - index * 0.05),
+      selected: true
+    }));
+  }, [state.workflow.viewType]);
+
+  useEffect(() => {
+    if (state.mode !== 'render-3d') return;
+    if (!state.workflow.prioritizationEnabled) return;
+    if (!state.uploadedImage) return;
+
+    if (analysisTimerRef.current) {
+      window.clearTimeout(analysisTimerRef.current);
+    }
+
+    analysisTimerRef.current = window.setTimeout(() => {
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { detectedElements: buildPriorityElements() } });
+    }, 600);
+
+    return () => {
+      if (analysisTimerRef.current) {
+        window.clearTimeout(analysisTimerRef.current);
+      }
+    };
+  }, [
+    state.mode,
+    state.uploadedImage,
+    state.workflow.prioritizationEnabled,
+    buildPriorityElements,
+    dispatch
+  ]);
 
   // --- Handlers ---
 

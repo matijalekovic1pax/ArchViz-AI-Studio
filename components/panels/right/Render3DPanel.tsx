@@ -1,74 +1,53 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useAppStore } from '../../../store';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Accordion } from '../../ui/Accordion';
-import { 
-  Lock, Sun, Box, Plane, ArrowRight, Grid, User, Droplets, Wind, Sparkle, 
-  Camera, Globe, Film, Car, Trees, Eye
+import {
+  Lock, Sun, User, Droplets, Wind, Sparkle, Car, Trees
 } from 'lucide-react';
 import { SectionDesc, SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
 import { cn } from '../../../lib/utils';
+import { Render3DSettings } from '../../../types';
 
 export const Render3DPanel = () => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
+    const settings = wf.render3d;
     const updateWf = (p: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: p });
 
-    const [settings, setSettings] = useState({
-      geometry: {
-        edgeMode: 'medium', 
-        strictPreservation: true,
-        geometryFreedom: 50,
-      },
-      lighting: {
-        sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
-        shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
-        ambient: { intensity: 40, occlusion: 50 },
-        preset: 'custom'
-      },
-      camera: {
-        preset: 'eye-level',
-        lens: 35, 
-        fov: 63,
-        autoCorrect: true,
-        dof: { enabled: false, aperture: 2.8, focusDist: 5 }
-      },
-      materials: {
-        category: 'Concrete',
-        reflectivity: 50,
-        roughness: 50,
-        weathering: { enabled: false, intensity: 30 }
-      },
-      atmosphere: {
-        mood: 'natural',
-        fog: { enabled: false, density: 20 },
-        bloom: { enabled: true, intensity: 30 },
-        temp: 0
-      },
-      scenery: {
-        people: { enabled: false, count: 20 },
-        trees: { enabled: true, count: 50 },
-        cars: { enabled: false, count: 10 },
-        preset: 'residential'
-      },
-      render: {
-        resolution: '1080p',
-        format: 'png',
-        quality: 'production'
-      }
-    });
-
-    const updateSection = (section: keyof typeof settings, updates: any) => {
-      setSettings(prev => ({ ...prev, [section]: { ...prev[section], ...updates } }));
+    const updateSection = (section: keyof Render3DSettings, updates: any) => {
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          render3d: {
+            ...settings,
+            [section]: { ...settings[section], ...updates }
+          }
+        }
+      });
     };
+    const materialEmphasisOptions = [
+      { key: 'concrete', label: 'Concrete' },
+      { key: 'wood', label: 'Wood' },
+      { key: 'metal', label: 'Metal' },
+      { key: 'glass', label: 'Glass' },
+      { key: 'stone', label: 'Stone' },
+      { key: 'brick', label: 'Brick' },
+      { key: 'tile', label: 'Tile' },
+      { key: 'fabric', label: 'Fabric' },
+      { key: 'paint', label: 'Paint' },
+      { key: 'flooring', label: 'Flooring' }
+    ];
 
     return (
         <div className="space-y-6">
             {/* Generation Mode */}
             <div>
-                <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Generation Mode</label>
+                <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+                  Generation Mode
+                </label>
                 <div className="space-y-1">
                     {[
                         { id: 'enhance', label: 'Enhance', desc: 'Improves lighting and textures while keeping geometry.' },
@@ -95,7 +74,9 @@ export const Render3DPanel = () => {
                        <SectionDesc>Preserve architectural precision and structure.</SectionDesc>
                        
                        <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">Edge Mode</label>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Edge Mode
+                          </label>
                           <SegmentedControl 
                              value={settings.geometry.edgeMode}
                              options={[
@@ -109,7 +90,12 @@ export const Render3DPanel = () => {
 
                        <div className="pt-3 border-t border-border-subtle mt-3">
                           <div className="flex items-center justify-between mb-2">
-                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Lock size={12}/> Preservation</span>
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5">
+                               <Lock size={12}/>
+                               <span className="inline-flex items-center">
+                                 Preservation
+                               </span>
+                             </span>
                           </div>
                           
                           <div className="space-y-4">
@@ -137,6 +123,185 @@ export const Render3DPanel = () => {
                              )}
                           </div>
                        </div>
+
+                       <div className="pt-3 border-t border-border-subtle mt-3">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Detail Level
+                          </label>
+                          <SegmentedControl 
+                             value={settings.geometry.lod.level}
+                             options={[
+                                { label: 'Minimal', value: 'minimal' },
+                                { label: 'Low', value: 'low' },
+                                { label: 'Medium', value: 'medium' },
+                                { label: 'High', value: 'high' },
+                                { label: 'Ultra', value: 'ultra' }
+                             ]}
+                             onChange={(v) => updateSection('geometry', { lod: { ...settings.geometry.lod, level: v } })}
+                          />
+
+                          <div className="mt-3 space-y-2">
+                             <Toggle 
+                                label="Preserve Ornaments" 
+                                checked={settings.geometry.lod.preserveOrnaments} 
+                                onChange={(v) => updateSection('geometry', { lod: { ...settings.geometry.lod, preserveOrnaments: v } })} 
+                             />
+                             <Toggle 
+                                label="Preserve Moldings" 
+                                checked={settings.geometry.lod.preserveMoldings} 
+                                onChange={(v) => updateSection('geometry', { lod: { ...settings.geometry.lod, preserveMoldings: v } })} 
+                             />
+                             <Toggle 
+                                label="Preserve Trim" 
+                                checked={settings.geometry.lod.preserveTrim} 
+                                onChange={(v) => updateSection('geometry', { lod: { ...settings.geometry.lod, preserveTrim: v } })} 
+                             />
+                          </div>
+                       </div>
+
+                       <div className="pt-3 border-t border-border-subtle mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                             <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
+                               Surface Smoothing
+                             </span>
+                             <Toggle 
+                                label="" 
+                                checked={settings.geometry.smoothing.enabled} 
+                                onChange={(v) => updateSection('geometry', { smoothing: { ...settings.geometry.smoothing, enabled: v } })} 
+                             />
+                          </div>
+
+                          {settings.geometry.smoothing.enabled && (
+                             <div className="space-y-3 animate-fade-in">
+                                <SliderControl 
+                                   label="Intensity" 
+                                   value={settings.geometry.smoothing.intensity} 
+                                   min={0} 
+                                   max={100} 
+                                   step={1} 
+                                   unit="%" 
+                                   onChange={(v) => updateSection('geometry', { smoothing: { ...settings.geometry.smoothing, intensity: v } })} 
+                                />
+                                <Toggle 
+                                   label="Preserve Hard Edges" 
+                                   checked={settings.geometry.smoothing.preserveHardEdges} 
+                                   onChange={(v) => updateSection('geometry', { smoothing: { ...settings.geometry.smoothing, preserveHardEdges: v } })} 
+                                />
+                                {settings.geometry.smoothing.preserveHardEdges && (
+                                   <div className="pl-2 border-l-2 border-border-subtle">
+                                      <SliderControl 
+                                         label="Edge Threshold" 
+                                         value={settings.geometry.smoothing.threshold} 
+                                         min={0} 
+                                         max={90} 
+                                         step={1} 
+                                         unit="°" 
+                                         onChange={(v) => updateSection('geometry', { smoothing: { ...settings.geometry.smoothing, threshold: v } })} 
+                                      />
+                                      <p className="text-[9px] text-foreground-muted mt-1 leading-normal">
+                                         Angles below threshold remain hard.
+                                      </p>
+                                   </div>
+                                )}
+                             </div>
+                          )}
+                       </div>
+
+                       <div className="pt-3 border-t border-border-subtle mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                             <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
+                               Depth Layers
+                             </span>
+                             <Toggle 
+                                label="" 
+                                checked={settings.geometry.depthLayers.enabled} 
+                                onChange={(v) => updateSection('geometry', { depthLayers: { ...settings.geometry.depthLayers, enabled: v } })} 
+                             />
+                          </div>
+
+                          {settings.geometry.depthLayers.enabled && (
+                             <div className="space-y-2 animate-fade-in">
+                                <SliderControl 
+                                   label="Foreground Quality" 
+                                   value={settings.geometry.depthLayers.foreground} 
+                                   min={0} 
+                                   max={100} 
+                                   step={1} 
+                                   unit="%" 
+                                   onChange={(v) => updateSection('geometry', { depthLayers: { ...settings.geometry.depthLayers, foreground: v } })} 
+                                />
+                                <SliderControl 
+                                   label="Midground Quality" 
+                                   value={settings.geometry.depthLayers.midground} 
+                                   min={0} 
+                                   max={100} 
+                                   step={1} 
+                                   unit="%" 
+                                   onChange={(v) => updateSection('geometry', { depthLayers: { ...settings.geometry.depthLayers, midground: v } })} 
+                                />
+                                <SliderControl 
+                                   label="Background Quality" 
+                                   value={settings.geometry.depthLayers.background} 
+                                   min={0} 
+                                   max={100} 
+                                   step={1} 
+                                   unit="%" 
+                                   onChange={(v) => updateSection('geometry', { depthLayers: { ...settings.geometry.depthLayers, background: v } })} 
+                                />
+                             </div>
+                          )}
+                       </div>
+
+                       <div className="pt-3 border-t border-border-subtle mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                             <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
+                               Displacement
+                             </span>
+                             <Toggle 
+                                label="" 
+                                checked={settings.geometry.displacement.enabled} 
+                                onChange={(v) => updateSection('geometry', { displacement: { ...settings.geometry.displacement, enabled: v } })} 
+                             />
+                          </div>
+
+                          {settings.geometry.displacement.enabled && (
+                             <div className="space-y-3 animate-fade-in">
+                                <SliderControl 
+                                   label="Strength" 
+                                   value={settings.geometry.displacement.strength} 
+                                   min={0} 
+                                   max={100} 
+                                   step={1} 
+                                   unit="%" 
+                                   onChange={(v) => updateSection('geometry', { displacement: { ...settings.geometry.displacement, strength: v } })} 
+                                />
+                                <div>
+                                   <label className="text-xs font-medium text-foreground mb-1.5 block">
+                                     Scale
+                                   </label>
+                                   <SegmentedControl 
+                                      value={settings.geometry.displacement.scale}
+                                      options={[
+                                         { label: 'Fine', value: 'fine' },
+                                         { label: 'Medium', value: 'medium' },
+                                         { label: 'Coarse', value: 'coarse' }
+                                      ]}
+                                      onChange={(v) => updateSection('geometry', { displacement: { ...settings.geometry.displacement, scale: v } })}
+                                   />
+                                </div>
+                                <div>
+                                   <Toggle 
+                                      label="Adapt to Material" 
+                                      checked={settings.geometry.displacement.adaptToMaterial} 
+                                      onChange={(v) => updateSection('geometry', { displacement: { ...settings.geometry.displacement, adaptToMaterial: v } })} 
+                                   />
+                                   <p className="text-[9px] text-foreground-muted mt-1 leading-normal">
+                                      Auto-adjusts per surface type.
+                                   </p>
+                                </div>
+                             </div>
+                          )}
+                       </div>
                     </div>
                 )},
 
@@ -146,7 +311,12 @@ export const Render3DPanel = () => {
                        <SectionDesc>Natural and artificial illumination control.</SectionDesc>
                        
                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-bold flex items-center gap-1.5"><Sun size={12} className="text-accent"/> Sun Position</span>
+                          <span className="text-xs font-bold flex items-center gap-1.5">
+                            <Sun size={12} className="text-accent"/>
+                            <span className="inline-flex items-center">
+                              Sun Position
+                            </span>
+                          </span>
                           <Toggle label="" checked={settings.lighting.sun.enabled} onChange={(v) => updateSection('lighting', { sun: { ...settings.lighting.sun, enabled: v } })} />
                        </div>
                        
@@ -162,7 +332,9 @@ export const Render3DPanel = () => {
                              
                              <div className="mb-4">
                                 <div className="flex justify-between items-baseline mb-2">
-                                   <label className="text-xs font-medium text-foreground">Color Temp</label>
+                                   <label className="text-xs font-medium text-foreground">
+                                     Color Temp
+                                   </label>
                                    <span className="text-[10px] font-mono text-foreground-muted">{settings.lighting.sun.colorTemp}K</span>
                                 </div>
                                 <div className="h-4 w-full relative">
@@ -186,7 +358,9 @@ export const Render3DPanel = () => {
 
                        <div className="border-t border-border-subtle pt-3 mt-3">
                           <div className="flex justify-between items-center mb-2">
-                             <span className="text-xs font-bold text-foreground-secondary">Shadows</span>
+                             <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
+                               Shadows
+                             </span>
                              <Toggle label="" checked={settings.lighting.shadows.enabled} onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, enabled: v } })} />
                           </div>
                           {settings.lighting.shadows.enabled && (
@@ -197,16 +371,23 @@ export const Render3DPanel = () => {
                           )}
                        </div>
 
-                       <div className="mt-4 grid grid-cols-3 gap-2">
-                          {['Golden', 'Noon', 'Blue', 'Overcast', 'Night'].map(p => (
-                             <button 
-                                key={p}
-                                className="px-2 py-1.5 text-[9px] font-bold border border-border rounded hover:bg-surface-elevated hover:text-foreground text-foreground-muted transition-colors"
-                                onClick={() => updateSection('lighting', { preset: p.toLowerCase() })}
-                             >
-                                {p}
-                             </button>
-                          ))}
+                       <div className="mt-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">Time of the Day</label>
+                          <select
+                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                             value={settings.lighting.preset}
+                             onChange={(e) => updateSection('lighting', { preset: e.target.value })}
+                          >
+                             <option value="pre-dawn">Pre-Dawn</option>
+                             <option value="sunrise">Sunrise</option>
+                             <option value="early-morning">Early Morning</option>
+                             <option value="high-noon">High Noon</option>
+                             <option value="late-afternoon">Late Afternoon</option>
+                             <option value="golden-hour">Golden Hour</option>
+                             <option value="sunset-glow">Sunset Glow</option>
+                             <option value="blue-hour">Blue Hour</option>
+                             <option value="moonlit-night">Moonlit Night</option>
+                          </select>
                        </div>
                     </div>
                 )},
@@ -216,33 +397,10 @@ export const Render3DPanel = () => {
                     <div>
                        <SectionDesc>Composition and perspective settings.</SectionDesc>
                        
-                       <div className="grid grid-cols-3 gap-2 mb-4">
-                          {[
-                             {id: 'eye-level', label: 'Eye Level', icon: User},
-                             {id: 'elevated', label: 'Elevated', icon: Box},
-                             {id: 'birds-eye', label: 'Bird\'s Eye', icon: Plane},
-                             {id: 'worms-eye', label: 'Worm\'s Eye', icon: ArrowRight},
-                             {id: 'corner', label: 'Corner', icon: Box},
-                             {id: 'straight', label: 'Straight', icon: Grid},
-                          ].map(p => (
-                             <button
-                                key={p.id}
-                                onClick={() => updateSection('camera', { preset: p.id })}
-                                className={cn(
-                                   "flex flex-col items-center justify-center p-2 rounded border transition-all h-14",
-                                   settings.camera.preset === p.id 
-                                      ? "bg-foreground text-background border-foreground shadow-sm" 
-                                      : "bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted"
-                                )}
-                             >
-                                <p.icon size={14} className="mb-1" />
-                                <span className="text-[9px] font-medium">{p.label}</span>
-                             </button>
-                          ))}
-                       </div>
-
                        <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">Lens (Focal Length)</label>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Lens (Focal Length)
+                          </label>
                           <div className="flex gap-1 bg-surface-sunken p-1 rounded-md">
                              {[12, 16, 24, 35, 50, 85].map(mm => (
                                 <button
@@ -281,16 +439,28 @@ export const Render3DPanel = () => {
                        <SectionDesc>Surface appearance and weathering.</SectionDesc>
                        
                        <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">Category Override</label>
-                          <select 
-                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-                             value={settings.materials.category}
-                             onChange={(e) => updateSection('materials', { category: e.target.value })}
-                          >
-                             {['Concrete', 'Wood', 'Metal', 'Glass', 'Stone', 'Brick', 'Tile', 'Fabric', 'Paint', 'Flooring'].map(c => (
-                                <option key={c} value={c}>{c}</option>
+                          <label className="text-xs font-medium text-foreground mb-2 block">
+                            Material Emphasis
+                          </label>
+                          <div className="space-y-2">
+                             {materialEmphasisOptions.map((material) => (
+                                <SliderControl
+                                   key={material.key}
+                                   label={material.label}
+                                   value={settings.materials.emphasis[material.key as keyof typeof settings.materials.emphasis]}
+                                   min={0}
+                                   max={100}
+                                   step={1}
+                                   unit="%"
+                                   onChange={(v) => updateSection('materials', { 
+                                     emphasis: { 
+                                       ...settings.materials.emphasis, 
+                                       [material.key]: v 
+                                     } 
+                                   })}
+                                />
                              ))}
-                          </select>
+                          </div>
                        </div>
 
                        <SliderControl label="Global Reflectivity" value={settings.materials.reflectivity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('materials', { reflectivity: v })} />
@@ -298,7 +468,12 @@ export const Render3DPanel = () => {
                        
                        <div className="pt-2 border-t border-border-subtle mt-3">
                           <div className="flex justify-between items-center mb-2">
-                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Droplets size={12}/> Weathering</span>
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5">
+                               <Droplets size={12}/>
+                               <span className="inline-flex items-center">
+                                 Weathering
+                               </span>
+                             </span>
                              <Toggle label="" checked={settings.materials.weathering.enabled} onChange={(v) => updateSection('materials', { weathering: { ...settings.materials.weathering, enabled: v } })} />
                           </div>
                           
@@ -323,8 +498,18 @@ export const Render3DPanel = () => {
                        
                        <div className="grid grid-cols-3 gap-2 mb-4">
                           {[
-                             {id: 'warm', label: 'Warm'}, {id: 'cool', label: 'Cool'}, {id: 'dramatic', label: 'Dramatic'},
-                             {id: 'soft', label: 'Soft'}, {id: 'moody', label: 'Moody'}, {id: 'luxury', label: 'Luxury'}
+                             {id: 'natural', label: 'Natural'},
+                             {id: 'warm', label: 'Warm'},
+                             {id: 'cool', label: 'Cool'},
+                             {id: 'dramatic', label: 'Dramatic'},
+                             {id: 'soft', label: 'Soft'},
+                             {id: 'moody', label: 'Moody'},
+                             {id: 'luxury', label: 'Luxury'},
+                             {id: 'cinematic', label: 'Cinematic'},
+                             {id: 'hazy', label: 'Hazy'},
+                             {id: 'crisp', label: 'Crisp'},
+                             {id: 'stormy', label: 'Stormy'},
+                             {id: 'noir', label: 'Noir'}
                           ].map(m => (
                              <button 
                                 key={m.id}
@@ -345,7 +530,12 @@ export const Render3DPanel = () => {
                        
                        <div className="space-y-3 pt-2 border-t border-border-subtle mt-2">
                           <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Wind size={12}/> Fog</span>
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5">
+                               <Wind size={12}/>
+                               <span className="inline-flex items-center">
+                                 Fog
+                               </span>
+                             </span>
                              <Toggle label="" checked={settings.atmosphere.fog.enabled} onChange={(v) => updateSection('atmosphere', { fog: { ...settings.atmosphere.fog, enabled: v } })} />
                           </div>
                           {settings.atmosphere.fog.enabled && (
@@ -353,7 +543,12 @@ export const Render3DPanel = () => {
                           )}
 
                           <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5"><Sparkle size={12}/> Bloom</span>
+                             <span className="text-xs font-bold text-foreground-secondary flex items-center gap-1.5">
+                               <Sparkle size={12}/>
+                               <span className="inline-flex items-center">
+                                 Bloom
+                               </span>
+                             </span>
                              <Toggle label="" checked={settings.atmosphere.bloom.enabled} onChange={(v) => updateSection('atmosphere', { bloom: { ...settings.atmosphere.bloom, enabled: v } })} />
                           </div>
                           {settings.atmosphere.bloom.enabled && (
@@ -371,7 +566,12 @@ export const Render3DPanel = () => {
                        <div className="space-y-4">
                           <div className="bg-surface-elevated border border-border rounded p-2">
                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold flex items-center gap-2"><User size={12}/> People</span>
+                                <span className="text-xs font-bold flex items-center gap-2">
+                                  <User size={12}/>
+                                  <span className="inline-flex items-center">
+                                    People
+                                  </span>
+                                </span>
                                 <Toggle label="" checked={settings.scenery.people.enabled} onChange={(v) => updateSection('scenery', { people: { ...settings.scenery.people, enabled: v } })} />
                              </div>
                              {settings.scenery.people.enabled && (
@@ -381,7 +581,12 @@ export const Render3DPanel = () => {
 
                           <div className="bg-surface-elevated border border-border rounded p-2">
                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold flex items-center gap-2"><Trees size={12}/> Vegetation</span>
+                                <span className="text-xs font-bold flex items-center gap-2">
+                                  <Trees size={12}/>
+                                  <span className="inline-flex items-center">
+                                    Vegetation
+                                  </span>
+                                </span>
                                 <Toggle label="" checked={settings.scenery.trees.enabled} onChange={(v) => updateSection('scenery', { trees: { ...settings.scenery.trees, enabled: v } })} />
                              </div>
                              {settings.scenery.trees.enabled && (
@@ -391,7 +596,12 @@ export const Render3DPanel = () => {
 
                           <div className="bg-surface-elevated border border-border rounded p-2">
                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold flex items-center gap-2"><Car size={12}/> Vehicles</span>
+                                <span className="text-xs font-bold flex items-center gap-2">
+                                  <Car size={12}/>
+                                  <span className="inline-flex items-center">
+                                    Vehicles
+                                  </span>
+                                </span>
                                 <Toggle label="" checked={settings.scenery.cars.enabled} onChange={(v) => updateSection('scenery', { cars: { ...settings.scenery.cars, enabled: v } })} />
                              </div>
                              {settings.scenery.cars.enabled && (
@@ -401,28 +611,85 @@ export const Render3DPanel = () => {
                        </div>
 
                        <div className="mt-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">Context Preset</label>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Context Preset
+                          </label>
                           <select 
                              className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                              value={settings.scenery.preset}
                              onChange={(e) => updateSection('scenery', { preset: e.target.value })}
                           >
-                             <option value="residential">Residential Suburban</option>
-                             <option value="commercial">Urban Commercial</option>
-                             <option value="interior">Interior Living</option>
-                             <option value="empty">Empty / Studio</option>
+                             <optgroup label="Terminal & Public Areas">
+                                <option value="departure-hall">Departure Hall</option>
+                                <option value="arrivals-hall">Arrivals Hall</option>
+                                <option value="check-in-counter">Check-in Counter</option>
+                                <option value="ticketing-area">Ticketing Area</option>
+                                <option value="main-concourse">Main Concourse</option>
+                                <option value="terminal-atrium">Terminal Atrium</option>
+                             </optgroup>
+                             <optgroup label="Security & Processing">
+                                <option value="security-checkpoint">Security Checkpoint</option>
+                                <option value="passport-control">Passport Control</option>
+                                <option value="customs-hall">Customs Hall</option>
+                                <option value="immigration-area">Immigration Area</option>
+                                <option value="tsa-screening">TSA Screening</option>
+                             </optgroup>
+                             <optgroup label="Waiting & Lounges">
+                                <option value="gate-waiting-area">Gate Waiting Area</option>
+                                <option value="business-class-lounge">Business Class Lounge</option>
+                                <option value="first-class-lounge">First Class Lounge</option>
+                                <option value="airline-lounge">Airline Lounge</option>
+                                <option value="transit-lounge">Transit Lounge</option>
+                                <option value="family-waiting-area">Family Waiting Area</option>
+                             </optgroup>
+                             <optgroup label="Baggage">
+                                <option value="baggage-claim">Baggage Claim</option>
+                                <option value="baggage-dropoff">Baggage Drop-off</option>
+                                <option value="oversized-baggage">Oversized Baggage</option>
+                                <option value="lost-baggage-office">Lost Baggage Office</option>
+                             </optgroup>
+                             <optgroup label="Retail & Dining">
+                                <option value="duty-free-shop">Duty-Free Shop</option>
+                                <option value="food-court">Food Court</option>
+                                <option value="restaurant-bar">Restaurant/Bar</option>
+                                <option value="retail-corridor">Retail Corridor</option>
+                                <option value="newsstand">Newsstand/Convenience</option>
+                             </optgroup>
+                             <optgroup label="Transport & Access">
+                                <option value="jet-bridge-gate">Jet Bridge / Boarding Gate</option>
+                                <option value="bus-gate-area">Bus Gate Area</option>
+                                <option value="ground-transportation">Ground Transportation</option>
+                                <option value="taxi-rideshare-pickup">Taxi/Rideshare Pickup</option>
+                                <option value="parking-garage">Parking Garage</option>
+                                <option value="rental-car-center">Rental Car Center</option>
+                             </optgroup>
+                             <optgroup label="Operations & Support">
+                                <option value="information-desk">Information Desk</option>
+                                <option value="airport-office">Airport Office</option>
+                                <option value="control-tower-exterior">Control Tower (exterior)</option>
+                                <option value="maintenance-hangar">Maintenance Hangar</option>
+                                <option value="cargo-terminal">Cargo Terminal</option>
+                             </optgroup>
+                             <optgroup label="Exterior">
+                                <option value="terminal-curbside">Terminal Curbside</option>
+                                <option value="runway-view">Runway View</option>
+                                <option value="apron-tarmac">Apron / Tarmac</option>
+                                <option value="airport-entry-plaza">Airport Entry Plaza</option>
+                             </optgroup>
                           </select>
                        </div>
                     </div>
                 )},
 
                 // 7. RENDER
-                { id: 'render', title: 'Render Quality', content: (
+                { id: 'render', title: 'Render Format', content: (
                     <div>
                        <SectionDesc>Output specifications and export.</SectionDesc>
                        
                        <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">Resolution</label>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Resolution
+                          </label>
                           <SegmentedControl 
                              value={settings.render.resolution}
                              options={[
@@ -432,48 +699,63 @@ export const Render3DPanel = () => {
                           />
                        </div>
 
-                       <div className="flex gap-4 mb-4">
-                          <div className="flex-1">
-                             <label className="text-xs font-medium text-foreground mb-1.5 block">Format</label>
-                             <select 
-                                className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-                                value={settings.render.format}
-                                onChange={(e) => updateSection('render', { format: e.target.value })}
-                             >
-                                <option value="png">PNG (Lossless)</option>
-                                <option value="jpg">JPG (Compact)</option>
-                                <option value="tiff">TIFF (High Bit)</option>
-                                <option value="exr">EXR (Linear)</option>
-                             </select>
-                          </div>
-                          <div className="flex-1">
-                             <label className="text-xs font-medium text-foreground mb-1.5 block">Quality</label>
-                             <select 
-                                className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-                                value={settings.render.quality}
-                                onChange={(e) => updateSection('render', { quality: e.target.value })}
-                             >
-                                <option value="draft">Draft (Fast)</option>
-                                <option value="preview">Preview</option>
-                                <option value="production">Production</option>
-                                <option value="ultra">Ultra</option>
-                             </select>
-                          </div>
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Aspect Ratio
+                          </label>
+                          <SegmentedControl 
+                             value={settings.render.aspectRatio}
+                             options={[
+                                {label: '16:9', value: '16:9'},
+                                {label: '4:3', value: '4:3'},
+                                {label: '3:2', value: '3:2'},
+                                {label: '1:1', value: '1:1'},
+                                {label: '21:9', value: '21:9'},
+                                {label: '9:16', value: '9:16'}
+                             ]}
+                             onChange={(v) => updateSection('render', { aspectRatio: v })}
+                          />
                        </div>
 
-                       <div className="space-y-2 mt-4">
-                          <button className="w-full py-3 bg-foreground text-background rounded-lg flex items-center justify-center gap-2 text-xs font-bold hover:bg-foreground/90 transition-colors shadow-md">
-                             <Camera size={16} /> Render Image
-                          </button>
-                          
-                          <div className="grid grid-cols-2 gap-2">
-                             <button className="py-2.5 bg-surface-elevated border border-border rounded-lg flex items-center justify-center gap-2 text-xs font-medium hover:bg-surface-sunken hover:border-foreground-muted transition-all">
-                                <Globe size={14} /> 360° Pano
-                             </button>
-                             <button className="py-2.5 bg-surface-elevated border border-border rounded-lg flex items-center justify-center gap-2 text-xs font-medium hover:bg-surface-sunken hover:border-foreground-muted transition-all">
-                                <Film size={14} /> Animation
-                             </button>
-                          </div>
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            View Type
+                          </label>
+                          <select 
+                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                             value={settings.render.viewType}
+                             onChange={(e) => updateSection('render', { viewType: e.target.value })}
+                          >
+                             <option value="passenger-pov">Passenger POV - eye-level walking through</option>
+                             <option value="concourse-walk">Concourse Walk - corridor perspective</option>
+                             <option value="atrium-overview">Atrium Overview - ground level looking up</option>
+                             <option value="gate-seating">Gate Seating - seated passenger view</option>
+                             <option value="lounge-interior">Lounge Interior - luxury seated angle</option>
+                             <option value="mezzanine-view">Mezzanine View - from upper level down</option>
+                             <option value="drone-low">Drone Low - facade hero shot</option>
+                             <option value="drone-high">Drone High - full terminal context</option>
+                             <option value="section-cut">Section Cut - interior reveal</option>
+                             <option value="spherical-360">360 Spherical - VR panorama</option>
+                          </select>
+                          <p className="text-[9px] text-foreground-muted mt-1 leading-normal">
+                             View preset controls the camera viewpoint and composition for the render.
+                          </p>
+                       </div>
+
+                       <div className="mb-4">
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Quality
+                          </label>
+                          <select 
+                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                             value={settings.render.quality}
+                             onChange={(e) => updateSection('render', { quality: e.target.value })}
+                          >
+                             <option value="draft">Draft (Fast)</option>
+                             <option value="preview">Preview</option>
+                             <option value="production">Production</option>
+                             <option value="ultra">Ultra</option>
+                          </select>
                        </div>
                     </div>
                 )}
