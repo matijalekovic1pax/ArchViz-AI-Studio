@@ -71,25 +71,54 @@ export const LeftRender3DPanel = () => {
     return targetIndex;
   }, [wf.detectedElements.length]);
 
-  const getItemShift = useCallback((itemIndex: number): number => {
-    if (!dragState) return 0;
+  const getItemShift = useCallback((itemIndex: number, elementId: string): number => {
+    // Active drag state takes priority
+    if (dragState) {
+      const { activeIndex, currentIndex, itemHeight } = dragState;
 
-    const { activeIndex, currentIndex, itemHeight } = dragState;
+      if (itemIndex === activeIndex) return 0;
 
-    if (itemIndex === activeIndex) return 0;
-
-    if (activeIndex < currentIndex) {
-      if (itemIndex > activeIndex && itemIndex <= currentIndex) {
-        return -itemHeight;
+      if (activeIndex < currentIndex) {
+        if (itemIndex > activeIndex && itemIndex <= currentIndex) {
+          return -itemHeight;
+        }
+      } else if (activeIndex > currentIndex) {
+        if (itemIndex >= currentIndex && itemIndex < activeIndex) {
+          return itemHeight;
+        }
       }
-    } else if (activeIndex > currentIndex) {
-      if (itemIndex >= currentIndex && itemIndex < activeIndex) {
-        return itemHeight;
+      return 0;
+    }
+
+    // During pending drop, maintain shifts until the array actually reorders
+    if (pendingDrop) {
+      // Don't shift the item being dropped (it's handled separately)
+      if (elementId === pendingDrop.id) return 0;
+
+      // Check if array has already reordered by finding where the dragged item currently is
+      const draggedItemCurrentIndex = wf.detectedElements.findIndex(el => el.id === pendingDrop.id);
+
+      // If the dragged item is still at fromIndex, array hasn't reordered yet - maintain shifts
+      if (draggedItemCurrentIndex === pendingDrop.fromIndex) {
+        const { fromIndex, toIndex, itemHeight } = pendingDrop;
+
+        if (fromIndex < toIndex) {
+          // Dragged down: items between should be shifted up
+          if (itemIndex > fromIndex && itemIndex <= toIndex) {
+            return -itemHeight;
+          }
+        } else if (fromIndex > toIndex) {
+          // Dragged up: items between should be shifted down
+          if (itemIndex >= toIndex && itemIndex < fromIndex) {
+            return itemHeight;
+          }
+        }
       }
+      // Array has reordered, no shifts needed
     }
 
     return 0;
-  }, [dragState]);
+  }, [dragState, pendingDrop, wf.detectedElements]);
 
   const handlePointerDown = useCallback((
     e: React.PointerEvent,
@@ -312,8 +341,7 @@ export const LeftRender3DPanel = () => {
 
               {wf.detectedElements.map((el, index) => {
                 const isDragging = dragState?.activeId === el.id;
-                const isDropping = pendingDrop?.id === el.id;
-                const shiftY = getItemShift(index);
+                const shiftY = getItemShift(index, el.id);
                 const dropTransform = getDropTransform(el, index);
 
                 let transform: string | undefined;
@@ -328,8 +356,9 @@ export const LeftRender3DPanel = () => {
                   transform = `translateY(${shiftY}px)`;
                 }
 
-                // Disable transitions for dragging item and dropping item
-                const noTransition = isDragging || isDropping;
+                // Disable transitions for dragging item, dropping item, and all items during pendingDrop
+                // This prevents visual glitches from timing issues between store and state updates
+                const noTransition = isDragging || !!pendingDrop;
 
                 return (
                   <div

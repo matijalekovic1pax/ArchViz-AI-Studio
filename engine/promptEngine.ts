@@ -1016,7 +1016,7 @@ function generate3DRenderPrompt(state: AppState): string {
   if (workflow.prioritizationEnabled) {
     const prioritized = workflow.detectedElements.filter(el => el.selected);
     if (prioritized.length > 0) {
-      parts.push(`Priority focus: ${prioritized.map(el => el.name).join(', ')}.`);
+      parts.push(`Priority focus (highest to lowest): ${prioritized.map(el => el.name).join(', ')}.`);
     }
   }
 
