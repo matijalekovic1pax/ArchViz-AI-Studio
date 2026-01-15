@@ -5,6 +5,12 @@ import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Pla
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
 
+type CanvasPoint = { x: number; y: number };
+type SelectionShape =
+  | { id: string; type: 'rect'; start: CanvasPoint; end: CanvasPoint }
+  | { id: string; type: 'brush'; points: CanvasPoint[]; brushSize: number }
+  | { id: string; type: 'lasso'; points: CanvasPoint[] };
+
 // --- Floating Prompt Bar Component ---
 
 const PromptBar: React.FC = () => {
@@ -265,14 +271,121 @@ const StandardCanvas: React.FC = () => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const selectionLayerRef = useRef<HTMLDivElement>(null);
+  const activeSelectionRef = useRef<SelectionShape | null>(null);
+  const lastPointRef = useRef<CanvasPoint | null>(null);
 
   // Mode helpers
   const isGenerateText = state.mode === 'generate-text';
   const isVideo = state.mode === 'video';
+  const isVisualEdit = state.mode === 'visual-edit';
+  const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
+  const selectionMode = state.workflow.visualSelection.mode;
   const showCompare = state.workflow.videoState?.compareMode || state.mode === 'upscale';
   const showSplit = state.workflow.canvasSync && !isVideo && !showCompare;
 
   // --- Handlers ---
+
+  const updateActiveSelection = useCallback((
+    next: SelectionShape | null | ((prev: SelectionShape | null) => SelectionShape | null)
+  ) => {
+    setActiveSelection((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      activeSelectionRef.current = resolved;
+      return resolved;
+    });
+  }, []);
+
+  const commitSelection = useCallback((shape: SelectionShape) => {
+    const nextShape = { ...shape, id: nanoid() };
+    const previousSelections = state.workflow.visualSelections;
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelections: [...previousSelections, nextShape],
+        visualSelectionUndoStack: [...state.workflow.visualSelectionUndoStack, previousSelections],
+        visualSelectionRedoStack: [],
+      },
+    });
+  }, [dispatch, state.workflow.visualSelectionUndoStack, state.workflow.visualSelections]);
+
+  const getSelectionPoint = useCallback((e: React.MouseEvent) => {
+    if (!selectionLayerRef.current) return null;
+    const rect = selectionLayerRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / state.canvas.zoom,
+      y: (e.clientY - rect.top) / state.canvas.zoom,
+    };
+  }, [state.canvas.zoom]);
+
+  const startSelection = useCallback((e: React.MouseEvent) => {
+    if (!state.uploadedImage || e.button !== 0) return;
+    const point = getSelectionPoint(e);
+    if (!point) return;
+    const drawMode = selectionMode === 'ai' ? 'rect' : selectionMode;
+
+    setIsSelecting(true);
+
+    if (drawMode === 'rect') {
+      updateActiveSelection({ id: 'active', type: 'rect', start: point, end: point });
+      return;
+    }
+
+    const type = drawMode === 'lasso' ? 'lasso' : 'brush';
+    lastPointRef.current = point;
+    if (type === 'brush') {
+      updateActiveSelection({
+        id: 'active',
+        type,
+        points: [point],
+        brushSize: state.workflow.visualSelection.brushSize,
+      });
+    } else {
+      updateActiveSelection({ id: 'active', type, points: [point] });
+    }
+  }, [getSelectionPoint, selectionMode, state.uploadedImage, state.workflow.visualSelection.brushSize, updateActiveSelection]);
+
+  const updateSelectionPath = useCallback((e: React.MouseEvent) => {
+    const point = getSelectionPoint(e);
+    if (!point) return;
+
+    updateActiveSelection((prev) => {
+      if (!prev) return prev;
+      if (prev.type === 'rect') {
+        return { ...prev, end: point };
+      }
+      const last = lastPointRef.current;
+      if (last && Math.hypot(point.x - last.x, point.y - last.y) < 2) {
+        return prev;
+      }
+      lastPointRef.current = point;
+      return { ...prev, points: [...prev.points, point] };
+    });
+  }, [getSelectionPoint, updateActiveSelection]);
+
+  const finishSelection = useCallback(() => {
+    setIsSelecting(false);
+    lastPointRef.current = null;
+    const finalSelection = activeSelectionRef.current;
+    if (finalSelection) {
+      if (finalSelection.type === 'rect') {
+        const width = Math.abs(finalSelection.end.x - finalSelection.start.x);
+        const height = Math.abs(finalSelection.end.y - finalSelection.start.y);
+        if (width > 2 && height > 2) {
+          commitSelection(finalSelection);
+        }
+      } else if (finalSelection.points.length > 1) {
+        if (finalSelection.type === 'brush' && !finalSelection.brushSize) {
+          commitSelection({ ...finalSelection, brushSize: state.workflow.visualSelection.brushSize });
+        } else {
+          commitSelection(finalSelection);
+        }
+      }
+    }
+    updateActiveSelection(null);
+  }, [commitSelection, state.workflow.visualSelection.brushSize, updateActiveSelection]);
 
   const handleFitToScreen = useCallback((e?: React.MouseEvent) => {
      if (e) {
@@ -341,9 +454,119 @@ const StandardCanvas: React.FC = () => {
     setIsPanning(false);
   };
 
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (isSelectTool) {
+      startSelection(e);
+      return;
+    }
+    startPan(e);
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isSelectTool) {
+      if (isSelecting) {
+        updateSelectionPath(e);
+      }
+      return;
+    }
+    updatePan(e);
+  };
+
+  const handleCanvasMouseUp = () => {
+    if (isSelectTool && isSelecting) {
+      finishSelection();
+    }
+    endPan();
+  };
+
+  const handleCanvasMouseLeave = () => {
+    if (isSelectTool && isSelecting) {
+      finishSelection();
+    }
+    endPan();
+  };
+
+  useEffect(() => {
+    if (!state.uploadedImage) {
+      updateActiveSelection(null);
+      if (state.workflow.visualSelections.length > 0) {
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload: {
+            visualSelections: [],
+            visualSelectionUndoStack: [],
+            visualSelectionRedoStack: [],
+          },
+        });
+      }
+    }
+  }, [dispatch, state.uploadedImage, state.workflow.visualSelections.length, updateActiveSelection]);
+
   const transformStyle = {
      transform: `translate(${state.canvas.pan.x}px, ${state.canvas.pan.y}px) scale(${state.canvas.zoom})`,
      transition: isPanning ? 'none' : 'transform 0.1s cubic-bezier(0.2, 0, 0.2, 1)'
+  };
+
+  const selectionStroke = Math.max(1, 2 / state.canvas.zoom);
+  const hideSelections =
+    state.mode === 'visual-edit' &&
+    state.workflow.activeTool === 'material' &&
+    state.workflow.visualMaterial.surfaceType === 'auto';
+  const selectionShapes = hideSelections
+    ? []
+    : [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])];
+
+  const renderSelectionShape = (shape: SelectionShape, isActive: boolean) => {
+    const stroke = isActive ? 'rgba(56,189,248,0.95)' : 'rgba(56,189,248,0.7)';
+    const dash = isActive ? '6 4' : undefined;
+
+    if (shape.type === 'rect') {
+      const x = Math.min(shape.start.x, shape.end.x);
+      const y = Math.min(shape.start.y, shape.end.y);
+      const width = Math.abs(shape.end.x - shape.start.x);
+      const height = Math.abs(shape.end.y - shape.start.y);
+      return (
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          stroke={stroke}
+          strokeWidth={selectionStroke}
+          strokeDasharray={dash}
+          fill="rgba(56,189,248,0.12)"
+          rx={6}
+        />
+      );
+    }
+
+    const points = shape.points.map((point) => `${point.x},${point.y}`).join(' ');
+    if (!points) return null;
+
+    if (shape.type === 'brush') {
+      const strokeWidth = Math.max(1, (shape.brushSize || state.workflow.visualSelection.brushSize) / state.canvas.zoom);
+      return (
+        <polyline
+          points={points}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      );
+    }
+
+    return (
+      <polygon
+        points={points}
+        stroke={stroke}
+        strokeWidth={selectionStroke}
+        strokeDasharray={dash}
+        strokeLinejoin="round"
+        fill="rgba(56,189,248,0.12)"
+      />
+    );
   };
 
   if (isFullscreen && state.uploadedImage) {
@@ -376,13 +599,13 @@ const StandardCanvas: React.FC = () => {
          ref={containerRef}
          className={cn(
             "flex-1 relative overflow-hidden h-full w-full select-none",
-            isPanning ? "cursor-grabbing" : "cursor-grab"
+            isSelectTool ? "cursor-crosshair" : isPanning ? "cursor-grabbing" : "cursor-grab"
          )}
          onWheel={handleWheel}
-         onMouseDown={startPan}
-         onMouseMove={updatePan}
-         onMouseUp={endPan}
-         onMouseLeave={endPan}
+         onMouseDown={handleCanvasMouseDown}
+         onMouseMove={handleCanvasMouseMove}
+         onMouseUp={handleCanvasMouseUp}
+         onMouseLeave={handleCanvasMouseLeave}
       >
          <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0" 
             style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} 
@@ -444,11 +667,22 @@ const StandardCanvas: React.FC = () => {
                                     draggable={false}
                                     onClick={(e) => {
                                        e.stopPropagation();
-                                       if (!isPanning) {
+                                       if (!isPanning && !isSelectTool) {
                                            setIsFullscreen(true);
                                        }
                                     }}
                                  />
+                                 {isVisualEdit && state.uploadedImage && (
+                                    <div ref={selectionLayerRef} className="absolute inset-0 pointer-events-none">
+                                       <svg className="w-full h-full">
+                                          {selectionShapes.map((shape, index) => (
+                                            <g key={`${shape.id}-${index}`}>
+                                              {renderSelectionShape(shape, shape.id === 'active')}
+                                            </g>
+                                          ))}
+                                       </svg>
+                                    </div>
+                                 )}
                                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-0 group-hover/image:opacity-100 transition-opacity">
                                     <div className="bg-black/30 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
                                         <Maximize2 size={12} /> Click to Expand

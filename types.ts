@@ -57,6 +57,16 @@ export interface ZoneItem {
   selected: boolean;
 }
 
+export interface VisualSelectionPoint {
+  x: number;
+  y: number;
+}
+
+export type VisualSelectionShape =
+  | { id: string; type: 'rect'; start: VisualSelectionPoint; end: VisualSelectionPoint }
+  | { id: string; type: 'brush'; points: VisualSelectionPoint[]; brushSize: number }
+  | { id: string; type: 'lasso'; points: VisualSelectionPoint[] };
+
 // Render 3D Panel Settings
 export interface Render3DGeometry {
   edgeMode: 'soft' | 'medium' | 'sharp';
@@ -213,16 +223,106 @@ export interface WorkflowSettings {
   mpExport: { topDown: boolean; aerialNE: boolean; aerialSW: boolean; eyeLevel: boolean };
 
   // 4. Visual Edit
-  activeTool: 'pan' | 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'adjust' | 'extend';
+  activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend';
   visualPrompt: string; // The specific prompt for the active operation
-  visualSelection: { mode: 'rect' | 'brush' | 'polygon' | 'ai'; brushSize: number; hardness: number; flow: number };
-  visualMaterial: { surfaceType: string; category: string; materialId: string; scale: number; rotation: number; roughness: number };
-  visualLighting: { mode: 'global' | 'local'; time: number; weather: string; intensity: number; warmth: number };
-  visualSky: { category: string; preset: string; horizonLine: number; atmosphere: number };
-  visualObject: { category: string; scale: number; autoPerspective: boolean; shadow: boolean };
-  visualRemove: { mode: 'fill' | 'clone'; autoDetect: string[] };
-  visualAdjust: { exposure: number; contrast: number; saturation: number; temp: number; styleStrength: number };
-  visualExtend: { top: number; right: number; bottom: number; left: number };
+  visualSelection: {
+    mode: 'rect' | 'brush' | 'lasso' | 'ai';
+    brushSize: number;
+    featherEnabled: boolean;
+    featherAmount: number;
+    strength: number;
+    autoTargets: string[];
+  };
+  visualSelections: VisualSelectionShape[];
+  visualSelectionUndoStack: VisualSelectionShape[][];
+  visualSelectionRedoStack: VisualSelectionShape[][];
+  visualMaterial: {
+    surfaceType: 'auto' | 'manual';
+    category: 'Flooring' | 'Wall' | 'Facade' | 'Roof' | 'Metal' | 'Glass' | 'Stone' | 'Fabric';
+    materialId: string;
+    scale: number;
+    rotation: number;
+    roughness: number;
+    colorTint: string;
+    matchLighting: boolean;
+    preserveReflections: boolean;
+  };
+  visualLighting: {
+    mode: 'sun' | 'hdri' | 'artificial';
+    sun: { azimuth: number; elevation: number; intensity: number; colorTemp: number; shadowSoftness: number };
+    hdri: { preset: string; rotation: number; intensity: number };
+    artificial: { type: 'point' | 'spot' | 'area'; position: { x: number; y: number }; intensity: number; color: string; falloff: number };
+    ambient: number;
+    preserveShadows: boolean;
+  };
+  visualSky: {
+    preset: string;
+    horizonLine: number;
+    cloudDensity: number;
+    atmosphere: number;
+    brightness: number;
+    reflectInGlass: boolean;
+    matchLighting: boolean;
+    sunFlare: boolean;
+  };
+  visualObject: {
+    category: 'Furniture' | 'People' | 'Vehicles' | 'Vegetation' | 'Props';
+    assetId: string;
+    scale: number;
+    rotation: number;
+    autoPerspective: boolean;
+    shadow: boolean;
+    groundContact: boolean;
+    position: { x: number; y: number };
+    depth: 'foreground' | 'midground' | 'background';
+  };
+  visualRemove: {
+    mode: 'fill' | 'aware' | 'clone';
+    brushSize: number;
+    hardness: number;
+    cloneAligned: boolean;
+    sourcePoint: { x: number; y: number } | null;
+    quickRemove: string[];
+    autoDetectEdges: boolean;
+    preserveStructure: boolean;
+  };
+  visualReplace: {
+    mode: 'similar' | 'different' | 'custom';
+    variation: number;
+    category: 'Furniture' | 'Vehicle' | 'Plant' | 'Person' | 'Object';
+    style: string;
+    prompt: string;
+    matchScale: boolean;
+    matchLighting: boolean;
+    preserveShadows: boolean;
+  };
+  visualAdjust: {
+    exposure: number;
+    contrast: number;
+    highlights: number;
+    shadows: number;
+    saturation: number;
+    vibrance: number;
+    temperature: number;
+    tint: number;
+    sharpness: number;
+    noiseReduction: number;
+    clarity: number;
+    vignette: number;
+    grain: number;
+    styleStrength: number;
+  };
+  visualExtend: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    direction: 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'none';
+    amount: number;
+    maintainAspect: boolean;
+    guidance: 'auto' | 'architecture' | 'landscape' | 'sky';
+    prompt: string;
+  };
   editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];
 
   // 5. Exploded

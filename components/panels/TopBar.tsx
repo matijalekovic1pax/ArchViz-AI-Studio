@@ -15,6 +15,41 @@ export const TopBar: React.FC = () => {
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const latestStateRef = useRef(state);
+
+  const selectionUndoStack = state.workflow.visualSelectionUndoStack;
+  const selectionRedoStack = state.workflow.visualSelectionRedoStack;
+  const canUndoSelection = state.mode === 'visual-edit' && selectionUndoStack.length > 0;
+  const canRedoSelection = state.mode === 'visual-edit' && selectionRedoStack.length > 0;
+
+  const handleUndoSelection = () => {
+    if (!canUndoSelection) return;
+    const previous = selectionUndoStack[selectionUndoStack.length - 1];
+    const nextUndo = selectionUndoStack.slice(0, -1);
+    const nextRedo = [...selectionRedoStack, state.workflow.visualSelections];
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelections: previous,
+        visualSelectionUndoStack: nextUndo,
+        visualSelectionRedoStack: nextRedo,
+      },
+    });
+  };
+
+  const handleRedoSelection = () => {
+    if (!canRedoSelection) return;
+    const next = selectionRedoStack[selectionRedoStack.length - 1];
+    const nextRedo = selectionRedoStack.slice(0, -1);
+    const nextUndo = [...selectionUndoStack, state.workflow.visualSelections];
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelections: next,
+        visualSelectionUndoStack: nextUndo,
+        visualSelectionRedoStack: nextRedo,
+      },
+    });
+  };
   
   // Download options state
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpg' | 'mp4'>('png');
@@ -258,13 +293,33 @@ export const TopBar: React.FC = () => {
 
         <div className="h-6 w-px bg-border-strong shrink-0" />
 
-        <div className="flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
-          <button className="p-1.5 text-foreground-secondary hover:text-foreground hover:bg-surface-elevated rounded-md transition-all" title="Undo">
-            <Undo size={14} />
-          </button>
-          <button className="p-1.5 text-foreground-secondary hover:text-foreground hover:bg-surface-elevated rounded-md transition-all" title="Redo">
-            <Redo size={14} />
-          </button>
+          <div className="flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
+            <button
+              onClick={handleUndoSelection}
+              disabled={!canUndoSelection}
+              className={cn(
+                "p-1.5 text-foreground-secondary rounded-md transition-all",
+                canUndoSelection
+                  ? "hover:text-foreground hover:bg-surface-elevated"
+                  : "opacity-40 cursor-not-allowed"
+              )}
+              title="Undo"
+            >
+              <Undo size={14} />
+            </button>
+            <button
+              onClick={handleRedoSelection}
+              disabled={!canRedoSelection}
+              className={cn(
+                "p-1.5 text-foreground-secondary rounded-md transition-all",
+                canRedoSelection
+                  ? "hover:text-foreground hover:bg-surface-elevated"
+                  : "opacity-40 cursor-not-allowed"
+              )}
+              title="Redo"
+            >
+              <Redo size={14} />
+            </button>
           
           <div className="w-px h-3 bg-border mx-1" />
 
