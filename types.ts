@@ -170,11 +170,38 @@ export interface WorkflowSettings {
   cadDrawingType: 'plan' | 'section' | 'elevation' | 'site';
   cadScale: string;
   cadOrientation: number;
+  cadLayerDetectionEnabled: boolean;
   cadLayers: DetectedLayer[];
-  cadCamera: { height: number; angle: 'horizontal' | 'down' | 'up' };
+  cadCamera: {
+    height: number;
+    angle: 'horizontal' | 'down' | 'up';
+    focalLength: number;
+    position: { x: number; y: number };
+    lookAt: 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
+    verticalCorrection: boolean;
+  };
+  cadSpace: {
+    roomType: string;
+    ceilingStyle: 'flat' | 'coffered' | 'beams' | 'vaulted';
+    windowStyle: 'slim' | 'heavy' | 'curtain' | 'frosted' | 'tinted';
+    doorStyle: 'panel' | 'glass' | 'flush' | 'industrial';
+  };
+  cadContext: {
+    landscape: 'garden' | 'native' | 'minimal' | 'tropical' | 'xeriscape';
+    environment: 'urban' | 'suburban' | 'rural';
+    season: 'spring' | 'summer' | 'autumn' | 'winter';
+  };
   cadSpatial: { ceilingHeight: number; floorThick: number; wallThick: number; style: number }; // style 0-100 conservative-creative
   cadMaterialAssignments: Record<string, string>; // elementId -> materialId
-  cadFurnishing: { auto: boolean; styles: string[]; density: number };
+  cadFurnishing: {
+    auto: boolean;
+    styles: string[];
+    density: number;
+    occupancy: 'empty' | 'staged' | 'lived-in';
+    clutter: number;
+    people: boolean;
+    entourage: number;
+  };
 
   // 3. Masterplan
   mpPlanType: 'site' | 'urban' | 'zoning' | 'massing';

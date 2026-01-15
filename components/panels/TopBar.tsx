@@ -1,10 +1,12 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
+import { generatePrompt } from '../../engine/promptEngine';
+import { nanoid } from 'nanoid';
 
 export const TopBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -12,6 +14,7 @@ export const TopBar: React.FC = () => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const latestStateRef = useRef(state);
   
   // Download options state
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpg' | 'mp4'>('png');
@@ -19,6 +22,10 @@ export const TopBar: React.FC = () => {
   
   const isVideoMode = state.mode === 'video';
   const isDisabled = !state.uploadedImage && state.mode !== 'material-validation'; // Material validation doesn't need an image
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   // --- Handlers ---
 
@@ -55,6 +62,20 @@ export const TopBar: React.FC = () => {
         clearInterval(interval);
         dispatch({ type: 'SET_GENERATING', payload: false });
         dispatch({ type: 'SET_PROGRESS', payload: 0 });
+        const latestState = latestStateRef.current;
+        if (latestState.uploadedImage) {
+          dispatch({ 
+            type: 'ADD_HISTORY', 
+            payload: {
+              id: nanoid(),
+              timestamp: Date.now(),
+              thumbnail: latestState.uploadedImage,
+              prompt: generatePrompt(latestState),
+              attachments: [],
+              mode: latestState.mode
+            }
+          });
+        }
       }
     }, 50);
   };

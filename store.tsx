@@ -47,7 +47,7 @@ const initialRender3D: Render3DSettings = {
       preserveTrim: true,
     },
     smoothing: {
-      enabled: true,
+      enabled: false,
       intensity: 50,
       preserveHardEdges: true,
       threshold: 30,
@@ -69,7 +69,7 @@ const initialRender3D: Render3DSettings = {
     sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
     shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
     ambient: { intensity: 40, occlusion: 50 },
-    preset: 'early-morning',
+    preset: 'golden-hour',
   },
   camera: {
     preset: 'eye-level',
@@ -98,12 +98,12 @@ const initialRender3D: Render3DSettings = {
   atmosphere: {
     mood: 'natural',
     fog: { enabled: false, density: 20 },
-    bloom: { enabled: true, intensity: 30 },
+    bloom: { enabled: false, intensity: 30 },
     temp: 0,
   },
   scenery: {
     people: { enabled: false, count: 20 },
-    trees: { enabled: true, count: 50 },
+    trees: { enabled: false, count: 50 },
     cars: { enabled: false, count: 10 },
     preset: 'departure-hall',
   },
@@ -138,16 +138,43 @@ const initialWorkflow: WorkflowSettings = {
   cadDrawingType: 'plan',
   cadScale: '1:100',
   cadOrientation: 0,
+  cadLayerDetectionEnabled: false,
   cadLayers: [
     { id: '1', name: 'Walls', color: '#000000', type: 'wall', visible: true },
     { id: '2', name: 'Windows', color: '#0000FF', type: 'window', visible: true },
     { id: '3', name: 'Doors', color: '#FF0000', type: 'door', visible: true },
     { id: '4', name: 'Dims', color: '#888888', type: 'dims', visible: false },
   ],
-  cadCamera: { height: 1.6, angle: 'horizontal' },
+  cadCamera: {
+    height: 1.6,
+    angle: 'horizontal',
+    focalLength: 35,
+    position: { x: 50, y: 50 },
+    lookAt: 'n',
+    verticalCorrection: true,
+  },
+  cadSpace: {
+    roomType: 'Airport Departure Hall',
+    ceilingStyle: 'flat',
+    windowStyle: 'slim',
+    doorStyle: 'panel',
+  },
+  cadContext: {
+    landscape: 'garden',
+    environment: 'urban',
+    season: 'summer',
+  },
   cadSpatial: { ceilingHeight: 2.8, floorThick: 0.3, wallThick: 0.2, style: 50 },
   cadMaterialAssignments: { 'walls': 'White Plaster', 'floor': 'Oak Hardwood' },
-  cadFurnishing: { auto: true, styles: ['Modern'], density: 60 },
+  cadFurnishing: {
+    auto: true,
+    styles: ['Modern'],
+    density: 60,
+    occupancy: 'staged',
+    clutter: 35,
+    people: false,
+    entourage: 10,
+  },
 
   // 3. Masterplan
   mpPlanType: 'urban',
@@ -264,7 +291,7 @@ const initialGeometry: GeometryState = {
     preserveTrim: true,
   },
   smoothing: {
-    enabled: true,
+    enabled: false,
     intensity: 50,
     preserveHardEdges: true,
     threshold: 30,
@@ -451,7 +478,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'TOGGLE_LEFT_SIDEBAR': return { ...state, leftSidebarOpen: !state.leftSidebarOpen };
     case 'TOGGLE_RIGHT_PANEL': return { ...state, rightPanelOpen: !state.rightPanelOpen };
 
-    case 'ADD_HISTORY': return { ...state, history: [action.payload, ...state.history].slice(0, 20) };
+    case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'LOAD_PROJECT': return { ...action.payload };
     case 'RESET_PROJECT': return { ...initialState };
     default: return state;

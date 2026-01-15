@@ -124,8 +124,14 @@ export const BottomPanel: React.FC = () => {
                </div>
             ) : (
                state.history.map((item) => (
-                 <div 
-                    key={item.id} 
+                 <button 
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
+                      dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+                      dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+                    }}
                     className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden"
                  >
                     <div className="absolute inset-0 bg-surface-sunken">
@@ -135,7 +141,7 @@ export const BottomPanel: React.FC = () => {
                        <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
                        <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
                     </div>
-                 </div>
+                 </button>
                ))
             )}
           </div>

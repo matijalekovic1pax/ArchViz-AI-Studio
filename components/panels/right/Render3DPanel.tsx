@@ -7,7 +7,7 @@ import { Accordion } from '../../ui/Accordion';
 import {
   Lock, Sun, User, Droplets, Wind, Sparkle, Car, Trees
 } from 'lucide-react';
-import { SectionDesc, SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
+import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
 import { cn } from '../../../lib/utils';
 import { Render3DSettings } from '../../../types';
 
@@ -315,7 +315,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 2. LIGHTING
                 { id: 'lighting', title: 'Lighting', content: (
                     <div>
-                       <SectionDesc>Natural and artificial illumination control.</SectionDesc>
                        
                        <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-bold flex items-center gap-1.5">
@@ -403,7 +402,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                   // 3. CAMERA
                   { id: 'camera', title: 'Camera', content: (
                     <div>
-                       <SectionDesc>Composition and perspective settings.</SectionDesc>
                        
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -446,7 +444,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 4. MATERIALS
                 { id: 'materials', title: 'Materials', content: (
                     <div>
-                       <SectionDesc>Surface appearance and weathering.</SectionDesc>
                        
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-2 block">
@@ -504,7 +501,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 5. ATMOSPHERE
                 { id: 'atmosphere', title: 'Atmosphere', content: (
                     <div>
-                       <SectionDesc>Mood, tone, and environmental effects.</SectionDesc>
                        
                        <div className="grid grid-cols-3 gap-2 mb-4">
                           {[
@@ -571,7 +567,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 6. SCENERY
                 { id: 'scenery', title: 'Scenery', content: (
                     <div>
-                       <SectionDesc>Populate scene with context.</SectionDesc>
                        
                        <div className="space-y-4">
                           <div className="bg-surface-elevated border border-border rounded p-2">
@@ -694,7 +689,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 7. RENDER
                 { id: 'render', title: 'Render Format', content: (
                     <div>
-                       <SectionDesc>Output specifications and export.</SectionDesc>
                        
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -769,7 +763,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                        </div>
                     </div>
                 )}
-            ]} defaultValue="geometry" />
+            ]} />
         </div>
     );
 };

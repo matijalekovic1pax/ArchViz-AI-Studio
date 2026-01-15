@@ -1160,6 +1160,185 @@ function generate3DRenderPrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function generateCadRenderPrompt(state: AppState): string {
+  const { workflow, activeStyleId, customStyles } = state;
+  const r3d = workflow.render3d;
+  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+
+  const parts: string[] = [];
+
+  const cadTypeMap: Record<string, string> = {
+    'plan': 'floor plan',
+    'section': 'section',
+    'elevation': 'elevation',
+    'site': 'site plan',
+  };
+
+  parts.push(`Architectural render from CAD ${cadTypeMap[workflow.cadDrawingType] || 'drawing'}.`);
+  if (workflow.cadScale) {
+    parts.push(`Scale ${workflow.cadScale}.`);
+  }
+  if (Number.isFinite(workflow.cadOrientation)) {
+    parts.push(`Orientation ${workflow.cadOrientation}°.`);
+  }
+
+  if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
+    const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
+    if (visibleLayers.length) {
+      parts.push(`Visible layers: ${visibleLayers.join(', ')}.`);
+    }
+  }
+
+  const space = workflow.cadSpace;
+  parts.push(`Room type: ${space.roomType}.`);
+  parts.push(`Ceiling: ${space.ceilingStyle}, window style: ${space.windowStyle}, door style: ${space.doorStyle}.`);
+
+  if (!isNoStyle && style) {
+    parts.push(style.description);
+    if (style.promptBundle?.renderingLanguage?.atmosphere) {
+      parts.push(`Atmosphere: ${style.promptBundle.renderingLanguage.atmosphere.join(', ')}.`);
+    }
+  }
+
+  const cam = workflow.cadCamera;
+  const camDesc: string[] = [];
+  camDesc.push(`camera height ${cam.height}m`);
+  camDesc.push(`${cam.focalLength}mm lens`);
+  camDesc.push(`look-at ${cam.lookAt.toUpperCase()}`);
+  camDesc.push(`position ${Math.round(cam.position.x)}% x, ${Math.round(cam.position.y)}% y`);
+  camDesc.push(cam.verticalCorrection ? 'vertical correction on' : 'vertical correction off');
+  parts.push(`Camera: ${camDesc.join(', ')}.`);
+
+  const furn = workflow.cadFurnishing;
+  const furnDesc: string[] = [`${furn.occupancy} occupancy`, `${furn.clutter}% clutter`];
+  if (furn.people) {
+    furnDesc.push(`entourage level ${furn.entourage}`);
+  } else {
+    furnDesc.push('no people');
+  }
+  parts.push(`Furnishing: ${furnDesc.join(', ')}.`);
+
+  const cadContext = workflow.cadContext;
+  parts.push(`Context: ${cadContext.environment} environment, ${cadContext.landscape} landscape, ${cadContext.season} season.`);
+
+  // Render output controls (shared with Render 3D panel)
+  const geo = r3d.geometry;
+  const geoDesc: string[] = [];
+
+  geoDesc.push(`${geo.edgeMode} edge definition`);
+  if (geo.strictPreservation) {
+    geoDesc.push('strict geometry preservation');
+  }
+  geoDesc.push(`${geo.lod.level} level of detail`);
+
+  const lodFeatures: string[] = [];
+  if (geo.lod.preserveOrnaments) lodFeatures.push('ornaments');
+  if (geo.lod.preserveMoldings) lodFeatures.push('moldings');
+  if (geo.lod.preserveTrim) lodFeatures.push('trim details');
+  if (lodFeatures.length > 0) {
+    geoDesc.push(`preserve ${lodFeatures.join(', ')}`);
+  }
+
+  if (geo.smoothing.enabled) {
+    geoDesc.push(`${geo.smoothing.intensity}% smoothing`);
+    if (geo.smoothing.preserveHardEdges) {
+      geoDesc.push(`hard edges at ${geo.smoothing.threshold}°`);
+    }
+  }
+
+  if (geo.depthLayers.enabled) {
+    geoDesc.push(`depth layers ${geo.depthLayers.foreground}/${geo.depthLayers.midground}/${geo.depthLayers.background}`);
+  }
+
+  if (geo.displacement.enabled) {
+    geoDesc.push(`${geo.displacement.strength}% ${geo.displacement.scale} displacement`);
+  }
+
+  parts.push(`Geometry: ${geoDesc.join(', ')}.`);
+
+  const light = r3d.lighting;
+  const lightDesc: string[] = [];
+  if (light.sun.enabled) {
+    lightDesc.push(`sun az ${light.sun.azimuth}° el ${light.sun.elevation}°`);
+    lightDesc.push(`${light.sun.intensity}% sun intensity`);
+    lightDesc.push(`${light.sun.colorTemp}K`);
+  }
+  if (light.shadows.enabled) {
+    lightDesc.push(`${light.shadows.intensity}% shadows`);
+    lightDesc.push(`${light.shadows.softness}% softness`);
+  }
+  if (light.ambient.intensity) {
+    lightDesc.push(`${light.ambient.intensity}% ambient`);
+  }
+  lightDesc.push(formatTimePreset(light.preset));
+  parts.push(`Lighting: ${lightDesc.join(', ')}.`);
+
+  const mat = r3d.materials;
+  const matDesc: string[] = [];
+  const emphasis = getEmphasisMaterials(mat.emphasis);
+  if (emphasis.length > 0) {
+    matDesc.push(`emphasize ${emphasis.join(', ')}`);
+  }
+  matDesc.push(`${mat.reflectivity}% reflectivity`);
+  matDesc.push(`${mat.roughness}% roughness`);
+  if (mat.weathering.enabled) {
+    matDesc.push(`${mat.weathering.intensity}% weathering`);
+  }
+  parts.push(`Materials: ${matDesc.join(', ')}.`);
+
+  const atm = r3d.atmosphere;
+  const atmDesc: string[] = [];
+  atmDesc.push(formatMood(atm.mood));
+  atmDesc.push(`${atm.temp} temperature`);
+  if (atm.fog.enabled) {
+    atmDesc.push(`${atm.fog.density}% fog density`);
+  }
+  if (atm.bloom.enabled) {
+    atmDesc.push(`${atm.bloom.intensity}% bloom effect`);
+  }
+  parts.push(`Atmosphere: ${atmDesc.join(', ')}.`);
+
+  const scene = r3d.scenery;
+  const sceneDesc: string[] = [];
+  sceneDesc.push(`${formatContextPreset(scene.preset)} setting`);
+  if (scene.people.enabled) {
+    const density = scene.people.count > 50 ? 'busy' : scene.people.count > 20 ? 'moderate' : 'sparse';
+    sceneDesc.push(`${density} pedestrian activity`);
+  }
+  if (scene.trees.enabled) {
+    const density = scene.trees.count > 70 ? 'lush' : scene.trees.count > 30 ? 'moderate' : 'minimal';
+    sceneDesc.push(`${density} vegetation`);
+  }
+  if (scene.cars.enabled) {
+    sceneDesc.push('vehicles present');
+  }
+  parts.push(`Scene: ${sceneDesc.join(', ')}.`);
+
+  const rend = r3d.render;
+  const rendDesc: string[] = [];
+  const resMap: Record<string, string> = {
+    '720p': '1280x720',
+    '1080p': '1920x1080',
+    '4k': '3840x2160',
+    'print': '6000x4000 print-ready',
+  };
+  rendDesc.push(resMap[rend.resolution] || rend.resolution);
+  rendDesc.push(`${rend.aspectRatio} aspect ratio`);
+  rendDesc.push(formatViewType(rend.viewType));
+  rendDesc.push(`${rend.quality} quality render`);
+  parts.push(`Output: ${rendDesc.join(', ')}.`);
+
+  const detailPhrase =
+    rend.resolution === '1080p' || rend.resolution === '4k'
+      ? 'when i zoom in i want to be able to see every detail'
+      : '8K resolution details';
+  parts.push(`High-fidelity photorealistic architectural visualization, professional archviz quality, ray-traced global illumination, physically accurate materials, ${detailPhrase}.`);
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 export function generatePrompt(state: AppState): string {
   const { workflow, activeStyleId, lighting, context, materials, camera } = state;
 
@@ -1175,6 +1354,9 @@ export function generatePrompt(state: AppState): string {
   // Use specialized prompt generator for 3D Render mode
   if (state.mode === 'render-3d') {
     return generate3DRenderPrompt(state);
+  }
+  if (state.mode === 'render-cad') {
+    return generateCadRenderPrompt(state);
   }
 
   const availableStyles = [...BUILT_IN_STYLES, ...(state.customStyles ?? [])];
