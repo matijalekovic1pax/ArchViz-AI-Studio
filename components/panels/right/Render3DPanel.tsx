@@ -11,7 +11,15 @@ import { SectionDesc, SliderControl, VerticalCard, SunPositionWidget } from './S
 import { cn } from '../../../lib/utils';
 import { Render3DSettings } from '../../../types';
 
-export const Render3DPanel = () => {
+interface Render3DPanelProps {
+  showGenerationMode?: boolean;
+  includeCamera?: boolean;
+}
+
+export const Render3DPanel: React.FC<Render3DPanelProps> = ({
+    showGenerationMode = true,
+    includeCamera = true,
+}) => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
     const settings = wf.render3d;
@@ -44,34 +52,35 @@ export const Render3DPanel = () => {
     return (
         <div className="space-y-6">
             {/* Generation Mode */}
-            <div>
-                <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-                  Generation Mode
-                </label>
-                <div className="space-y-1">
-                    {[
-                        { id: 'enhance', label: 'Enhance', desc: 'Improves lighting and textures while keeping geometry.' },
-                        { id: 'stylize', label: 'Stylize', desc: 'Applies artistic styles to the base model.' },
-                        { id: 'hybrid', label: 'Hybrid', desc: 'Balances structural accuracy with creative details.' },
-                        { id: 'strict-realism', label: 'Strict Realism', desc: 'Photographic accuracy, minimal hallucination.' },
-                        { id: 'concept-push', label: 'Concept Push', desc: 'High creativity, explores new forms.' },
-                    ].map(m => (
-                        <VerticalCard 
-                            key={m.id} 
-                            label={m.label} 
-                            description={m.desc} 
-                            selected={wf.renderMode === m.id} 
-                            onClick={() => updateWf({ renderMode: m.id as any })} 
-                        />
-                    ))}
+            {showGenerationMode && (
+                <div>
+                    <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+                      Generation Mode
+                    </label>
+                    <div className="space-y-1">
+                        {[
+                            { id: 'enhance', label: 'Enhance', desc: 'Improves lighting and textures while keeping geometry.' },
+                            { id: 'stylize', label: 'Stylize', desc: 'Applies artistic styles to the base model.' },
+                            { id: 'hybrid', label: 'Hybrid', desc: 'Balances structural accuracy with creative details.' },
+                            { id: 'strict-realism', label: 'Strict Realism', desc: 'Photographic accuracy, minimal hallucination.' },
+                            { id: 'concept-push', label: 'Concept Push', desc: 'High creativity, explores new forms.' },
+                        ].map(m => (
+                            <VerticalCard 
+                                key={m.id} 
+                                label={m.label} 
+                                description={m.desc} 
+                                selected={wf.renderMode === m.id} 
+                                onClick={() => updateWf({ renderMode: m.id as any })} 
+                            />
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <Accordion items={[
                 // 1. GEOMETRY
                 { id: 'geometry', title: 'Geometry', content: (
                     <div>
-                       <SectionDesc>Preserve architectural precision and structure.</SectionDesc>
                        
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -131,11 +140,9 @@ export const Render3DPanel = () => {
                           <SegmentedControl 
                              value={settings.geometry.lod.level}
                              options={[
-                                { label: 'Minimal', value: 'minimal' },
                                 { label: 'Low', value: 'low' },
                                 { label: 'Medium', value: 'medium' },
-                                { label: 'High', value: 'high' },
-                                { label: 'Ultra', value: 'ultra' }
+                                { label: 'High', value: 'high' }
                              ]}
                              onChange={(v) => updateSection('geometry', { lod: { ...settings.geometry.lod, level: v } })}
                           />
@@ -392,8 +399,9 @@ export const Render3DPanel = () => {
                     </div>
                 )},
 
-                // 3. CAMERA
-                { id: 'camera', title: 'Camera', content: (
+                ...(includeCamera ? [
+                  // 3. CAMERA
+                  { id: 'camera', title: 'Camera', content: (
                     <div>
                        <SectionDesc>Composition and perspective settings.</SectionDesc>
                        
@@ -431,7 +439,9 @@ export const Render3DPanel = () => {
                           )}
                        </div>
                     </div>
-                )},
+                  )},
+
+                ] : []),
 
                 // 4. MATERIALS
                 { id: 'materials', title: 'Materials', content: (

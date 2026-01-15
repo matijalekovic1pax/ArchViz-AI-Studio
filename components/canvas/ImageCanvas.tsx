@@ -259,7 +259,6 @@ const StandardCanvas: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const analysisTimerRef = useRef<number | null>(null);
   
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -272,77 +271,6 @@ const StandardCanvas: React.FC = () => {
   const isVideo = state.mode === 'video';
   const showCompare = state.workflow.videoState?.compareMode || state.mode === 'upscale';
   const showSplit = state.workflow.canvasSync && !isVideo && !showCompare;
-
-  const buildPriorityElements = useCallback(() => {
-    const presets: Record<string, { name: string; type: 'structural' | 'envelope' | 'interior' | 'site' }[]> = {
-      exterior: [
-        { name: 'Facade', type: 'envelope' },
-        { name: 'Glazing', type: 'envelope' },
-        { name: 'Roofline', type: 'structural' },
-        { name: 'Primary Structure', type: 'structural' },
-        { name: 'Entry Canopy', type: 'structural' },
-        { name: 'Site Paving', type: 'site' },
-        { name: 'Landscape', type: 'site' }
-      ],
-      interior: [
-        { name: 'Primary Structure', type: 'structural' },
-        { name: 'Ceiling', type: 'interior' },
-        { name: 'Lighting', type: 'interior' },
-        { name: 'Seating', type: 'interior' },
-        { name: 'Flooring', type: 'interior' },
-        { name: 'Glazing', type: 'envelope' },
-        { name: 'Wayfinding', type: 'interior' }
-      ],
-      aerial: [
-        { name: 'Roofscape', type: 'structural' },
-        { name: 'Massing', type: 'structural' },
-        { name: 'Site Context', type: 'site' },
-        { name: 'Circulation', type: 'site' },
-        { name: 'Landscape', type: 'site' },
-        { name: 'Parking', type: 'site' }
-      ],
-      detail: [
-        { name: 'Material Detailing', type: 'envelope' },
-        { name: 'Joints and Trim', type: 'structural' },
-        { name: 'Fenestration', type: 'envelope' },
-        { name: 'Surface Texture', type: 'interior' }
-      ]
-    };
-    const list = presets[state.workflow.viewType] || presets.exterior;
-    return list.map((item, index) => ({
-      id: nanoid(),
-      name: item.name,
-      type: item.type,
-      confidence: Math.max(0.65, 0.92 - index * 0.05),
-      selected: true
-    }));
-  }, [state.workflow.viewType]);
-
-  useEffect(() => {
-    if (state.mode !== 'render-3d') return;
-    if (!state.workflow.prioritizationEnabled) return;
-    if (!state.uploadedImage) return;
-
-    if (analysisTimerRef.current) {
-      window.clearTimeout(analysisTimerRef.current);
-    }
-
-    analysisTimerRef.current = window.setTimeout(() => {
-      dispatch({ type: 'UPDATE_WORKFLOW', payload: { detectedElements: buildPriorityElements() } });
-    }, 600);
-
-    return () => {
-      if (analysisTimerRef.current) {
-        window.clearTimeout(analysisTimerRef.current);
-      }
-    };
-  }, [
-    state.mode,
-    state.uploadedImage,
-    state.workflow.prioritizationEnabled,
-    buildPriorityElements,
-    dispatch
-  ]);
 
   // --- Handlers ---
 

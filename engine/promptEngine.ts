@@ -1,5 +1,5 @@
 
-import { AppState, StyleConfiguration, Render3DSettings } from '../types';
+import { AppState, Render3DSettings, StyleConfiguration } from '../types';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
   {
@@ -7,7 +7,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
     name: 'No Style',
     category: 'Base',
     description: 'No style. Use the raw prompt without stylistic bias.',
-    previewUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500' viewBox='0 0 800 500'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%23eef2f7'/><stop offset='100%25' stop-color='%23dce4ef'/></linearGradient></defs><rect width='800' height='500' fill='url(%23g)'/><text x='40' y='70' font-family='Arial' font-size='24' fill='%23859bb5'>No Style</text></svg>",
+    previewUrl: 'https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?auto=format&fit=crop&w=600&q=80',
     promptBundle: {}
   },
   // --- EXISTING STYLES (14) ---
@@ -868,23 +868,6 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
   }
 ];
 
-// Helper functions for prompt generation
-const formatViewType = (viewType: string): string => {
-  const viewDescriptions: Record<string, string> = {
-    'passenger-pov': 'eye-level passenger perspective walking through the space',
-    'concourse-walk': 'corridor perspective along the main concourse',
-    'atrium-overview': 'ground level looking up at the atrium',
-    'gate-seating': 'seated passenger viewpoint at the gate area',
-    'lounge-interior': 'luxury lounge interior from seated angle',
-    'mezzanine-view': 'elevated mezzanine view looking down',
-    'drone-low': 'low-altitude drone shot capturing the facade',
-    'drone-high': 'high-altitude aerial showing full terminal context',
-    'section-cut': 'architectural section cut revealing interior spaces',
-    'spherical-360': '360-degree spherical panorama for VR',
-  };
-  return viewDescriptions[viewType] || viewType.replace(/-/g, ' ');
-};
-
 const formatTimePreset = (preset: string): string => {
   const timeDescriptions: Record<string, string> = {
     'pre-dawn': 'pre-dawn twilight with deep blue sky',
@@ -902,6 +885,27 @@ const formatTimePreset = (preset: string): string => {
 
 const formatContextPreset = (preset: string): string => {
   return preset.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const formatViewType = (viewType: string): string => {
+  const viewDescriptions: Record<string, string> = {
+    'passenger-pov': 'passenger point-of-view perspective',
+    'concourse-walk': 'concourse corridor perspective',
+    'atrium-overview': 'atrium overview from ground level',
+    'gate-seating': 'seated gate waiting view',
+    'lounge-interior': 'lounge interior seated angle',
+    'mezzanine-view': 'mezzanine view from upper level',
+    'drone-low': 'low-altitude drone perspective',
+    'drone-high': 'high-altitude drone overview',
+    'section-cut': 'architectural section cut view',
+    'spherical-360': '360-degree spherical panorama',
+    'perspective': 'perspective view',
+    'orthographic': 'orthographic view',
+    'isometric': 'isometric view',
+    'section': 'section view',
+    'elevation': 'elevation view',
+  };
+  return viewDescriptions[viewType] || viewType.replace(/-/g, ' ');
 };
 
 const formatMood = (mood: string): string => {
@@ -1014,9 +1018,13 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(`Geometry: ${geoDesc.join(', ')}.`);
 
   if (workflow.prioritizationEnabled) {
-    const prioritized = workflow.detectedElements.filter(el => el.selected);
-    if (prioritized.length > 0) {
-      parts.push(`Priority focus (highest to lowest): ${prioritized.map(el => el.name).join(', ')}.`);
+    const problemAreas = [...workflow.detectedElements].sort((a, b) => b.confidence - a.confidence);
+    if (problemAreas.length > 0) {
+      const detailList = problemAreas.map((el) => {
+        const level = el.confidence >= 0.8 ? 'high' : el.confidence >= 0.6 ? 'medium' : 'low';
+        return `${el.name} (${level} risk)`;
+      });
+      parts.push(`Problem areas to render with extra care: ${detailList.join(', ')}.`);
     }
   }
 
