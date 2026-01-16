@@ -120,7 +120,43 @@ const skyPresets = [
   'Dramatic',
 ];
 
-const removeQuickOptions = ['People', 'Vehicles', 'Wires', 'Signs', 'Shadows'];
+const removeQuickOptions = [
+  'People',
+  'Vehicles',
+  'Wires',
+  'Signs',
+  'Shadows',
+  'Streetlights',
+  'Poles',
+  'Fences',
+  'Trash',
+  'Graffiti',
+  'Reflections',
+  'Glare',
+  'Scaffolding',
+  'Cones',
+  'Construction Barriers',
+  'Temporary Fencing',
+  'Luggage Carts',
+  'Queue Barriers',
+  'Stanchions',
+  'Cables',
+  'Pipes',
+  'HVAC Units',
+  'Security Cameras',
+  'Fire Extinguishers',
+  'Exit Signs',
+  'Wayfinding Displays',
+  'Ad Posters',
+  'Benches',
+  'Chairs',
+  'Plants',
+  'Bollards',
+  'Road Markings',
+  'Puddles',
+  'Birds',
+  'Tree Branches',
+];
 
 const replaceStylesByCategory: Record<string, string[]> = {
   Furniture: ['Modern', 'Classic', 'Industrial', 'Minimal', 'Scandi'],
@@ -835,44 +871,9 @@ export const VisualEditPanel = () => {
               options={[
                 { label: 'Generative Fill', value: 'fill' },
                 { label: 'Content-Aware', value: 'aware' },
-                { label: 'Clone', value: 'clone' },
               ]}
               onChange={(value) => updateRemove({ mode: value })}
             />
-
-            <div className="space-y-2">
-              <SliderControl
-                label="Brush Size"
-                value={wf.visualRemove.brushSize}
-                min={10}
-                max={300}
-                step={5}
-                unit="px"
-                onChange={(value) => updateRemove({ brushSize: value })}
-              />
-              <SliderControl
-                label="Hardness"
-                value={wf.visualRemove.hardness}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updateRemove({ hardness: value })}
-              />
-            </div>
-
-            {wf.visualRemove.mode === 'clone' && (
-              <div className="space-y-2">
-                <div className="text-[10px] text-foreground-muted bg-surface-sunken border border-border rounded p-2">
-                  Source point picker runs on canvas. Click to set clone source.
-                </div>
-                <Toggle
-                  label="Aligned"
-                  checked={wf.visualRemove.cloneAligned}
-                  onChange={(value) => updateRemove({ cloneAligned: value })}
-                />
-              </div>
-            )}
 
             <div className="space-y-2 pt-2 border-t border-border-subtle">
               <label className="text-xs font-medium text-foreground">Quick Remove</label>
