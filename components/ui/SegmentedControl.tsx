@@ -3,7 +3,7 @@ import { cn } from '../../lib/utils';
 
 interface Option {
   value: string;
-  label: string;
+  label: React.ReactNode;
 }
 
 interface SegmentedControlProps {

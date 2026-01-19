@@ -1,5 +1,5 @@
 
-import { AppState, Render3DSettings, StyleConfiguration } from '../types';
+import { AppState, Render3DSettings, StyleConfiguration, VisualSelectionShape } from '../types';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
   {
@@ -1160,6 +1160,294 @@ function generate3DRenderPrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+const formatToggle = (value: boolean) => (value ? 'on' : 'off');
+
+const buildSelectionBounds = (
+  shapes: VisualSelectionShape[],
+  size?: { width: number; height: number } | null
+) => {
+  if (!shapes.length) return [];
+  return shapes
+    .map((shape) => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let pointsCount = 0;
+
+      if (shape.type === 'rect') {
+        minX = Math.min(shape.start.x, shape.end.x);
+        minY = Math.min(shape.start.y, shape.end.y);
+        maxX = Math.max(shape.start.x, shape.end.x);
+        maxY = Math.max(shape.start.y, shape.end.y);
+        pointsCount = 2;
+      } else {
+        const points = shape.points || [];
+        pointsCount = points.length;
+        points.forEach((point) => {
+          minX = Math.min(minX, point.x);
+          minY = Math.min(minY, point.y);
+          maxX = Math.max(maxX, point.x);
+          maxY = Math.max(maxY, point.y);
+        });
+        if (shape.type === 'brush') {
+          const pad = (shape.brushSize || 0) / 2;
+          minX -= pad;
+          minY -= pad;
+          maxX += pad;
+          maxY += pad;
+        }
+      }
+
+      if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+        return null;
+      }
+
+      const width = Math.max(0, maxX - minX);
+      const height = Math.max(0, maxY - minY);
+      const normalize = (value: number, max: number) =>
+        max > 0 ? Number((value / max).toFixed(4)) : Number(value.toFixed(2));
+
+      const box = size
+        ? {
+            x: normalize(minX, size.width),
+            y: normalize(minY, size.height),
+            w: normalize(width, size.width),
+            h: normalize(height, size.height),
+          }
+        : {
+            x: Number(minX.toFixed(2)),
+            y: Number(minY.toFixed(2)),
+            w: Number(width.toFixed(2)),
+            h: Number(height.toFixed(2)),
+          };
+
+      return {
+        type: shape.type,
+        points: pointsCount,
+        box,
+      };
+    })
+    .filter((item) => item);
+};
+
+const buildSelectionContext = (workflow: AppState['workflow']) => {
+  const selectionCount = workflow.visualSelections.length;
+  const selectionSize = workflow.visualSelectionMaskSize;
+  const parts: string[] = [];
+
+  if (selectionCount === 0) {
+    parts.push('Selection: none. Apply edits to the entire image.');
+  } else {
+    const maskInfo = workflow.visualSelectionMask
+      ? `Selection mask available (${selectionSize?.width || 0}x${selectionSize?.height || 0}). White = selected.`
+      : 'Selection mask unavailable.';
+    const overlayInfo = workflow.visualSelectionComposite
+      ? `Selection overlay baked into input image (${workflow.visualSelectionCompositeSize?.width || 0}x${workflow.visualSelectionCompositeSize?.height || 0}).`
+      : 'Selection overlay image unavailable.';
+    const summary = workflow.visualSelections.reduce(
+      (acc, shape) => {
+        acc[shape.type] = (acc[shape.type] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+    const summaryText = Object.keys(summary)
+      .map((key) => `${key}:${summary[key]}`)
+      .join(', ');
+    parts.push(`Selection: ${selectionCount} region(s) (${summaryText || 'none'}). ${maskInfo} ${overlayInfo}`);
+    parts.push('Apply edits strictly within the visible selection overlay or mask, not a bounding box.');
+  }
+
+  const autoTargets =
+    workflow.visualSelection.autoTargets.length > 0 ? workflow.visualSelection.autoTargets.join(', ') : 'none';
+  parts.push(
+    `Selection settings: mode ${workflow.visualSelection.mode}, strength ${workflow.visualSelection.strength}%, auto targets ${autoTargets}.`
+  );
+  return parts;
+};
+
+const generateVisualEditPrompt = (state: AppState): string => {
+  const { workflow } = state;
+  const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
+  const selectionParts = buildSelectionContext(workflow);
+  const parts: string[] = [];
+
+  if (tool === 'select') {
+    parts.push('Tool: Select. Define the edit region based on the selection input.');
+    parts.push(...selectionParts);
+    if (workflow.visualPrompt?.trim()) {
+      parts.push(`Selection prompt: ${workflow.visualPrompt.trim()}.`);
+    } else {
+      parts.push('Selection prompt: none.');
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'material') {
+    parts.push('Tool: Material. Apply surface material changes.');
+    parts.push(...selectionParts);
+    if (workflow.visualMaterial.surfaceType === 'auto') {
+      parts.push('Surface detection: auto. Ignore selection mask and target detected surfaces.');
+    } else {
+      parts.push('Surface detection: manual. Apply only within the selection mask.');
+    }
+    const material = workflow.visualMaterial;
+    parts.push(
+      `Material: category ${material.category}, material ${material.materialId || 'custom'}, scale ${material.scale}%, rotation ${material.rotation}deg, roughness ${material.roughness}%, tint ${material.colorTint}, match lighting ${formatToggle(
+        material.matchLighting
+      )}, preserve reflections ${formatToggle(material.preserveReflections)}.`
+    );
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'lighting') {
+    parts.push('Tool: Lighting. Relight the scene with the chosen mode.');
+    parts.push(...selectionParts);
+    const lighting = workflow.visualLighting;
+    if (lighting.mode === 'sun') {
+      parts.push(
+        `Sun: azimuth ${lighting.sun.azimuth}deg, elevation ${lighting.sun.elevation}deg, intensity ${lighting.sun.intensity}%, temp ${lighting.sun.colorTemp}K, shadow softness ${lighting.sun.shadowSoftness}%.`
+      );
+    } else if (lighting.mode === 'hdri') {
+      parts.push(
+        `HDRI: preset ${lighting.hdri.preset}, rotation ${lighting.hdri.rotation}deg, intensity ${lighting.hdri.intensity}%.`
+      );
+    } else {
+      parts.push(
+        `Artificial: type ${lighting.artificial.type}, position ${lighting.artificial.position.x},${lighting.artificial.position.y}, intensity ${lighting.artificial.intensity}%, color ${lighting.artificial.color}, falloff ${lighting.artificial.falloff}%.`
+      );
+    }
+    parts.push(
+      `Global lighting: ambient ${lighting.ambient}%, preserve shadows ${formatToggle(lighting.preserveShadows)}.`
+    );
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'object') {
+    parts.push('Tool: Object. Place or replace objects within the selection.');
+    parts.push(...selectionParts);
+    const object = workflow.visualObject;
+    const replace = workflow.visualReplace;
+
+    if (object.placementMode === 'replace') {
+      if (replace.mode === 'similar') {
+        parts.push('Replace mode: similar. Auto-match objects within the selection.');
+        parts.push(`Variation: ${replace.variation}%.`);
+      } else {
+        parts.push('Replace mode: different. Use the chosen object library entry.');
+        parts.push(
+          `Target: category ${object.category}, subcategory ${object.subcategory}, asset ${object.assetId || 'auto'}.`
+        );
+      }
+      parts.push(
+        `Replace options: match scale ${formatToggle(replace.matchScale)}, match lighting ${formatToggle(
+          replace.matchLighting
+        )}, preserve shadows ${formatToggle(replace.preserveShadows)}.`
+      );
+    } else {
+      parts.push('Placement mode: place new object.');
+      parts.push(
+        `Target: category ${object.category}, subcategory ${object.subcategory}, asset ${object.assetId || 'auto'}.`
+      );
+    }
+
+    parts.push(
+      `Placement tuning: scale ${object.scale}%, rotation ${object.rotation}deg, auto perspective ${formatToggle(
+        object.autoPerspective
+      )}, shadows ${formatToggle(object.shadow)}, ground contact ${formatToggle(object.groundContact)}, depth ${
+        object.depth
+      }.`
+    );
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'sky') {
+    parts.push('Tool: Sky. Replace the sky and atmosphere.');
+    parts.push(...selectionParts);
+    const sky = workflow.visualSky;
+    parts.push(
+      `Sky preset ${sky.preset}, horizon ${sky.horizonLine}%, cloud density ${sky.cloudDensity}%, haze ${sky.atmosphere}%, brightness ${sky.brightness}%, reflect glass ${formatToggle(
+        sky.reflectInGlass
+      )}, match lighting ${formatToggle(sky.matchLighting)}, sun flare ${formatToggle(sky.sunFlare)}.`
+    );
+    parts.push('Sky replacement is global; use selection only as a hint if provided.');
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'remove') {
+    parts.push('Tool: Remove. Remove unwanted content.');
+    parts.push(...selectionParts);
+    const remove = workflow.visualRemove;
+    parts.push(
+      `Remove mode ${remove.mode}. Quick remove targets: ${
+        remove.quickRemove.length > 0 ? remove.quickRemove.join(', ') : 'none'
+      }.`
+    );
+    parts.push(
+      `Remove options: auto edges ${formatToggle(remove.autoDetectEdges)}, preserve structure ${formatToggle(
+        remove.preserveStructure
+      )}.`
+    );
+    if (remove.quickRemove.length > 0) {
+      parts.push('Auto-detect and remove the selected quick targets across the image.');
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'adjust') {
+    parts.push('Tool: Adjust. Global image adjustments.');
+    parts.push(...selectionParts);
+    const adjust = workflow.visualAdjust;
+    parts.push(
+      `Tone: exposure ${adjust.exposure}, contrast ${adjust.contrast}, highlights ${adjust.highlights}, shadows ${adjust.shadows}, whites ${adjust.whites}, blacks ${adjust.blacks}, gamma ${adjust.gamma}.`
+    );
+    parts.push(
+      `Color: saturation ${adjust.saturation}, vibrance ${adjust.vibrance}, temperature ${adjust.temperature}, tint ${adjust.tint}, hue shift ${adjust.hueShift}.`
+    );
+    parts.push(`Presence: texture ${adjust.texture}, clarity ${adjust.clarity}, dehaze ${adjust.dehaze}.`);
+    parts.push(
+      `HSL: channel ${adjust.hslChannel}, reds ${adjust.hslRedsHue}/${adjust.hslRedsSaturation}/${adjust.hslRedsLuminance}, oranges ${adjust.hslOrangesHue}/${adjust.hslOrangesSaturation}/${adjust.hslOrangesLuminance}, yellows ${adjust.hslYellowsHue}/${adjust.hslYellowsSaturation}/${adjust.hslYellowsLuminance}, greens ${adjust.hslGreensHue}/${adjust.hslGreensSaturation}/${adjust.hslGreensLuminance}, aquas ${adjust.hslAquasHue}/${adjust.hslAquasSaturation}/${adjust.hslAquasLuminance}, blues ${adjust.hslBluesHue}/${adjust.hslBluesSaturation}/${adjust.hslBluesLuminance}, purples ${adjust.hslPurplesHue}/${adjust.hslPurplesSaturation}/${adjust.hslPurplesLuminance}, magentas ${adjust.hslMagentasHue}/${adjust.hslMagentasSaturation}/${adjust.hslMagentasLuminance}.`
+    );
+    parts.push(
+      `Color grade: shadows ${adjust.colorGradeShadowsHue}deg/${adjust.colorGradeShadowsSaturation}%, midtones ${adjust.colorGradeMidtonesHue}deg/${adjust.colorGradeMidtonesSaturation}%, highlights ${adjust.colorGradeHighlightsHue}deg/${adjust.colorGradeHighlightsSaturation}%, balance ${adjust.colorGradeBalance}.`
+    );
+    parts.push(
+      `Detail: sharpness ${adjust.sharpness}, radius ${adjust.sharpnessRadius}, detail ${adjust.sharpnessDetail}, masking ${adjust.sharpnessMasking}, noise luma ${adjust.noiseReduction}, noise color ${adjust.noiseReductionColor}, noise detail ${adjust.noiseReductionDetail}.`
+    );
+    parts.push(
+      `Effects: vignette ${adjust.vignette}, midpoint ${adjust.vignetteMidpoint}, roundness ${adjust.vignetteRoundness}, feather ${adjust.vignetteFeather}, grain ${adjust.grain}/${adjust.grainSize}/${adjust.grainRoughness}, bloom ${adjust.bloom}, chromatic aberration ${adjust.chromaticAberration}.`
+    );
+    parts.push(
+      `Transform: rotate ${adjust.transformRotate}deg, horizontal ${adjust.transformHorizontal}, vertical ${adjust.transformVertical}, distortion ${adjust.transformDistortion}, perspective ${adjust.transformPerspective}.`
+    );
+    parts.push(`Global: style strength ${adjust.styleStrength}.`);
+    return parts.filter(Boolean).join(' ');
+  }
+
+  if (tool === 'extend') {
+    parts.push('Tool: Extend. Outpaint the image.');
+    parts.push(...selectionParts);
+    const extend = workflow.visualExtend;
+    const ratioDesc =
+      extend.targetAspectRatio === 'custom'
+        ? `custom ${extend.customRatio.width}:${extend.customRatio.height}`
+        : extend.targetAspectRatio;
+    parts.push(
+      `Extend: direction ${extend.direction}, amount ${extend.amount}%, target ratio ${ratioDesc}, lock aspect ${formatToggle(
+        extend.lockAspectRatio
+      )}, seamless blend ${formatToggle(extend.seamlessBlend)}, high detail ${formatToggle(
+        extend.highDetail
+      )}, quality ${extend.quality}.`
+    );
+    parts.push('Outpainting ignores selection unless specified by the direction.');
+    return parts.filter(Boolean).join(' ');
+  }
+
+  parts.push(...selectionParts);
+  return parts.filter(Boolean).join(' ');
+};
+
 function generateCadRenderPrompt(state: AppState): string {
   const { workflow, activeStyleId, customStyles } = state;
   const r3d = workflow.render3d;
@@ -1347,8 +1635,8 @@ export function generatePrompt(state: AppState): string {
      return workflow.textPrompt;
   }
 
-  if (state.mode === 'visual-edit' && workflow.visualPrompt) {
-     return workflow.visualPrompt;
+  if (state.mode === 'visual-edit') {
+    return generateVisualEditPrompt(state);
   }
 
   // Use specialized prompt generator for 3D Render mode

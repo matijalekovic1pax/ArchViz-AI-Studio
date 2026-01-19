@@ -53,8 +53,9 @@ export interface ZoneItem {
   id: string;
   name: string;
   color: string;
-  type: 'residential' | 'commercial' | 'green' | 'mixed' | 'infra';
+  type: string;
   selected: boolean;
+  areaHa?: number;
 }
 
 export interface VisualSelectionPoint {
@@ -214,13 +215,92 @@ export interface WorkflowSettings {
   };
 
   // 3. Masterplan
+  mpInputSource: 'upload' | 'canvas';
+  mpInputImage: string | null;
   mpPlanType: 'site' | 'urban' | 'zoning' | 'massing';
-  mpScale: string;
+  mpScale: '1:200' | '1:500' | '1:1000' | '1:2500' | '1:5000' | '1:10000' | 'custom';
+  mpCustomScale: number;
+  mpNorthRotation: number;
+  mpZoneDetection: 'auto' | 'manual' | 'import';
   mpZones: ZoneItem[];
-  mpContext: { location: string; loadBuildings: boolean; loadRoads: boolean; loadWater: boolean; loadTerrain: boolean };
-  mpOutputType: 'photorealistic' | 'diagrammatic' | 'hybrid' | 'illustrative';
-  mpBuildingStyle: { style: string; heightMode: 'uniform' | 'color' | 'random'; defaultHeight: number; roofType: 'flat' | 'gabled' };
-  mpExport: { topDown: boolean; aerialNE: boolean; aerialSW: boolean; eyeLevel: boolean };
+  mpBoundary: { mode: 'auto' | 'custom' | 'full'; points: { x: number; y: number }[] };
+  mpContext: {
+    location: string;
+    loadBuildings: boolean;
+    loadRoads: boolean;
+    loadWater: boolean;
+    loadTerrain: boolean;
+    loadTransit: boolean;
+  };
+  mpOutputStyle: 'photorealistic' | 'diagrammatic' | 'hybrid' | 'illustrative';
+  mpViewAngle: 'top' | 'iso-ne' | 'iso-nw' | 'iso-se' | 'iso-sw' | 'custom';
+  mpViewCustom: { elevation: number; rotation: number; perspective: number };
+  mpBuildings: {
+    style: string;
+    heightMode: 'uniform' | 'from-color' | 'vary';
+    defaultHeight: number;
+    heightRange: { min: number; max: number };
+    floorHeight: number;
+    roofStyle: 'flat' | 'gabled' | 'hip' | 'mansard' | 'green' | 'mixed';
+    showShadows: boolean;
+    transparent: boolean;
+    facadeVariation: boolean;
+    showFloorLabels: boolean;
+  };
+  mpLandscape: {
+    season: 'spring' | 'summer' | 'autumn' | 'winter';
+    vegetationDensity: number;
+    treeVariation: number;
+    trees: boolean;
+    grass: boolean;
+    water: boolean;
+    pathways: boolean;
+    streetFurniture: boolean;
+    vehicles: boolean;
+    people: boolean;
+    vegetationStyle: 'realistic' | 'stylized' | 'watercolor' | 'technical';
+  };
+  mpAnnotations: {
+    zoneLabels: boolean;
+    streetNames: boolean;
+    buildingLabels: boolean;
+    lotNumbers: boolean;
+    scaleBar: boolean;
+    northArrow: boolean;
+    dimensions: boolean;
+    areaCalc: boolean;
+    contourLabels: boolean;
+    labelStyle: 'modern' | 'classic' | 'technical' | 'handwritten' | 'minimal';
+    labelSize: 'small' | 'medium' | 'large';
+    labelColor: 'auto' | 'dark' | 'light';
+    labelHalo: boolean;
+  };
+  mpLegend: {
+    include: boolean;
+    position: 'top-left' | 'top-right' | 'bottom';
+    showZones: boolean;
+    showZoneAreas: boolean;
+    showBuildings: boolean;
+    showLandscape: boolean;
+    showInfrastructure: boolean;
+    style: 'compact' | 'detailed' | 'professional' | 'minimal';
+  };
+  mpExport: {
+    resolution: '1080p' | '2k' | '4k' | 'print-a3' | 'print-a2' | 'print-a1' | 'print-a0' | 'custom';
+    customResolution: { width: number; height: number };
+    format: 'png' | 'tiff' | 'pdf' | 'psd';
+    exportLayers: boolean;
+    cadCompatible: boolean;
+    includeSketch: boolean;
+    layerExport: {
+      base: boolean;
+      zones: boolean;
+      buildings: boolean;
+      landscape: boolean;
+      annotations: boolean;
+      legend: boolean;
+    };
+  };
 
   // 4. Visual Edit
   activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend';
@@ -236,6 +316,10 @@ export interface WorkflowSettings {
   visualSelections: VisualSelectionShape[];
   visualSelectionUndoStack: VisualSelectionShape[][];
   visualSelectionRedoStack: VisualSelectionShape[][];
+  visualSelectionMask: string | null;
+  visualSelectionMaskSize: { width: number; height: number } | null;
+  visualSelectionComposite: string | null;
+  visualSelectionCompositeSize: { width: number; height: number } | null;
   visualMaterial: {
     surfaceType: 'auto' | 'manual';
     category: 'Flooring' | 'Wall' | 'Facade' | 'Roof' | 'Metal' | 'Glass' | 'Stone' | 'Fabric';
@@ -267,7 +351,10 @@ export interface WorkflowSettings {
   };
   visualObject: {
     category: 'Furniture' | 'People' | 'Vehicles' | 'Vegetation' | 'Props';
+    subcategory: string;
     assetId: string;
+    selectionIds: string[];
+    placementMode: 'place' | 'replace';
     scale: number;
     rotation: number;
     autoPerspective: boolean;
@@ -301,27 +388,81 @@ export interface WorkflowSettings {
     contrast: number;
     highlights: number;
     shadows: number;
+    whites: number;
+    blacks: number;
+    gamma: number;
     saturation: number;
     vibrance: number;
     temperature: number;
     tint: number;
+    hueShift: number;
+    texture: number;
+    dehaze: number;
     sharpness: number;
+    sharpnessRadius: number;
+    sharpnessDetail: number;
+    sharpnessMasking: number;
     noiseReduction: number;
+    noiseReductionColor: number;
+    noiseReductionDetail: number;
+    hslChannel: string;
+    hslRedsHue: number;
+    hslRedsSaturation: number;
+    hslRedsLuminance: number;
+    hslOrangesHue: number;
+    hslOrangesSaturation: number;
+    hslOrangesLuminance: number;
+    hslYellowsHue: number;
+    hslYellowsSaturation: number;
+    hslYellowsLuminance: number;
+    hslGreensHue: number;
+    hslGreensSaturation: number;
+    hslGreensLuminance: number;
+    hslAquasHue: number;
+    hslAquasSaturation: number;
+    hslAquasLuminance: number;
+    hslBluesHue: number;
+    hslBluesSaturation: number;
+    hslBluesLuminance: number;
+    hslPurplesHue: number;
+    hslPurplesSaturation: number;
+    hslPurplesLuminance: number;
+    hslMagentasHue: number;
+    hslMagentasSaturation: number;
+    hslMagentasLuminance: number;
+    colorGradeShadowsHue: number;
+    colorGradeShadowsSaturation: number;
+    colorGradeMidtonesHue: number;
+    colorGradeMidtonesSaturation: number;
+    colorGradeHighlightsHue: number;
+    colorGradeHighlightsSaturation: number;
+    colorGradeBalance: number;
     clarity: number;
     vignette: number;
+    vignetteMidpoint: number;
+    vignetteRoundness: number;
+    vignetteFeather: number;
     grain: number;
+    grainSize: number;
+    grainRoughness: number;
+    bloom: number;
+    chromaticAberration: number;
+    transformRotate: number;
+    transformHorizontal: number;
+    transformVertical: number;
+    transformDistortion: number;
+    transformPerspective: number;
     styleStrength: number;
   };
   visualExtend: {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
     direction: 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'none';
     amount: number;
-    maintainAspect: boolean;
-    guidance: 'auto' | 'architecture' | 'landscape' | 'sky';
-    prompt: string;
+    targetAspectRatio: '16:9' | '21:9' | '4:3' | '1:1' | '9:16' | 'custom';
+    customRatio: { width: number; height: number };
+    lockAspectRatio: boolean;
+    seamlessBlend: boolean;
+    highDetail: boolean;
+    quality: 'draft' | 'standard' | 'high';
   };
   editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];
 

@@ -7,6 +7,96 @@ import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
 import { generatePrompt } from '../../engine/promptEngine';
 import { nanoid } from 'nanoid';
+import { VisualSelectionShape } from '../../types';
+
+const drawSelectionOverlay = (
+  ctx: CanvasRenderingContext2D,
+  shapes: VisualSelectionShape[],
+  selectionCanvasSize: { width: number; height: number } | null,
+  outputWidth: number,
+  outputHeight: number,
+  brushFallback: number
+) => {
+  if (!selectionCanvasSize || shapes.length === 0) return;
+
+  const canvasWidth = selectionCanvasSize.width;
+  const canvasHeight = selectionCanvasSize.height;
+  if (canvasWidth < 2 || canvasHeight < 2 || outputWidth < 2 || outputHeight < 2) return;
+
+  const imageAspect = outputWidth / outputHeight;
+  const canvasAspect = canvasWidth / canvasHeight;
+  let drawWidth = canvasWidth;
+  let drawHeight = canvasHeight;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (imageAspect > canvasAspect) {
+    drawHeight = canvasWidth / imageAspect;
+    offsetY = (canvasHeight - drawHeight) / 2;
+  } else {
+    drawWidth = canvasHeight * imageAspect;
+    offsetX = (canvasWidth - drawWidth) / 2;
+  }
+
+  const scaleX = outputWidth / drawWidth;
+  const scaleY = outputHeight / drawHeight;
+  const scale = (scaleX + scaleY) / 2;
+
+  const mapPoint = (point: { x: number; y: number }) => ({
+    x: (point.x - offsetX) * scaleX,
+    y: (point.y - offsetY) * scaleY,
+  });
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, outputWidth, outputHeight);
+  ctx.clip();
+
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  shapes.forEach((shape) => {
+    if (shape.type === 'rect') {
+      const x = Math.min(shape.start.x, shape.end.x);
+      const y = Math.min(shape.start.y, shape.end.y);
+      const w = Math.abs(shape.end.x - shape.start.x);
+      const h = Math.abs(shape.end.y - shape.start.y);
+      if (w > 0 && h > 0) {
+        const start = mapPoint({ x, y });
+        const end = mapPoint({ x: x + w, y: y + h });
+        ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
+        ctx.lineWidth = Math.max(1, 2);
+        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+      }
+      return;
+    }
+
+    if (shape.type === 'lasso') {
+      if (shape.points.length < 2) return;
+      ctx.beginPath();
+      const mapped = shape.points.map(mapPoint);
+      ctx.moveTo(mapped[0].x, mapped[0].y);
+      mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, 2);
+      ctx.stroke();
+      return;
+    }
+
+    if (shape.points.length < 2) return;
+    ctx.lineWidth = (shape.brushSize || brushFallback) * scale;
+    ctx.beginPath();
+    const mapped = shape.points.map(mapPoint);
+    ctx.moveTo(mapped[0].x, mapped[0].y);
+    mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    ctx.stroke();
+  });
+
+  ctx.restore();
+};
 
 export const TopBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -153,10 +243,19 @@ export const TopBar: React.FC = () => {
     const prefix = isVideoMode ? 'archviz-video' : 'archviz-render';
     const filename = `${prefix}-${Date.now()}${resSuffix}.${ext}`;
 
+    const selectionShapes = state.workflow.visualSelections;
+    const selectionCanvasSize = state.workflow.visualSelectionMaskSize;
+    const shouldBakeSelections = state.mode === 'visual-edit' && selectionShapes.length > 0;
+    const useCompositeSource = shouldBakeSelections && !!state.workflow.visualSelectionComposite;
+
+    const downloadSource = useCompositeSource
+      ? state.workflow.visualSelectionComposite!
+      : state.uploadedImage;
+
     // For video mode, we download the source URL directly
     if (isVideoMode) {
         const downloadLink = document.createElement('a');
-        downloadLink.href = state.uploadedImage;
+        downloadLink.href = downloadSource;
         downloadLink.download = filename;
         downloadLink.target = "_blank";
         document.body.appendChild(downloadLink);
@@ -188,6 +287,16 @@ export const TopBar: React.FC = () => {
             
             if (ctx) {
                 ctx.drawImage(img, 0, 0, width, height);
+                if (shouldBakeSelections && !useCompositeSource) {
+                    drawSelectionOverlay(
+                        ctx,
+                        selectionShapes,
+                        selectionCanvasSize,
+                        width,
+                        height,
+                        state.workflow.visualSelection.brushSize
+                    );
+                }
                 
                 const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
                 const quality = ext === 'jpg' ? 0.85 : undefined;
@@ -205,7 +314,7 @@ export const TopBar: React.FC = () => {
             console.error("Canvas export failed (likely CORS restrictions), falling back to blob fetch.", e);
             
             // Fallback: Fetch as blob to bypass canvas tainting for simple downloads
-            fetch(state.uploadedImage!)
+            fetch(downloadSource)
                 .then(response => response.blob())
                 .then(blob => {
                     const blobUrl = window.URL.createObjectURL(blob);
@@ -221,7 +330,7 @@ export const TopBar: React.FC = () => {
                 .catch(fetchErr => {
                     console.error("Fallback fetch failed", fetchErr);
                     // Ultimate fallback: open in new tab
-                    window.open(state.uploadedImage!, '_blank');
+                    window.open(downloadSource, '_blank');
                     setShowDownloadMenu(false);
                 });
         }
@@ -230,12 +339,12 @@ export const TopBar: React.FC = () => {
     img.onerror = () => {
          console.error("Image failed to load for download processing.");
          // Fallback if image object fails
-         window.open(state.uploadedImage!, '_blank');
+         window.open(downloadSource, '_blank');
          setShowDownloadMenu(false);
     };
 
     // Set src after handlers
-    img.src = state.uploadedImage;
+    img.src = downloadSource;
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {

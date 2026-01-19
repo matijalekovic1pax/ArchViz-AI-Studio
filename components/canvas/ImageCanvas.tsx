@@ -311,6 +311,175 @@ const StandardCanvas: React.FC = () => {
     });
   }, [dispatch, state.workflow.visualSelectionUndoStack, state.workflow.visualSelections]);
 
+  const buildSelectionMask = useCallback((shapes: SelectionShape[]) => {
+    if (!selectionLayerRef.current) return null;
+    const width = Math.round(selectionLayerRef.current.offsetWidth);
+    const height = Math.round(selectionLayerRef.current.offsetHeight);
+    if (width < 2 || height < 2) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#fff';
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    shapes.forEach((shape) => {
+      if (shape.type === 'rect') {
+        const x = Math.min(shape.start.x, shape.end.x);
+        const y = Math.min(shape.start.y, shape.end.y);
+        const w = Math.abs(shape.end.x - shape.start.x);
+        const h = Math.abs(shape.end.y - shape.start.y);
+        if (w > 0 && h > 0) {
+          ctx.fillRect(x, y, w, h);
+        }
+        return;
+      }
+
+      if (shape.type === 'lasso') {
+        if (shape.points.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(shape.points[0].x, shape.points[0].y);
+        shape.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+        ctx.closePath();
+        ctx.fill();
+        return;
+      }
+
+      if (shape.points.length < 2) return;
+      ctx.lineWidth = shape.brushSize || state.workflow.visualSelection.brushSize;
+      ctx.beginPath();
+      ctx.moveTo(shape.points[0].x, shape.points[0].y);
+      shape.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.stroke();
+    });
+
+    return {
+      dataUrl: canvas.toDataURL('image/png'),
+      width,
+      height,
+    };
+  }, [state.workflow.visualSelection.brushSize]);
+
+  const buildSelectionComposite = useCallback(
+    (shapes: SelectionShape[], imageSrc: string) => {
+      if (!selectionLayerRef.current) return null;
+      const width = Math.round(selectionLayerRef.current.offsetWidth);
+      const height = Math.round(selectionLayerRef.current.offsetHeight);
+      if (width < 2 || height < 2) return null;
+
+      return new Promise<{ dataUrl: string; width: number; height: number } | null>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const outputWidth = img.naturalWidth || img.width;
+          const outputHeight = img.naturalHeight || img.height;
+          if (outputWidth < 2 || outputHeight < 2) {
+            resolve(null);
+            return;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = outputWidth;
+          canvas.height = outputHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(null);
+            return;
+          }
+
+          const imageAspect = img.width / img.height;
+          const canvasAspect = width / height;
+          let drawWidth = width;
+          let drawHeight = height;
+          let offsetX = 0;
+          let offsetY = 0;
+
+          if (imageAspect > canvasAspect) {
+            drawWidth = width;
+            drawHeight = width / imageAspect;
+            offsetY = (height - drawHeight) / 2;
+          } else {
+            drawHeight = height;
+            drawWidth = height * imageAspect;
+            offsetX = (width - drawWidth) / 2;
+          }
+
+          const scaleX = outputWidth / drawWidth;
+          const scaleY = outputHeight / drawHeight;
+          const scale = (scaleX + scaleY) / 2;
+
+          ctx.drawImage(img, 0, 0, outputWidth, outputHeight);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, outputWidth, outputHeight);
+          ctx.clip();
+
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+
+          const mapPoint = (point: CanvasPoint) => ({
+            x: (point.x - offsetX) * scaleX,
+            y: (point.y - offsetY) * scaleY,
+          });
+
+          shapes.forEach((shape) => {
+            if (shape.type === 'rect') {
+              const x = Math.min(shape.start.x, shape.end.x);
+              const y = Math.min(shape.start.y, shape.end.y);
+              const w = Math.abs(shape.end.x - shape.start.x);
+              const h = Math.abs(shape.end.y - shape.start.y);
+              if (w > 0 && h > 0) {
+                const start = mapPoint({ x, y });
+                const end = mapPoint({ x: x + w, y: y + h });
+                ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
+                ctx.lineWidth = Math.max(1, 2);
+                ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+              }
+              return;
+            }
+
+            if (shape.type === 'lasso') {
+              if (shape.points.length < 2) return;
+              ctx.beginPath();
+              const mapped = shape.points.map(mapPoint);
+              ctx.moveTo(mapped[0].x, mapped[0].y);
+              mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+              ctx.closePath();
+              ctx.fill();
+              ctx.lineWidth = Math.max(1, 2);
+              ctx.stroke();
+              return;
+            }
+
+            if (shape.points.length < 2) return;
+            ctx.lineWidth = (shape.brushSize || state.workflow.visualSelection.brushSize) * scale;
+            ctx.beginPath();
+            const mapped = shape.points.map(mapPoint);
+            ctx.moveTo(mapped[0].x, mapped[0].y);
+            mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+            ctx.stroke();
+          });
+
+          ctx.restore();
+
+          resolve({ dataUrl: canvas.toDataURL('image/png'), width: outputWidth, height: outputHeight });
+        };
+        img.onerror = () => resolve(null);
+        img.src = imageSrc;
+      });
+    },
+    [state.workflow.visualSelection.brushSize]
+  );
+
   const getSelectionPoint = useCallback((e: React.MouseEvent) => {
     if (!selectionLayerRef.current) return null;
     const rect = selectionLayerRef.current.getBoundingClientRect();
@@ -496,11 +665,91 @@ const StandardCanvas: React.FC = () => {
             visualSelections: [],
             visualSelectionUndoStack: [],
             visualSelectionRedoStack: [],
+            visualSelectionMask: null,
+            visualSelectionMaskSize: null,
+            visualSelectionComposite: null,
+            visualSelectionCompositeSize: null,
           },
         });
       }
     }
   }, [dispatch, state.uploadedImage, state.workflow.visualSelections.length, updateActiveSelection]);
+
+  useEffect(() => {
+    if (state.mode !== 'visual-edit') return;
+    if (!state.uploadedImage || state.workflow.visualSelections.length === 0) {
+      if (
+        state.workflow.visualSelectionMask ||
+        state.workflow.visualSelectionMaskSize ||
+        state.workflow.visualSelectionComposite ||
+        state.workflow.visualSelectionCompositeSize
+      ) {
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload: {
+            visualSelectionMask: null,
+            visualSelectionMaskSize: null,
+            visualSelectionComposite: null,
+            visualSelectionCompositeSize: null,
+          },
+        });
+      }
+      return;
+    }
+
+    const mask = buildSelectionMask(state.workflow.visualSelections);
+    if (!mask) return;
+    if (
+      state.workflow.visualSelectionMask === mask.dataUrl &&
+      state.workflow.visualSelectionMaskSize?.width === mask.width &&
+      state.workflow.visualSelectionMaskSize?.height === mask.height
+    ) {
+      return;
+    }
+
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelectionMask: mask.dataUrl,
+        visualSelectionMaskSize: { width: mask.width, height: mask.height },
+      },
+    });
+
+    let canceled = false;
+    buildSelectionComposite(state.workflow.visualSelections, state.uploadedImage).then((composite) => {
+      if (canceled || !composite) return;
+      if (
+        state.workflow.visualSelectionComposite === composite.dataUrl &&
+        state.workflow.visualSelectionCompositeSize?.width === composite.width &&
+        state.workflow.visualSelectionCompositeSize?.height === composite.height
+      ) {
+        return;
+      }
+
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualSelectionComposite: composite.dataUrl,
+          visualSelectionCompositeSize: { width: composite.width, height: composite.height },
+        },
+      });
+    });
+
+    return () => {
+      canceled = true;
+    };
+  }, [
+    buildSelectionMask,
+    buildSelectionComposite,
+    dispatch,
+    state.mode,
+    state.uploadedImage,
+    state.workflow.visualSelectionMask,
+    state.workflow.visualSelectionMaskSize,
+    state.workflow.visualSelectionComposite,
+    state.workflow.visualSelectionCompositeSize,
+    state.workflow.visualSelections,
+  ]);
 
   const transformStyle = {
      transform: `translate(${state.canvas.pan.x}px, ${state.canvas.pan.y}px) scale(${state.canvas.zoom})`,
@@ -517,7 +766,7 @@ const StandardCanvas: React.FC = () => {
     : [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])];
 
   const renderSelectionShape = (shape: SelectionShape, isActive: boolean) => {
-    const stroke = isActive ? 'rgba(56,189,248,0.95)' : 'rgba(56,189,248,0.7)';
+    const stroke = isActive ? 'rgba(56,189,248,0.45)' : 'rgba(56,189,248,0.25)';
     const dash = isActive ? '6 4' : undefined;
 
     if (shape.type === 'rect') {
@@ -534,7 +783,7 @@ const StandardCanvas: React.FC = () => {
           stroke={stroke}
           strokeWidth={selectionStroke}
           strokeDasharray={dash}
-          fill="rgba(56,189,248,0.12)"
+          fill="rgba(56,189,248,0.06)"
           rx={6}
         />
       );
@@ -564,7 +813,7 @@ const StandardCanvas: React.FC = () => {
         strokeWidth={selectionStroke}
         strokeDasharray={dash}
         strokeLinejoin="round"
-        fill="rgba(56,189,248,0.12)"
+        fill="rgba(56,189,248,0.06)"
       />
     );
   };
