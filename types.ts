@@ -58,6 +58,14 @@ export interface ZoneItem {
   areaHa?: number;
 }
 
+export interface SectionArea {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+  active: boolean;
+}
+
 export interface VisualSelectionPoint {
   x: number;
   y: number;
@@ -479,14 +487,99 @@ export interface WorkflowSettings {
   editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];
 
   // 5. Exploded
-  explodedComponents: { id: string; name: string; order: number; active: boolean }[];
-  explodedView: { type: 'axon' | 'perspective'; separation: number };
-  explodedStyle: { render: 'photo' | 'diagram' | 'tech'; color: 'material' | 'system'; labels: boolean; leaders: boolean };
-  explodedAnim: { generate: boolean; type: 'assembly' | 'explosion'; duration: number };
+  explodedSource: {
+    type: 'revit' | 'rhino' | 'sketchup' | 'archicad' | 'ifc' | 'other';
+    fileName: string | null;
+    componentCount: number;
+  };
+  explodedComponents: {
+    id: string;
+    name: string;
+    title: string;
+    description: string;
+    attributes: string[];
+    order: number;
+    active: boolean;
+    category: 'structure' | 'envelope' | 'interior' | 'mep' | 'site';
+    color?: string;
+  }[];
+  explodedDetection: 'auto' | 'manual' | 'category';
+  explodedDirection: 'vertical' | 'radial' | 'custom';
+  explodedAxis: { x: number; y: number; z: number };
+  explodedView: {
+    type: 'axon' | 'perspective';
+    angle: 'iso-ne' | 'iso-nw' | 'iso-se' | 'iso-sw';
+    cameraHeight: number;
+    fov: number;
+    lookAt: 'center' | 'top' | 'bottom';
+    separation: number;
+  };
+  explodedStyle: {
+    render: 'stacked' | 'radial' | 'sequential' | 'core-shell' | 'slice' | 'systems';
+    colorMode: 'material' | 'system' | 'mono';
+    systemColors: Record<string, string>;
+    edgeStyle: 'hidden-removed' | 'hidden-dashed' | 'all-visible' | 'silhouette';
+    lineWeight: number;
+  };
+  explodedAnnotations: {
+    labels: boolean;
+    leaders: boolean;
+    leaderStyle: 'straight' | 'angled' | 'curved';
+    dimensions: boolean;
+    assemblyNumbers: boolean;
+    materialCallouts: boolean;
+    labelStyle: 'minimal' | 'technical' | 'descriptive';
+    fontSize: 'small' | 'medium' | 'large';
+  };
+  explodedAnim: {
+    generate: boolean;
+    type: 'assembly' | 'explosion';
+    duration: number;
+    easing: 'ease-in-out' | 'linear' | 'bounce';
+    stagger: number;
+    holdStart: number;
+    holdEnd: number;
+  };
+  explodedOutput: {
+    resolution: '1080p' | '2k' | '4k' | 'print-a3';
+    background: 'white' | 'gray' | 'black' | 'transparent';
+    groundPlane: boolean;
+    shadow: boolean;
+    grid: boolean;
+    exportLayers: boolean;
+  };
 
   // 6. Section
   sectionCut: { type: 'vertical' | 'horizontal' | 'diagonal'; plane: number; depth: number; direction: 'fwd' | 'bwd' };
-  sectionStyle: { poche: 'black' | 'gray'; hatch: 'solid' | 'diag' | 'cross'; weight: 'heavy' | 'medium' | 'light'; showBeyond: number };
+  sectionStyle: { poche: string; hatch: 'solid' | 'diag' | 'cross'; weight: 'heavy' | 'medium' | 'light'; showBeyond: number };
+  sectionAreas: SectionArea[];
+  sectionAreaDetection: 'auto' | 'manual';
+  sectionReveal: {
+    style: 'front-peel' | 'slice-lift' | 'stacked-floors' | 'core-focus' | 'program-color' | 'circulation' | 'services';
+    focus:
+      | 'residential'
+      | 'parking'
+      | 'circulation'
+      | 'services'
+      | 'mixed'
+      | 'amenities'
+      | 'lobby'
+      | 'retail'
+      | 'office'
+      | 'mechanical'
+      | 'storage';
+    facadeOpacity: number;
+    depthFade: number;
+  };
+  sectionProgram: {
+    colorMode: 'program' | 'material' | 'mono';
+    programColors: Record<string, string>;
+    labels: boolean;
+    leaderLines: boolean;
+    areaTags: boolean;
+    labelStyle: 'minimal' | 'technical' | 'descriptive';
+    fontSize: 'small' | 'medium' | 'large';
+  };
 
   // 7. Sketch
   sketchType: 'interior';

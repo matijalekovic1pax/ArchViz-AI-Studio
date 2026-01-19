@@ -1627,6 +1627,259 @@ function generateCadRenderPrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
+
+function generateMasterplanPrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Masterplan visualization');
+  }
+
+  const planTypeMap: Record<string, string> = {
+    site: 'site plan',
+    urban: 'urban plan',
+    zoning: 'zoning plan',
+    massing: 'massing plan',
+  };
+  parts.push(`Plan type: ${planTypeMap[workflow.mpPlanType] || workflow.mpPlanType}.`);
+
+  const scaleValue = workflow.mpScale === 'custom' ? `1:${workflow.mpCustomScale}` : workflow.mpScale;
+  parts.push(`Scale: ${scaleValue}.`);
+  parts.push(`North rotation: ${Math.round(workflow.mpNorthRotation)} deg.`);
+
+  parts.push(`Output style: ${workflow.mpOutputStyle}.`);
+  if (workflow.mpViewAngle === 'custom') {
+    parts.push(
+      `View: custom elevation ${workflow.mpViewCustom.elevation} deg, rotation ${workflow.mpViewCustom.rotation} deg, perspective ${workflow.mpViewCustom.perspective}%.`
+    );
+  } else {
+    parts.push(`View: ${workflow.mpViewAngle}.`);
+  }
+
+  const buildings = workflow.mpBuildings;
+  const heightDesc =
+    buildings.heightMode === 'vary'
+      ? `varying heights ${buildings.heightRange.min}-${buildings.heightRange.max}m`
+      : buildings.heightMode === 'from-color'
+        ? 'heights from color'
+        : `uniform height ${buildings.defaultHeight}m`;
+  parts.push(
+    `Buildings: style ${buildings.style}, ${heightDesc}, floor height ${buildings.floorHeight}m, roof ${buildings.roofStyle}.`
+  );
+  parts.push(
+    `Building options: shadows ${formatYesNo(buildings.showShadows)}, transparent ${formatYesNo(
+      buildings.transparent
+    )}, facade variation ${formatYesNo(buildings.facadeVariation)}, floor labels ${formatYesNo(
+      buildings.showFloorLabels
+    )}.`
+  );
+
+  const landscape = workflow.mpLandscape;
+  const landscapeFeatures = [
+    landscape.trees ? 'trees' : null,
+    landscape.grass ? 'grass' : null,
+    landscape.water ? 'water' : null,
+    landscape.pathways ? 'pathways' : null,
+    landscape.streetFurniture ? 'street furniture' : null,
+    landscape.vehicles ? 'vehicles' : null,
+    landscape.people ? 'people' : null,
+  ].filter(Boolean);
+  parts.push(
+    `Landscape: ${landscape.season} season, vegetation density ${landscape.vegetationDensity}%, tree variation ${landscape.treeVariation}%.`
+  );
+  if (landscapeFeatures.length > 0) {
+    parts.push(`Landscape features: ${landscapeFeatures.join(', ')}.`);
+  }
+  if (workflow.mpOutputStyle === 'illustrative') {
+    parts.push(`Vegetation style: ${landscape.vegetationStyle}.`);
+  }
+
+  const annotations = workflow.mpAnnotations;
+  const annotationFlags = [
+    annotations.zoneLabels ? 'zone labels' : null,
+    annotations.streetNames ? 'street names' : null,
+    annotations.buildingLabels ? 'building labels' : null,
+    annotations.lotNumbers ? 'lot numbers' : null,
+    annotations.scaleBar ? 'scale bar' : null,
+    annotations.northArrow ? 'north arrow' : null,
+    annotations.dimensions ? 'dimensions' : null,
+    annotations.areaCalc ? 'area calculations' : null,
+    annotations.contourLabels ? 'contour labels' : null,
+  ].filter(Boolean);
+  if (annotationFlags.length > 0) {
+    parts.push(`Annotations: ${annotationFlags.join(', ')}.`);
+  }
+  parts.push(
+    `Label style: ${annotations.labelStyle}, size ${annotations.labelSize}, color ${annotations.labelColor}, halo ${formatYesNo(
+      annotations.labelHalo
+    )}.`
+  );
+
+  const legend = workflow.mpLegend;
+  if (legend.include) {
+    const legendItems = [
+      legend.showZones ? 'zones' : null,
+      legend.showZoneAreas ? 'zone areas' : null,
+      legend.showBuildings ? 'buildings' : null,
+      legend.showLandscape ? 'landscape' : null,
+      legend.showInfrastructure ? 'infrastructure' : null,
+    ].filter(Boolean);
+    parts.push(`Legend: ${legend.style} style, position ${legend.position}, items ${legendItems.join(', ')}.`);
+  } else {
+    parts.push('Legend: none.');
+  }
+
+  const zones = workflow.mpZones?.length || 0;
+  if (zones > 0) {
+    parts.push(`Zones: ${zones} defined.`);
+  }
+  const boundaryMode = workflow.mpBoundary?.mode || 'auto';
+  parts.push(`Site boundary: ${boundaryMode}.`);
+
+  const exportSettings = workflow.mpExport;
+  parts.push(
+    `Export: ${exportSettings.resolution} resolution, format ${exportSettings.format}, layers ${formatYesNo(
+      exportSettings.exportLayers
+    )}.`
+  );
+
+  if (workflow.mpContext?.location) {
+    parts.push(`Context: ${workflow.mpContext.location}.`);
+  }
+
+  return parts.filter(Boolean).join(' ');
+}
+
+function generateExplodedPrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Exploded architectural view');
+  }
+
+  parts.push('Input: PDF model export reference.');
+
+  parts.push(`Dissection style: ${workflow.explodedStyle.render}.`);
+  parts.push(`Explosion direction: ${workflow.explodedDirection}.`);
+  if (workflow.explodedDirection === 'custom') {
+    parts.push(
+      `Explosion axis: X ${workflow.explodedAxis.x}, Y ${workflow.explodedAxis.y}, Z ${workflow.explodedAxis.z}.`
+    );
+  }
+  parts.push(`Separation: ${workflow.explodedView.separation}mm.`);
+
+  const view = workflow.explodedView;
+  if (view.type === 'axon') {
+    parts.push(`View: axonometric, angle ${view.angle}.`);
+  } else {
+    parts.push(
+      `View: perspective, camera height ${view.cameraHeight}m, FOV ${view.fov} deg, look at ${view.lookAt}.`
+    );
+  }
+
+  const style = workflow.explodedStyle;
+  parts.push(`Color mode: ${style.colorMode}.`);
+  if (style.colorMode === 'system') {
+    const systemColors = Object.entries(style.systemColors || {})
+      .map(([key, value]) => `${key}:${value}`)
+      .join(', ');
+    if (systemColors) {
+      parts.push(`System colors: ${systemColors}.`);
+    }
+  }
+  parts.push(`Edge style: ${style.edgeStyle}, line weight ${style.lineWeight}.`);
+
+  const activeComponents = workflow.explodedComponents.filter((comp) => comp.active);
+  parts.push(`Components: ${activeComponents.length} active of ${workflow.explodedComponents.length}.`);
+  if (activeComponents.length > 0) {
+    const names = activeComponents.slice(0, 6).map((comp) => comp.title || comp.name);
+    parts.push(`Active components: ${names.join(', ')}${activeComponents.length > 6 ? ', ...' : ''}.`);
+  }
+
+  const annotations = workflow.explodedAnnotations;
+  parts.push(
+    `Annotations: labels ${formatYesNo(annotations.labels)}, leaders ${formatYesNo(
+      annotations.leaders
+    )}, dimensions ${formatYesNo(annotations.dimensions)}, assembly numbers ${formatYesNo(
+      annotations.assemblyNumbers
+    )}, material callouts ${formatYesNo(annotations.materialCallouts)}.`
+  );
+  parts.push(
+    `Label style: ${annotations.labelStyle}, font size ${annotations.fontSize}, leader style ${annotations.leaderStyle}.`
+  );
+
+  const anim = workflow.explodedAnim;
+  if (anim.generate) {
+    parts.push(
+      `Animation: type ${anim.type}, duration ${anim.duration}s, easing ${anim.easing}, stagger ${anim.stagger}%, hold start ${anim.holdStart}s, hold end ${anim.holdEnd}s.`
+    );
+  } else {
+    parts.push('Animation: none.');
+  }
+
+  const output = workflow.explodedOutput;
+  parts.push(
+    `Output: ${output.resolution} resolution, background ${output.background}, ground plane ${formatYesNo(
+      output.groundPlane
+    )}, shadow ${formatYesNo(output.shadow)}, grid ${formatYesNo(output.grid)}, export layers ${formatYesNo(
+      output.exportLayers
+    )}.`
+  );
+
+  return parts.filter(Boolean).join(' ');
+}
+
+function generateSectionPrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Section cutaway visualization');
+  }
+
+  const cut = workflow.sectionCut;
+  parts.push(`Cut: ${cut.type}, plane ${cut.plane}%, depth ${cut.depth}%, direction ${cut.direction}.`);
+
+  const reveal = workflow.sectionReveal;
+  parts.push(`Reveal style: ${reveal.style}, focus ${reveal.focus}.`);
+  parts.push(`Facade opacity ${reveal.facadeOpacity}%, depth fade ${reveal.depthFade}%.`);
+
+  const areas = workflow.sectionAreas || [];
+  const activeAreas = areas.filter((area) => area.active);
+  parts.push(`Section areas: ${activeAreas.length} active of ${areas.length}.`);
+  if (activeAreas.length > 0) {
+    const formatArea = (area: (typeof activeAreas)[number]) => {
+      const title = area.title?.trim() || 'Untitled';
+      const description = area.description?.trim();
+      return description ? `${title} - ${description}` : title;
+    };
+    const items = activeAreas.slice(0, 6).map(formatArea);
+    parts.push(`Active areas: ${items.join(', ')}${activeAreas.length > 6 ? ', ...' : ''}.`);
+  }
+  parts.push(`Area detection: ${workflow.sectionAreaDetection}.`);
+
+  const program = workflow.sectionProgram;
+  parts.push(
+    `Program visualization: color mode ${program.colorMode}, labels ${formatYesNo(program.labels)}, leader lines ${formatYesNo(
+      program.leaderLines
+    )}, area tags ${formatYesNo(program.areaTags)}, label style ${program.labelStyle}, font size ${program.fontSize}.`
+  );
+
+  const style = workflow.sectionStyle;
+  parts.push(`Cut style: poche ${style.poche}, hatch ${style.hatch}, line weight ${style.weight}, beyond visibility ${style.showBeyond}%.`);
+
+  return parts.filter(Boolean).join(' ');
+}
+
 export function generatePrompt(state: AppState): string {
   const { workflow, activeStyleId, lighting, context, materials, camera } = state;
 
@@ -1645,6 +1898,15 @@ export function generatePrompt(state: AppState): string {
   }
   if (state.mode === 'render-cad') {
     return generateCadRenderPrompt(state);
+  }
+  if (state.mode === 'masterplan') {
+    return generateMasterplanPrompt(state);
+  }
+  if (state.mode === 'exploded') {
+    return generateExplodedPrompt(state);
+  }
+  if (state.mode === 'section') {
+    return generateSectionPrompt(state);
   }
 
   const availableStyles = [...BUILT_IN_STYLES, ...(state.customStyles ?? [])];

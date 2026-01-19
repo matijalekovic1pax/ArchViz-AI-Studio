@@ -258,7 +258,7 @@ export const LeftMasterplanPanel = () => {
               {zoneDetectError}
             </div>
           )}
-          <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-2">
             {wf.mpZones.map((zone) => (
               <div key={zone.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded">
                 <div className="w-4 h-4 rounded shadow-sm border border-black/10" style={{ backgroundColor: zone.color }} />
@@ -369,11 +369,6 @@ export const LeftMasterplanPanel = () => {
               Draw a green lasso directly on the canvas to set the site boundary.
             </div>
           )}
-          <div className="text-[10px] text-foreground-muted space-y-1">
-            <div>Total Area: {totalArea ? `${totalArea.toFixed(1)} ha` : '--'}</div>
-            <div>Perimeter: {totalArea ? `${(totalArea * 230).toFixed(0)} m` : '--'}</div>
-            <div>Buildable Area: {totalArea ? `${(totalArea * 0.66).toFixed(1)} ha` : '--'}</div>
-          </div>
         </div>
       </div>
 
