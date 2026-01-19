@@ -221,16 +221,27 @@ export interface WorkflowSettings {
   mpScale: '1:200' | '1:500' | '1:1000' | '1:2500' | '1:5000' | '1:10000' | 'custom';
   mpCustomScale: number;
   mpNorthRotation: number;
-  mpZoneDetection: 'auto' | 'manual' | 'import';
+  mpZoneDetection: 'auto' | 'manual';
   mpZones: ZoneItem[];
   mpBoundary: { mode: 'auto' | 'custom' | 'full'; points: { x: number; y: number }[] };
+  mpBoundaryUndoStack: { x: number; y: number }[][];
+  mpBoundaryRedoStack: { x: number; y: number }[][];
   mpContext: {
     location: string;
+    coordinates: { lat: number; lng: number } | null;
+    radius: number;
     loadBuildings: boolean;
     loadRoads: boolean;
     loadWater: boolean;
     loadTerrain: boolean;
     loadTransit: boolean;
+    loadedData: {
+      buildings: number;
+      roads: number;
+      water: number;
+      terrain: boolean;
+      transit: number;
+    } | null;
   };
   mpOutputStyle: 'photorealistic' | 'diagrammatic' | 'hybrid' | 'illustrative';
   mpViewAngle: 'top' | 'iso-ne' | 'iso-nw' | 'iso-se' | 'iso-sw' | 'custom';
@@ -318,6 +329,7 @@ export interface WorkflowSettings {
   visualSelectionRedoStack: VisualSelectionShape[][];
   visualSelectionMask: string | null;
   visualSelectionMaskSize: { width: number; height: number } | null;
+  visualSelectionViewScale: number | null;
   visualSelectionComposite: string | null;
   visualSelectionCompositeSize: { width: number; height: number } | null;
   visualMaterial: {

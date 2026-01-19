@@ -1,7 +1,9 @@
-import React, { useCallback } from 'react';
+﻿import React, { useCallback } from 'react';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Slider } from '../../ui/Slider';
+import { RangeSlider } from '../../ui/RangeSlider';
+import { Accordion } from '../../ui/Accordion';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { ArrowUpRight, ArrowUpLeft, ArrowDownRight, ArrowDownLeft, Layout, Crosshair } from 'lucide-react';
@@ -152,400 +154,412 @@ export const MasterplanPanel = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Output Style</label>
-        <div className="grid grid-cols-2 gap-2">
-          {outputStyles.map((style) => {
-            const selected = wf.mpOutputStyle === style.id;
-            return (
-              <button
-                key={style.id}
-                type="button"
-                onClick={() => updateWf({ mpOutputStyle: style.id as any })}
-                className={cn(
-                  'rounded-lg border p-2 text-[10px] font-medium transition-all',
-                  selected ? 'border-accent ring-2 ring-accent/30' : 'border-border hover:border-foreground/40'
-                )}
-              >
-                <div className="relative rounded-md h-16 w-full mb-2 border border-border overflow-hidden">
-                  <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent" />
+      <Accordion
+        defaultValue="output-style"
+        items={[
+          {
+            id: 'output-style',
+            title: 'Output Style',
+            content: (
+              <div className="grid grid-cols-2 gap-2">
+                {outputStyles.map((style) => {
+                  const selected = wf.mpOutputStyle === style.id;
+                  return (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => updateWf({ mpOutputStyle: style.id as any })}
+                      className={cn(
+                        'rounded-lg border p-2 text-[10px] font-medium transition-all',
+                        selected ? 'border-accent ring-2 ring-accent/30' : 'border-border hover:border-foreground/40'
+                      )}
+                    >
+                      <div className="relative rounded-md h-16 w-full mb-2 border border-border overflow-hidden">
+                        <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent" />
+                      </div>
+                      <div className="text-center">{style.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            ),
+          },
+          {
+            id: 'view-angle',
+            title: 'View Angle',
+            content: (
+              <div>
+                <div className="grid grid-cols-3 gap-2">
+                  {viewAngles.map((view) => {
+                    const Icon = view.icon;
+                    const selected = wf.mpViewAngle === view.id;
+                    return (
+                      <button
+                        key={view.id}
+                        type="button"
+                        onClick={() => updateWf({ mpViewAngle: view.id as any })}
+                        className={cn(
+                          'aspect-square flex flex-col items-center justify-center border rounded transition-colors',
+                          selected ? 'bg-surface-sunken border-foreground/50' : 'border-border hover:bg-surface-elevated'
+                        )}
+                      >
+                        <Icon size={18} className={cn(selected ? 'text-foreground' : 'text-foreground-muted')} />
+                        <span className={cn('text-[9px] mt-1', selected && 'font-bold')}>{view.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="text-center">{style.label}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">View Angle</label>
-        <div className="grid grid-cols-3 gap-2">
-          {viewAngles.map((view) => {
-            const Icon = view.icon;
-            const selected = wf.mpViewAngle === view.id;
-            return (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => updateWf({ mpViewAngle: view.id as any })}
-                className={cn(
-                  'aspect-square flex flex-col items-center justify-center border rounded transition-colors',
-                  selected ? 'bg-surface-sunken border-foreground/50' : 'border-border hover:bg-surface-elevated'
+                {wf.mpViewAngle === 'custom' && (
+                  <div className="mt-3 space-y-2">
+                    <Slider
+                      label="Elevation Angle"
+                      value={wf.mpViewCustom.elevation}
+                      min={0}
+                      max={90}
+                      onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, elevation: value } })}
+                    />
+                    <Slider
+                      label="Rotation Angle"
+                      value={wf.mpViewCustom.rotation}
+                      min={0}
+                      max={360}
+                      onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, rotation: value } })}
+                    />
+                    <Slider
+                      label="Perspective Strength"
+                      value={wf.mpViewCustom.perspective}
+                      min={0}
+                      max={100}
+                      onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, perspective: value } })}
+                    />
+                  </div>
                 )}
-              >
-                <Icon size={18} className={cn(selected ? 'text-foreground' : 'text-foreground-muted')} />
-                <span className={cn('text-[9px] mt-1', selected && 'font-bold')}>{view.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        {wf.mpViewAngle === 'custom' && (
-          <div className="mt-3 space-y-2">
-            <Slider
-              label="Elevation Angle"
-              value={wf.mpViewCustom.elevation}
-              min={0}
-              max={90}
-              onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, elevation: value } })}
-            />
-            <Slider
-              label="Rotation Angle"
-              value={wf.mpViewCustom.rotation}
-              min={0}
-              max={360}
-              onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, rotation: value } })}
-            />
-            <Slider
-              label="Perspective Strength"
-              value={wf.mpViewCustom.perspective}
-              min={0}
-              max={100}
-              onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, perspective: value } })}
-            />
-          </div>
-        )}
-      </div>
-
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Buildings</label>
-        <div className="space-y-3">
-          <select
-            className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-            value={wf.mpBuildings.style}
-            onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, style: e.target.value } })}
-          >
-            {buildingStyles.map((style) => (
-              <option key={style} value={style}>
-                {style}
-              </option>
-            ))}
-          </select>
-          <div>
-            <span className="text-[10px] text-foreground-muted block mb-1">Height Mode</span>
-            <SegmentedControl
-              value={wf.mpBuildings.heightMode}
-              options={[
-                { label: 'Uniform', value: 'uniform' },
-                { label: 'From Color', value: 'from-color' },
-                { label: 'Vary', value: 'vary' },
-              ]}
-              onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightMode: value as any } })}
-            />
-          </div>
-          <Slider
-            label="Default Height"
-            value={wf.mpBuildings.defaultHeight}
-            min={3}
-            max={100}
-            onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, defaultHeight: value } })}
-          />
-          <Slider
-            label="Height Range (Min)"
-            value={wf.mpBuildings.heightRange.min}
-            min={3}
-            max={60}
-            onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightRange: { ...wf.mpBuildings.heightRange, min: value } } })}
-          />
-          <Slider
-            label="Height Range (Max)"
-            value={wf.mpBuildings.heightRange.max}
-            min={10}
-            max={150}
-            onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightRange: { ...wf.mpBuildings.heightRange, max: value } } })}
-          />
-          <Slider
-            label="Floor Height"
-            value={wf.mpBuildings.floorHeight}
-            min={2.5}
-            max={5}
-            step={0.1}
-            onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, floorHeight: value } })}
-          />
-          <select
-            className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-            value={wf.mpBuildings.roofStyle}
-            onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, roofStyle: e.target.value as any } })}
-          >
-            {roofStyles.map((style) => (
-              <option key={style} value={style.toLowerCase()}>
-                {style}
-              </option>
-            ))}
-          </select>
-          <div className="space-y-2">
-            <Toggle
-              label="Show Building Shadows"
-              checked={wf.mpBuildings.showShadows}
-              onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showShadows: value } })}
-            />
-            <Toggle
-              label="Transparent Buildings"
-              checked={wf.mpBuildings.transparent}
-              onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, transparent: value } })}
-            />
-            <Toggle
-              label="Facade Variation"
-              checked={wf.mpBuildings.facadeVariation}
-              onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, facadeVariation: value } })}
-            />
-            <Toggle
-              label="Show Floor Count Labels"
-              checked={wf.mpBuildings.showFloorLabels}
-              onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showFloorLabels: value } })}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Landscape</label>
-        <div className="space-y-3">
-          <SegmentedControl
-            value={wf.mpLandscape.season}
-            options={[
-              { label: 'Spring', value: 'spring' },
-              { label: 'Summer', value: 'summer' },
-              { label: 'Autumn', value: 'autumn' },
-              { label: 'Winter', value: 'winter' },
-            ]}
-            onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, season: value as any } })}
-          />
-          <Slider
-            label="Vegetation Density"
-            value={wf.mpLandscape.vegetationDensity}
-            min={0}
-            max={100}
-            onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationDensity: value } })}
-          />
-          <Slider
-            label="Tree Size Variation"
-            value={wf.mpLandscape.treeVariation}
-            min={0}
-            max={100}
-            onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, treeVariation: value } })}
-          />
-          <div className="space-y-2">
-            <Toggle
-              label="Trees & Shrubs"
-              checked={wf.mpLandscape.trees}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, trees: value } })}
-            />
-            <Toggle
-              label="Grass & Ground Cover"
-              checked={wf.mpLandscape.grass}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, grass: value } })}
-            />
-            <Toggle
-              label="Water Features"
-              checked={wf.mpLandscape.water}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, water: value } })}
-            />
-            <Toggle
-              label="Pathways & Plazas"
-              checked={wf.mpLandscape.pathways}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, pathways: value } })}
-            />
-            <Toggle
-              label="Street Furniture"
-              checked={wf.mpLandscape.streetFurniture}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, streetFurniture: value } })}
-            />
-            <Toggle
-              label="Vehicles"
-              checked={wf.mpLandscape.vehicles}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vehicles: value } })}
-            />
-            <Toggle
-              label="People"
-              checked={wf.mpLandscape.people}
-              onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, people: value } })}
-            />
-          </div>
-          {wf.mpOutputStyle === 'illustrative' && (
-            <select
-              className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-              value={wf.mpLandscape.vegetationStyle}
-              onChange={(e) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationStyle: e.target.value as any } })}
-            >
-              <option value="realistic">Realistic</option>
-              <option value="stylized">Stylized / Iconic</option>
-              <option value="watercolor">Watercolor</option>
-              <option value="technical">Technical (Symbols)</option>
-            </select>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Annotations</label>
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Toggle
-              label="Zone Labels"
-              checked={wf.mpAnnotations.zoneLabels}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, zoneLabels: value } })}
-            />
-            <Toggle
-              label="Street Names"
-              checked={wf.mpAnnotations.streetNames}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, streetNames: value } })}
-            />
-            <Toggle
-              label="Building Labels"
-              checked={wf.mpAnnotations.buildingLabels}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, buildingLabels: value } })}
-            />
-            <Toggle
-              label="Lot Numbers"
-              checked={wf.mpAnnotations.lotNumbers}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, lotNumbers: value } })}
-            />
-            <Toggle
-              label="Scale Bar"
-              checked={wf.mpAnnotations.scaleBar}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, scaleBar: value } })}
-            />
-            <Toggle
-              label="North Arrow"
-              checked={wf.mpAnnotations.northArrow}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, northArrow: value } })}
-            />
-            <Toggle
-              label="Dimensions"
-              checked={wf.mpAnnotations.dimensions}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, dimensions: value } })}
-            />
-            <Toggle
-              label="Area Calculations"
-              checked={wf.mpAnnotations.areaCalc}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, areaCalc: value } })}
-            />
-            <Toggle
-              label="Contour Labels"
-              checked={wf.mpAnnotations.contourLabels}
-              onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, contourLabels: value } })}
-            />
-          </div>
-          <select
-            className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-            value={wf.mpAnnotations.labelStyle}
-            onChange={(e) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelStyle: e.target.value as any } })}
-          >
-            {labelStyles.map((style) => (
-              <option key={style} value={style}>
-                {style.charAt(0).toUpperCase() + style.slice(1)}
-              </option>
-            ))}
-          </select>
-          <SegmentedControl
-            value={wf.mpAnnotations.labelSize}
-            options={[
-              { label: 'Small', value: 'small' },
-              { label: 'Medium', value: 'medium' },
-              { label: 'Large', value: 'large' },
-            ]}
-            onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelSize: value as any } })}
-          />
-          <SegmentedControl
-            value={wf.mpAnnotations.labelColor}
-            options={[
-              { label: 'Auto', value: 'auto' },
-              { label: 'Dark', value: 'dark' },
-              { label: 'Light', value: 'light' },
-            ]}
-            onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelColor: value as any } })}
-          />
-          <Toggle
-            label="Label Background (Halo)"
-            checked={wf.mpAnnotations.labelHalo}
-            onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelHalo: value } })}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Legend</label>
-        <div className="space-y-3">
-          <Toggle
-            label="Include Legend"
-            checked={wf.mpLegend.include}
-            onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, include: value } })}
-          />
-          {wf.mpLegend.include && (
-            <>
-              <SegmentedControl
-                value={wf.mpLegend.position}
-                options={[
-                  { label: 'Top-Left', value: 'top-left' },
-                  { label: 'Top-Right', value: 'top-right' },
-                  { label: 'Bottom', value: 'bottom' },
-                ]}
-                onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, position: value as any } })}
-              />
-              <div className="space-y-2">
-                <Toggle
-                  label="Zone Colors & Names"
-                  checked={wf.mpLegend.showZones}
-                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZones: value } })}
+              </div>
+            ),
+          },
+          {
+            id: 'buildings',
+            title: 'Buildings',
+            content: (
+              <div className="space-y-3">
+                <select
+                  className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                  value={wf.mpBuildings.style}
+                  onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, style: e.target.value } })}
+                >
+                  {buildingStyles.map((style) => (
+                    <option key={style} value={style}>
+                      {style}
+                    </option>
+                  ))}
+                </select>
+                <div>
+                  <span className="text-[10px] text-foreground-muted block mb-1">Height Mode</span>
+                  <SegmentedControl
+                    value={wf.mpBuildings.heightMode}
+                    options={[
+                      { label: 'Uniform', value: 'uniform' },
+                      { label: 'From Color', value: 'from-color' },
+                      { label: 'Vary', value: 'vary' },
+                    ]}
+                    onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightMode: value as any } })}
+                  />
+                </div>
+                <Slider
+                  label="Default Height"
+                  value={wf.mpBuildings.defaultHeight}
+                  min={3}
+                  max={100}
+                  onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, defaultHeight: value } })}
+                />
+                <RangeSlider
+                  label="Height Range"
+                  value={[wf.mpBuildings.heightRange.min, wf.mpBuildings.heightRange.max]}
+                  min={3}
+                  max={150}
+                  onChange={([min, max]) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightRange: { min, max } } })}
+                />
+                <Slider
+                  label="Floor Height"
+                  value={wf.mpBuildings.floorHeight}
+                  min={2.5}
+                  max={5}
+                  step={0.1}
+                  onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, floorHeight: value } })}
+                />
+                <select
+                  className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                  value={wf.mpBuildings.roofStyle}
+                  onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, roofStyle: e.target.value as any } })}
+                >
+                  {roofStyles.map((style) => (
+                    <option key={style} value={style.toLowerCase()}>
+                      {style}
+                    </option>
+                  ))}
+                </select>
+                <div className="space-y-2">
+                  <Toggle
+                    label="Show Building Shadows"
+                    checked={wf.mpBuildings.showShadows}
+                    onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showShadows: value } })}
+                  />
+                  <Toggle
+                    label="Transparent Buildings"
+                    checked={wf.mpBuildings.transparent}
+                    onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, transparent: value } })}
+                  />
+                  <Toggle
+                    label="Facade Variation"
+                    checked={wf.mpBuildings.facadeVariation}
+                    onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, facadeVariation: value } })}
+                  />
+                  <Toggle
+                    label="Show Floor Count Labels"
+                    checked={wf.mpBuildings.showFloorLabels}
+                    onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showFloorLabels: value } })}
+                  />
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'landscape',
+            title: 'Landscape',
+            content: (
+              <div className="space-y-3">
+                <SegmentedControl
+                  value={wf.mpLandscape.season}
+                  options={[
+                    { label: 'Spring', value: 'spring' },
+                    { label: 'Summer', value: 'summer' },
+                    { label: 'Autumn', value: 'autumn' },
+                    { label: 'Winter', value: 'winter' },
+                  ]}
+                  onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, season: value as any } })}
+                />
+                <Slider
+                  label="Vegetation Density"
+                  value={wf.mpLandscape.vegetationDensity}
+                  min={0}
+                  max={100}
+                  onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationDensity: value } })}
+                />
+                <Slider
+                  label="Tree Size Variation"
+                  value={wf.mpLandscape.treeVariation}
+                  min={0}
+                  max={100}
+                  onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, treeVariation: value } })}
+                />
+                <div className="space-y-2">
+                  <Toggle
+                    label="Trees & Shrubs"
+                    checked={wf.mpLandscape.trees}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, trees: value } })}
+                  />
+                  <Toggle
+                    label="Grass & Ground Cover"
+                    checked={wf.mpLandscape.grass}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, grass: value } })}
+                  />
+                  <Toggle
+                    label="Water Features"
+                    checked={wf.mpLandscape.water}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, water: value } })}
+                  />
+                  <Toggle
+                    label="Pathways & Plazas"
+                    checked={wf.mpLandscape.pathways}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, pathways: value } })}
+                  />
+                  <Toggle
+                    label="Street Furniture"
+                    checked={wf.mpLandscape.streetFurniture}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, streetFurniture: value } })}
+                  />
+                  <Toggle
+                    label="Vehicles"
+                    checked={wf.mpLandscape.vehicles}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vehicles: value } })}
+                  />
+                  <Toggle
+                    label="People"
+                    checked={wf.mpLandscape.people}
+                    onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, people: value } })}
+                  />
+                </div>
+                {wf.mpOutputStyle === 'illustrative' && (
+                  <select
+                    className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                    value={wf.mpLandscape.vegetationStyle}
+                    onChange={(e) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationStyle: e.target.value as any } })}
+                  >
+                    <option value="realistic">Realistic</option>
+                    <option value="stylized">Stylized / Iconic</option>
+                    <option value="watercolor">Watercolor</option>
+                    <option value="technical">Technical (Symbols)</option>
+                  </select>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: 'annotations',
+            title: 'Annotations',
+            content: (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Toggle
+                    label="Zone Labels"
+                    checked={wf.mpAnnotations.zoneLabels}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, zoneLabels: value } })}
+                  />
+                  <Toggle
+                    label="Street Names"
+                    checked={wf.mpAnnotations.streetNames}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, streetNames: value } })}
+                  />
+                  <Toggle
+                    label="Building Labels"
+                    checked={wf.mpAnnotations.buildingLabels}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, buildingLabels: value } })}
+                  />
+                  <Toggle
+                    label="Lot Numbers"
+                    checked={wf.mpAnnotations.lotNumbers}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, lotNumbers: value } })}
+                  />
+                  <Toggle
+                    label="Scale Bar"
+                    checked={wf.mpAnnotations.scaleBar}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, scaleBar: value } })}
+                  />
+                  <Toggle
+                    label="North Arrow"
+                    checked={wf.mpAnnotations.northArrow}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, northArrow: value } })}
+                  />
+                  <Toggle
+                    label="Dimensions"
+                    checked={wf.mpAnnotations.dimensions}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, dimensions: value } })}
+                  />
+                  <Toggle
+                    label="Area Calculations"
+                    checked={wf.mpAnnotations.areaCalc}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, areaCalc: value } })}
+                  />
+                  <Toggle
+                    label="Contour Labels"
+                    checked={wf.mpAnnotations.contourLabels}
+                    onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, contourLabels: value } })}
+                  />
+                </div>
+                <select
+                  className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                  value={wf.mpAnnotations.labelStyle}
+                  onChange={(e) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelStyle: e.target.value as any } })}
+                >
+                  {labelStyles.map((style) => (
+                    <option key={style} value={style}>
+                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <SegmentedControl
+                  value={wf.mpAnnotations.labelSize}
+                  options={[
+                    { label: 'Small', value: 'small' },
+                    { label: 'Medium', value: 'medium' },
+                    { label: 'Large', value: 'large' },
+                  ]}
+                  onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelSize: value as any } })}
+                />
+                <SegmentedControl
+                  value={wf.mpAnnotations.labelColor}
+                  options={[
+                    { label: 'Auto', value: 'auto' },
+                    { label: 'Dark', value: 'dark' },
+                    { label: 'Light', value: 'light' },
+                  ]}
+                  onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelColor: value as any } })}
                 />
                 <Toggle
-                  label="Zone Areas"
-                  checked={wf.mpLegend.showZoneAreas}
-                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZoneAreas: value } })}
-                />
-                <Toggle
-                  label="Building Types"
-                  checked={wf.mpLegend.showBuildings}
-                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showBuildings: value } })}
-                />
-                <Toggle
-                  label="Landscape Elements"
-                  checked={wf.mpLegend.showLandscape}
-                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showLandscape: value } })}
-                />
-                <Toggle
-                  label="Infrastructure"
-                  checked={wf.mpLegend.showInfrastructure}
-                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showInfrastructure: value } })}
+                  label="Label Background (Halo)"
+                  checked={wf.mpAnnotations.labelHalo}
+                  onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelHalo: value } })}
                 />
               </div>
-              <select
-                className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-                value={wf.mpLegend.style}
-                onChange={(e) => updateWf({ mpLegend: { ...wf.mpLegend, style: e.target.value as any } })}
-              >
-                {legendStyles.map((style) => (
-                  <option key={style} value={style}>
-                    {style.charAt(0).toUpperCase() + style.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-      </div>
-
+            ),
+          },
+          {
+            id: 'legend',
+            title: 'Legend',
+            content: (
+              <div className="space-y-3">
+                <Toggle
+                  label="Include Legend"
+                  checked={wf.mpLegend.include}
+                  onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, include: value } })}
+                />
+                {wf.mpLegend.include && (
+                  <>
+                    <SegmentedControl
+                      value={wf.mpLegend.position}
+                      options={[
+                        { label: 'Top-Left', value: 'top-left' },
+                        { label: 'Top-Right', value: 'top-right' },
+                        { label: 'Bottom', value: 'bottom' },
+                      ]}
+                      onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, position: value as any } })}
+                    />
+                    <div className="space-y-2">
+                      <Toggle
+                        label="Zone Colors & Names"
+                        checked={wf.mpLegend.showZones}
+                        onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZones: value } })}
+                      />
+                      <Toggle
+                        label="Zone Areas"
+                        checked={wf.mpLegend.showZoneAreas}
+                        onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZoneAreas: value } })}
+                      />
+                      <Toggle
+                        label="Building Types"
+                        checked={wf.mpLegend.showBuildings}
+                        onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showBuildings: value } })}
+                      />
+                      <Toggle
+                        label="Landscape Elements"
+                        checked={wf.mpLegend.showLandscape}
+                        onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showLandscape: value } })}
+                      />
+                      <Toggle
+                        label="Infrastructure"
+                        checked={wf.mpLegend.showInfrastructure}
+                        onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showInfrastructure: value } })}
+                      />
+                    </div>
+                    <select
+                      className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                      value={wf.mpLegend.style}
+                      onChange={(e) => updateWf({ mpLegend: { ...wf.mpLegend, style: e.target.value as any } })}
+                    >
+                      {legendStyles.map((style) => (
+                        <option key={style} value={style}>
+                          {style.charAt(0).toUpperCase() + style.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 };

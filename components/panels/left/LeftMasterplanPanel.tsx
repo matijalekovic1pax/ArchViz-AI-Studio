@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
-import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Toggle } from '../../ui/Toggle';
+import { Slider } from '../../ui/Slider';
 import { cn } from '../../../lib/utils';
-import { Building2, Blocks, Map, LayoutGrid, MapPin, Compass, MoreHorizontal } from 'lucide-react';
+import { Building2, Blocks, Map, LayoutGrid, MapPin, Compass, MoreHorizontal, X } from 'lucide-react';
 import { ZoneItem } from '../../../types';
 import { nanoid } from 'nanoid';
+import { LocationPickerModal } from '../../modals/LocationPickerModal';
 
 const planTypes = [
   { id: 'site', label: 'Site Plan', icon: Building2 },
@@ -50,6 +51,19 @@ export const LeftMasterplanPanel = () => {
   const [newZoneName, setNewZoneName] = useState('');
   const [newZoneType, setNewZoneType] = useState(zoneTypeOptions[0].type);
   const [newZoneColor, setNewZoneColor] = useState(zoneTypeOptions[0].color);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isDetectingZones, setIsDetectingZones] = useState(false);
+  const [zoneDetectError, setZoneDetectError] = useState<string | null>(null);
+  const [openZoneMenuId, setOpenZoneMenuId] = useState<string | null>(null);
+  const hasSetBoundaryDefaultRef = useRef(false);
+
+  useEffect(() => {
+    if (hasSetBoundaryDefaultRef.current) return;
+    hasSetBoundaryDefaultRef.current = true;
+    if (wf.mpBoundary.mode !== 'auto') {
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpBoundary: { ...wf.mpBoundary, mode: 'auto' } } });
+    }
+  }, [dispatch, wf.mpBoundary]);
 
   const totalArea = useMemo(() => {
     const sum = wf.mpZones.reduce((acc, zone) => acc + (zone.areaHa || 0), 0);
@@ -75,11 +89,63 @@ export const LeftMasterplanPanel = () => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: newZones } });
   };
 
+  const deleteZone = (id: string) => {
+    const newZones = wf.mpZones.filter((z) => z.id !== id);
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: newZones } });
+    if (openZoneMenuId === id) {
+      setOpenZoneMenuId(null);
+    }
+  };
+
   const handleZoneTypeChange = (value: string) => {
     const next = zoneTypeOptions.find((opt) => opt.type === value);
     if (next) {
       setNewZoneType(next.type);
       setNewZoneColor(next.color);
+    }
+  };
+
+  const handleAutoDetectZones = async () => {
+    if (isDetectingZones) return;
+    const sourceImage = wf.mpInputImage || state.uploadedImage;
+    if (!sourceImage) {
+      setZoneDetectError('Upload an image first to auto-detect zones.');
+      return;
+    }
+    setZoneDetectError(null);
+    setIsDetectingZones(true);
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZoneDetection: 'auto' } });
+    try {
+      const response = await fetch('/api/masterplan/zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: sourceImage }),
+      });
+      if (!response.ok) {
+        throw new Error('Zone detection failed.');
+      }
+      const payload = await response.json();
+      const zones = Array.isArray(payload?.zones) ? (payload.zones as Partial<ZoneItem>[]) : [];
+      const normalized = zones.map((zone, index) => {
+        const fallbackType = zoneTypeOptions[index % zoneTypeOptions.length];
+        return {
+          id: zone.id || nanoid(),
+          name: zone.name || `Zone ${index + 1}`,
+          type: zone.type || fallbackType.type,
+          color: zone.color || fallbackType.color,
+          selected: zone.selected ?? true,
+          areaHa: typeof zone.areaHa === 'number' ? zone.areaHa : undefined,
+        };
+      });
+      if (normalized.length > 0) {
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: normalized } });
+      } else {
+        setZoneDetectError('No zones detected. Try again or refine the image.');
+      }
+    } catch (err) {
+      setZoneDetectError('Auto-detect failed. Please try again.');
+    } finally {
+      setIsDetectingZones(false);
     }
   };
 
@@ -141,24 +207,32 @@ export const LeftMasterplanPanel = () => {
               />
             </div>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full border border-border bg-surface-elevated flex items-center justify-center">
-                <Compass size={18} className="text-foreground-muted" />
+          <div className="rounded-lg border border-border bg-surface-elevated p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full border border-border bg-surface-sunken flex items-center justify-center">
+                  <Compass size={16} className="text-foreground-muted" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-foreground-muted uppercase tracking-wide">North Rotation</div>
+                  <div className="text-[11px] font-mono text-foreground">{Math.round(wf.mpNorthRotation)} deg</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] text-foreground-muted uppercase tracking-wide">North Rotation</div>
-                <div className="text-xs font-semibold">{Math.round(wf.mpNorthRotation)}°</div>
-              </div>
+              <span className="text-[10px] font-semibold text-foreground-muted">N</span>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={359}
-              value={wf.mpNorthRotation}
-              onChange={(e) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpNorthRotation: Number(e.target.value) } })}
-              className="flex-1 accent-foreground"
-            />
+            <div className="mt-2">
+              <Slider
+                value={wf.mpNorthRotation}
+                min={0}
+                max={359}
+                step={1}
+                onChange={(value) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpNorthRotation: value } })}
+                label="North Rotation"
+                showLabel={false}
+                showValue={false}
+                className="mt-1"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -166,15 +240,24 @@ export const LeftMasterplanPanel = () => {
       <div>
         <SectionHeader title="Zone Definition" />
         <div className="space-y-3">
-          <SegmentedControl
-            value={wf.mpZoneDetection}
-            onChange={(value) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZoneDetection: value as any } })}
-            options={[
-              { label: 'Auto', value: 'auto' },
-              { label: 'Manual', value: 'manual' },
-              { label: 'Import', value: 'import' },
-            ]}
-          />
+          <button
+            type="button"
+            onClick={handleAutoDetectZones}
+            disabled={isDetectingZones}
+            className={cn(
+              "w-full py-2 text-xs font-semibold rounded border transition-colors",
+              isDetectingZones
+                ? "bg-surface-sunken text-foreground-muted border-border"
+                : "bg-foreground text-background border-foreground hover:opacity-90"
+            )}
+          >
+            {isDetectingZones ? 'Detecting Zones...' : 'Auto Detect Zones'}
+          </button>
+          {zoneDetectError && (
+            <div className="text-[10px] text-red-600 font-medium">
+              {zoneDetectError}
+            </div>
+          )}
           <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
             {wf.mpZones.map((zone) => (
               <div key={zone.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded">
@@ -185,9 +268,27 @@ export const LeftMasterplanPanel = () => {
                     <div className="text-[10px] text-foreground-muted">{zone.areaHa.toFixed(1)} ha</div>
                   )}
                 </div>
-                <button className="p-1 rounded-full text-foreground-muted hover:text-foreground">
-                  <MoreHorizontal size={14} />
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenZoneMenuId((prev) => (prev === zone.id ? null : zone.id))}
+                    className="p-1 rounded-full text-foreground-muted hover:text-foreground"
+                    title="Zone actions"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {openZoneMenuId === zone.id && (
+                    <div className="absolute right-0 top-full mt-1 w-28 bg-surface-elevated border border-border rounded shadow-elevated text-xs z-10">
+                      <button
+                        type="button"
+                        onClick={() => deleteZone(zone.id)}
+                        className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <Toggle label="" checked={zone.selected} onChange={() => toggleZone(zone.id)} />
               </div>
             ))}
@@ -238,9 +339,6 @@ export const LeftMasterplanPanel = () => {
               >
                 + Add Zone
               </button>
-              <button className="px-3 py-2 border border-border text-xs rounded hover:bg-surface-elevated">
-                Import Legend
-              </button>
             </div>
           )}
         </div>
@@ -249,15 +347,28 @@ export const LeftMasterplanPanel = () => {
       <div>
         <SectionHeader title="Site Boundary" />
         <div className="space-y-3 bg-surface-sunken p-3 rounded-lg border border-border-subtle">
-          <SegmentedControl
-            value={wf.mpBoundary.mode}
-            onChange={(value) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpBoundary: { ...wf.mpBoundary, mode: value as any } } })}
-            options={[
-              { label: 'Auto', value: 'auto' },
-              { label: 'Custom', value: 'custom' },
-              { label: 'Full', value: 'full' },
-            ]}
-          />
+          <button
+            type="button"
+            onClick={() =>
+              dispatch({
+                type: 'UPDATE_WORKFLOW',
+                payload: { mpBoundary: { ...wf.mpBoundary, mode: wf.mpBoundary.mode === 'custom' ? 'auto' : 'custom' } },
+              })
+            }
+            className={cn(
+              "w-full py-2 text-xs font-semibold rounded border transition-colors",
+              wf.mpBoundary.mode === 'custom'
+                ? "bg-emerald-600/15 text-emerald-700 border-emerald-500/40"
+                : "bg-surface-elevated text-foreground-secondary border-border hover:bg-surface-sunken"
+            )}
+          >
+            {wf.mpBoundary.mode === 'custom' ? 'Lasso On (Click to Disable)' : 'Lasso Boundary'}
+          </button>
+          {wf.mpBoundary.mode === 'custom' && (
+            <div className="text-[10px] text-emerald-600 font-semibold">
+              Draw a green lasso directly on the canvas to set the site boundary.
+            </div>
+          )}
           <div className="text-[10px] text-foreground-muted space-y-1">
             <div>Total Area: {totalArea ? `${totalArea.toFixed(1)} ha` : '--'}</div>
             <div>Perimeter: {totalArea ? `${(totalArea * 230).toFixed(0)} m` : '--'}</div>
@@ -269,38 +380,55 @@ export const LeftMasterplanPanel = () => {
       <div>
         <SectionHeader title="Context" />
         <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
-          <button className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors">
-            <MapPin size={14} /> Load from Location
-          </button>
-          <div className="space-y-2 pt-2 border-t border-border-subtle">
-            <Toggle
-              label="Surrounding Buildings"
-              checked={wf.mpContext.loadBuildings}
-              onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadBuildings: v } } })}
-            />
-            <Toggle
-              label="Road Network"
-              checked={wf.mpContext.loadRoads}
-              onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadRoads: v } } })}
-            />
-            <Toggle
-              label="Water Bodies"
-              checked={wf.mpContext.loadWater}
-              onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadWater: v } } })}
-            />
-            <Toggle
-              label="Terrain / Topography"
-              checked={wf.mpContext.loadTerrain}
-              onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadTerrain: v } } })}
-            />
-            <Toggle
-              label="Transit Lines"
-              checked={wf.mpContext.loadTransit}
-              onChange={(v) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, loadTransit: v } } })}
-            />
-          </div>
+          {wf.mpContext.loadedData ? (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin size={14} className="text-accent shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">{wf.mpContext.location}</div>
+                    <div className="text-[10px] text-foreground-muted">
+                      {wf.mpContext.loadedData.buildings} buildings · {wf.mpContext.loadedData.roads} roads · {wf.mpContext.radius}m
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, location: '', coordinates: null, loadedData: null } } })}
+                  className="p-1 rounded hover:bg-surface-elevated text-foreground-muted hover:text-foreground transition-colors shrink-0"
+                  title="Clear context"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="flex-1 py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated transition-colors"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsLocationModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors"
+            >
+              <MapPin size={14} /> Load from Location
+            </button>
+          )}
+          
         </div>
       </div>
+
+      <LocationPickerModal
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        initialData={wf.mpContext}
+        onLoad={(data) => {
+          dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: data } });
+        }}
+      />
     </div>
   );
 };

@@ -1,11 +1,21 @@
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import { useAppStore } from '../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
 
 type CanvasPoint = { x: number; y: number };
+type ImageLayout = {
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
+  naturalWidth: number;
+  naturalHeight: number;
+};
 type SelectionShape =
   | { id: string; type: 'rect'; start: CanvasPoint; end: CanvasPoint }
   | { id: string; type: 'brush'; points: CanvasPoint[]; brushSize: number }
@@ -273,15 +283,40 @@ const StandardCanvas: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [activeBoundary, setActiveBoundary] = useState<CanvasPoint[] | null>(null);
+  const [isBoundarySelecting, setIsBoundarySelecting] = useState(false);
+  const [imageVersion, setImageVersion] = useState(0);
+  const [imageLayout, setImageLayout] = useState<ImageLayout | null>(null);
   const selectionLayerRef = useRef<HTMLDivElement>(null);
+  const selectionLayerRectRef = useRef<DOMRect | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const activeSelectionRef = useRef<SelectionShape | null>(null);
+  const activeBoundaryRef = useRef<CanvasPoint[] | null>(null);
   const lastPointRef = useRef<CanvasPoint | null>(null);
+  const pendingPointRef = useRef<CanvasPoint | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const minPointDistanceRef = useRef<number>(2);
+  const selectionPreviewMinPointDistanceRef = useRef<number>(4);
+  const selectionPreviewLastPointRef = useRef<CanvasPoint | null>(null);
+  const selectionFullPointsRef = useRef<CanvasPoint[]>([]);
+  const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
+  const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
+  const boundaryRafRef = useRef<number | null>(null);
+  const boundaryMinPointDistanceRef = useRef<number>(3);
+  const boundaryPreviewMinPointDistanceRef = useRef<number>(5);
+  const boundaryPreviewLastPointRef = useRef<CanvasPoint | null>(null);
+  const boundaryFullPointsRef = useRef<CanvasPoint[]>([]);
+  const brushOutlineId = useRef(`brush-outline-${nanoid()}`);
+  const selectionMigrationRef = useRef<string | null>(null);
+  const lastViewScaleRef = useRef<number | null>(null);
 
   // Mode helpers
   const isGenerateText = state.mode === 'generate-text';
   const isVideo = state.mode === 'video';
   const isVisualEdit = state.mode === 'visual-edit';
   const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
+  const isMasterplan = state.mode === 'masterplan';
+  const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
   const selectionMode = state.workflow.visualSelection.mode;
   const showCompare = state.workflow.videoState?.compareMode || state.mode === 'upscale';
   const showSplit = state.workflow.canvasSync && !isVideo && !showCompare;
@@ -294,6 +329,16 @@ const StandardCanvas: React.FC = () => {
     setActiveSelection((prev) => {
       const resolved = typeof next === 'function' ? next(prev) : next;
       activeSelectionRef.current = resolved;
+      return resolved;
+    });
+  }, []);
+
+  const updateActiveBoundary = useCallback((
+    next: CanvasPoint[] | null | ((prev: CanvasPoint[] | null) => CanvasPoint[] | null)
+  ) => {
+    setActiveBoundary((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      activeBoundaryRef.current = resolved;
       return resolved;
     });
   }, []);
@@ -311,10 +356,158 @@ const StandardCanvas: React.FC = () => {
     });
   }, [dispatch, state.workflow.visualSelectionUndoStack, state.workflow.visualSelections]);
 
-  const buildSelectionMask = useCallback((shapes: SelectionShape[]) => {
-    if (!selectionLayerRef.current) return null;
+  const commitBoundary = useCallback((points: CanvasPoint[]) => {
+    const previousBoundary = state.workflow.mpBoundary.points;
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        mpBoundary: {
+          ...state.workflow.mpBoundary,
+          points,
+        },
+        mpBoundaryUndoStack: [...state.workflow.mpBoundaryUndoStack, previousBoundary],
+        mpBoundaryRedoStack: [],
+      },
+    });
+  }, [dispatch, state.workflow.mpBoundary, state.workflow.mpBoundaryRedoStack, state.workflow.mpBoundaryUndoStack]);
+
+  const measureImageLayout = useCallback((): ImageLayout | null => {
+    if (!selectionLayerRef.current || !imageRef.current) return null;
+    const img = imageRef.current;
+    if (!img.naturalWidth || !img.naturalHeight) return null;
     const width = Math.round(selectionLayerRef.current.offsetWidth);
     const height = Math.round(selectionLayerRef.current.offsetHeight);
+    if (width < 2 || height < 2) return null;
+
+    const imageAspect = img.naturalWidth / img.naturalHeight;
+    const canvasAspect = width / height;
+    let drawWidth = width;
+    let drawHeight = height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imageAspect > canvasAspect) {
+      drawWidth = width;
+      drawHeight = width / imageAspect;
+      offsetY = (height - drawHeight) / 2;
+    } else {
+      drawHeight = height;
+      drawWidth = height * imageAspect;
+      offsetX = (width - drawWidth) / 2;
+    }
+
+    const scaleX = drawWidth / img.naturalWidth;
+    const scaleY = drawHeight / img.naturalHeight;
+
+    return {
+      width: drawWidth,
+      height: drawHeight,
+      offsetX,
+      offsetY,
+      scaleX,
+      scaleY,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+    };
+  }, []);
+
+  const getImageLayout = useCallback(() => imageLayout ?? measureImageLayout(), [imageLayout, measureImageLayout]);
+
+  const updateImageLayout = useCallback(() => {
+    const next = measureImageLayout();
+    setImageLayout((prev) => {
+      if (!next) return prev ? null : prev;
+      if (
+        prev &&
+        prev.width === next.width &&
+        prev.height === next.height &&
+        prev.offsetX === next.offsetX &&
+        prev.offsetY === next.offsetY &&
+        prev.scaleX === next.scaleX &&
+        prev.scaleY === next.scaleY &&
+        prev.naturalWidth === next.naturalWidth &&
+        prev.naturalHeight === next.naturalHeight
+      ) {
+        return prev;
+      }
+      return next;
+    });
+    if (selectionLayerRef.current) {
+      selectionLayerRectRef.current = selectionLayerRef.current.getBoundingClientRect();
+    }
+
+    const viewScale = next ? (next.scaleX + next.scaleY) / 2 : null;
+    if (viewScale === null) {
+      if (lastViewScaleRef.current !== null) {
+        lastViewScaleRef.current = null;
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualSelectionViewScale: null } });
+      }
+      return;
+    }
+
+    const delta = lastViewScaleRef.current === null ? Infinity : Math.abs(lastViewScaleRef.current - viewScale);
+    if (delta > 0.0001) {
+      lastViewScaleRef.current = viewScale;
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualSelectionViewScale: viewScale } });
+    }
+  }, [dispatch, measureImageLayout]);
+
+  useLayoutEffect(() => {
+    updateImageLayout();
+    if (!selectionLayerRef.current) return;
+    const observer = new ResizeObserver(() => updateImageLayout());
+    observer.observe(selectionLayerRef.current);
+    if (imageRef.current) {
+      observer.observe(imageRef.current);
+    }
+    return () => observer.disconnect();
+  }, [imageVersion, updateImageLayout]);
+
+  const getImageBrushSize = useCallback(() => {
+    const layout = getImageLayout();
+    if (!layout) return state.workflow.visualSelection.brushSize;
+    const scale = (layout.scaleX + layout.scaleY) / 2;
+    if (scale <= 0) return state.workflow.visualSelection.brushSize;
+    return state.workflow.visualSelection.brushSize / (scale * state.canvas.zoom);
+  }, [getImageLayout, state.canvas.zoom, state.workflow.visualSelection.brushSize]);
+
+  const getMinPointDistance = useCallback(() => {
+    const layout = getImageLayout();
+    if (!layout) return 2;
+    const scale = (layout.scaleX + layout.scaleY) / 2;
+    if (scale <= 0) return 2;
+    return 2 / (scale * state.canvas.zoom);
+  }, [getImageLayout, state.canvas.zoom]);
+
+  useEffect(() => {
+    minPointDistanceRef.current = getMinPointDistance();
+    selectionPreviewMinPointDistanceRef.current = getMinPointDistance() * 2.5;
+    boundaryMinPointDistanceRef.current = getMinPointDistance() * 2.5;
+    boundaryPreviewMinPointDistanceRef.current = getMinPointDistance() * 4;
+  }, [getMinPointDistance]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (boundaryRafRef.current !== null) {
+        cancelAnimationFrame(boundaryRafRef.current);
+        boundaryRafRef.current = null;
+      }
+      selectionPreviewLastPointRef.current = null;
+      selectionFullPointsRef.current = [];
+      boundaryPreviewLastPointRef.current = null;
+      boundaryFullPointsRef.current = [];
+    };
+  }, []);
+
+  const buildSelectionMask = useCallback((shapes: SelectionShape[]) => {
+    const img = imageRef.current;
+    if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+    const width = Math.round(img.naturalWidth);
+    const height = Math.round(img.naturalHeight);
     if (width < 2 || height < 2) return null;
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -328,6 +521,7 @@ const StandardCanvas: React.FC = () => {
     ctx.strokeStyle = '#fff';
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    const fallbackBrushSize = getImageBrushSize();
 
     shapes.forEach((shape) => {
       if (shape.type === 'rect') {
@@ -352,7 +546,7 @@ const StandardCanvas: React.FC = () => {
       }
 
       if (shape.points.length < 2) return;
-      ctx.lineWidth = shape.brushSize || state.workflow.visualSelection.brushSize;
+      ctx.lineWidth = shape.brushSize || fallbackBrushSize;
       ctx.beginPath();
       ctx.moveTo(shape.points[0].x, shape.points[0].y);
       shape.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
@@ -364,15 +558,10 @@ const StandardCanvas: React.FC = () => {
       width,
       height,
     };
-  }, [state.workflow.visualSelection.brushSize]);
+  }, [getImageBrushSize]);
 
   const buildSelectionComposite = useCallback(
     (shapes: SelectionShape[], imageSrc: string) => {
-      if (!selectionLayerRef.current) return null;
-      const width = Math.round(selectionLayerRef.current.offsetWidth);
-      const height = Math.round(selectionLayerRef.current.offsetHeight);
-      if (width < 2 || height < 2) return null;
-
       return new Promise<{ dataUrl: string; width: number; height: number } | null>((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -393,45 +582,41 @@ const StandardCanvas: React.FC = () => {
             return;
           }
 
-          const imageAspect = img.width / img.height;
-          const canvasAspect = width / height;
-          let drawWidth = width;
-          let drawHeight = height;
-          let offsetX = 0;
-          let offsetY = 0;
-
-          if (imageAspect > canvasAspect) {
-            drawWidth = width;
-            drawHeight = width / imageAspect;
-            offsetY = (height - drawHeight) / 2;
-          } else {
-            drawHeight = height;
-            drawWidth = height * imageAspect;
-            offsetX = (width - drawWidth) / 2;
-          }
-
-          const scaleX = outputWidth / drawWidth;
-          const scaleY = outputHeight / drawHeight;
-          const scale = (scaleX + scaleY) / 2;
-
           ctx.drawImage(img, 0, 0, outputWidth, outputHeight);
 
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, outputWidth, outputHeight);
-          ctx.clip();
+          const baseWidth = img.naturalWidth || outputWidth;
+          const baseHeight = img.naturalHeight || outputHeight;
+          const scaleX = outputWidth / baseWidth;
+          const scaleY = outputHeight / baseHeight;
+          const scale = (scaleX + scaleY) / 2;
+          const layout = getImageLayout();
+          const baseViewScale = layout ? (layout.scaleX + layout.scaleY) / 2 : (state.workflow.visualSelectionViewScale || 1);
+          const displayScale = Math.max(0.0001, baseViewScale * state.canvas.zoom);
+          const selectionStrokeScreen = Math.max(1.5, 2.4 / state.canvas.zoom);
+          const brushOutlineScreen = Math.max(1.5, 2.6 / state.canvas.zoom);
+          const selectionStrokeImage = selectionStrokeScreen / displayScale;
+          const brushOutlineImage = brushOutlineScreen / displayScale;
+          const selectionFill = 'rgba(56, 189, 248, 0.14)';
+          const selectionStroke = 'rgba(56, 189, 248, 0.6)';
+          const brushFill = 'rgba(56, 189, 248, 0.14)';
+          const brushOutline = 'rgba(56, 189, 248, 0.6)';
+          const fallbackBrushSize = getImageBrushSize();
 
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+          const mapPoint = (point: CanvasPoint) => ({
+            x: point.x * scaleX,
+            y: point.y * scaleY,
+          });
+
+          const brushShapes = shapes.filter((shape) => shape.type === 'brush');
+          const otherShapes = shapes.filter((shape) => shape.type !== 'brush');
+
+          ctx.save();
+          ctx.fillStyle = selectionFill;
+          ctx.strokeStyle = selectionStroke;
           ctx.lineJoin = 'round';
           ctx.lineCap = 'round';
 
-          const mapPoint = (point: CanvasPoint) => ({
-            x: (point.x - offsetX) * scaleX,
-            y: (point.y - offsetY) * scaleY,
-          });
-
-          shapes.forEach((shape) => {
+          otherShapes.forEach((shape) => {
             if (shape.type === 'rect') {
               const x = Math.min(shape.start.x, shape.end.x);
               const y = Math.min(shape.start.y, shape.end.y);
@@ -441,7 +626,7 @@ const StandardCanvas: React.FC = () => {
                 const start = mapPoint({ x, y });
                 const end = mapPoint({ x: x + w, y: y + h });
                 ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
-                ctx.lineWidth = Math.max(1, 2);
+                ctx.lineWidth = selectionStrokeImage;
                 ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
               }
               return;
@@ -455,21 +640,76 @@ const StandardCanvas: React.FC = () => {
               mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
               ctx.closePath();
               ctx.fill();
-              ctx.lineWidth = Math.max(1, 2);
+              ctx.lineWidth = selectionStrokeImage;
               ctx.stroke();
-              return;
             }
-
-            if (shape.points.length < 2) return;
-            ctx.lineWidth = (shape.brushSize || state.workflow.visualSelection.brushSize) * scale;
-            ctx.beginPath();
-            const mapped = shape.points.map(mapPoint);
-            ctx.moveTo(mapped[0].x, mapped[0].y);
-            mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
-            ctx.stroke();
           });
 
           ctx.restore();
+
+          if (brushShapes.length > 0) {
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = outputWidth;
+            maskCanvas.height = outputHeight;
+            const maskCtx = maskCanvas.getContext('2d');
+
+            if (maskCtx) {
+              maskCtx.strokeStyle = '#fff';
+              maskCtx.lineJoin = 'round';
+              maskCtx.lineCap = 'round';
+              brushShapes.forEach((shape) => {
+                if (shape.type !== 'brush' || shape.points.length < 2) return;
+                const brushSize = (shape.brushSize || fallbackBrushSize) * scale;
+                maskCtx.lineWidth = brushSize;
+                maskCtx.beginPath();
+                const mapped = shape.points.map(mapPoint);
+                maskCtx.moveTo(mapped[0].x, mapped[0].y);
+                mapped.slice(1).forEach((point) => maskCtx.lineTo(point.x, point.y));
+                maskCtx.stroke();
+              });
+            }
+
+            const fillCanvas = document.createElement('canvas');
+            fillCanvas.width = outputWidth;
+            fillCanvas.height = outputHeight;
+            const fillCtx = fillCanvas.getContext('2d');
+            if (fillCtx) {
+              fillCtx.drawImage(maskCanvas, 0, 0);
+              fillCtx.globalCompositeOperation = 'source-in';
+              fillCtx.fillStyle = brushFill;
+              fillCtx.fillRect(0, 0, outputWidth, outputHeight);
+              ctx.drawImage(fillCanvas, 0, 0);
+            }
+
+            const outlineCanvas = document.createElement('canvas');
+            outlineCanvas.width = outputWidth;
+            outlineCanvas.height = outputHeight;
+            const outlineCtx = outlineCanvas.getContext('2d');
+            if (outlineCtx) {
+              const outlineWidth = brushOutlineImage;
+
+              outlineCtx.drawImage(maskCanvas, 0, 0);
+              outlineCtx.globalCompositeOperation = 'source-out';
+              outlineCtx.strokeStyle = brushOutline;
+              outlineCtx.lineJoin = 'round';
+              outlineCtx.lineCap = 'round';
+
+              brushShapes.forEach((shape) => {
+                if (shape.type !== 'brush' || shape.points.length < 2) return;
+                const brushSize = (shape.brushSize || fallbackBrushSize) * scale;
+                outlineCtx.lineWidth = brushSize + outlineWidth * 2;
+                outlineCtx.beginPath();
+                const mapped = shape.points.map(mapPoint);
+                outlineCtx.moveTo(mapped[0].x, mapped[0].y);
+                mapped.slice(1).forEach((point) => outlineCtx.lineTo(point.x, point.y));
+                outlineCtx.stroke();
+              });
+
+              outlineCtx.globalCompositeOperation = 'destination-out';
+              outlineCtx.drawImage(maskCanvas, 0, 0);
+              ctx.drawImage(outlineCanvas, 0, 0);
+            }
+          }
 
           resolve({ dataUrl: canvas.toDataURL('image/png'), width: outputWidth, height: outputHeight });
         };
@@ -477,20 +717,43 @@ const StandardCanvas: React.FC = () => {
         img.src = imageSrc;
       });
     },
-    [state.workflow.visualSelection.brushSize]
+    [getImageBrushSize, getImageLayout, state.canvas.zoom, state.workflow.visualSelectionViewScale]
   );
 
-  const getSelectionPoint = useCallback((e: React.MouseEvent) => {
+  const getSelectionPoint = useCallback((e: React.MouseEvent, clamp = false) => {
     if (!selectionLayerRef.current) return null;
-    const rect = selectionLayerRef.current.getBoundingClientRect();
+    const layout = getImageLayout();
+    if (!layout) return null;
+    const rect = selectionLayerRectRef.current || selectionLayerRef.current.getBoundingClientRect();
+    const rawX = (e.clientX - rect.left) / state.canvas.zoom;
+    const rawY = (e.clientY - rect.top) / state.canvas.zoom;
+    const localX = rawX - layout.offsetX;
+    const localY = rawY - layout.offsetY;
+    const within =
+      localX >= 0 &&
+      localX <= layout.width &&
+      localY >= 0 &&
+      localY <= layout.height;
+    if (!clamp && !within) return null;
+    const clampedX = Math.min(Math.max(localX, 0), layout.width);
+    const clampedY = Math.min(Math.max(localY, 0), layout.height);
+
     return {
-      x: (e.clientX - rect.left) / state.canvas.zoom,
-      y: (e.clientY - rect.top) / state.canvas.zoom,
+      x: clampedX / layout.scaleX,
+      y: clampedY / layout.scaleY,
     };
-  }, [state.canvas.zoom]);
+  }, [getImageLayout, state.canvas.zoom]);
 
   const startSelection = useCallback((e: React.MouseEvent) => {
     if (!state.uploadedImage || e.button !== 0) return;
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingPointRef.current = null;
+    selectionPreviewLastPointRef.current = null;
+    selectionFullPointsRef.current = [];
+    lastPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
     const drawMode = selectionMode === 'ai' ? 'rect' : selectionMode;
@@ -504,39 +767,121 @@ const StandardCanvas: React.FC = () => {
 
     const type = drawMode === 'lasso' ? 'lasso' : 'brush';
     lastPointRef.current = point;
+    selectionPreviewLastPointRef.current = point;
+    selectionFullPointsRef.current = [point];
     if (type === 'brush') {
+      const layout = getImageLayout();
+      const scale = layout ? (layout.scaleX + layout.scaleY) / 2 : 1;
+      const imageBrushSize = scale > 0
+        ? state.workflow.visualSelection.brushSize / (scale * state.canvas.zoom)
+        : state.workflow.visualSelection.brushSize;
       updateActiveSelection({
         id: 'active',
         type,
         points: [point],
-        brushSize: state.workflow.visualSelection.brushSize,
+        brushSize: imageBrushSize,
       });
     } else {
       updateActiveSelection({ id: 'active', type, points: [point] });
     }
-  }, [getSelectionPoint, selectionMode, state.uploadedImage, state.workflow.visualSelection.brushSize, updateActiveSelection]);
+  }, [getImageLayout, getSelectionPoint, selectionMode, state.canvas.zoom, state.uploadedImage, state.workflow.visualSelection.brushSize, updateActiveSelection]);
 
-  const updateSelectionPath = useCallback((e: React.MouseEvent) => {
+  const startBoundarySelection = useCallback((e: React.MouseEvent) => {
+    if (!state.uploadedImage || e.button !== 0) return;
+    if (boundaryRafRef.current !== null) {
+      cancelAnimationFrame(boundaryRafRef.current);
+      boundaryRafRef.current = null;
+    }
+    boundaryPendingPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
+    setIsBoundarySelecting(true);
+    boundaryLastPointRef.current = point;
+    boundaryPreviewLastPointRef.current = point;
+    boundaryFullPointsRef.current = [point];
+    updateActiveBoundary([point]);
+  }, [getSelectionPoint, state.uploadedImage, updateActiveBoundary]);
 
-    updateActiveSelection((prev) => {
-      if (!prev) return prev;
-      if (prev.type === 'rect') {
-        return { ...prev, end: point };
+  const updateSelectionPath = useCallback((e: React.MouseEvent) => {
+    const point = getSelectionPoint(e, true);
+    if (!point) return;
+    pendingPointRef.current = point;
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const latestPoint = pendingPointRef.current;
+      pendingPointRef.current = null;
+      if (!latestPoint) return;
+
+      const current = activeSelectionRef.current;
+      if (!current) return;
+      if (current.type === 'rect') {
+        updateActiveSelection((prev) => (prev && prev.type === 'rect' ? { ...prev, end: latestPoint } : prev));
+        return;
       }
-      const last = lastPointRef.current;
-      if (last && Math.hypot(point.x - last.x, point.y - last.y) < 2) {
-        return prev;
+
+      const lastFull = lastPointRef.current;
+      const fullMin = minPointDistanceRef.current;
+      if (!lastFull || Math.hypot(latestPoint.x - lastFull.x, latestPoint.y - lastFull.y) >= fullMin) {
+        lastPointRef.current = latestPoint;
+        if (selectionFullPointsRef.current.length === 0) {
+          selectionFullPointsRef.current = [latestPoint];
+        } else {
+          selectionFullPointsRef.current.push(latestPoint);
+        }
       }
-      lastPointRef.current = point;
-      return { ...prev, points: [...prev.points, point] };
+
+      const lastPreview = selectionPreviewLastPointRef.current;
+      const previewMin = selectionPreviewMinPointDistanceRef.current;
+      if (!lastPreview || Math.hypot(latestPoint.x - lastPreview.x, latestPoint.y - lastPreview.y) >= previewMin) {
+        selectionPreviewLastPointRef.current = latestPoint;
+        updateActiveSelection((prev) => {
+          if (!prev || prev.type === 'rect') return prev;
+          return { ...prev, points: [...prev.points, latestPoint] };
+        });
+      }
     });
   }, [getSelectionPoint, updateActiveSelection]);
 
+  const updateBoundaryPath = useCallback((e: React.MouseEvent) => {
+    const point = getSelectionPoint(e, true);
+    if (!point) return;
+    boundaryPendingPointRef.current = point;
+    if (boundaryRafRef.current !== null) return;
+    boundaryRafRef.current = requestAnimationFrame(() => {
+      boundaryRafRef.current = null;
+      const latestPoint = boundaryPendingPointRef.current;
+      boundaryPendingPointRef.current = null;
+      if (!latestPoint) return;
+      const lastFull = boundaryLastPointRef.current;
+      const fullMin = boundaryMinPointDistanceRef.current;
+      if (!lastFull || Math.hypot(latestPoint.x - lastFull.x, latestPoint.y - lastFull.y) >= fullMin) {
+        boundaryLastPointRef.current = latestPoint;
+        if (boundaryFullPointsRef.current.length === 0) {
+          boundaryFullPointsRef.current = [latestPoint];
+        } else {
+          boundaryFullPointsRef.current.push(latestPoint);
+        }
+      }
+
+      const lastPreview = boundaryPreviewLastPointRef.current;
+      const previewMin = boundaryPreviewMinPointDistanceRef.current;
+      if (!lastPreview || Math.hypot(latestPoint.x - lastPreview.x, latestPoint.y - lastPreview.y) >= previewMin) {
+        boundaryPreviewLastPointRef.current = latestPoint;
+        updateActiveBoundary((prev) => (prev ? [...prev, latestPoint] : [latestPoint]));
+      }
+    });
+  }, [getSelectionPoint, updateActiveBoundary]);
+
   const finishSelection = useCallback(() => {
     setIsSelecting(false);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingPointRef.current = null;
     lastPointRef.current = null;
+    selectionPreviewLastPointRef.current = null;
     const finalSelection = activeSelectionRef.current;
     if (finalSelection) {
       if (finalSelection.type === 'rect') {
@@ -545,16 +890,42 @@ const StandardCanvas: React.FC = () => {
         if (width > 2 && height > 2) {
           commitSelection(finalSelection);
         }
-      } else if (finalSelection.points.length > 1) {
-        if (finalSelection.type === 'brush' && !finalSelection.brushSize) {
-          commitSelection({ ...finalSelection, brushSize: state.workflow.visualSelection.brushSize });
-        } else {
-          commitSelection(finalSelection);
+      } else {
+        const points = selectionFullPointsRef.current.length > 1
+          ? selectionFullPointsRef.current
+          : finalSelection.points;
+        if (points.length > 1) {
+          const shape = { ...finalSelection, points };
+          if (shape.type === 'brush' && !shape.brushSize) {
+            commitSelection({ ...shape, brushSize: getImageBrushSize() });
+          } else {
+            commitSelection(shape);
+          }
         }
       }
     }
+    selectionFullPointsRef.current = [];
     updateActiveSelection(null);
-  }, [commitSelection, state.workflow.visualSelection.brushSize, updateActiveSelection]);
+  }, [commitSelection, getImageBrushSize, updateActiveSelection]);
+
+  const finishBoundarySelection = useCallback(() => {
+    setIsBoundarySelecting(false);
+    if (boundaryRafRef.current !== null) {
+      cancelAnimationFrame(boundaryRafRef.current);
+      boundaryRafRef.current = null;
+    }
+    boundaryPendingPointRef.current = null;
+    boundaryLastPointRef.current = null;
+    boundaryPreviewLastPointRef.current = null;
+    const finalBoundary = boundaryFullPointsRef.current.length > 2
+      ? boundaryFullPointsRef.current
+      : activeBoundaryRef.current;
+    if (finalBoundary && finalBoundary.length > 2) {
+      commitBoundary(finalBoundary);
+    }
+    boundaryFullPointsRef.current = [];
+    updateActiveBoundary(null);
+  }, [commitBoundary, updateActiveBoundary]);
 
   const handleFitToScreen = useCallback((e?: React.MouseEvent) => {
      if (e) {
@@ -624,6 +995,10 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (isBoundaryTool) {
+      startBoundarySelection(e);
+      return;
+    }
     if (isSelectTool) {
       startSelection(e);
       return;
@@ -632,6 +1007,12 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isBoundaryTool) {
+      if (isBoundarySelecting) {
+        updateBoundaryPath(e);
+      }
+      return;
+    }
     if (isSelectTool) {
       if (isSelecting) {
         updateSelectionPath(e);
@@ -642,6 +1023,9 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseUp = () => {
+    if (isBoundaryTool && isBoundarySelecting) {
+      finishBoundarySelection();
+    }
     if (isSelectTool && isSelecting) {
       finishSelection();
     }
@@ -649,6 +1033,9 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseLeave = () => {
+    if (isBoundaryTool && isBoundarySelecting) {
+      finishBoundarySelection();
+    }
     if (isSelectTool && isSelecting) {
       finishSelection();
     }
@@ -658,6 +1045,7 @@ const StandardCanvas: React.FC = () => {
   useEffect(() => {
     if (!state.uploadedImage) {
       updateActiveSelection(null);
+      updateActiveBoundary(null);
       if (state.workflow.visualSelections.length > 0) {
         dispatch({
           type: 'UPDATE_WORKFLOW',
@@ -667,13 +1055,103 @@ const StandardCanvas: React.FC = () => {
             visualSelectionRedoStack: [],
             visualSelectionMask: null,
             visualSelectionMaskSize: null,
+            visualSelectionViewScale: null,
             visualSelectionComposite: null,
             visualSelectionCompositeSize: null,
           },
         });
       }
     }
-  }, [dispatch, state.uploadedImage, state.workflow.visualSelections.length, updateActiveSelection]);
+  }, [dispatch, state.uploadedImage, state.workflow.visualSelections.length, updateActiveBoundary, updateActiveSelection]);
+
+  useEffect(() => {
+    if (!isMasterplan || state.workflow.mpBoundary.mode !== 'custom') {
+      setIsBoundarySelecting(false);
+      updateActiveBoundary(null);
+      boundaryLastPointRef.current = null;
+      boundaryPendingPointRef.current = null;
+      boundaryPreviewLastPointRef.current = null;
+      boundaryFullPointsRef.current = [];
+      if (boundaryRafRef.current !== null) {
+        cancelAnimationFrame(boundaryRafRef.current);
+        boundaryRafRef.current = null;
+      }
+    }
+  }, [isMasterplan, state.workflow.mpBoundary.mode, updateActiveBoundary]);
+
+  useEffect(() => {
+    if (!state.uploadedImage || state.workflow.visualSelections.length === 0) return;
+    const img = imageRef.current;
+    const maskSize = state.workflow.visualSelectionMaskSize;
+    if (!img || !img.naturalWidth || !img.naturalHeight || !maskSize) return;
+    if (maskSize.width === img.naturalWidth && maskSize.height === img.naturalHeight) return;
+    if (selectionMigrationRef.current === state.uploadedImage) return;
+
+    const imageAspect = img.naturalWidth / img.naturalHeight;
+    const canvasAspect = maskSize.width / maskSize.height;
+    let drawWidth = maskSize.width;
+    let drawHeight = maskSize.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imageAspect > canvasAspect) {
+      drawWidth = maskSize.width;
+      drawHeight = maskSize.width / imageAspect;
+      offsetY = (maskSize.height - drawHeight) / 2;
+    } else {
+      drawHeight = maskSize.height;
+      drawWidth = maskSize.height * imageAspect;
+      offsetX = (maskSize.width - drawWidth) / 2;
+    }
+
+    const scaleX = img.naturalWidth / drawWidth;
+    const scaleY = img.naturalHeight / drawHeight;
+    const scale = (scaleX + scaleY) / 2;
+    const clampPoint = (point: CanvasPoint) => ({
+      x: Math.min(Math.max((point.x - offsetX) * scaleX, 0), img.naturalWidth),
+      y: Math.min(Math.max((point.y - offsetY) * scaleY, 0), img.naturalHeight),
+    });
+
+    const migratedSelections = state.workflow.visualSelections.map((shape) => {
+      if (shape.type === 'rect') {
+        return {
+          ...shape,
+          start: clampPoint(shape.start),
+          end: clampPoint(shape.end),
+        };
+      }
+      if (shape.type === 'lasso') {
+        return {
+          ...shape,
+          points: shape.points.map(clampPoint),
+        };
+      }
+      return {
+        ...shape,
+        points: shape.points.map(clampPoint),
+        brushSize: (shape.brushSize || state.workflow.visualSelection.brushSize) * scale,
+      };
+    });
+
+    selectionMigrationRef.current = state.uploadedImage;
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelections: migratedSelections,
+        visualSelectionMask: null,
+        visualSelectionMaskSize: { width: img.naturalWidth, height: img.naturalHeight },
+        visualSelectionComposite: null,
+        visualSelectionCompositeSize: { width: img.naturalWidth, height: img.naturalHeight },
+      },
+    });
+  }, [
+    dispatch,
+    imageVersion,
+    state.uploadedImage,
+    state.workflow.visualSelection.brushSize,
+    state.workflow.visualSelectionMaskSize,
+    state.workflow.visualSelections,
+  ]);
 
   useEffect(() => {
     if (state.mode !== 'visual-edit') return;
@@ -742,6 +1220,7 @@ const StandardCanvas: React.FC = () => {
     buildSelectionMask,
     buildSelectionComposite,
     dispatch,
+    imageVersion,
     state.mode,
     state.uploadedImage,
     state.workflow.visualSelectionMask,
@@ -756,24 +1235,73 @@ const StandardCanvas: React.FC = () => {
      transition: isPanning ? 'none' : 'transform 0.1s cubic-bezier(0.2, 0, 0.2, 1)'
   };
 
-  const selectionStroke = Math.max(1, 2 / state.canvas.zoom);
-  const hideSelections =
-    state.mode === 'visual-edit' &&
-    state.workflow.activeTool === 'material' &&
-    state.workflow.visualMaterial.surfaceType === 'auto';
-  const selectionShapes = hideSelections
-    ? []
-    : [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])];
+  const currentImageLayout = getImageLayout();
+  const selectionStroke = Math.max(1.5, 2.4 / state.canvas.zoom);
+  const brushOutlineRadius = Math.max(1.5, 2.6 / state.canvas.zoom);
+  const selectionColors = {
+    fill: 'rgba(56, 189, 248, 0.14)',
+    fillActive: 'rgba(56, 189, 248, 0.18)',
+    stroke: 'rgba(56, 189, 248, 0.6)',
+    strokeActive: 'rgba(56, 189, 248, 0.85)',
+    brushFill: 'rgba(56, 189, 248, 0.14)',
+    brushFillActive: 'rgba(56, 189, 248, 0.18)',
+    brushOutline: 'rgba(56, 189, 248, 0.6)',
+  };
+  const selectionShapes =
+    state.mode === 'visual-edit'
+      ? [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])]
+      : [];
+  const boundaryPoints = isMasterplan
+    ? (isBoundarySelecting && activeBoundary ? activeBoundary : state.workflow.mpBoundary.points)
+    : [];
+  const brushShapes = selectionShapes.filter((shape) => shape.type === 'brush');
+  const otherShapes = selectionShapes.filter((shape) => shape.type !== 'brush');
+
+  const mapPoint = (point: CanvasPoint) => {
+    if (!currentImageLayout) return point;
+    return {
+      x: point.x * currentImageLayout.scaleX + currentImageLayout.offsetX,
+      y: point.y * currentImageLayout.scaleY + currentImageLayout.offsetY,
+    };
+  };
+
+  const getDisplayBrushSize = (size: number) => {
+    if (!currentImageLayout) return size;
+    const scale = (currentImageLayout.scaleX + currentImageLayout.scaleY) / 2;
+    return Math.max(1, size * scale);
+  };
+
+  const renderBrushStroke = (shape: SelectionShape, stroke: string) => {
+    if (shape.type !== 'brush' || !currentImageLayout || shape.points.length < 2) return null;
+    const points = shape.points.map((point) => mapPoint(point));
+    const strokeWidth = getDisplayBrushSize(shape.brushSize || getImageBrushSize());
+    const pointString = points.map((point) => `${point.x},${point.y}`).join(' ');
+    if (!pointString) return null;
+    return (
+      <polyline
+        points={pointString}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    );
+  };
 
   const renderSelectionShape = (shape: SelectionShape, isActive: boolean) => {
-    const stroke = isActive ? 'rgba(56,189,248,0.45)' : 'rgba(56,189,248,0.25)';
+    if (!currentImageLayout) return null;
+    const stroke = isActive ? selectionColors.strokeActive : selectionColors.stroke;
+    const fill = isActive ? selectionColors.fillActive : selectionColors.fill;
     const dash = isActive ? '6 4' : undefined;
 
     if (shape.type === 'rect') {
-      const x = Math.min(shape.start.x, shape.end.x);
-      const y = Math.min(shape.start.y, shape.end.y);
-      const width = Math.abs(shape.end.x - shape.start.x);
-      const height = Math.abs(shape.end.y - shape.start.y);
+      const start = mapPoint(shape.start);
+      const end = mapPoint(shape.end);
+      const x = Math.min(start.x, end.x);
+      const y = Math.min(start.y, end.y);
+      const width = Math.abs(end.x - start.x);
+      const height = Math.abs(end.y - start.y);
       return (
         <rect
           x={x}
@@ -783,37 +1311,44 @@ const StandardCanvas: React.FC = () => {
           stroke={stroke}
           strokeWidth={selectionStroke}
           strokeDasharray={dash}
-          fill="rgba(56,189,248,0.06)"
+          fill={fill}
           rx={6}
         />
       );
     }
 
-    const points = shape.points.map((point) => `${point.x},${point.y}`).join(' ');
-    if (!points) return null;
-
-    if (shape.type === 'brush') {
-      const strokeWidth = Math.max(1, (shape.brushSize || state.workflow.visualSelection.brushSize) / state.canvas.zoom);
-      return (
-        <polyline
-          points={points}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      );
-    }
+    if (shape.type === 'brush') return null;
+    const mappedPoints = shape.points.map((point) => mapPoint(point));
+    const pointString = mappedPoints.map((point) => `${point.x},${point.y}`).join(' ');
+    if (!pointString) return null;
 
     return (
       <polygon
-        points={points}
+        points={pointString}
         stroke={stroke}
         strokeWidth={selectionStroke}
         strokeDasharray={dash}
         strokeLinejoin="round"
-        fill="rgba(56,189,248,0.06)"
+        fill={fill}
+      />
+    );
+  };
+
+  const renderBoundaryShape = () => {
+    if (!currentImageLayout || boundaryPoints.length < 2) return null;
+    const mappedPoints = boundaryPoints.map((point) => mapPoint(point));
+    const pointString = mappedPoints.map((point) => `${point.x},${point.y}`).join(' ');
+    if (!pointString) return null;
+    const stroke = 'rgba(16, 185, 129, 0.85)';
+    const fill = 'rgba(16, 185, 129, 0.16)';
+
+    return (
+      <polygon
+        points={pointString}
+        stroke={stroke}
+        strokeWidth={selectionStroke}
+        strokeLinejoin="round"
+        fill={fill}
       />
     );
   };
@@ -848,7 +1383,7 @@ const StandardCanvas: React.FC = () => {
          ref={containerRef}
          className={cn(
             "flex-1 relative overflow-hidden h-full w-full select-none",
-            isSelectTool ? "cursor-crosshair" : isPanning ? "cursor-grabbing" : "cursor-grab"
+            isSelectTool || isBoundaryTool ? "cursor-crosshair" : isPanning ? "cursor-grabbing" : "cursor-grab"
          )}
          onWheel={handleWheel}
          onMouseDown={handleCanvasMouseDown}
@@ -873,6 +1408,8 @@ const StandardCanvas: React.FC = () => {
                             <img 
                                src={state.uploadedImage} 
                                className="w-full h-full object-contain block select-none" 
+                               ref={imageRef}
+                               onLoad={() => setImageVersion((prev) => prev + 1)}
                                draggable={false}
                             />
                          </div>
@@ -912,19 +1449,70 @@ const StandardCanvas: React.FC = () => {
                                  <img 
                                     src={state.uploadedImage} 
                                     alt="Workspace" 
+                                    ref={imageRef}
                                     className="w-full h-full object-contain block select-none"
                                     draggable={false}
+                                    onLoad={() => setImageVersion((prev) => prev + 1)}
                                     onClick={(e) => {
                                        e.stopPropagation();
-                                       if (!isPanning && !isSelectTool) {
+                                       if (!isPanning && !isSelectTool && !isBoundaryTool) {
                                            setIsFullscreen(true);
                                        }
                                     }}
                                  />
-                                 {isVisualEdit && state.uploadedImage && (
+                                 {(isVisualEdit || isMasterplan) && state.uploadedImage && (
                                     <div ref={selectionLayerRef} className="absolute inset-0 pointer-events-none">
                                        <svg className="w-full h-full">
-                                          {selectionShapes.map((shape, index) => (
+                                          {isMasterplan && renderBoundaryShape()}
+                                          {brushShapes.length > 0 && (
+                                            <defs>
+                                              <filter
+                                                id={brushOutlineId.current}
+                                                x="-50%"
+                                                y="-50%"
+                                                width="200%"
+                                                height="200%"
+                                                colorInterpolationFilters="sRGB"
+                                              >
+                                                <feMorphology
+                                                  in="SourceAlpha"
+                                                  operator="dilate"
+                                                  radius={brushOutlineRadius}
+                                                  result="dilated"
+                                                />
+                                                <feComposite in="dilated" in2="SourceAlpha" operator="out" result="outline" />
+                                                <feFlood floodColor={selectionColors.brushOutline} result="color" />
+                                                <feComposite in="color" in2="outline" operator="in" result="outlineColor" />
+                                                <feMerge>
+                                                  <feMergeNode in="outlineColor" />
+                                                </feMerge>
+                                              </filter>
+                                            </defs>
+                                          )}
+                                          {brushShapes.length > 0 && (
+                                            <>
+                                              <g filter={`url(#${brushOutlineId.current})`}>
+                                                {brushShapes.map((shape, index) => (
+                                                  <g key={`brush-outline-${shape.id}-${index}`}>
+                                                    {renderBrushStroke(shape, '#fff')}
+                                                  </g>
+                                                ))}
+                                              </g>
+                                              <g>
+                                                {brushShapes.map((shape, index) => (
+                                                  <g key={`brush-fill-${shape.id}-${index}`}>
+                                                    {renderBrushStroke(
+                                                      shape,
+                                                      shape.id === 'active'
+                                                        ? selectionColors.brushFillActive
+                                                        : selectionColors.brushFill
+                                                    )}
+                                                  </g>
+                                                ))}
+                                              </g>
+                                            </>
+                                          )}
+                                          {otherShapes.map((shape, index) => (
                                             <g key={`${shape.id}-${index}`}>
                                               {renderSelectionShape(shape, shape.id === 'active')}
                                             </g>

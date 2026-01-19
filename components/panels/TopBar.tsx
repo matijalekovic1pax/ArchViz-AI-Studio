@@ -15,7 +15,9 @@ const drawSelectionOverlay = (
   selectionCanvasSize: { width: number; height: number } | null,
   outputWidth: number,
   outputHeight: number,
-  brushFallback: number
+  brushFallback: number,
+  viewScale: number | null,
+  zoom: number
 ) => {
   if (!selectionCanvasSize || shapes.length === 0) return;
 
@@ -41,6 +43,14 @@ const drawSelectionOverlay = (
   const scaleX = outputWidth / drawWidth;
   const scaleY = outputHeight / drawHeight;
   const scale = (scaleX + scaleY) / 2;
+  const baseViewScale = viewScale && viewScale > 0 ? viewScale : 1;
+  const displayScale = Math.max(0.0001, baseViewScale * zoom);
+  const selectionStrokeScreen = Math.max(1.5, 2.4 / zoom);
+  const brushOutlineScreen = Math.max(1.5, 2.6 / zoom);
+  const selectionStrokeImage = selectionStrokeScreen / displayScale;
+  const brushOutlineImage = brushOutlineScreen / displayScale;
+  const selectionStrokeWidth = selectionStrokeImage * scale;
+  const brushOutlineWidth = brushOutlineImage * scale;
 
   const mapPoint = (point: { x: number; y: number }) => ({
     x: (point.x - offsetX) * scaleX,
@@ -52,12 +62,19 @@ const drawSelectionOverlay = (
   ctx.rect(0, 0, outputWidth, outputHeight);
   ctx.clip();
 
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+  const selectionFill = 'rgba(56, 189, 248, 0.14)';
+  const selectionStroke = 'rgba(56, 189, 248, 0.6)';
+  const brushFill = 'rgba(56, 189, 248, 0.14)';
+  const brushOutline = 'rgba(56, 189, 248, 0.6)';
+  const brushShapes = shapes.filter((shape) => shape.type === 'brush');
+  const otherShapes = shapes.filter((shape) => shape.type !== 'brush');
+
+  ctx.fillStyle = selectionFill;
+  ctx.strokeStyle = selectionStroke;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  shapes.forEach((shape) => {
+  otherShapes.forEach((shape) => {
     if (shape.type === 'rect') {
       const x = Math.min(shape.start.x, shape.end.x);
       const y = Math.min(shape.start.y, shape.end.y);
@@ -67,7 +84,7 @@ const drawSelectionOverlay = (
         const start = mapPoint({ x, y });
         const end = mapPoint({ x: x + w, y: y + h });
         ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
-        ctx.lineWidth = Math.max(1, 2);
+        ctx.lineWidth = selectionStrokeWidth;
         ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
       }
       return;
@@ -81,19 +98,74 @@ const drawSelectionOverlay = (
       mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
       ctx.closePath();
       ctx.fill();
-      ctx.lineWidth = Math.max(1, 2);
+      ctx.lineWidth = selectionStrokeWidth;
       ctx.stroke();
-      return;
+    }
+  });
+
+  if (brushShapes.length > 0) {
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = outputWidth;
+    maskCanvas.height = outputHeight;
+    const maskCtx = maskCanvas.getContext('2d');
+
+    if (maskCtx) {
+      maskCtx.strokeStyle = '#fff';
+      maskCtx.lineJoin = 'round';
+      maskCtx.lineCap = 'round';
+      brushShapes.forEach((shape) => {
+        if (shape.type !== 'brush' || shape.points.length < 2) return;
+        const brushSize = (shape.brushSize || brushFallback) * scale;
+        maskCtx.lineWidth = brushSize;
+        maskCtx.beginPath();
+        const mapped = shape.points.map(mapPoint);
+        maskCtx.moveTo(mapped[0].x, mapped[0].y);
+        mapped.slice(1).forEach((point) => maskCtx.lineTo(point.x, point.y));
+        maskCtx.stroke();
+      });
     }
 
-    if (shape.points.length < 2) return;
-    ctx.lineWidth = (shape.brushSize || brushFallback) * scale;
-    ctx.beginPath();
-    const mapped = shape.points.map(mapPoint);
-    ctx.moveTo(mapped[0].x, mapped[0].y);
-    mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
-    ctx.stroke();
-  });
+    const fillCanvas = document.createElement('canvas');
+    fillCanvas.width = outputWidth;
+    fillCanvas.height = outputHeight;
+    const fillCtx = fillCanvas.getContext('2d');
+    if (fillCtx) {
+      fillCtx.drawImage(maskCanvas, 0, 0);
+      fillCtx.globalCompositeOperation = 'source-in';
+      fillCtx.fillStyle = brushFill;
+      fillCtx.fillRect(0, 0, outputWidth, outputHeight);
+      ctx.drawImage(fillCanvas, 0, 0);
+    }
+
+    const outlineCanvas = document.createElement('canvas');
+    outlineCanvas.width = outputWidth;
+    outlineCanvas.height = outputHeight;
+    const outlineCtx = outlineCanvas.getContext('2d');
+    if (outlineCtx) {
+      const outlineWidth = brushOutlineWidth;
+
+      outlineCtx.drawImage(maskCanvas, 0, 0);
+      outlineCtx.globalCompositeOperation = 'source-out';
+      outlineCtx.strokeStyle = brushOutline;
+      outlineCtx.lineJoin = 'round';
+      outlineCtx.lineCap = 'round';
+
+      brushShapes.forEach((shape) => {
+        if (shape.type !== 'brush' || shape.points.length < 2) return;
+        const brushSize = (shape.brushSize || brushFallback) * scale;
+        outlineCtx.lineWidth = brushSize + outlineWidth * 2;
+        outlineCtx.beginPath();
+        const mapped = shape.points.map(mapPoint);
+        outlineCtx.moveTo(mapped[0].x, mapped[0].y);
+        mapped.slice(1).forEach((point) => outlineCtx.lineTo(point.x, point.y));
+        outlineCtx.stroke();
+      });
+
+      outlineCtx.globalCompositeOperation = 'destination-out';
+      outlineCtx.drawImage(maskCanvas, 0, 0);
+      ctx.drawImage(outlineCanvas, 0, 0);
+    }
+  }
 
   ctx.restore();
 };
@@ -108,11 +180,32 @@ export const TopBar: React.FC = () => {
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
   const selectionRedoStack = state.workflow.visualSelectionRedoStack;
-  const canUndoSelection = state.mode === 'visual-edit' && selectionUndoStack.length > 0;
-  const canRedoSelection = state.mode === 'visual-edit' && selectionRedoStack.length > 0;
+  const boundaryUndoStack = state.workflow.mpBoundaryUndoStack;
+  const boundaryRedoStack = state.workflow.mpBoundaryRedoStack;
+  const isMasterplanBoundary = state.mode === 'masterplan' && state.workflow.mpBoundary.mode === 'custom';
+  const canUndoSelection =
+    (state.mode === 'visual-edit' && selectionUndoStack.length > 0) ||
+    (isMasterplanBoundary && boundaryUndoStack.length > 0);
+  const canRedoSelection =
+    (state.mode === 'visual-edit' && selectionRedoStack.length > 0) ||
+    (isMasterplanBoundary && boundaryRedoStack.length > 0);
 
   const handleUndoSelection = () => {
     if (!canUndoSelection) return;
+    if (isMasterplanBoundary) {
+      const previous = boundaryUndoStack[boundaryUndoStack.length - 1] || [];
+      const nextUndo = boundaryUndoStack.slice(0, -1);
+      const nextRedo = [...boundaryRedoStack, state.workflow.mpBoundary.points];
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          mpBoundary: { ...state.workflow.mpBoundary, points: previous },
+          mpBoundaryUndoStack: nextUndo,
+          mpBoundaryRedoStack: nextRedo,
+        },
+      });
+      return;
+    }
     const previous = selectionUndoStack[selectionUndoStack.length - 1];
     const nextUndo = selectionUndoStack.slice(0, -1);
     const nextRedo = [...selectionRedoStack, state.workflow.visualSelections];
@@ -128,6 +221,20 @@ export const TopBar: React.FC = () => {
 
   const handleRedoSelection = () => {
     if (!canRedoSelection) return;
+    if (isMasterplanBoundary) {
+      const next = boundaryRedoStack[boundaryRedoStack.length - 1] || [];
+      const nextRedo = boundaryRedoStack.slice(0, -1);
+      const nextUndo = [...boundaryUndoStack, state.workflow.mpBoundary.points];
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          mpBoundary: { ...state.workflow.mpBoundary, points: next },
+          mpBoundaryUndoStack: nextUndo,
+          mpBoundaryRedoStack: nextRedo,
+        },
+      });
+      return;
+    }
     const next = selectionRedoStack[selectionRedoStack.length - 1];
     const nextRedo = selectionRedoStack.slice(0, -1);
     const nextUndo = [...selectionUndoStack, state.workflow.visualSelections];
@@ -294,7 +401,9 @@ export const TopBar: React.FC = () => {
                         selectionCanvasSize,
                         width,
                         height,
-                        state.workflow.visualSelection.brushSize
+                        state.workflow.visualSelection.brushSize,
+                        state.workflow.visualSelectionViewScale,
+                        state.canvas.zoom
                     );
                 }
                 

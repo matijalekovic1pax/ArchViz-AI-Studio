@@ -11,15 +11,31 @@ interface SliderProps {
   label?: string;
   className?: string;
   disabled?: boolean;
+  showLabel?: boolean;
+  showValue?: boolean;
 }
 
-export const Slider: React.FC<SliderProps> = ({ value, min, max, step = 1, onChange, label, className, disabled }) => {
+export const Slider: React.FC<SliderProps> = ({
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  label,
+  className,
+  disabled,
+  showLabel = true,
+  showValue = true,
+}) => {
+  const showHeader = (showLabel && !!label) || showValue;
   return (
     <div className={cn("space-y-2", className, disabled && "opacity-50 pointer-events-none")}>
-      <div className="flex justify-between text-xs">
-        {label && <span className="text-foreground-secondary">{label}</span>}
-        <span className="font-mono text-foreground-muted">{value}</span>
-      </div>
+      {showHeader && (
+        <div className="flex justify-between text-xs">
+          {showLabel && label && <span className="text-foreground-secondary">{label}</span>}
+          {showValue && <span className="font-mono text-foreground-muted">{value}</span>}
+        </div>
+      )}
       <SliderPrimitive.Root
         className="relative flex items-center select-none touch-none w-full h-5"
         value={[value]}
