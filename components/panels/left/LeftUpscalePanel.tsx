@@ -131,6 +131,23 @@ export const LeftUpscalePanel = () => {
             </div>
          </div>
          
+         {total > 0 && (
+            <div className="bg-surface-elevated border border-border p-3 rounded-lg">
+               <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium">{completed}/{total} completed</span>
+                  {completed === total && total > 0 && (
+                     <Check size={14} className="text-green-500" />
+                  )}
+               </div>
+               <div className="w-full bg-surface-sunken rounded-full h-1.5">
+                  <div
+                     className="bg-accent h-1.5 rounded-full transition-all duration-300"
+                     style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
+                  />
+               </div>
+            </div>
+         )}
+
          <div className="bg-surface-sunken p-3 rounded-lg text-[10px] text-foreground-secondary leading-relaxed">
             Batch processing saves ~30% compared to single-image runs.
          </div>

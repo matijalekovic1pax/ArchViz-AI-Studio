@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../../store';
 import { 
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings, 
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -12,6 +12,7 @@ import { MasterplanPanel } from './MasterplanPanel';
 import { VisualEditPanel } from './VisualEditPanel';
 import { ExplodedPanel } from './ExplodedPanel';
 import { SectionPanel } from './SectionPanel';
+import { MultiAnglePanel } from './MultiAnglePanel';
 import { UpscalePanel } from './UpscalePanel';
 import { ImageToCadPanel } from './ImageToCadPanel';
 import { ImageTo3DPanel } from './ImageTo3DPanel';
@@ -100,6 +101,12 @@ export const RightPanel: React.FC = () => {
         panelDescription = "Control geometry, lighting, camera, and materials for sketch-to-render conversion.";
         panelContent = <Render3DPanel />; 
         break;
+      case 'multi-angle':
+        panelTitle = "Multi-Angle";
+        PanelIcon = Camera;
+        panelDescription = "Generate consistent views across multiple angles while keeping lighting and style locked.";
+        panelContent = <MultiAnglePanel />;
+        break;
       case 'upscale': 
         panelTitle = "Upscaler"; 
         PanelIcon = Maximize2; 
@@ -112,11 +119,11 @@ export const RightPanel: React.FC = () => {
         panelDescription = "Settings for vectorizing raster images into CAD-ready formats like DXF or DWG.";
         panelContent = <ImageToCadPanel />; 
         break;
-      case 'img-to-3d': 
-        panelTitle = "Image to 3D"; 
-        PanelIcon = Cuboid; 
-        panelDescription = "Control mesh density and texture generation when converting 2D images to 3D models.";
-        panelContent = <ImageTo3DPanel />; 
+      case 'img-to-3d':
+        panelTitle = "Image to 3D";
+        PanelIcon = Cuboid;
+        panelDescription = "Preview and export 3D models generated from your images using SAM AI.";
+        panelContent = <ImageTo3DPanel />;
         break;
       case 'video': 
         panelTitle = "Video Studio"; 
@@ -135,12 +142,15 @@ export const RightPanel: React.FC = () => {
         panelContent = <div className="p-4 text-center text-xs text-foreground-muted">Select a workflow</div>;
   }
 
+  // Use wider panel for img-to-3d mode to accommodate the 3D viewer
+  const panelWidth = mode === 'img-to-3d' ? 380 : (rightPanelWidth || 320);
+
   return (
-    <div 
+    <div
       className={cn(
-        "bg-background-tertiary border-l border-border flex flex-col overflow-hidden transition-all relative z-10",
-        rightPanelWidth ? `w-[${rightPanelWidth}px]` : "w-[320px]"
+        "bg-background-tertiary border-l border-border flex flex-col overflow-hidden transition-all relative z-10"
       )}
+      style={{ width: `${panelWidth}px` }}
     >
       <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle flex justify-between items-center relative">
           <div className="flex items-center gap-2">

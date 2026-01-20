@@ -8,6 +8,7 @@ export type GenerationMode =
   | 'exploded' 
   | 'section' 
   | 'render-sketch' 
+  | 'multi-angle'
   | 'upscale' 
   | 'img-to-cad' 
   | 'img-to-3d' 
@@ -643,19 +644,30 @@ export interface WorkflowSettings {
   upscalePreserveMetadata: boolean;
   upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing'; url?: string }[];
 
-  // 9. Image to CAD
+  // 9. Multi-Angle
+  multiAnglePreset: 'turntable' | 'architectural' | 'birds-eye' | 'custom';
+  multiAngleViewCount: number;
+  multiAngleDistribution: 'even' | 'manual';
+  multiAngleAzimuthRange: [number, number];
+  multiAngleElevationRange: [number, number];
+  multiAngleLockConsistency: boolean;
+  multiAngleAngles: { id: string; azimuth: number; elevation: number }[];
+  multiAngleOutputs: { id: string; name: string; url: string }[];
+
+  // 10. Image to CAD
   imgToCadType: 'photo' | 'render';
   imgToCadOutput: 'elevation' | 'plan' | 'detail';
   imgToCadLine: { sensitivity: number; simplify: number; connect: boolean };
   imgToCadLayers: { walls: boolean; windows: boolean; details: boolean; hidden: boolean };
   imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
 
-  // 10. Image to 3D
-  img3dInputs: { id: string; view: string; isPrimary: boolean }[];
-  img3dMesh: { type: 'organic' | 'arch'; edges: number; fill: boolean };
-  img3dOutput: { format: 'obj' | 'fbx' | 'gltf'; textureRes: number };
+  // 11. Image to 3D
+  img3dInputs: { id: string; view: string; isPrimary: boolean; url?: string }[];
+  img3dGeneratedModel: string | null;
+  img3dOutputFormat: 'obj' | 'fbx' | 'glb' | 'usd';
+  img3dIncludeTextures: boolean;
 
-  // 11. Video Studio
+  // 12. Video Studio
   videoState: VideoState;
 }
 

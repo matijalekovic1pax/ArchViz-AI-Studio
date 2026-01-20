@@ -1878,6 +1878,42 @@ function generateUpscalePrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function generateMultiAnglePrompt(state: AppState): string {
+  const { workflow, activeStyleId, customStyles } = state;
+  const parts: string[] = [];
+  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Generate consistent multi-angle views of the same subject.');
+  }
+
+  parts.push(`Views: ${workflow.multiAngleViewCount}.`);
+  parts.push(
+    `Azimuth range ${workflow.multiAngleAzimuthRange[0]}°-${workflow.multiAngleAzimuthRange[1]}°, elevation range ${workflow.multiAngleElevationRange[0]}°-${workflow.multiAngleElevationRange[1]}°.`
+  );
+  parts.push(`Distribution: ${workflow.multiAngleDistribution}.`);
+  parts.push(`Lock consistency: ${formatYesNo(workflow.multiAngleLockConsistency)}.`);
+
+  if (workflow.multiAngleAngles.length > 0) {
+    const list = workflow.multiAngleAngles
+      .slice(0, 12)
+      .map((angle) => `${angle.azimuth}°/${angle.elevation}°`)
+      .join(', ');
+    parts.push(`Angles: ${list}${workflow.multiAngleAngles.length > 12 ? ', ...' : ''}.`);
+  }
+
+  if (!isNoStyle && style) {
+    parts.push(`Style: ${style.name}.`);
+  }
+  parts.push('Keep lighting, materials, and exposure consistent across all views.');
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
 
 function generateMasterplanPrompt(state: AppState): string {
@@ -2145,6 +2181,12 @@ export function generatePrompt(state: AppState): string {
 
   if (state.mode === 'render-sketch') {
     return generateSketchPrompt(state);
+  }
+  if (state.mode === 'upscale') {
+    return generateUpscalePrompt(state);
+  }
+  if (state.mode === 'multi-angle') {
+    return generateMultiAnglePrompt(state);
   }
 
   // Use specialized prompt generator for 3D Render mode

@@ -626,19 +626,30 @@ const initialWorkflow: WorkflowSettings = {
   upscalePreserveMetadata: true,
   upscaleBatch: [],
 
-  // 9. Image to CAD
+  // 9. Multi-Angle
+  multiAnglePreset: 'turntable',
+  multiAngleViewCount: 8,
+  multiAngleDistribution: 'even',
+  multiAngleAzimuthRange: [0, 360],
+  multiAngleElevationRange: [10, 10],
+  multiAngleLockConsistency: true,
+  multiAngleAngles: [],
+  multiAngleOutputs: [],
+
+  // 10. Image to CAD
   imgToCadType: 'render',
   imgToCadOutput: 'detail',
   imgToCadLine: { sensitivity: 50, simplify: 20, connect: true },
   imgToCadLayers: { walls: true, windows: true, details: true, hidden: false },
   imgToCadFormat: 'dxf',
 
-  // 10. Image to 3D
-  img3dInputs: [{ id: '1', view: 'Front', isPrimary: true }],
-  img3dMesh: { type: 'arch', edges: 80, fill: true },
-  img3dOutput: { format: 'obj', textureRes: 2048 },
+  // 11. Image to 3D
+  img3dInputs: [],
+  img3dGeneratedModel: null,
+  img3dOutputFormat: 'glb',
+  img3dIncludeTextures: true,
 
-  // 11. Video Studio
+  // 12. Video Studio
   videoState: initialVideoState,
 };
 

@@ -3,7 +3,7 @@ import React from 'react';
 import { useAppStore } from '../../../store';
 import { 
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical, 
-  Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck,
+  Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
   ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -15,6 +15,7 @@ import { LeftVisualEditPanel } from './LeftVisualEditPanel';
 import { LeftExplodedPanel } from './LeftExplodedPanel';
 import { LeftSectionPanel } from './LeftSectionPanel';
 import { LeftSketchPanel } from './LeftSketchPanel';
+import { LeftMultiAnglePanel } from './LeftMultiAnglePanel';
 import { LeftUpscalePanel } from './LeftUpscalePanel';
 import { LeftImageToCADPanel } from './LeftImageToCADPanel';
 import { LeftImageTo3DPanel } from './LeftImageTo3DPanel';
@@ -32,6 +33,7 @@ const WORKFLOWS: { id: GenerationMode; label: string; icon: React.ElementType }[
   { id: 'exploded', label: 'Exploded Views', icon: Layers },
   { id: 'section', label: 'Render to Section', icon: RectangleVertical },
   { id: 'render-sketch', label: 'Sketch to Render', icon: Pencil },
+  { id: 'multi-angle', label: 'Multi-Angle', icon: Camera },
   { id: 'upscale', label: 'Image Upscaler', icon: Maximize },
   { id: 'img-to-cad', label: 'Image to CAD', icon: PenTool },
   { id: 'img-to-3d', label: 'Image to 3D', icon: Cuboid },
@@ -57,6 +59,7 @@ export const LeftSidebar: React.FC = () => {
       case 'exploded': return <LeftExplodedPanel />;
       case 'section': return <LeftSectionPanel />;
       case 'render-sketch': return <LeftSketchPanel />;
+      case 'multi-angle': return <LeftMultiAnglePanel />;
       case 'upscale': return <LeftUpscalePanel />;
       case 'img-to-cad': return <LeftImageToCADPanel />;
       case 'img-to-3d': return <LeftImageTo3DPanel />;

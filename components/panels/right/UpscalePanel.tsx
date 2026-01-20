@@ -1,7 +1,8 @@
-
 import React, { useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
+import { Toggle } from '../../ui/Toggle';
+import { Accordion } from '../../ui/Accordion';
 
 export const UpscalePanel = () => {
   const { state, dispatch } = useAppStore();
@@ -9,13 +10,41 @@ export const UpscalePanel = () => {
 
   const updateWf = useCallback(
     (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),
-    [dispatch, wf]
+    [dispatch]
   );
+
+  const scaleFactors = ['2x', '4x', '8x'] as const;
+  const formats = ['png', 'jpg', 'tiff'] as const;
 
   return (
     <div className="space-y-6">
+      {/* Scale Factor */}
       <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Enhancement</label>
+        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+          Scale Factor
+        </label>
+        <div className="grid grid-cols-3 gap-1">
+          {scaleFactors.map((factor) => (
+            <button
+              key={factor}
+              onClick={() => updateWf({ upscaleFactor: factor })}
+              className={`text-sm font-medium border rounded py-2 transition-colors ${
+                wf.upscaleFactor === factor
+                  ? 'bg-accent text-white border-accent'
+                  : 'border-border hover:bg-surface-elevated'
+              }`}
+            >
+              {factor}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Enhancement Sliders */}
+      <div>
+        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+          Enhancement
+        </label>
         <div className="space-y-4">
           <div className="space-y-2">
             <Slider
@@ -71,6 +100,45 @@ export const UpscalePanel = () => {
           </div>
         </div>
       </div>
+
+      {/* Output Section */}
+      <Accordion
+        items={[
+          {
+            id: 'output',
+            title: 'Output',
+            content: (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-foreground-muted mb-2 block">
+                    Format
+                  </label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {formats.map((format) => (
+                      <button
+                        key={format}
+                        onClick={() => updateWf({ upscaleFormat: format })}
+                        className={`text-[10px] uppercase border rounded py-1.5 transition-colors ${
+                          wf.upscaleFormat === format
+                            ? 'bg-accent text-white border-accent'
+                            : 'border-border hover:bg-surface-elevated'
+                        }`}
+                      >
+                        {format}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Toggle
+                  label="Preserve Metadata"
+                  checked={wf.upscalePreserveMetadata}
+                  onChange={(checked) => updateWf({ upscalePreserveMetadata: checked })}
+                />
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 };

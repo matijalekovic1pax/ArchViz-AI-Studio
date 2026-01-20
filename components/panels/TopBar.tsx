@@ -483,6 +483,7 @@ export const TopBar: React.FC = () => {
       case 'masterplan': return 'Generate Masterplan';
       case 'exploded': return 'Generate Exploded View';
       case 'section': return 'Generate Section';
+      case 'multi-angle': return 'Generate Angles';
       case 'upscale': return 'Upscale Image';
       case 'img-to-cad': return 'Convert to CAD';
       case 'img-to-3d': return 'Generate 3D Model';
