@@ -12,7 +12,6 @@ import { MasterplanPanel } from './MasterplanPanel';
 import { VisualEditPanel } from './VisualEditPanel';
 import { ExplodedPanel } from './ExplodedPanel';
 import { SectionPanel } from './SectionPanel';
-import { SketchPanel } from './SketchPanel';
 import { UpscalePanel } from './UpscalePanel';
 import { ImageToCadPanel } from './ImageToCadPanel';
 import { ImageTo3DPanel } from './ImageTo3DPanel';
@@ -98,8 +97,8 @@ export const RightPanel: React.FC = () => {
       case 'render-sketch': 
         panelTitle = "Sketch to Render"; 
         PanelIcon = Brush; 
-        panelDescription = "Adjust how faithfully the AI interprets your hand-drawn sketches and applies materials.";
-        panelContent = <SketchPanel />; 
+        panelDescription = "Control geometry, lighting, camera, and materials for sketch-to-render conversion.";
+        panelContent = <Render3DPanel />; 
         break;
       case 'upscale': 
         panelTitle = "Upscaler"; 

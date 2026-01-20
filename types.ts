@@ -582,17 +582,65 @@ export interface WorkflowSettings {
   };
 
   // 7. Sketch
-  sketchType: 'interior';
-  sketchConfidence: number;
-  sketchCleanup: { clean: boolean; lines: boolean };
+  // Sketch Analysis
+  sketchType: 'exterior' | 'interior' | 'detail' | 'aerial';
+  sketchAutoDetect: boolean;
+  sketchDetectedPerspective:
+    | '1-point'
+    | '2-point'
+    | '3-point'
+    | 'isometric'
+    | 'axonometric'
+    | 'freehand'
+    | null;
+  sketchLineQuality: number;
+  sketchCompleteness: number;
+
+  // Line Processing
+  sketchCleanupIntensity: number;
+  sketchEnhanceFaint: boolean;
+  sketchConnectLines: boolean;
+  sketchStraighten: boolean;
+  sketchRemoveConstruction: boolean;
+  sketchLineWeight: 'thin' | 'medium' | 'thick' | 'vary';
+  sketchPerspectiveCorrect: boolean;
+  sketchPerspectiveStrength: number;
+  sketchFixVerticals: boolean;
+
+  // View & Perspective
+  sketchPerspectiveType: '1-point' | '2-point' | '3-point' | 'isometric' | 'axonometric' | 'freehand';
+  sketchHorizonLine: number;
+  sketchCameraHeight: 'ground' | 'eye' | 'elevated' | 'aerial';
+  sketchVanishingPoints: { x: number; y: number }[];
+
+  // Interpretation
   sketchInterpretation: number; // 0-100 faithful-creative
-  sketchRefs: { id: string; url: string }[];
+  sketchPreserveOutline: boolean;
+  sketchPreserveOpenings: boolean;
+  sketchPreserveRoof: boolean;
+  sketchPreserveFloors: boolean;
+  sketchPreserveProportions: boolean;
+  sketchAllowDetails: boolean;
+  sketchAllowMaterials: boolean;
+  sketchAllowEntourage: boolean;
+  sketchAllowExtend: boolean;
+  sketchAmbiguityMode: 'ask' | 'conservative' | 'creative' | 'typical';
+
+  // References
+  sketchRefs: { id: string; url: string; type: 'style' | 'material' | 'mood' }[];
   sketchRefInfluence: number;
+  sketchRefType: 'style' | 'material' | 'mood';
+  sketchMaterialPalette: string;
+  sketchMoodPreset: string;
 
   // 8. Upscale
   upscaleFactor: '2x' | '4x' | '8x';
-  upscaleMode: 'general' | 'arch' | 'photo';
-  upscaleCreativity: number;
+  upscaleSharpness: number;
+  upscaleClarity: number;
+  upscaleEdgeDefinition: number;
+  upscaleFineDetail: number;
+  upscaleFormat: 'png' | 'jpg' | 'tiff';
+  upscalePreserveMetadata: boolean;
   upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing' }[];
 
   // 9. Image to CAD

@@ -572,22 +572,59 @@ const initialWorkflow: WorkflowSettings = {
   },
 
   // 7. Sketch
-  sketchType: 'interior',
-  sketchConfidence: 70,
-  sketchCleanup: { clean: true, lines: true },
-  sketchInterpretation: 40,
+  // Sketch Analysis
+  sketchType: 'exterior',
+  sketchAutoDetect: true,
+  sketchDetectedPerspective: null,
+  sketchLineQuality: 70,
+  sketchCompleteness: 80,
+
+  // Line Processing
+  sketchCleanupIntensity: 50,
+  sketchEnhanceFaint: true,
+  sketchConnectLines: true,
+  sketchStraighten: false,
+  sketchRemoveConstruction: false,
+  sketchLineWeight: 'medium',
+  sketchPerspectiveCorrect: false,
+  sketchPerspectiveStrength: 50,
+  sketchFixVerticals: true,
+
+  // View & Perspective
+  sketchPerspectiveType: '2-point',
+  sketchHorizonLine: 50,
+  sketchCameraHeight: 'eye',
+  sketchVanishingPoints: [],
+
+  // Interpretation
+  sketchInterpretation: 50,
+  sketchPreserveOutline: true,
+  sketchPreserveOpenings: true,
+  sketchPreserveRoof: true,
+  sketchPreserveFloors: false,
+  sketchPreserveProportions: true,
+  sketchAllowDetails: true,
+  sketchAllowMaterials: true,
+  sketchAllowEntourage: false,
+  sketchAllowExtend: false,
+  sketchAmbiguityMode: 'typical',
+
+  // References
   sketchRefs: [],
   sketchRefInfluence: 50,
+  sketchRefType: 'style',
+  sketchMaterialPalette: 'Concrete & Glass',
+  sketchMoodPreset: 'soft-daylight',
 
   // 8. Upscale
-  upscaleFactor: '4x',
-  upscaleMode: 'arch',
-  upscaleCreativity: 20,
-  upscaleBatch: [
-    { id: '1', name: 'Render_001.png', status: 'done' },
-    { id: '2', name: 'Render_002.png', status: 'processing' },
-    { id: '3', name: 'Render_003.png', status: 'queued' },
-  ],
+  upscaleFactor: '8x',
+  upscaleSharpness: 50,
+  upscaleClarity: 40,
+  upscaleEdgeDefinition: 50,
+  upscaleFineDetail: 50,
+  upscaleFormat: 'png',
+  upscalePreserveMetadata: true,
+  upscaleBatch: [],
 
   // 9. Image to CAD
   imgToCadType: 'render',

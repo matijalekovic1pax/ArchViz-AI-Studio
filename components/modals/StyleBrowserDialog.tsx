@@ -216,7 +216,9 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
           <div className="flex-1 bg-surface-elevated p-3 overflow-y-auto custom-scrollbar">
             {filteredStyles.length > 0 ? (
                <div className="grid grid-cols-3 gap-2">
-               {filteredStyles.map(style => (
+               {filteredStyles.map(style => {
+                  const isNoStyle = style.id === 'no-style';
+                  return (
                   <button
                      key={style.id}
                      onClick={() => handleStyleClick(style)}
@@ -229,14 +231,20 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
                      )}
                   >
                      {/* Preview Image */}
-                     <img
-                        src={resolvePreviewUrl(style.previewUrl)}
-                        alt={style.name}
-                        onError={handlePreviewError}
-                        data-fallback={fallbackPhoto}
-                        className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105"
-                     />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
+                     {isNoStyle ? (
+                       <div className="absolute inset-0 bg-surface-sunken" />
+                     ) : (
+                       <>
+                         <img
+                           src={resolvePreviewUrl(style.previewUrl)}
+                           alt={style.name}
+                           onError={handlePreviewError}
+                           data-fallback={fallbackPhoto}
+                           className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105"
+                         />
+                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
+                       </>
+                     )}
                      
                      {/* Active Indicator */}
                      {activeStyleId === style.id && (
@@ -246,10 +254,18 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
                      )}
 
                      <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="text-white text-xs font-bold mb-0.5 leading-tight shadow-sm truncate">{style.name}</p>
+                        <p
+                          className={cn(
+                            "text-xs font-bold mb-0.5 leading-tight shadow-sm truncate",
+                            isNoStyle ? "text-foreground" : "text-white"
+                          )}
+                        >
+                          {style.name}
+                        </p>
                      </div>
                   </button>
-               ))}
+                  );
+               })}
                </div>
             ) : (
                <div className="h-full flex flex-col items-center justify-center text-foreground-muted">
@@ -292,15 +308,23 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
           </div>
           <div className="p-4 space-y-4">
             <div className="relative w-full h-48 rounded-xl overflow-hidden border border-border bg-surface-sunken">
-              <img
-                src={resolvePreviewUrl(detailStyle.previewUrl)}
-                alt={detailStyle.name}
-                onError={handlePreviewError}
-                data-fallback={fallbackPhoto}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-              <div className="absolute bottom-3 left-3 text-white text-sm font-semibold">{detailStyle.name}</div>
+              {detailStyle.id === 'no-style' ? (
+                <div className="absolute inset-0 bg-surface-sunken flex items-center justify-center text-sm font-semibold text-foreground">
+                  No Style
+                </div>
+              ) : (
+                <>
+                  <img
+                    src={resolvePreviewUrl(detailStyle.previewUrl)}
+                    alt={detailStyle.name}
+                    onError={handlePreviewError}
+                    data-fallback={fallbackPhoto}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                  <div className="absolute bottom-3 left-3 text-white text-sm font-semibold">{detailStyle.name}</div>
+                </>
+              )}
             </div>
             <div className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Style Description</div>
             <div className="text-sm leading-relaxed text-foreground bg-surface-sunken/60 border border-border rounded-xl p-3">
