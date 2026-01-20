@@ -16,10 +16,12 @@ export const BottomPanel: React.FC = () => {
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
   const showEditStack = state.mode === 'visual-edit';
-  const showCleanup = state.mode === 'render-sketch' || state.mode === 'img-to-cad';
+  const showCleanup = state.mode === 'img-to-cad';
+  const resolvedBottomTab =
+    !showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab;
 
   const renderContent = () => {
-    if (state.activeBottomTab === 'prompt') {
+    if (resolvedBottomTab === 'prompt') {
       return (
         <div className="absolute inset-0 p-4 overflow-y-auto font-mono text-sm leading-relaxed text-foreground-secondary group">
           {prompt}
@@ -34,7 +36,7 @@ export const BottomPanel: React.FC = () => {
       );
     }
 
-    if (state.activeBottomTab === 'timeline') {
+    if (resolvedBottomTab === 'timeline') {
       const duration = state.workflow.videoState?.duration || 10;
       
       return (
@@ -114,7 +116,7 @@ export const BottomPanel: React.FC = () => {
     }
     
     // ... (Keep existing handlers for legend, edit-stack, cleanup, history)
-    if (state.activeBottomTab === 'history') {
+    if (resolvedBottomTab === 'history') {
         return (
           <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
             {state.history.length === 0 ? (
@@ -166,7 +168,7 @@ export const BottomPanel: React.FC = () => {
                onClick={() => dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: tab })}
                className={cn(
                  "flex items-center gap-2 px-4 h-full border-r border-border-subtle text-xs font-medium uppercase tracking-wider transition-colors",
-                 state.activeBottomTab === tab ? "bg-background-secondary text-foreground" : "text-foreground-muted hover:text-foreground hover:bg-background-secondary"
+                 resolvedBottomTab === tab ? "bg-background-secondary text-foreground" : "text-foreground-muted hover:text-foreground hover:bg-background-secondary"
                )}
              >
                {tab === 'prompt' && <Terminal size={14} />}

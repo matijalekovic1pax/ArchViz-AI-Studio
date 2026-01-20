@@ -641,7 +641,7 @@ export interface WorkflowSettings {
   upscaleFineDetail: number;
   upscaleFormat: 'png' | 'jpg' | 'tiff';
   upscalePreserveMetadata: boolean;
-  upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing' }[];
+  upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing'; url?: string }[];
 
   // 9. Image to CAD
   imgToCadType: 'photo' | 'render';

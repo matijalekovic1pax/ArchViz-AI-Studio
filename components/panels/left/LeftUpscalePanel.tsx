@@ -4,6 +4,7 @@ import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { Image as ImageIcon, Check, RefreshCw, Trash2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
+import { cn } from '../../../lib/utils';
 
 export const LeftUpscalePanel = () => {
    const { state, dispatch } = useAppStore();
@@ -15,21 +16,48 @@ export const LeftUpscalePanel = () => {
       [dispatch, wf]
    );
 
-   const handleAddImages = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+   const readFileAsDataUrl = useCallback((file: File) => (
+      new Promise<string>((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+         reader.onerror = () => reject(new Error('Failed to read file'));
+         reader.readAsDataURL(file);
+      })
+   ), []);
+
+   const handleAddImages = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
       if (files.length === 0) return;
-      const nextItems = files.map((file) => ({
-         id: nanoid(),
-         name: file.name,
-         status: 'queued' as const,
-      }));
-      updateWf({ upscaleBatch: [...wf.upscaleBatch, ...nextItems] });
-      event.target.value = '';
-   }, [updateWf, wf.upscaleBatch]);
+      try {
+         const results = await Promise.all(
+            files.map(async (file) => {
+               const url = await readFileAsDataUrl(file);
+               return {
+                  id: nanoid(),
+                  name: file.name,
+                  status: 'queued' as const,
+                  url,
+               };
+            })
+         );
+         updateWf({ upscaleBatch: [...wf.upscaleBatch, ...results] });
+      } catch (error) {
+         console.error('Failed to add images', error);
+      } finally {
+         event.target.value = '';
+      }
+   }, [readFileAsDataUrl, updateWf, wf.upscaleBatch]);
 
    const handleRemove = useCallback((id: string) => {
       updateWf({ upscaleBatch: wf.upscaleBatch.filter((item) => item.id !== id) });
    }, [updateWf, wf.upscaleBatch]);
+
+   const handleSelect = useCallback((itemUrl?: string) => {
+      if (!itemUrl) return;
+      dispatch({ type: 'SET_IMAGE', payload: itemUrl });
+      dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+      dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+   }, [dispatch]);
 
    const total = wf.upscaleBatch.length;
    const completed = wf.upscaleBatch.filter((item) => item.status === 'done').length;
@@ -39,8 +67,27 @@ export const LeftUpscalePanel = () => {
          <div>
             <SectionHeader title="Batch Queue" />
             <div className="space-y-2">
-               {wf.upscaleBatch.map(item => (
-                  <div key={item.id} className="flex items-center gap-3 p-2 bg-surface-elevated border border-border rounded">
+               {wf.upscaleBatch.map(item => {
+                  const isSelected = !!item.url && item.url === state.uploadedImage;
+                  return (
+                  <div
+                     key={item.id}
+                     onClick={() => handleSelect(item.url)}
+                     className={cn(
+                        "flex w-full items-center gap-3 p-2 rounded border text-left transition-colors",
+                        isSelected
+                           ? "border-accent bg-accent/10"
+                           : "bg-surface-elevated border-border hover:border-foreground/40"
+                     )}
+                     role="button"
+                     tabIndex={0}
+                     onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                           event.preventDefault();
+                           handleSelect(item.url);
+                        }
+                     }}
+                  >
                      <div className="w-8 h-8 bg-surface-sunken rounded flex items-center justify-center">
                         <ImageIcon size={14} className="text-foreground-muted" />
                      </div>
@@ -56,13 +103,16 @@ export const LeftUpscalePanel = () => {
                         <button
                            type="button"
                            className="text-foreground-muted hover:text-red-500"
-                           onClick={() => handleRemove(item.id)}
+                           onClick={(event) => {
+                              event.stopPropagation();
+                              handleRemove(item.id);
+                           }}
                         >
                            <Trash2 size={14} />
                         </button>
                      )}
                   </div>
-               ))}
+               )})}
                <button
                   type="button"
                   className="w-full py-2 border border-dashed border-border text-xs text-foreground-muted rounded hover:bg-surface-elevated transition-colors"
@@ -81,12 +131,8 @@ export const LeftUpscalePanel = () => {
             </div>
          </div>
          
-         <div className="bg-surface-sunken p-3 rounded-lg text-[10px] text-foreground-secondary leading-relaxed space-y-1">
-            <div className="flex items-center justify-between text-foreground">
-               <span className="font-semibold">Progress</span>
-               <span>{completed}/{total} completed</span>
-            </div>
-            <div>Batch processing saves ~30% compared to single-image runs.</div>
+         <div className="bg-surface-sunken p-3 rounded-lg text-[10px] text-foreground-secondary leading-relaxed">
+            Batch processing saves ~30% compared to single-image runs.
          </div>
       </div>
    );

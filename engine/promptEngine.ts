@@ -1627,6 +1627,257 @@ function generateCadRenderPrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function generateSketchPrompt(state: AppState): string {
+  const { workflow, activeStyleId, customStyles } = state;
+  const r3d = workflow.render3d;
+  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+
+  const parts: string[] = [];
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Sketch-to-render architectural visualization from a hand-drawn sketch.');
+  }
+
+  parts.push(`Sketch type: ${workflow.sketchType}.`);
+  parts.push(`Auto-detect analysis: ${formatYesNo(workflow.sketchAutoDetect)}.`);
+  parts.push(`Detected perspective: ${workflow.sketchDetectedPerspective || 'none'}.`);
+  parts.push(`Line quality ${workflow.sketchLineQuality}%, completeness ${workflow.sketchCompleteness}%.`);
+
+  const lineFlags: string[] = [];
+  if (workflow.sketchEnhanceFaint) lineFlags.push('enhance faint lines');
+  if (workflow.sketchConnectLines) lineFlags.push('connect broken lines');
+  if (workflow.sketchStraighten) lineFlags.push('straighten wobbly lines');
+  if (workflow.sketchRemoveConstruction) lineFlags.push('remove construction lines');
+  parts.push(
+    `Line processing: ${lineFlags.length ? lineFlags.join(', ') : 'none'}; cleanup ${workflow.sketchCleanupIntensity}%, line weight ${workflow.sketchLineWeight}.`
+  );
+  if (workflow.sketchPerspectiveCorrect) {
+    parts.push(
+      `Perspective correction: ${workflow.sketchPerspectiveStrength}% strength, fix verticals ${formatYesNo(
+        workflow.sketchFixVerticals
+      )}.`
+    );
+  } else {
+    parts.push('Perspective correction: off.');
+  }
+
+  parts.push(
+    `View: ${workflow.sketchPerspectiveType} perspective, horizon ${workflow.sketchHorizonLine}%, camera height ${workflow.sketchCameraHeight}.`
+  );
+  if (workflow.sketchVanishingPoints.length > 0) {
+    parts.push(`Vanishing points detected: ${workflow.sketchVanishingPoints.length}.`);
+  }
+
+  parts.push(`Interpretation: ${workflow.sketchInterpretation}% creative.`);
+  const preserveFlags: string[] = [];
+  if (workflow.sketchPreserveOutline) preserveFlags.push('building outline');
+  if (workflow.sketchPreserveOpenings) preserveFlags.push('window/door positions');
+  if (workflow.sketchPreserveRoof) preserveFlags.push('roof shape');
+  if (workflow.sketchPreserveFloors) preserveFlags.push('floor levels');
+  if (workflow.sketchPreserveProportions) preserveFlags.push('proportions & scale');
+  parts.push(`Preserve strictly: ${preserveFlags.length ? preserveFlags.join(', ') : 'none'}.`);
+
+  const allowFlags: string[] = [];
+  if (workflow.sketchAllowDetails) allowFlags.push('architectural details');
+  if (workflow.sketchAllowMaterials) allowFlags.push('material textures');
+  if (workflow.sketchAllowEntourage) allowFlags.push('entourage');
+  if (workflow.sketchAllowExtend) allowFlags.push('extend beyond bounds');
+  parts.push(`Allow variation: ${allowFlags.length ? allowFlags.join(', ') : 'none'}.`);
+  parts.push(`Ambiguity handling: ${workflow.sketchAmbiguityMode}.`);
+
+  if (!isNoStyle && style) {
+    parts.push(style.description);
+    if (style.promptBundle?.renderingLanguage?.atmosphere) {
+      parts.push(`Atmosphere: ${style.promptBundle.renderingLanguage.atmosphere.join(', ')}.`);
+    }
+  } else {
+    parts.push('Style: none.');
+  }
+
+  if (workflow.sketchRefs.length > 0) {
+    const counts = workflow.sketchRefs.reduce(
+      (acc, ref) => {
+        acc[ref.type] += 1;
+        return acc;
+      },
+      { style: 0, material: 0, mood: 0 }
+    );
+    parts.push(
+      `Reference images: ${workflow.sketchRefs.length} total (style ${counts.style}, material ${counts.material}, mood ${counts.mood}); influence ${workflow.sketchRefInfluence}%.`
+    );
+  } else {
+    parts.push(`Reference images: none; influence ${workflow.sketchRefInfluence}%.`);
+  }
+  if (workflow.sketchRefType === 'material') {
+    parts.push(`Material palette: ${workflow.sketchMaterialPalette}.`);
+  }
+  if (workflow.sketchRefType === 'mood') {
+    parts.push(`Mood preset: ${workflow.sketchMoodPreset}.`);
+  }
+
+  const modeDescriptions: Record<string, string> = {
+    'enhance': 'Enhance existing textures and lighting while strictly preserving geometry.',
+    'stylize': 'Apply artistic interpretation while maintaining architectural accuracy.',
+    'hybrid': 'Balance structural precision with creative material and lighting enhancements.',
+    'strict-realism': 'Maximum photographic realism with minimal AI interpretation.',
+    'concept-push': 'Creative exploration allowing form refinement and artistic details.',
+  };
+  parts.push(modeDescriptions[workflow.renderMode] || '');
+
+  const geo = r3d.geometry;
+  const geoDesc: string[] = [];
+  geoDesc.push(`${geo.edgeMode} edge definition`);
+  if (geo.strictPreservation) {
+    geoDesc.push('strict geometry preservation');
+  }
+  geoDesc.push(`${geo.lod.level} level of detail`);
+
+  const lodFeatures: string[] = [];
+  if (geo.lod.preserveOrnaments) lodFeatures.push('ornaments');
+  if (geo.lod.preserveMoldings) lodFeatures.push('moldings');
+  if (geo.lod.preserveTrim) lodFeatures.push('trim details');
+  if (lodFeatures.length > 0) {
+    geoDesc.push(`preserving ${lodFeatures.join(', ')}`);
+  }
+  if (geo.smoothing.enabled) {
+    geoDesc.push(
+      `${geo.smoothing.intensity}% surface smoothing${geo.smoothing.preserveHardEdges ? ' with preserved hard edges' : ''}`
+    );
+  }
+  if (geo.depthLayers.enabled) {
+    geoDesc.push(`depth-aware rendering (FG ${geo.depthLayers.foreground}%, MG ${geo.depthLayers.midground}%, BG ${geo.depthLayers.background}%)`);
+  }
+  if (geo.displacement.enabled) {
+    geoDesc.push(`${geo.displacement.scale} scale displacement at ${geo.displacement.strength}%${geo.displacement.adaptToMaterial ? ' adapting to materials' : ''}`);
+  }
+  parts.push(`Geometry: ${geoDesc.join(', ')}.`);
+
+  const light = r3d.lighting;
+  const lightDesc: string[] = [];
+  lightDesc.push(formatTimePreset(light.preset));
+  if (light.sun.enabled) {
+    lightDesc.push(`sun at ${light.sun.azimuth}Aų azimuth and ${light.sun.elevation}Aų elevation`);
+    lightDesc.push(`${light.sun.intensity}% intensity`);
+    const tempDesc = light.sun.colorTemp < 4000 ? 'warm' : light.sun.colorTemp > 6500 ? 'cool' : 'neutral';
+    lightDesc.push(`${tempDesc} ${light.sun.colorTemp}K color temperature`);
+  }
+  if (light.shadows.enabled) {
+    lightDesc.push(`${light.shadows.softness > 50 ? 'soft' : 'sharp'} shadows at ${light.shadows.intensity}% opacity`);
+  }
+  parts.push(`Lighting: ${lightDesc.join(', ')}.`);
+
+  const cam = r3d.camera;
+  const camDesc: string[] = [];
+  camDesc.push(`${cam.lens}mm lens`);
+  camDesc.push(`${cam.fov}Aų field of view`);
+  if (cam.autoCorrect) {
+    camDesc.push('perspective-corrected verticals');
+  }
+  if (cam.dof.enabled) {
+    camDesc.push(`depth of field at f/${cam.dof.aperture}`);
+    camDesc.push(`${cam.dof.focusDist}m focus distance`);
+  }
+  parts.push(`Camera: ${camDesc.join(', ')}.`);
+
+  const mat = r3d.materials;
+  const matDesc: string[] = [];
+  const emphasizedMats = getEmphasisMaterials(mat.emphasis);
+  if (emphasizedMats.length > 0) {
+    matDesc.push(`emphasizing ${emphasizedMats.join(', ')}`);
+  }
+  if (mat.reflectivity !== 50) {
+    matDesc.push(`${mat.reflectivity > 50 ? 'enhanced' : 'reduced'} reflectivity`);
+  }
+  if (mat.roughness !== 50) {
+    matDesc.push(`${mat.roughness > 50 ? 'rougher' : 'smoother'} surfaces`);
+  }
+  if (mat.weathering.enabled) {
+    matDesc.push(`${mat.weathering.intensity}% weathering and aging`);
+  }
+  if (matDesc.length > 0) {
+    parts.push(`Materials: ${matDesc.join(', ')}.`);
+  }
+
+  const atm = r3d.atmosphere;
+  const atmDesc: string[] = [];
+  atmDesc.push(formatMood(atm.mood));
+  if (atm.temp !== 0) {
+    atmDesc.push(`${atm.temp > 0 ? 'warmer' : 'cooler'} color temperature`);
+  }
+  if (atm.fog.enabled) {
+    atmDesc.push(`${atm.fog.density}% fog density`);
+  }
+  if (atm.bloom.enabled) {
+    atmDesc.push(`${atm.bloom.intensity}% bloom effect`);
+  }
+  parts.push(`Atmosphere: ${atmDesc.join(', ')}.`);
+
+  const scene = r3d.scenery;
+  const sceneDesc: string[] = [];
+  sceneDesc.push(`${formatContextPreset(scene.preset)} setting`);
+  if (scene.people.enabled) {
+    const density = scene.people.count > 50 ? 'busy' : scene.people.count > 20 ? 'moderate' : 'sparse';
+    sceneDesc.push(`${density} pedestrian activity`);
+  }
+  if (scene.trees.enabled) {
+    const density = scene.trees.count > 70 ? 'lush' : scene.trees.count > 30 ? 'moderate' : 'minimal';
+    sceneDesc.push(`${density} vegetation`);
+  }
+  if (scene.cars.enabled) {
+    sceneDesc.push('vehicles present');
+  }
+  parts.push(`Context: ${sceneDesc.join(', ')}.`);
+
+  const rend = r3d.render;
+  const rendDesc: string[] = [];
+  const resMap: Record<string, string> = {
+    '720p': '1280x720',
+    '1080p': '1920x1080',
+    '4k': '3840x2160',
+    'print': '6000x4000 print-ready',
+  };
+  rendDesc.push(resMap[rend.resolution] || rend.resolution);
+  rendDesc.push(`${rend.aspectRatio} aspect ratio`);
+  rendDesc.push(formatViewType(rend.viewType));
+  rendDesc.push(`${rend.quality} quality render`);
+  parts.push(`Output: ${rendDesc.join(', ')}.`);
+
+  const detailPhrase =
+    rend.resolution === '1080p' || rend.resolution === '4k'
+      ? 'when i zoom in i want to be able to see every detail'
+      : '8K resolution details';
+  parts.push(
+    `High-fidelity photorealistic architectural visualization, professional archviz quality, ray-traced global illumination, physically accurate materials, ${detailPhrase}.`
+  );
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
+function generateUpscalePrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+
+  parts.push('Image upscaling request.');
+  parts.push(`Scale factor: ${workflow.upscaleFactor}.`);
+  parts.push(
+    `Enhancement: sharpness ${workflow.upscaleSharpness}%, clarity ${workflow.upscaleClarity}%, edge definition ${workflow.upscaleEdgeDefinition}%, fine detail ${workflow.upscaleFineDetail}%.`
+  );
+
+  const batchCount = workflow.upscaleBatch.length;
+  if (batchCount > 0) {
+    const queued = workflow.upscaleBatch.filter((item) => item.status === 'queued').length;
+    const processing = workflow.upscaleBatch.filter((item) => item.status === 'processing').length;
+    const done = workflow.upscaleBatch.filter((item) => item.status === 'done').length;
+    parts.push(`Batch queue: ${batchCount} total (${queued} queued, ${processing} processing, ${done} done).`);
+  }
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
 
 function generateMasterplanPrompt(state: AppState): string {
@@ -1890,6 +2141,10 @@ export function generatePrompt(state: AppState): string {
 
   if (state.mode === 'visual-edit') {
     return generateVisualEditPrompt(state);
+  }
+
+  if (state.mode === 'render-sketch') {
+    return generateSketchPrompt(state);
   }
 
   // Use specialized prompt generator for 3D Render mode
