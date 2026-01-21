@@ -173,12 +173,15 @@ export function useGeneration(): UseGenerationReturn {
       const modePrefix = getModePromptPrefix(state.mode);
       const fullPrompt = modePrefix + basePrompt;
 
+      const sourceImage = state.sourceImage || state.uploadedImage;
+      const baseImage = state.mode === 'render-3d' ? sourceImage : state.uploadedImage;
+
       // Collect images from state and attachments
       const images: ImageData[] = [];
 
       // Add uploaded image if available
-      if (state.uploadedImage) {
-        const imgData = dataUrlToImageData(state.uploadedImage);
+      if (baseImage) {
+        const imgData = dataUrlToImageData(baseImage);
         if (imgData) {
           images.push(imgData);
         }
@@ -396,6 +399,26 @@ export function useGeneration(): UseGenerationReturn {
 
       // Process result
       if (result.images && result.images.length > 0) {
+        const sourceForHistory = state.sourceImage;
+        const hasSourceEntry = sourceForHistory
+          ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
+          : false;
+
+        if (sourceForHistory && !hasSourceEntry) {
+          dispatch({
+            type: 'ADD_HISTORY',
+            payload: {
+              id: nanoid(),
+              timestamp: Date.now(),
+              thumbnail: sourceForHistory,
+              prompt: basePrompt,
+              attachments: options.attachments || [],
+              mode: state.mode,
+              settings: { kind: 'source' }
+            }
+          });
+        }
+
         // Set the first generated image as the main image
         const generatedImageUrl = result.images[0].dataUrl;
         dispatch({ type: 'SET_IMAGE', payload: generatedImageUrl });

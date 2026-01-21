@@ -992,6 +992,8 @@ function generate3DRenderPrompt(state: AppState): string {
     'Re-render the exact same model; do not reinterpret or redesign.',
     'Preserve silhouette, proportions, massing, roofline, openings, facade rhythm, and all element positions.',
     'Keep camera viewpoint, lens, horizon, and framing unchanged; no perspective or crop changes.',
+    'Perspective lock: identical azimuth/elevation/roll, vanishing points, and horizon line. Do not rotate around the model.',
+    'Match the same framing and foreshortening; do not shift the camera position or target.',
     'Only materials, lighting, reflections, and render quality may change to achieve realism.'
   ];
   if (geometryLock) {

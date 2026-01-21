@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -173,6 +173,7 @@ export const TopBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showControlsMenu, setShowControlsMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { generate } = useGeneration();
@@ -490,7 +491,7 @@ export const TopBar: React.FC = () => {
 
         <div className="h-6 w-px bg-border-strong shrink-0" />
 
-          <div className="flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
+          <div className="hidden 2xl:flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
             <button
               onClick={handleUndoSelection}
               disabled={!canUndoSelection}
@@ -616,6 +617,153 @@ export const TopBar: React.FC = () => {
                 </div>
               </div>
             </>
+          )}
+        </div>
+
+        <div className="relative shrink-0 2xl:hidden">
+          <button
+            onClick={() => setShowControlsMenu((prev) => !prev)}
+            className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-full border border-border-subtle bg-surface-elevated text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
+            title="Controls"
+          >
+            <SlidersHorizontal size={12} />
+            Controls
+          </button>
+
+          {showControlsMenu && (
+            <div className="absolute left-0 top-full mt-2 w-64 bg-surface-elevated rounded-lg shadow-elevated border border-border p-2 z-50 animate-fade-in origin-top-left">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
+                  Canvas Controls
+                </span>
+                <button
+                  onClick={() => setShowControlsMenu(false)}
+                  className="text-foreground-muted hover:text-foreground"
+                  title="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-0.5">
+                  <button
+                    onClick={handleUndoSelection}
+                    disabled={!canUndoSelection}
+                    className={cn(
+                      "p-1 rounded-md transition-all border",
+                      canUndoSelection
+                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                    )}
+                    title="Undo"
+                  >
+                    <Undo size={14} />
+                  </button>
+                  <button
+                    onClick={handleRedoSelection}
+                    disabled={!canRedoSelection}
+                    className={cn(
+                      "p-1 rounded-md transition-all border",
+                      canRedoSelection
+                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                    )}
+                    title="Redo"
+                  >
+                    <Redo size={14} />
+                  </button>
+                  <button
+                    onClick={handleClearImage}
+                    disabled={!state.uploadedImage}
+                    className={cn(
+                      "p-1 rounded-md transition-all border",
+                      !state.uploadedImage
+                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        : "border-border text-foreground-secondary hover:text-red-600 hover:bg-surface-sunken"
+                    )}
+                    title="Clear Image"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <button
+                    onClick={handleFitToScreen}
+                    disabled={!state.uploadedImage}
+                    className={cn(
+                      "p-1 rounded-md transition-all border",
+                      !state.uploadedImage
+                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                    )}
+                    title="Fit to Screen"
+                  >
+                    <Minimize2 size={14} />
+                  </button>
+                  {!isVideoMode && (
+                    <button
+                      onClick={handleToggleSplit}
+                      disabled={!state.uploadedImage}
+                      className={cn(
+                        "p-1 rounded-md transition-all border",
+                        !state.uploadedImage
+                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                          : state.workflow.canvasSync
+                            ? "border-foreground text-foreground bg-surface-sunken"
+                            : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                      )}
+                      title="Toggle Split View"
+                    >
+                      <Columns size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    className="p-1 text-foreground-secondary hover:text-foreground hover:bg-surface-sunken rounded-md transition-all border border-border"
+                    onClick={() => handleZoom(-0.25)}
+                    title="Zoom Out"
+                  >
+                    <ZoomOut size={14} />
+                  </button>
+                  <span className="text-[9px] font-mono text-foreground-muted select-none">
+                    {Math.round(state.canvas.zoom * 100)}%
+                  </span>
+                  <button
+                    className="p-1 text-foreground-secondary hover:text-foreground hover:bg-surface-sunken rounded-md transition-all border border-border"
+                    onClick={() => handleZoom(0.25)}
+                    title="Zoom In"
+                  >
+                    <ZoomIn size={14} />
+                  </button>
+                </div>
+
+                {!isVideoMode && (
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted mb-1">
+                      Resolution
+                    </div>
+                    <div className="flex items-center gap-0.5 bg-surface-sunken rounded-md p-1 border border-border-subtle">
+                      {resolutionOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => handleResolutionChange(option.value)}
+                          className={cn(
+                            "px-1.5 py-0.5 text-[9px] font-semibold rounded-md transition-all",
+                            state.output.resolution === option.value
+                              ? "bg-foreground text-background shadow-sm"
+                              : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                          )}
+                          title={option.title || `Set ${option.label} output resolution`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -876,6 +1024,7 @@ export const TopBar: React.FC = () => {
                   <button 
                      onClick={() => {
                         dispatch({ type: 'SET_IMAGE', payload: null });
+                        dispatch({ type: 'SET_SOURCE_IMAGE', payload: null });
                         setShowClearConfirm(false);
                      }}
                      className="flex-1 py-2.5 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm"

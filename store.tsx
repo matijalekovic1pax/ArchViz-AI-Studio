@@ -808,6 +808,7 @@ const initialState: AppState = {
   mode: 'generate-text', // CHANGED: Set to 'generate-text' for default starting tab
   activeStyleId: 'no-style',
   uploadedImage: null,
+  sourceImage: null,
   isGenerating: false,
   progress: 0,
   prompt: '',
@@ -840,6 +841,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default' };
     case 'SET_STYLE': return { ...state, activeStyleId: action.payload };
     case 'SET_IMAGE': return { ...state, uploadedImage: action.payload };
+    case 'SET_SOURCE_IMAGE': return { ...state, sourceImage: action.payload };
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'UPDATE_WORKFLOW': return { ...state, workflow: { ...state.workflow, ...action.payload } };
@@ -880,7 +882,10 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'TOGGLE_RIGHT_PANEL': return { ...state, rightPanelOpen: !state.rightPanelOpen };
 
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
-    case 'LOAD_PROJECT': return { ...action.payload };
+    case 'LOAD_PROJECT': return { 
+      ...action.payload,
+      sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null
+    };
     case 'RESET_PROJECT': return { ...initialState };
     default: return state;
   }

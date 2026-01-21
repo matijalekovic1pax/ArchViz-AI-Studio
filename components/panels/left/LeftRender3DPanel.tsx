@@ -143,7 +143,8 @@ export const LeftRender3DPanel = () => {
   }, []);
 
   const analyzeProblemAreas = useCallback(async () => {
-    if (!state.uploadedImage) {
+    const sourceImage = state.sourceImage || state.uploadedImage;
+    if (!sourceImage) {
       updateWf({ detectedElements: [] });
       return;
     }
@@ -155,7 +156,7 @@ export const LeftRender3DPanel = () => {
     setIsAnalyzing(true);
     try {
       const service = getGeminiService();
-      const imageData = ImageUtils.dataUrlToImageData(state.uploadedImage);
+      const imageData = ImageUtils.dataUrlToImageData(sourceImage);
       const prompt = [
         `Analyze this ${wf.viewType} architectural render and list the top problem areas that need extra attention.`,
         'Return ONLY a JSON array of objects: [{ "name": string, "type": "structural"|"envelope"|"interior"|"site", "confidence": number }].',
@@ -173,7 +174,7 @@ export const LeftRender3DPanel = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [state.uploadedImage, wf.viewType, ensureServiceInitialized, parseProblemAreas, updateWf, buildProblemAreas]);
+  }, [state.sourceImage, state.uploadedImage, wf.viewType, ensureServiceInitialized, parseProblemAreas, updateWf, buildProblemAreas]);
 
   const problemAreas = useMemo(() => {
     return [...wf.detectedElements].sort((a, b) => b.confidence - a.confidence);

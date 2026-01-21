@@ -131,6 +131,9 @@ export const BottomPanel: React.FC = () => {
                     type="button"
                     onClick={() => {
                       dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
+                      if (item.settings?.kind === 'source') {
+                        dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
+                      }
                       dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
                       dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
                     }}

@@ -924,6 +924,7 @@ export interface AppState {
   mode: GenerationMode;
   activeStyleId: string;
   uploadedImage: string | null;
+  sourceImage: string | null;
   isGenerating: boolean;
   progress: number;
   prompt: string;
@@ -961,6 +962,7 @@ export type Action =
   | { type: 'SET_MODE'; payload: GenerationMode }
   | { type: 'SET_STYLE'; payload: string }
   | { type: 'SET_IMAGE'; payload: string | null }
+  | { type: 'SET_SOURCE_IMAGE'; payload: string | null }
   | { type: 'SET_GENERATING'; payload: boolean }
   | { type: 'SET_PROGRESS'; payload: number }
   | { type: 'UPDATE_WORKFLOW'; payload: Partial<WorkflowSettings> }

@@ -928,7 +928,9 @@ const StandardCanvas: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        dispatch({ type: 'SET_IMAGE', payload: ev.target?.result as string });
+        const dataUrl = ev.target?.result as string;
+        dispatch({ type: 'SET_IMAGE', payload: dataUrl });
+        dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
         handleFitToScreen();
       };
       reader.readAsDataURL(file);
@@ -941,9 +943,11 @@ const StandardCanvas: React.FC = () => {
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith('image/')) {
-       const reader = new FileReader();
+      const reader = new FileReader();
       reader.onload = (ev) => {
-        dispatch({ type: 'SET_IMAGE', payload: ev.target?.result as string });
+        const dataUrl = ev.target?.result as string;
+        dispatch({ type: 'SET_IMAGE', payload: dataUrl });
+        dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
         handleFitToScreen();
       };
       reader.readAsDataURL(file);
