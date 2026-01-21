@@ -1,54 +1,22 @@
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useAppStore } from '../store';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { generatePrompt } from '../engine/promptEngine';
-import { nanoid } from 'nanoid';
+import { useGeneration } from '../hooks/useGeneration';
 
 export const FloatingGenerateButton: React.FC = () => {
-  const { state, dispatch } = useAppStore();
-  const latestStateRef = useRef(state);
-
-  useEffect(() => {
-    latestStateRef.current = state;
-  }, [state]);
+  const { state } = useAppStore();
+  const { generate, isReady } = useGeneration();
 
   // If in chat mode, the chat interface has its own send button.
   if (state.mode === 'generate-text') return null;
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!state.uploadedImage || state.isGenerating) return;
-    
-    dispatch({ type: 'SET_GENERATING', payload: true });
-    
-    // Simulate generation
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 2;
-      dispatch({ type: 'SET_PROGRESS', payload: progress });
-      if (progress >= 100) {
-        clearInterval(interval);
-        dispatch({ type: 'SET_GENERATING', payload: false });
-        dispatch({ type: 'SET_PROGRESS', payload: 0 });
-        const latestState = latestStateRef.current;
-        if (latestState.uploadedImage) {
-          dispatch({ 
-            type: 'ADD_HISTORY', 
-            payload: {
-              id: nanoid(),
-              timestamp: Date.now(),
-              thumbnail: latestState.uploadedImage,
-              prompt: generatePrompt(latestState),
-              attachments: [],
-              mode: latestState.mode
-            }
-          });
-        }
-      }
-    }, 50);
+    await generate();
   };
 
-  const isDisabled = !state.uploadedImage;
+  const isDisabled = !state.uploadedImage || !isReady;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
@@ -58,8 +26,8 @@ export const FloatingGenerateButton: React.FC = () => {
         disabled={isDisabled || state.isGenerating}
         className={`
           flex items-center gap-3 px-8 py-3.5 rounded-full shadow-elevated transition-all duration-300
-          ${isDisabled 
-            ? 'bg-surface-sunken text-foreground-muted cursor-not-allowed' 
+          ${isDisabled
+            ? 'bg-surface-sunken text-foreground-muted cursor-not-allowed'
             : 'bg-foreground text-background hover:scale-105 active:scale-95'
           }
         `}

@@ -773,6 +773,9 @@ export interface MaterialValidationState {
     errors: number;
   };
   selectedMaterialCode: string | null;
+  isRunning: boolean;
+  lastRunAt: number | null;
+  aiSummary: string | null;
 }
 
 export interface GeometryState {

@@ -15,16 +15,13 @@ export {
 
 export type {
   GeminiConfig,
-  GeminiModel,
   GeminiRequest,
   GeminiResponse,
   GenerationConfig,
-  SafetySetting,
+  ImageConfig,
   ImageData,
   ImageMimeType,
   GeneratedImage,
-  UsageMetadata,
-  SafetyRating,
   BatchImageRequest,
   BatchImageResponse,
   ImageEditRequest

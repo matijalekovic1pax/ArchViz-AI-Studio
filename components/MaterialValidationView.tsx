@@ -3,11 +3,12 @@ import React, { useState } from 'react';
 import { useAppStore } from '../store';
 import { 
   FileText, FileSpreadsheet, Plus, Play, Download, Search, ChevronDown, 
-  Check, XCircle, AlertTriangle, CheckCircle2, Info, ArrowRight,
+  Check, XCircle, AlertTriangle, CheckCircle2, Info, ArrowRight, Loader2,
   Filter, LayoutList
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ParsedMaterial, ValidationIssue } from '../types';
+import { useGeneration } from '../hooks/useGeneration';
 
 // --- ENHANCED MOCK DATA ---
 
@@ -366,6 +367,7 @@ const BoQRow: React.FC<BoQRowProps> = ({ material, item, issues, expanded, onExp
 
 export const MaterialValidationView: React.FC = () => {
   const { state } = useAppStore();
+  const { generate, isReady } = useGeneration();
   const [activeTab, setActiveTab] = useState<'technical' | 'boq'>('technical');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
@@ -410,6 +412,10 @@ export const MaterialValidationView: React.FC = () => {
 
   const boqData = getBoQData();
 
+  const handleRunValidation = async () => {
+     await generate();
+  };
+
   return (
     <div className="flex-1 bg-background flex flex-col h-full overflow-hidden">
       
@@ -440,11 +446,48 @@ export const MaterialValidationView: React.FC = () => {
                <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold border border-border rounded-lg hover:bg-surface-sunken transition-colors">
                   <Download size={14} /> Export Report
                </button>
-               <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-foreground text-background rounded-lg hover:bg-foreground/90 transition-colors shadow-md">
-                  <Play size={14} fill="currentColor" /> Run Validation
+               <button
+                  onClick={handleRunValidation}
+                  disabled={!isReady || state.materialValidation.isRunning}
+                  className={cn(
+                     "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-colors shadow-md",
+                     !isReady || state.materialValidation.isRunning
+                        ? "bg-surface-sunken text-foreground-muted cursor-not-allowed"
+                        : "bg-foreground text-background hover:bg-foreground/90"
+                  )}
+               >
+                  {state.materialValidation.isRunning ? (
+                     <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Running...
+                     </>
+                  ) : (
+                     <>
+                        <Play size={14} fill="currentColor" /> Run Validation
+                     </>
+                  )}
                </button>
             </div>
          </div>
+
+         {(state.materialValidation.isRunning || state.materialValidation.aiSummary) && (
+            <div className="px-6 py-3 border-t border-border-subtle bg-background/60">
+               <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-1">
+                  AI Summary
+               </div>
+               {state.materialValidation.isRunning && (
+                  <div className="text-xs text-foreground-muted flex items-center gap-2">
+                     <Loader2 size={12} className="animate-spin" />
+                     Analyzing materials and documents...
+                  </div>
+               )}
+               {!state.materialValidation.isRunning && state.materialValidation.aiSummary && (
+                  <div className="text-xs text-foreground leading-relaxed">
+                     {state.materialValidation.aiSummary}
+                  </div>
+               )}
+            </div>
+         )}
 
          {/* 2. TOOLBAR & FILTERS */}
          <div className="flex items-center justify-between px-6 h-12 bg-background/50 backdrop-blur-sm border-t border-border-subtle">

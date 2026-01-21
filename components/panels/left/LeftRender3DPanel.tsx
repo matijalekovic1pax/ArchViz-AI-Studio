@@ -7,11 +7,19 @@ import { SectionHeader, StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { nanoid } from 'nanoid';
+import { RefreshCw } from 'lucide-react';
+import {
+  getGeminiService,
+  initGeminiService,
+  isGeminiServiceInitialized,
+  ImageUtils
+} from '../../../services/geminiService';
 
 
 export const LeftRender3DPanel = () => {
   const { state, dispatch } = useAppStore();
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const wf = state.workflow;
 
   const availableStyles = useMemo(
@@ -81,6 +89,91 @@ export const LeftRender3DPanel = () => {
       selected: true
     }));
   }, [wf.viewType]);
+
+  const getApiKey = useCallback((): string | null => {
+    // @ts-ignore - Vite injects this
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_GEMINI_API_KEY;
+    }
+    return localStorage.getItem('gemini_api_key');
+  }, []);
+
+  const ensureServiceInitialized = useCallback((): boolean => {
+    if (isGeminiServiceInitialized()) {
+      return true;
+    }
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return false;
+    }
+    initGeminiService({ apiKey });
+    return true;
+  }, [getApiKey]);
+
+  const parseProblemAreas = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    const jsonStart = trimmed.indexOf('[');
+    const jsonEnd = trimmed.lastIndexOf(']');
+    const jsonSlice = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonSlice);
+    } catch {
+      return [];
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .slice(0, 10)
+      .map((item: any, index: number) => {
+        const name = typeof item?.name === 'string' ? item.name : `Area ${index + 1}`;
+        const type = ['structural', 'envelope', 'interior', 'site'].includes(item?.type)
+          ? item.type
+          : 'interior';
+        const confidenceRaw = typeof item?.confidence === 'number' ? item.confidence : 0.6;
+        const confidence = Math.min(0.99, Math.max(0.3, confidenceRaw));
+        return {
+          id: nanoid(),
+          name,
+          type,
+          confidence,
+          selected: true
+        };
+      });
+  }, []);
+
+  const analyzeProblemAreas = useCallback(async () => {
+    if (!state.uploadedImage) {
+      updateWf({ detectedElements: [] });
+      return;
+    }
+    if (!ensureServiceInitialized()) {
+      updateWf({ detectedElements: buildProblemAreas() });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const service = getGeminiService();
+      const imageData = ImageUtils.dataUrlToImageData(state.uploadedImage);
+      const prompt = [
+        `Analyze this ${wf.viewType} architectural render and list the top problem areas that need extra attention.`,
+        'Return ONLY a JSON array of objects: [{ "name": string, "type": "structural"|"envelope"|"interior"|"site", "confidence": number }].',
+        'Confidence should be between 0 and 1.'
+      ].join(' ');
+      const text = await service.generateText({
+        prompt,
+        images: [imageData]
+      });
+      const parsed = parseProblemAreas(text);
+      updateWf({ detectedElements: parsed });
+    } catch (error) {
+      console.error('Problem area analysis failed:', error);
+      updateWf({ detectedElements: buildProblemAreas() });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [state.uploadedImage, wf.viewType, ensureServiceInitialized, parseProblemAreas, updateWf, buildProblemAreas]);
 
   const problemAreas = useMemo(() => {
     return [...wf.detectedElements].sort((a, b) => b.confidence - a.confidence);
@@ -154,13 +247,10 @@ export const LeftRender3DPanel = () => {
             checked={wf.prioritizationEnabled}
             onChange={(v) => {
               if (v) {
-                if (state.uploadedImage) {
-                  updateWf({ prioritizationEnabled: true, detectedElements: buildProblemAreas() });
-                } else {
-                  updateWf({ prioritizationEnabled: true, detectedElements: [] });
-                }
+                updateWf({ prioritizationEnabled: true, detectedElements: [] });
+                analyzeProblemAreas();
               } else {
-                updateWf({ prioritizationEnabled: false });
+                updateWf({ prioritizationEnabled: false, detectedElements: [] });
               }
             }}
           />
@@ -173,9 +263,15 @@ export const LeftRender3DPanel = () => {
             </p>
 
             <div className="space-y-1">
+              {isAnalyzing && (
+                <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
+                  <RefreshCw size={12} className="animate-spin" />
+                  Analyzing problem areas...
+                </div>
+              )}
               {problemAreas.length === 0 && (
                 <div className="text-[10px] text-foreground-muted py-2">
-                  No problem areas detected yet.
+                  {isAnalyzing ? 'Waiting for analysis results...' : 'No problem areas detected yet.'}
                 </div>
               )}
 

@@ -1,13 +1,12 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
-import { generatePrompt } from '../../engine/promptEngine';
-import { nanoid } from 'nanoid';
 import { VisualSelectionShape } from '../../types';
+import { useGeneration } from '../../hooks/useGeneration';
 
 const drawSelectionOverlay = (
   ctx: CanvasRenderingContext2D,
@@ -176,7 +175,7 @@ export const TopBar: React.FC = () => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const latestStateRef = useRef(state);
+  const { generate } = useGeneration();
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
   const selectionRedoStack = state.workflow.visualSelectionRedoStack;
@@ -254,10 +253,16 @@ export const TopBar: React.FC = () => {
   
   const isVideoMode = state.mode === 'video';
   const isDisabled = !state.uploadedImage && state.mode !== 'material-validation'; // Material validation doesn't need an image
+  const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
+    { value: '2k', label: '2K' },
+    { value: '4k', label: '4K' },
+    { value: '8k', label: '8K', title: '8K (API capped at 4K)' },
+  ];
 
-  useEffect(() => {
-    latestStateRef.current = state;
-  }, [state]);
+  const handleResolutionChange = (resolution: '2k' | '4k' | '8k') => {
+    if (resolution === state.output.resolution) return;
+    dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution } });
+  };
 
   // --- Handlers ---
 
@@ -280,36 +285,9 @@ export const TopBar: React.FC = () => {
       setShowClearConfirm(true);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if ((!state.uploadedImage && state.mode !== 'material-validation') || state.isGenerating) return;
-    
-    dispatch({ type: 'SET_GENERATING', payload: true });
-    
-    // Simulate generation
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 2;
-      dispatch({ type: 'SET_PROGRESS', payload: progress });
-      if (progress >= 100) {
-        clearInterval(interval);
-        dispatch({ type: 'SET_GENERATING', payload: false });
-        dispatch({ type: 'SET_PROGRESS', payload: 0 });
-        const latestState = latestStateRef.current;
-        if (latestState.uploadedImage) {
-          dispatch({ 
-            type: 'ADD_HISTORY', 
-            payload: {
-              id: nanoid(),
-              timestamp: Date.now(),
-              thumbnail: latestState.uploadedImage,
-              prompt: generatePrompt(latestState),
-              attachments: [],
-              mode: latestState.mode
-            }
-          });
-        }
-      }
-    }, 50);
+    await generate();
   };
 
   const handleExportProject = () => {
@@ -611,6 +589,34 @@ export const TopBar: React.FC = () => {
           >
             <ZoomIn size={14} />
           </button>
+
+          {!isVideoMode && (
+            <>
+              <div className="w-px h-3 bg-border mx-1" />
+              <div className="flex items-center gap-1 px-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted px-1">
+                  Res
+                </span>
+                <div className="flex items-center gap-1 bg-surface-elevated/70 rounded-md p-0.5">
+                  {resolutionOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleResolutionChange(option.value)}
+                      className={cn(
+                        "px-2 py-1 text-[10px] font-semibold rounded-md transition-all",
+                        state.output.resolution === option.value
+                          ? "bg-foreground text-background shadow-sm"
+                          : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                      )}
+                      title={option.title || `Set ${option.label} output resolution`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

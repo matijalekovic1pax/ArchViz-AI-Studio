@@ -4,6 +4,7 @@ import { useAppStore } from '../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
+import { useGeneration } from '../../hooks/useGeneration';
 
 type CanvasPoint = { x: number; y: number };
 type ImageLayout = {
@@ -25,8 +26,9 @@ type SelectionShape =
 
 const PromptBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { generate } = useGeneration();
   const [inputText, setInputText] = useState('');
-  const [attachments, setAttachments] = useState<string[]>([]); 
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -51,12 +53,11 @@ const PromptBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isHistoryOpen]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if ((!inputText.trim() && attachments.length === 0) || state.isGenerating) return;
 
     const promptText = inputText;
     const promptAttachments = attachments.slice();
-    dispatch({ type: 'SET_GENERATING', payload: true });
 
     setInputText('');
     setAttachments([]);
@@ -66,27 +67,12 @@ const PromptBar: React.FC = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    
-    setTimeout(() => {
-        dispatch({ type: 'SET_GENERATING', payload: false });
-        const mockImageUrl = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2400&q=80";
-        dispatch({ type: 'SET_IMAGE', payload: mockImageUrl });
-        dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
-        dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
-        
-        dispatch({ 
-            type: 'ADD_HISTORY', 
-            payload: {
-                id: nanoid(),
-                timestamp: Date.now(),
-                thumbnail: mockImageUrl,
-                prompt: promptText,
-                attachments: promptAttachments,
-                mode: state.mode
-            }
-        });
 
-    }, 3000);
+    // Use the generation hook with prompt and attachments
+    await generate({
+      prompt: promptText,
+      attachments: promptAttachments
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

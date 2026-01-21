@@ -985,6 +985,20 @@ function generate3DRenderPrompt(state: AppState): string {
   };
   parts.push(modeDescriptions[workflow.renderMode] || '');
 
+  // 3b. GEOMETRY FIDELITY (critical for 3D-to-render)
+  const geometryLock = workflow.renderMode === 'strict-realism' || r3d.geometry.strictPreservation;
+  const fidelityNotes: string[] = [
+    'Use the input image as ground-truth geometry and camera.',
+    'Re-render the exact same model; do not reinterpret or redesign.',
+    'Preserve silhouette, proportions, massing, roofline, openings, facade rhythm, and all element positions.',
+    'Keep camera viewpoint, lens, horizon, and framing unchanged; no perspective or crop changes.',
+    'Only materials, lighting, reflections, and render quality may change to achieve realism.'
+  ];
+  if (geometryLock) {
+    fidelityNotes.push('Absolute geometry lock: no additions, removals, or reshaping. If unsure, keep the original.');
+  }
+  parts.push(`Constraints: ${fidelityNotes.join(' ')}`);
+
   // 4. GEOMETRY
   const geo = r3d.geometry;
   const geoDesc: string[] = [];

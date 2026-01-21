@@ -151,7 +151,7 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
 
     try {
       const result = await service.generateBatchImages(request);
-      setResponse({ text: result.text, images: result.images, usage: result.usage });
+      setResponse({ text: result.text, images: result.images });
       return result;
     } catch (err) {
       return handleError(err);
@@ -169,7 +169,7 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
 
     try {
       const result = await service.generateBatchImagesParallel(request);
-      setResponse({ text: result.text, images: result.images, usage: result.usage });
+      setResponse({ text: result.text, images: result.images });
       return result;
     } catch (err) {
       return handleError(err);

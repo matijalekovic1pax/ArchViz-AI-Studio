@@ -666,7 +666,10 @@ const initialMaterialValidation: MaterialValidationState = {
     warnings: 8,
     errors: 3
   },
-  selectedMaterialCode: null
+  selectedMaterialCode: null,
+  isRunning: false,
+  lastRunAt: null,
+  aiSummary: null
 };
 
 const initialGeometry: GeometryState = {
