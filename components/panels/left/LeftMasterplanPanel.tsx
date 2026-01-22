@@ -107,7 +107,7 @@ export const LeftMasterplanPanel = () => {
 
   const handleAutoDetectZones = async () => {
     if (isDetectingZones) return;
-    const sourceImage = wf.mpInputImage || state.uploadedImage;
+    const sourceImage = wf.mpInputImage || state.sourceImage || state.uploadedImage;
     if (!sourceImage) {
       setZoneDetectError('Upload an image first to auto-detect zones.');
       return;

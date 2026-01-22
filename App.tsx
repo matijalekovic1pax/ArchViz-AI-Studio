@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { AppProvider, useAppStore } from './store';
+import { AuthGate } from './components/auth/AuthGate';
 import { TopBar } from './components/panels/TopBar';
 import { LeftSidebar } from './components/panels/left/LeftSidebar';
 import { RightPanel } from './components/panels/right/RightPanel';
@@ -86,8 +87,10 @@ const Layout: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <Layout />
-    </AppProvider>
+    <AuthGate>
+      <AppProvider>
+        <Layout />
+      </AppProvider>
+    </AuthGate>
   );
 }

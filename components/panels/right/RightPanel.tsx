@@ -110,7 +110,7 @@ export const RightPanel: React.FC = () => {
       case 'upscale': 
         panelTitle = "Upscaler"; 
         PanelIcon = Maximize2; 
-        panelDescription = "Configure upscaling factor and enhancement settings to increase image resolution.";
+        panelDescription = "Configure enhancement settings and output format for higher-resolution results.";
         panelContent = <UpscalePanel />; 
         break;
       case 'img-to-cad': 

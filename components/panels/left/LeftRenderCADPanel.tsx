@@ -1,5 +1,6 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { nanoid } from 'nanoid';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SectionHeader } from './SharedLeftComponents';
@@ -7,14 +8,25 @@ import { Toggle } from '../../ui/Toggle';
 import { StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
-import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon } from 'lucide-react';
+import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw } from 'lucide-react';
+import {
+    getGeminiService,
+    initGeminiService,
+    isGeminiServiceInitialized,
+    ImageUtils
+} from '../../../services/geminiService';
 
 export const LeftRenderCADPanel = () => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
-    const updateWf = (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
+    const updateWf = useCallback(
+      (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),
+      [dispatch]
+    );
     const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+    const [isDetecting, setIsDetecting] = useState(false);
     const cadSpace = wf.cadSpace;
+    const sourceImage = state.sourceImage || state.uploadedImage;
     const [openMenu, setOpenMenu] = useState<null | 'room' | 'ceiling' | 'window' | 'door'>(null);
     const roomMenuRef = useRef<HTMLDivElement>(null);
     const ceilingMenuRef = useRef<HTMLDivElement>(null);
@@ -114,15 +126,137 @@ export const LeftRenderCADPanel = () => {
       { value: 'industrial', label: 'Industrial' },
     ];
 
-    const buildCadLayers = () => ([
-      { id: 'walls', name: 'Walls', color: '#7aa2f7', type: 'wall', visible: true },
-      { id: 'glazing', name: 'Glazing', color: '#7dcfff', type: 'window', visible: true },
-      { id: 'doors', name: 'Doors', color: '#f7768e', type: 'door', visible: true },
-      { id: 'stairs', name: 'Stairs', color: '#9ece6a', type: 'stairs', visible: true },
-      { id: 'structure', name: 'Structural Grid', color: '#e0af68', type: 'dims', visible: true },
-      { id: 'dimensions', name: 'Dimensions', color: '#c0caf5', type: 'dims', visible: true },
-      { id: 'annotations', name: 'Annotations', color: '#bb9af7', type: 'text', visible: true },
-    ]);
+    const layerColors = {
+      wall: '#7aa2f7',
+      window: '#7dcfff',
+      door: '#f7768e',
+      stairs: '#9ece6a',
+      dims: '#e0af68',
+      text: '#bb9af7',
+    } as const;
+
+    const normalizeLayerType = useCallback((rawType: string, name: string) => {
+      const cleaned = (rawType || '').toLowerCase();
+      if (cleaned.includes('wall')) return 'wall';
+      if (cleaned.includes('window') || cleaned.includes('glazing')) return 'window';
+      if (cleaned.includes('door')) return 'door';
+      if (cleaned.includes('stair')) return 'stairs';
+      if (cleaned.includes('text') || cleaned.includes('label') || cleaned.includes('annotation')) return 'text';
+      if (cleaned.includes('dim') || cleaned.includes('grid') || cleaned.includes('structure')) return 'dims';
+
+      const nameLower = name.toLowerCase();
+      if (nameLower.includes('wall')) return 'wall';
+      if (nameLower.includes('window') || nameLower.includes('glazing')) return 'window';
+      if (nameLower.includes('door')) return 'door';
+      if (nameLower.includes('stair')) return 'stairs';
+      if (nameLower.includes('annotation') || nameLower.includes('label') || nameLower.includes('text')) return 'text';
+      if (nameLower.includes('dim') || nameLower.includes('grid') || nameLower.includes('structure')) return 'dims';
+
+      return 'dims';
+    }, []);
+
+    const parseCadLayers = useCallback((raw: string) => {
+      const trimmed = raw.trim();
+      const jsonStart = trimmed.indexOf('[');
+      const jsonEnd = trimmed.lastIndexOf(']');
+      const jsonSlice = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(jsonSlice);
+      } catch {
+        return [];
+      }
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .slice(0, 10)
+        .map((item: any) => {
+          const name = typeof item?.name === 'string' ? item.name.trim() : '';
+          if (!name) {
+            return null;
+          }
+          const rawType = typeof item?.type === 'string' ? item.type : '';
+          const confidence = typeof item?.confidence === 'number' ? item.confidence : 0.6;
+          const type = normalizeLayerType(rawType, name);
+          return {
+            layer: {
+              id: nanoid(),
+              name,
+              color: layerColors[type],
+              type,
+              visible: true
+            },
+            confidence
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.confidence - a.confidence)
+        .map(({ layer }) => layer);
+    }, [layerColors, normalizeLayerType]);
+
+    const getApiKey = useCallback((): string | null => {
+      // @ts-ignore - Vite injects this
+      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
+        // @ts-ignore
+        return import.meta.env.VITE_GEMINI_API_KEY;
+      }
+      return localStorage.getItem('gemini_api_key');
+    }, []);
+
+    const ensureServiceInitialized = useCallback((): boolean => {
+      if (isGeminiServiceInitialized()) {
+        return true;
+      }
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return false;
+      }
+      initGeminiService({ apiKey });
+      return true;
+    }, [getApiKey]);
+
+    const analyzeCadLayers = useCallback(async (imageUrl: string) => {
+      if (!ensureServiceInitialized()) {
+        updateWf({ cadLayers: [] });
+        return;
+      }
+
+      setIsDetecting(true);
+      try {
+        const cadTypeMap: Record<string, string> = {
+          plan: 'floor plan',
+          section: 'section drawing',
+          elevation: 'elevation drawing',
+          site: 'site plan',
+        };
+        const service = getGeminiService();
+        const imageData = ImageUtils.dataUrlToImageData(imageUrl);
+        const prompt = [
+          `Analyze this CAD ${cadTypeMap[wf.cadDrawingType] || 'drawing'} and identify key layer categories.`,
+          'Return ONLY a JSON array: [{ "name": string, "type": "wall"|"window"|"door"|"stairs"|"dims"|"text", "confidence": number }].',
+          'Use type "dims" for dimensions, grids, or structural lines. Use type "text" for annotations or labels.',
+          'Limit to the most important layers only.'
+        ].join(' ');
+
+        const text = await service.generateText({
+          prompt,
+          images: [imageData]
+        });
+        const parsed = parseCadLayers(text);
+        if (lastLayerScanRef.current === imageUrl) {
+          updateWf({ cadLayers: parsed });
+        }
+      } catch (error) {
+        console.error('CAD layer detection failed:', error);
+        if (lastLayerScanRef.current === imageUrl) {
+          updateWf({ cadLayers: [] });
+        }
+      } finally {
+        if (lastLayerScanRef.current === imageUrl) {
+          setIsDetecting(false);
+        }
+      }
+    }, [ensureServiceInitialized, parseCadLayers, updateWf, wf.cadDrawingType]);
 
     const toggleLayer = (id: string) => {
       const newLayers = wf.cadLayers.map(l => l.id === id ? { ...l, visible: !l.visible } : l);
@@ -149,13 +283,18 @@ export const LeftRenderCADPanel = () => {
     useEffect(() => {
       if (!wf.cadLayerDetectionEnabled) {
         lastLayerScanRef.current = null;
+        setIsDetecting(false);
         return;
       }
-      if (!state.uploadedImage) return;
-      if (lastLayerScanRef.current === state.uploadedImage) return;
-      updateWf({ cadLayers: buildCadLayers() });
-      lastLayerScanRef.current = state.uploadedImage;
-    }, [state.uploadedImage, updateWf, wf.cadLayerDetectionEnabled]);
+      if (!sourceImage) {
+        setIsDetecting(false);
+        updateWf({ cadLayers: [] });
+        return;
+      }
+      if (lastLayerScanRef.current === sourceImage) return;
+      lastLayerScanRef.current = sourceImage;
+      analyzeCadLayers(sourceImage);
+    }, [analyzeCadLayers, sourceImage, updateWf, wf.cadLayerDetectionEnabled]);
 
     const toggleMenu = (menu: 'room' | 'ceiling' | 'window' | 'door') => {
       setOpenMenu((current) => (current === menu ? null : menu));
@@ -416,12 +555,23 @@ export const LeftRenderCADPanel = () => {
           </div>
           {wf.cadLayerDetectionEnabled && (
             <div className="space-y-1">
-               {!state.uploadedImage && (
+               {!sourceImage && (
                  <div className="text-[10px] text-foreground-muted py-1">
                    Upload a CAD image to detect layers.
                  </div>
                )}
-               {state.uploadedImage && wf.cadLayers.map(layer => (
+               {sourceImage && isDetecting && (
+                 <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
+                   <RefreshCw size={12} className="animate-spin" />
+                   Detecting CAD layers...
+                 </div>
+               )}
+               {sourceImage && !isDetecting && wf.cadLayers.length === 0 && (
+                 <div className="text-[10px] text-foreground-muted py-1">
+                   No layers detected yet.
+                 </div>
+               )}
+               {sourceImage && wf.cadLayers.map(layer => (
                  <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded hover:border-foreground-muted transition-colors">
                     <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: layer.color }} />
                     <span className="text-xs flex-1 font-medium">{layer.name}</span>

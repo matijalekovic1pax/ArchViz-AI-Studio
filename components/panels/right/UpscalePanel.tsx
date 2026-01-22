@@ -13,33 +13,10 @@ export const UpscalePanel = () => {
     [dispatch]
   );
 
-  const scaleFactors = ['2x', '4x', '8x'] as const;
   const formats = ['png', 'jpg', 'tiff'] as const;
 
   return (
     <div className="space-y-6">
-      {/* Scale Factor */}
-      <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-          Scale Factor
-        </label>
-        <div className="grid grid-cols-3 gap-1">
-          {scaleFactors.map((factor) => (
-            <button
-              key={factor}
-              onClick={() => updateWf({ upscaleFactor: factor })}
-              className={`text-sm font-medium border rounded py-2 transition-colors ${
-                wf.upscaleFactor === factor
-                  ? 'bg-accent text-white border-accent'
-                  : 'border-border hover:bg-surface-elevated'
-              }`}
-            >
-              {factor}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Enhancement Sliders */}
       <div>
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">

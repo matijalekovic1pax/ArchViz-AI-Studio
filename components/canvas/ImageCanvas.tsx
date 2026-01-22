@@ -1443,7 +1443,7 @@ const StandardCanvas: React.FC = () => {
                                     className="w-full h-full object-contain block select-none"
                                     draggable={false}
                                     onLoad={() => setImageVersion((prev) => prev + 1)}
-                                    onClick={(e) => {
+                                    onDoubleClick={(e) => {
                                        e.stopPropagation();
                                        if (!isPanning && !isSelectTool && !isBoundaryTool) {
                                            setIsFullscreen(true);

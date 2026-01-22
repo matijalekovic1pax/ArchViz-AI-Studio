@@ -1280,6 +1280,9 @@ const buildSelectionContext = (workflow: AppState['workflow']) => {
   parts.push(
     `Selection settings: mode ${workflow.visualSelection.mode}, strength ${workflow.visualSelection.strength}%, auto targets ${autoTargets}.`
   );
+  parts.push(
+    'Constraints: preserve camera, perspective, and composition. Keep edits confined to the selection or tool scope. Do not alter unrelated geometry or materials. Blend edges seamlessly.'
+  );
   return parts;
 };
 
@@ -1470,6 +1473,7 @@ function generateCadRenderPrompt(state: AppState): string {
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
   const isNoStyle = style?.id === 'no-style';
+  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
 
   const parts: string[] = [];
 
@@ -1480,13 +1484,32 @@ function generateCadRenderPrompt(state: AppState): string {
     'site': 'site plan',
   };
 
-  parts.push(`Architectural render from CAD ${cadTypeMap[workflow.cadDrawingType] || 'drawing'}.`);
+  const drawingLabel = cadTypeMap[workflow.cadDrawingType] || 'drawing';
+  const projectionMap: Record<string, string> = {
+    plan: 'top-down orthographic',
+    section: 'straight-on orthographic section',
+    elevation: 'straight-on orthographic elevation',
+    site: 'top-down orthographic',
+  };
+  const projectionLabel = projectionMap[workflow.cadDrawingType] || 'orthographic';
+
+  parts.push(`Architectural render from CAD ${drawingLabel}.`);
   if (workflow.cadScale) {
     parts.push(`Scale ${workflow.cadScale}.`);
   }
   if (Number.isFinite(workflow.cadOrientation)) {
     parts.push(`Orientation ${workflow.cadOrientation}°.`);
   }
+
+  const cadFidelityNotes: string[] = [
+    'Use the CAD drawing as ground-truth geometry and camera.',
+    `Match the ${projectionLabel} projection for this ${drawingLabel}.`,
+    'Keep orientation, scale, and framing identical; no rotation, skew, or crop changes.',
+    'Preserve linework, wall positions, openings, grids, and dimensions exactly.',
+    'Do not add, remove, or relocate elements.',
+    'Perspective lock: keep the same viewpoint, horizon, and vanishing points; do not move the camera.'
+  ];
+  parts.push(`Constraints: ${cadFidelityNotes.join(' ')}`);
 
   if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
     const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
@@ -1498,6 +1521,14 @@ function generateCadRenderPrompt(state: AppState): string {
   const space = workflow.cadSpace;
   parts.push(`Room type: ${space.roomType}.`);
   parts.push(`Ceiling: ${space.ceilingStyle}, window style: ${space.windowStyle}, door style: ${space.doorStyle}.`);
+
+  const constraints = [
+    hasSourceImage ? 'Use the input image as ground-truth geometry and materials.' : null,
+    'Keep the same subject, scale, and proportions across all views.',
+    'Only change camera azimuth/elevation; do not redesign, reframe, or crop.',
+    'Lock materials, lighting, weather, and exposure consistency.'
+  ].filter(Boolean);
+  parts.push(`Constraints: ${constraints.join(' ')}`);
 
   if (!isNoStyle && style) {
     parts.push(style.description);
@@ -1661,6 +1692,23 @@ function generateSketchPrompt(state: AppState): string {
   parts.push(`Sketch type: ${workflow.sketchType}.`);
   parts.push(`Auto-detect analysis: ${formatYesNo(workflow.sketchAutoDetect)}.`);
   parts.push(`Detected perspective: ${workflow.sketchDetectedPerspective || 'none'}.`);
+
+  const sketchConstraints: string[] = [
+    'Use the input sketch as ground-truth composition and camera.',
+    'Lock viewpoint and framing; no reframe, crop, or rotation.',
+    `Keep the ${workflow.sketchPerspectiveType} perspective with the same horizon at ${workflow.sketchHorizonLine}% and camera height ${workflow.sketchCameraHeight}.`,
+    'Preserve silhouette, proportions, and linework positions; only materials, lighting, and render realism may change.'
+  ];
+  if (workflow.sketchDetectedPerspective) {
+    sketchConstraints.push(`Match detected perspective: ${workflow.sketchDetectedPerspective}.`);
+  }
+  if (workflow.sketchVanishingPoints.length > 0) {
+    sketchConstraints.push('Keep the same vanishing points.');
+  }
+  if (!workflow.sketchAllowExtend) {
+    sketchConstraints.push('Do not extend beyond the original sketch bounds.');
+  }
+  parts.push(`Constraints: ${sketchConstraints.join(' ')}`);
   parts.push(`Line quality ${workflow.sketchLineQuality}%, completeness ${workflow.sketchCompleteness}%.`);
 
   const lineFlags: string[] = [];
@@ -1878,7 +1926,6 @@ function generateUpscalePrompt(state: AppState): string {
   const parts: string[] = [];
 
   parts.push('Image upscaling request.');
-  parts.push(`Scale factor: ${workflow.upscaleFactor}.`);
   parts.push(
     `Enhancement: sharpness ${workflow.upscaleSharpness}%, clarity ${workflow.upscaleClarity}%, edge definition ${workflow.upscaleEdgeDefinition}%, fine detail ${workflow.upscaleFineDetail}%.`
   );
@@ -1925,8 +1972,6 @@ function generateMultiAnglePrompt(state: AppState): string {
   if (!isNoStyle && style) {
     parts.push(`Style: ${style.name}.`);
   }
-  parts.push('Keep lighting, materials, and exposure consistent across all views.');
-
   return parts.filter(p => p.trim()).join(' ');
 }
 
@@ -1953,6 +1998,19 @@ function generateMasterplanPrompt(state: AppState): string {
   const scaleValue = workflow.mpScale === 'custom' ? `1:${workflow.mpCustomScale}` : workflow.mpScale;
   parts.push(`Scale: ${scaleValue}.`);
   parts.push(`North rotation: ${Math.round(workflow.mpNorthRotation)} deg.`);
+  const boundaryMode = workflow.mpBoundary?.mode || 'auto';
+
+  const mpConstraints: string[] = [
+    'If an input masterplan image is provided, treat it as ground-truth layout.',
+    'Preserve site boundary, parcel edges, road alignments, water bodies, and building footprints.',
+    `Keep north rotation and scale consistent (${Math.round(workflow.mpNorthRotation)} deg).`,
+    'Do not rotate, mirror, or reframe the plan.',
+    'Only add presentation styling, landscaping, labels, and legend elements.'
+  ];
+  if (boundaryMode === 'custom') {
+    mpConstraints.push('Respect the custom site boundary exactly.');
+  }
+  parts.push(`Constraints: ${mpConstraints.join(' ')}`);
 
   parts.push(`Output style: ${workflow.mpOutputStyle}.`);
   if (workflow.mpViewAngle === 'custom') {
@@ -2040,7 +2098,6 @@ function generateMasterplanPrompt(state: AppState): string {
   if (zones > 0) {
     parts.push(`Zones: ${zones} defined.`);
   }
-  const boundaryMode = workflow.mpBoundary?.mode || 'auto';
   parts.push(`Site boundary: ${boundaryMode}.`);
 
   const exportSettings = workflow.mpExport;
@@ -2068,6 +2125,15 @@ function generateExplodedPrompt(state: AppState): string {
   }
 
   parts.push('Input: PDF model export reference.');
+
+  const explodedConstraints: string[] = [
+    'Use the input model as ground-truth geometry.',
+    'Keep component geometry, scale, and alignment intact.',
+    'Only separate components along the specified axis; no unintended rotation or distortion.',
+    'Do not add or remove components.',
+    'Keep camera framing consistent with the source view.'
+  ];
+  parts.push(`Constraints: ${explodedConstraints.join(' ')}`);
 
   parts.push(`Dissection style: ${workflow.explodedStyle.render}.`);
   parts.push(`Explosion direction: ${workflow.explodedDirection}.`);
@@ -2148,6 +2214,15 @@ function generateSectionPrompt(state: AppState): string {
   } else {
     parts.push('Section cutaway visualization');
   }
+
+  const sectionConstraints: string[] = [
+    'Use the input model or drawing as ground-truth geometry.',
+    'Keep the cut plane location, depth, and direction exact.',
+    'Preserve scale, orientation, and linework alignment.',
+    'Do not relocate elements or change proportions.',
+    'Only reveal elements according to the cut and reveal settings.'
+  ];
+  parts.push(`Constraints: ${sectionConstraints.join(' ')}`);
 
   const cut = workflow.sectionCut;
   parts.push(`Cut: ${cut.type}, plane ${cut.plane}%, depth ${cut.depth}%, direction ${cut.direction}.`);

@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
 import * as Switch from '@radix-ui/react-switch';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
@@ -9,6 +9,12 @@ import { Slider } from '../../ui/Slider';
 import { SectionHeader, StyleGrid } from './SharedLeftComponents';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { cn } from '../../../lib/utils';
+import {
+  getGeminiService,
+  initGeminiService,
+  isGeminiServiceInitialized,
+  ImageUtils
+} from '../../../services/geminiService';
 
 const materialPalettes = [
   'Concrete & Glass',
@@ -74,6 +80,9 @@ export const LeftSketchPanel = () => {
   const wf = state.workflow;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const lastScanRef = useRef<string | null>(null);
+  const sourceImage = state.sourceImage || state.uploadedImage;
 
   const availableStyles = useMemo(
     () => [...BUILT_IN_STYLES, ...state.customStyles],
@@ -94,6 +103,139 @@ export const LeftSketchPanel = () => {
     (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),
     [dispatch]
   );
+
+  const getApiKey = useCallback((): string | null => {
+    // @ts-ignore - Vite injects this
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_GEMINI_API_KEY;
+    }
+    return localStorage.getItem('gemini_api_key');
+  }, []);
+
+  const ensureServiceInitialized = useCallback((): boolean => {
+    if (isGeminiServiceInitialized()) {
+      return true;
+    }
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return false;
+    }
+    initGeminiService({ apiKey });
+    return true;
+  }, [getApiKey]);
+
+  const parseSketchAnalysis = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    const jsonStart = trimmed.indexOf('{');
+    const jsonEnd = trimmed.lastIndexOf('}');
+    const jsonSlice = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonSlice);
+    } catch {
+      return null;
+    }
+
+    const normalizePerspective = (value: string) => {
+      const normalized = value.toLowerCase().replace(/\s+/g, '-');
+      if (normalized.includes('1') && normalized.includes('point')) return '1-point';
+      if (normalized.includes('2') && normalized.includes('point')) return '2-point';
+      if (normalized.includes('3') && normalized.includes('point')) return '3-point';
+      if (normalized.includes('isometric')) return 'isometric';
+      if (normalized.includes('axonometric') || normalized.includes('axon')) return 'axonometric';
+      if (normalized.includes('freehand')) return 'freehand';
+      return null;
+    };
+    const detectedPerspective =
+      typeof parsed?.detectedPerspective === 'string'
+        ? normalizePerspective(parsed.detectedPerspective)
+        : null;
+
+    const clampPercent = (value: unknown, fallback: number) => {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      return Math.min(100, Math.max(0, Math.round(num)));
+    };
+
+    const normalizePoint = (value: unknown) => {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(num)) return null;
+      const scaled = num <= 1 ? num * 100 : num;
+      return Math.min(100, Math.max(0, Math.round(scaled)));
+    };
+
+    const rawPoints = Array.isArray(parsed?.vanishingPoints) ? parsed.vanishingPoints : [];
+    const vanishingPoints = rawPoints
+      .slice(0, 3)
+      .map((point: any) => {
+        const x = normalizePoint(point?.x);
+        const y = normalizePoint(point?.y);
+        if (x === null || y === null) return null;
+        return { x, y };
+      })
+      .filter(Boolean) as { x: number; y: number }[];
+
+    return {
+      detectedPerspective,
+      lineQuality: clampPercent(parsed?.lineQuality, 70),
+      completeness: clampPercent(parsed?.completeness, 80),
+      vanishingPoints
+    };
+  }, []);
+
+  const analyzeSketch = useCallback(async (imageUrl: string) => {
+    if (!ensureServiceInitialized()) {
+      return;
+    }
+
+    setIsDetecting(true);
+    try {
+      const service = getGeminiService();
+      const imageData = ImageUtils.dataUrlToImageData(imageUrl);
+      const prompt = [
+        'Analyze this architectural sketch for perspective and drawing quality.',
+        'Return ONLY JSON: {"detectedPerspective": "1-point"|"2-point"|"3-point"|"isometric"|"axonometric"|"freehand",',
+        '"lineQuality": number, "completeness": number, "vanishingPoints": [{"x": number, "y": number}]}.',
+        'Use 0-100 for lineQuality and completeness. Use 0-100 percent coordinates for vanishingPoints.'
+      ].join(' ');
+
+      const text = await service.generateText({
+        prompt,
+        images: [imageData]
+      });
+      const parsed = parseSketchAnalysis(text);
+      if (parsed && lastScanRef.current === imageUrl) {
+        updateWf({
+          sketchDetectedPerspective: parsed.detectedPerspective,
+          sketchLineQuality: parsed.lineQuality,
+          sketchCompleteness: parsed.completeness,
+          sketchVanishingPoints: parsed.vanishingPoints
+        });
+      }
+    } catch (error) {
+      console.error('Sketch analysis failed:', error);
+    } finally {
+      if (lastScanRef.current === imageUrl) {
+        setIsDetecting(false);
+      }
+    }
+  }, [ensureServiceInitialized, parseSketchAnalysis, updateWf]);
+
+  useEffect(() => {
+    if (!wf.sketchAutoDetect) {
+      lastScanRef.current = null;
+      setIsDetecting(false);
+      return;
+    }
+    if (!sourceImage) {
+      setIsDetecting(false);
+      return;
+    }
+    if (lastScanRef.current === sourceImage) return;
+    lastScanRef.current = sourceImage;
+    analyzeSketch(sourceImage);
+  }, [analyzeSketch, sourceImage, wf.sketchAutoDetect]);
 
   const handleAddReference = useCallback(() => {
     fileInputRef.current?.click();
@@ -146,6 +288,17 @@ export const LeftSketchPanel = () => {
           >
             Auto-detect Analysis {wf.sketchAutoDetect ? 'On' : 'Off'}
           </button>
+          {wf.sketchAutoDetect && !sourceImage && (
+            <div className="text-[10px] text-foreground-muted">
+              Upload a sketch to analyze.
+            </div>
+          )}
+          {wf.sketchAutoDetect && isDetecting && (
+            <div className="flex items-center gap-2 text-[10px] text-foreground-muted">
+              <RefreshCw size={12} className="animate-spin" />
+              Analyzing sketch...
+            </div>
+          )}
           <div>
             <label className="text-xs text-foreground-muted mb-2 block">Sketch Type</label>
             <SegmentedControl

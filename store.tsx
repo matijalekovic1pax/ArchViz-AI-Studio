@@ -139,12 +139,7 @@ const initialWorkflow: WorkflowSettings = {
   cadScale: '1:100',
   cadOrientation: 0,
   cadLayerDetectionEnabled: false,
-  cadLayers: [
-    { id: '1', name: 'Walls', color: '#000000', type: 'wall', visible: true },
-    { id: '2', name: 'Windows', color: '#0000FF', type: 'window', visible: true },
-    { id: '3', name: 'Doors', color: '#FF0000', type: 'door', visible: true },
-    { id: '4', name: 'Dims', color: '#888888', type: 'dims', visible: false },
-  ],
+  cadLayers: [],
   cadCamera: {
     height: 1.6,
     angle: 'horizontal',

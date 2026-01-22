@@ -631,8 +631,8 @@ export const TopBar: React.FC = () => {
           </button>
 
           {showControlsMenu && (
-            <div className="absolute left-0 top-full mt-2 w-64 bg-surface-elevated rounded-lg shadow-elevated border border-border p-2 z-50 animate-fade-in origin-top-left">
-              <div className="flex items-center justify-between mb-1.5">
+            <div className="absolute left-0 top-full mt-1.5 w-60 bg-surface-elevated rounded-lg shadow-elevated border border-border p-2 z-50 animate-fade-in origin-top-left">
+              <div className="flex items-center justify-between mb-1.5 pb-1.5 border-b border-border-subtle">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
                   Canvas Controls
                 </span>
@@ -641,118 +641,145 @@ export const TopBar: React.FC = () => {
                   className="text-foreground-muted hover:text-foreground"
                   title="Close"
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </button>
               </div>
 
               <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-0.5">
-                  <button
-                    onClick={handleUndoSelection}
-                    disabled={!canUndoSelection}
-                    className={cn(
-                      "p-1 rounded-md transition-all border",
-                      canUndoSelection
-                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                    )}
-                    title="Undo"
-                  >
-                    <Undo size={14} />
-                  </button>
-                  <button
-                    onClick={handleRedoSelection}
-                    disabled={!canRedoSelection}
-                    className={cn(
-                      "p-1 rounded-md transition-all border",
-                      canRedoSelection
-                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                    )}
-                    title="Redo"
-                  >
-                    <Redo size={14} />
-                  </button>
-                  <button
-                    onClick={handleClearImage}
-                    disabled={!state.uploadedImage}
-                    className={cn(
-                      "p-1 rounded-md transition-all border",
-                      !state.uploadedImage
-                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                        : "border-border text-foreground-secondary hover:text-red-600 hover:bg-surface-sunken"
-                    )}
-                    title="Clear Image"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  <button
-                    onClick={handleFitToScreen}
-                    disabled={!state.uploadedImage}
-                    className={cn(
-                      "p-1 rounded-md transition-all border",
-                      !state.uploadedImage
-                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                        : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                    )}
-                    title="Fit to Screen"
-                  >
-                    <Minimize2 size={14} />
-                  </button>
-                  {!isVideoMode && (
+                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
+                  <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
+                    History
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
-                      onClick={handleToggleSplit}
-                      disabled={!state.uploadedImage}
+                      onClick={handleUndoSelection}
+                      disabled={!canUndoSelection}
                       className={cn(
-                        "p-1 rounded-md transition-all border",
-                        !state.uploadedImage
-                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                          : state.workflow.canvasSync
-                            ? "border-foreground text-foreground bg-surface-sunken"
-                            : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        canUndoSelection
+                          ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                          : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                       )}
-                      title="Toggle Split View"
+                      title="Undo"
                     >
-                      <Columns size={14} />
+                      <Undo size={11} />
+                      Undo
                     </button>
-                  )}
+                    <button
+                      onClick={handleRedoSelection}
+                      disabled={!canRedoSelection}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        canRedoSelection
+                          ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                          : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                      )}
+                      title="Redo"
+                    >
+                      <Redo size={11} />
+                      Redo
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    className="p-1 text-foreground-secondary hover:text-foreground hover:bg-surface-sunken rounded-md transition-all border border-border"
-                    onClick={() => handleZoom(-0.25)}
-                    title="Zoom Out"
-                  >
-                    <ZoomOut size={14} />
-                  </button>
-                  <span className="text-[9px] font-mono text-foreground-muted select-none">
-                    {Math.round(state.canvas.zoom * 100)}%
-                  </span>
-                  <button
-                    className="p-1 text-foreground-secondary hover:text-foreground hover:bg-surface-sunken rounded-md transition-all border border-border"
-                    onClick={() => handleZoom(0.25)}
-                    title="Zoom In"
-                  >
-                    <ZoomIn size={14} />
-                  </button>
+                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
+                  <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
+                    Canvas
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={handleFitToScreen}
+                      disabled={!state.uploadedImage}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        !state.uploadedImage
+                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                          : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                      )}
+                      title="Fit to Screen"
+                    >
+                      <Minimize2 size={11} />
+                      Fit
+                    </button>
+                    {!isVideoMode && (
+                      <button
+                        onClick={handleToggleSplit}
+                        disabled={!state.uploadedImage}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                          !state.uploadedImage
+                            ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                            : state.workflow.canvasSync
+                              ? "border-foreground text-foreground bg-surface-elevated"
+                              : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                        )}
+                        title="Toggle Split View"
+                      >
+                        <Columns size={11} />
+                        Split
+                      </button>
+                    )}
+                    <button
+                      onClick={handleClearImage}
+                      disabled={!state.uploadedImage}
+                      className={cn(
+                        "col-span-2 flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        !state.uploadedImage
+                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                          : "border-border text-red-600 hover:bg-red-50"
+                      )}
+                      title="Clear Image"
+                    >
+                      <Trash2 size={11} />
+                      Clear Image
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted">
+                      Zoom
+                    </span>
+                    <span className="text-[8px] font-mono text-foreground-muted select-none">
+                      {Math.round(state.canvas.zoom * 100)}%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      className="flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      onClick={() => handleZoom(-0.25)}
+                      title="Zoom Out"
+                    >
+                      <ZoomOut size={11} />
+                      Zoom Out
+                    </button>
+                    <button
+                      className="flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      onClick={() => handleZoom(0.25)}
+                      title="Zoom In"
+                    >
+                      <ZoomIn size={11} />
+                      Zoom In
+                    </button>
+                  </div>
                 </div>
 
                 {!isVideoMode && (
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted mb-1">
+                  <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
+                    <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
                       Resolution
                     </div>
-                    <div className="flex items-center gap-0.5 bg-surface-sunken rounded-md p-1 border border-border-subtle">
+                    <div className="grid grid-cols-3 gap-1">
                       {resolutionOptions.map((option) => (
                         <button
                           key={option.value}
                           onClick={() => handleResolutionChange(option.value)}
                           className={cn(
-                            "px-1.5 py-0.5 text-[9px] font-semibold rounded-md transition-all",
+                            "h-6 rounded-md text-[8px] font-semibold border transition-all",
                             state.output.resolution === option.value
-                              ? "bg-foreground text-background shadow-sm"
-                              : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+                              ? "bg-foreground text-background border-foreground shadow-sm"
+                              : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                           )}
                           title={option.title || `Set ${option.label} output resolution`}
                         >

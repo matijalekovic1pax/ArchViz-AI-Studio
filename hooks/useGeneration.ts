@@ -173,8 +173,22 @@ export function useGeneration(): UseGenerationReturn {
       const modePrefix = getModePromptPrefix(state.mode);
       const fullPrompt = modePrefix + basePrompt;
 
+      const sourceLockedModes: GenerationMode[] = [
+        'render-3d',
+        'render-cad',
+        'render-sketch',
+        'masterplan',
+        'exploded',
+        'section',
+        'multi-angle'
+      ];
+      const isSourceLockedMode = sourceLockedModes.includes(state.mode);
       const sourceImage = state.sourceImage || state.uploadedImage;
-      const baseImage = state.mode === 'render-3d' ? sourceImage : state.uploadedImage;
+      const baseImage = isSourceLockedMode ? sourceImage : state.uploadedImage;
+
+      if (isSourceLockedMode && !state.sourceImage && state.uploadedImage) {
+        dispatch({ type: 'SET_SOURCE_IMAGE', payload: state.uploadedImage });
+      }
 
       // Collect images from state and attachments
       const images: ImageData[] = [];
@@ -310,9 +324,8 @@ export function useGeneration(): UseGenerationReturn {
             continue;
           }
 
-          const upscalePrompt = `${fullPrompt} Scale factor ${wf.upscaleFactor}.`;
           const upscaleResult = await service.generateImages({
-            prompt: upscalePrompt,
+            prompt: fullPrompt,
             images: [source],
             generationConfig
           });
@@ -399,7 +412,7 @@ export function useGeneration(): UseGenerationReturn {
 
       // Process result
       if (result.images && result.images.length > 0) {
-        const sourceForHistory = state.sourceImage;
+        const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
         const hasSourceEntry = sourceForHistory
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
           : false;
