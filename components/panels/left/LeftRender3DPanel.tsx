@@ -2,7 +2,6 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
-import { Toggle } from '../../ui/Toggle';
 import { SectionHeader, StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
@@ -180,6 +179,18 @@ export const LeftRender3DPanel = () => {
     return [...wf.detectedElements].sort((a, b) => b.confidence - a.confidence);
   }, [wf.detectedElements]);
 
+  const handleProblemAreaAnalysis = useCallback(() => {
+    if (isAnalyzing) return;
+    updateWf({ prioritizationEnabled: true, detectedElements: [] });
+    analyzeProblemAreas();
+  }, [analyzeProblemAreas, isAnalyzing, updateWf]);
+
+  const problemAreasActionLabel = isAnalyzing
+    ? 'Analyzing...'
+    : problemAreas.length > 0
+      ? 'Re-run AI Pre-Processing'
+      : 'Run AI Pre-Processing';
+
   return (
     <div className="space-y-6">
       <StyleBrowserDialog
@@ -241,67 +252,68 @@ export const LeftRender3DPanel = () => {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <SectionHeader title="Problem Areas" />
-          <Toggle
-            label=""
-            checked={wf.prioritizationEnabled}
-            onChange={(v) => {
-              if (v) {
-                updateWf({ prioritizationEnabled: true, detectedElements: [] });
-                analyzeProblemAreas();
-              } else {
-                updateWf({ prioritizationEnabled: false, detectedElements: [] });
-              }
-            }}
-          />
-        </div>
+        <SectionHeader title="Problem Areas" />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={handleProblemAreaAnalysis}
+            disabled={isAnalyzing}
+            className={cn(
+              "w-full py-2 text-xs font-semibold rounded border transition-colors",
+              isAnalyzing
+                ? "bg-surface-sunken text-foreground-muted border-border"
+                : "bg-foreground text-background border-foreground hover:opacity-90"
+            )}
+          >
+            {problemAreasActionLabel}
+          </button>
 
-        {wf.prioritizationEnabled && (
-          <>
-            <p className="text-[10px] text-foreground-muted mb-2">
-              AI flags detailed or patterned areas that may need extra care. Color shows difficulty.
-            </p>
+          {wf.prioritizationEnabled && (
+            <>
+              <p className="text-[10px] text-foreground-muted">
+                AI flags detailed or patterned areas that may need extra care. Color shows difficulty.
+              </p>
 
-            <div className="space-y-1">
-              {isAnalyzing && (
-                <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
-                  <RefreshCw size={12} className="animate-spin" />
-                  Analyzing problem areas...
-                </div>
-              )}
-              {problemAreas.length === 0 && (
-                <div className="text-[10px] text-foreground-muted py-2">
-                  {isAnalyzing ? 'Waiting for analysis results...' : 'No problem areas detected yet.'}
-                </div>
-              )}
-
-              {problemAreas.map((el, index) => {
-                const risk = getRiskMeta(el.confidence);
-                return (
-                  <div
-                    key={el.id}
-                    className={cn(
-                      "flex items-center justify-between gap-3 p-2 rounded text-xs border",
-                      "bg-surface-elevated border-border"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-[9px] text-foreground-muted font-mono w-4">
-                        {index + 1}
-                      </span>
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", risk.dotClass)} />
-                      <span className="truncate">{el.name}</span>
-                    </div>
-                    <span className={cn("text-[9px] font-bold uppercase tracking-wider", risk.textClass)}>
-                      {risk.label}
-                    </span>
+              <div className="space-y-1">
+                {isAnalyzing && (
+                  <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
+                    <RefreshCw size={12} className="animate-spin" />
+                    Analyzing problem areas...
                   </div>
-                );
-              })}
-            </div>
-          </>
-        )}
+                )}
+                {problemAreas.length === 0 && (
+                  <div className="text-[10px] text-foreground-muted py-2">
+                    {isAnalyzing ? 'Waiting for analysis results...' : 'No problem areas detected yet.'}
+                  </div>
+                )}
+
+                {problemAreas.map((el, index) => {
+                  const risk = getRiskMeta(el.confidence);
+                  return (
+                    <div
+                      key={el.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 p-2 rounded text-xs border",
+                        "bg-surface-elevated border-border"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[9px] text-foreground-muted font-mono w-4">
+                          {index + 1}
+                        </span>
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", risk.dotClass)} />
+                        <span className="truncate">{el.name}</span>
+                      </div>
+                      <span className={cn("text-[9px] font-bold uppercase tracking-wider", risk.textClass)}>
+                        {risk.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

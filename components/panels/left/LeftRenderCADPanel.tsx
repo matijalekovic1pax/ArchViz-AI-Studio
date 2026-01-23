@@ -258,6 +258,23 @@ export const LeftRenderCADPanel = () => {
       }
     }, [ensureServiceInitialized, parseCadLayers, updateWf, wf.cadDrawingType]);
 
+    const handleLayerDetection = useCallback(() => {
+      if (isDetecting) return;
+      updateWf({ cadLayerDetectionEnabled: true, cadLayers: [] });
+      if (!sourceImage) {
+        lastLayerScanRef.current = null;
+        return;
+      }
+      lastLayerScanRef.current = sourceImage;
+      analyzeCadLayers(sourceImage);
+    }, [analyzeCadLayers, isDetecting, sourceImage, updateWf]);
+
+    const layerDetectionLabel = isDetecting
+      ? 'Detecting...'
+      : wf.cadLayers.length > 0
+        ? 'Re-run AI Pre-Processing'
+        : 'Run AI Pre-Processing';
+
     const toggleLayer = (id: string) => {
       const newLayers = wf.cadLayers.map(l => l.id === id ? { ...l, visible: !l.visible } : l);
       updateWf({ cadLayers: newLayers });
@@ -545,41 +562,49 @@ export const LeftRenderCADPanel = () => {
         </div>
   
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <SectionHeader title="Layer Detection" />
-            <Toggle
-              label=""
-              checked={wf.cadLayerDetectionEnabled}
-              onChange={(value) => updateWf({ cadLayerDetectionEnabled: value })}
-            />
+          <SectionHeader title="Layer Detection" />
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleLayerDetection}
+              disabled={isDetecting}
+              className={cn(
+                "w-full py-2 text-xs font-semibold rounded border transition-colors",
+                isDetecting
+                  ? "bg-surface-sunken text-foreground-muted border-border"
+                  : "bg-foreground text-background border-foreground hover:opacity-90"
+              )}
+            >
+              {layerDetectionLabel}
+            </button>
+            {wf.cadLayerDetectionEnabled && (
+              <div className="space-y-1">
+                 {!sourceImage && (
+                   <div className="text-[10px] text-foreground-muted py-1">
+                     Upload a CAD image to detect layers.
+                   </div>
+                 )}
+                 {sourceImage && isDetecting && (
+                   <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
+                     <RefreshCw size={12} className="animate-spin" />
+                     Detecting CAD layers...
+                   </div>
+                 )}
+                 {sourceImage && !isDetecting && wf.cadLayers.length === 0 && (
+                   <div className="text-[10px] text-foreground-muted py-1">
+                     No layers detected yet.
+                   </div>
+                 )}
+                 {sourceImage && wf.cadLayers.map(layer => (
+                   <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded hover:border-foreground-muted transition-colors">
+                      <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: layer.color }} />
+                      <span className="text-xs flex-1 font-medium">{layer.name}</span>
+                      <Toggle label="" checked={layer.visible} onChange={() => toggleLayer(layer.id)} />
+                   </div>
+                 ))}
+              </div>
+            )}
           </div>
-          {wf.cadLayerDetectionEnabled && (
-            <div className="space-y-1">
-               {!sourceImage && (
-                 <div className="text-[10px] text-foreground-muted py-1">
-                   Upload a CAD image to detect layers.
-                 </div>
-               )}
-               {sourceImage && isDetecting && (
-                 <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
-                   <RefreshCw size={12} className="animate-spin" />
-                   Detecting CAD layers...
-                 </div>
-               )}
-               {sourceImage && !isDetecting && wf.cadLayers.length === 0 && (
-                 <div className="text-[10px] text-foreground-muted py-1">
-                   No layers detected yet.
-                 </div>
-               )}
-               {sourceImage && wf.cadLayers.map(layer => (
-                 <div key={layer.id} className="flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded hover:border-foreground-muted transition-colors">
-                    <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: layer.color }} />
-                    <span className="text-xs flex-1 font-medium">{layer.name}</span>
-                    <Toggle label="" checked={layer.visible} onChange={() => toggleLayer(layer.id)} />
-                 </div>
-               ))}
-            </div>
-          )}
         </div>
       </div>
     );

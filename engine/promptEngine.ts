@@ -1281,7 +1281,15 @@ const buildSelectionContext = (workflow: AppState['workflow']) => {
     `Selection settings: mode ${workflow.visualSelection.mode}, strength ${workflow.visualSelection.strength}%, auto targets ${autoTargets}.`
   );
   parts.push(
-    'Constraints: preserve camera, perspective, and composition. Keep edits confined to the selection or tool scope. Do not alter unrelated geometry or materials. Blend edges seamlessly.'
+    workflow.visualSelection.featherEnabled
+      ? `Selection feather: on ${workflow.visualSelection.featherAmount}%.`
+      : 'Selection feather: off.'
+  );
+  if (workflow.visualSelection.mode === 'brush') {
+    parts.push(`Brush size: ${workflow.visualSelection.brushSize}px.`);
+  }
+  parts.push(
+    'Base constraints: preserve camera, perspective, and composition. Keep edits confined to the selection or tool scope. Do not modify unrelated architecture, layout, or materials. Blend edges seamlessly.'
   );
   return parts;
 };
@@ -1289,23 +1297,28 @@ const buildSelectionContext = (workflow: AppState['workflow']) => {
 const generateVisualEditPrompt = (state: AppState): string => {
   const { workflow } = state;
   const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
+  const selectionCount = workflow.visualSelections.length;
+  const userPrompt = workflow.visualPrompt?.trim();
+  const userPromptText = userPrompt ? `User intent: ${userPrompt}.` : 'User intent: none.';
   const selectionParts = buildSelectionContext(workflow);
   const parts: string[] = [];
 
   if (tool === 'select') {
     parts.push('Tool: Select. Define the edit region based on the selection input.');
     parts.push(...selectionParts);
-    if (workflow.visualPrompt?.trim()) {
-      parts.push(`Selection prompt: ${workflow.visualPrompt.trim()}.`);
+    if (userPrompt) {
+      parts.push(`Selection intent: ${userPrompt}.`);
     } else {
-      parts.push('Selection prompt: none.');
+      parts.push('Selection intent: none.');
     }
+    parts.push('Restrictions: do not change image content, color, lighting, or geometry. Output only a precise selection region that matches the intent and auto targets.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'material') {
     parts.push('Tool: Material. Apply surface material changes.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     if (workflow.visualMaterial.surfaceType === 'auto') {
       parts.push('Surface detection: auto. Ignore selection mask and target detected surfaces.');
     } else {
@@ -1317,12 +1330,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
         material.matchLighting
       )}, preserve reflections ${formatToggle(material.preserveReflections)}.`
     );
+    parts.push('Restrictions: change surface appearance only. Keep geometry, edges, joints, and UV direction intact. Do not alter adjacent materials or add/remove objects. Respect match lighting and preserve reflections toggles.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'lighting') {
     parts.push('Tool: Lighting. Relight the scene with the chosen mode.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const lighting = workflow.visualLighting;
     if (lighting.mode === 'sun') {
       parts.push(
@@ -1340,14 +1355,17 @@ const generateVisualEditPrompt = (state: AppState): string => {
     parts.push(
       `Global lighting: ambient ${lighting.ambient}%, preserve shadows ${formatToggle(lighting.preserveShadows)}.`
     );
+    parts.push('Restrictions: lighting changes only. Do not replace sky, alter materials, or modify geometry. Keep camera fixed and preserve textures. If a selection exists, relight only within it with smooth falloff.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'object') {
     parts.push('Tool: Object. Place or replace objects within the selection.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const object = workflow.visualObject;
     const replace = workflow.visualReplace;
+    const replacePrompt = replace.prompt?.trim();
 
     if (object.placementMode === 'replace') {
       if (replace.mode === 'similar') {
@@ -1358,6 +1376,12 @@ const generateVisualEditPrompt = (state: AppState): string => {
         parts.push(
           `Target: category ${object.category}, subcategory ${object.subcategory}, asset ${object.assetId || 'auto'}.`
         );
+      }
+      if (replace.style) {
+        parts.push(`Replacement style: ${replace.style}.`);
+      }
+      if (replacePrompt) {
+        parts.push(`Replacement prompt: ${replacePrompt}.`);
       }
       parts.push(
         `Replace options: match scale ${formatToggle(replace.matchScale)}, match lighting ${formatToggle(
@@ -1378,12 +1402,17 @@ const generateVisualEditPrompt = (state: AppState): string => {
         object.depth
       }.`
     );
+    if (selectionCount === 0) {
+      parts.push('No selection: choose the most relevant target area based on the intent and keep changes minimal.');
+    }
+    parts.push('Restrictions: only add or replace objects. Do not alter building geometry, materials, or layout. Maintain correct perspective, scale, occlusion, and contact shadows. Avoid overlaps, floating objects, or clipping.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'sky') {
     parts.push('Tool: Sky. Replace the sky and atmosphere.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const sky = workflow.visualSky;
     parts.push(
       `Sky preset ${sky.preset}, horizon ${sky.horizonLine}%, cloud density ${sky.cloudDensity}%, haze ${sky.atmosphere}%, brightness ${sky.brightness}%, reflect glass ${formatToggle(
@@ -1391,18 +1420,21 @@ const generateVisualEditPrompt = (state: AppState): string => {
       )}, match lighting ${formatToggle(sky.matchLighting)}, sun flare ${formatToggle(sky.sunFlare)}.`
     );
     parts.push('Sky replacement is global; use selection only as a hint if provided.');
+    parts.push('Restrictions: replace sky and atmosphere only. Preserve building silhouettes, horizon alignment, and foreground exposure. Do not change geometry or add objects.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'remove') {
     parts.push('Tool: Remove. Remove unwanted content.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const remove = workflow.visualRemove;
     parts.push(
       `Remove mode ${remove.mode}. Quick remove targets: ${
         remove.quickRemove.length > 0 ? remove.quickRemove.join(', ') : 'none'
       }.`
     );
+    parts.push(`Removal brush: size ${remove.brushSize}px, hardness ${remove.hardness}%, clone aligned ${formatToggle(remove.cloneAligned)}.`);
     parts.push(
       `Remove options: auto edges ${formatToggle(remove.autoDetectEdges)}, preserve structure ${formatToggle(
         remove.preserveStructure
@@ -1411,12 +1443,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
     if (remove.quickRemove.length > 0) {
       parts.push('Auto-detect and remove the selected quick targets across the image.');
     }
+    parts.push('Restrictions: remove only the specified targets. Reconstruct background consistent with nearby materials and straight lines. Do not erase structural or architectural elements unless explicitly selected.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'adjust') {
     parts.push('Tool: Adjust. Global image adjustments.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const adjust = workflow.visualAdjust;
     parts.push(
       `Tone: exposure ${adjust.exposure}, contrast ${adjust.contrast}, highlights ${adjust.highlights}, shadows ${adjust.shadows}, whites ${adjust.whites}, blacks ${adjust.blacks}, gamma ${adjust.gamma}.`
@@ -1441,12 +1475,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
       `Transform: rotate ${adjust.transformRotate}deg, horizontal ${adjust.transformHorizontal}, vertical ${adjust.transformVertical}, distortion ${adjust.transformDistortion}, perspective ${adjust.transformPerspective}.`
     );
     parts.push(`Global: style strength ${adjust.styleStrength}.`);
+    parts.push('Restrictions: adjust color and tone only. Do not add, remove, or replace objects. Do not change geometry, perspective, or crop. If a selection exists, limit adjustments to that region.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'extend') {
     parts.push('Tool: Extend. Outpaint the image.');
     parts.push(...selectionParts);
+    parts.push(userPromptText);
     const extend = workflow.visualExtend;
     const ratioDesc =
       extend.targetAspectRatio === 'custom'
@@ -1460,6 +1496,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
       )}, quality ${extend.quality}.`
     );
     parts.push('Outpainting ignores selection unless specified by the direction.');
+    if (extend.direction === 'none') {
+      parts.push('No extend direction set: keep the image unchanged.');
+    }
+    parts.push('Restrictions: do not modify existing pixels. Extend only into the new canvas area, continuing perspective, horizon, materials, and lighting seamlessly. Avoid duplicating or warping existing elements.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -1924,11 +1964,28 @@ function generateSketchPrompt(state: AppState): string {
 function generateUpscalePrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
+  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
+  const userPrompt = state.prompt?.trim();
 
-  parts.push('Image upscaling request.');
+  parts.push('Image upscaling request for architectural visualization.');
+  parts.push(`Scale: ${workflow.upscaleFactor}. Output format: ${workflow.upscaleFormat}.`);
+  parts.push(`Preserve metadata: ${formatYesNo(workflow.upscalePreserveMetadata)}.`);
   parts.push(
     `Enhancement: sharpness ${workflow.upscaleSharpness}%, clarity ${workflow.upscaleClarity}%, edge definition ${workflow.upscaleEdgeDefinition}%, fine detail ${workflow.upscaleFineDetail}%.`
   );
+  if (userPrompt) {
+    parts.push(`User intent: ${userPrompt}.`);
+  }
+
+  const constraints = [
+    hasSourceImage ? 'Use the input image as ground-truth content and composition.' : null,
+    'Upscale only: do not add, remove, or redesign objects, materials, or geometry.',
+    'Preserve camera, perspective, framing, and aspect ratio; no crop or reframing.',
+    'Keep colors, lighting, and exposure consistent; no style transfer.',
+    'Maintain straight lines, text legibility, and crisp edges without halos or ringing.',
+    'Reduce noise and artifacts subtly while retaining authentic surface texture.',
+  ].filter(Boolean);
+  parts.push(`Constraints: ${constraints.join(' ')}`);
 
   const batchCount = workflow.upscaleBatch.length;
   if (batchCount > 0) {
@@ -1941,12 +1998,62 @@ function generateUpscalePrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function generateImageTo3DPrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+  const inputs = workflow.img3dInputs || [];
+  const primary = inputs.find((input) => input.isPrimary);
+  const inputLabels = inputs.slice(0, 6).map((input, index) => {
+    const label = input.view?.trim() || `View ${index + 1}`;
+    return input.isPrimary ? `${label} (primary)` : label;
+  });
+  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
+  const userPrompt = state.prompt?.trim();
+
+  parts.push('Image-to-3D reconstruction request.');
+  if (userPrompt) {
+    parts.push(`User intent: ${userPrompt}.`);
+  }
+  parts.push(
+    `Inputs: ${inputs.length}${primary?.view ? `, primary ${primary.view}` : ''}.`
+  );
+  if (inputLabels.length > 0) {
+    parts.push(`Views: ${inputLabels.join(', ')}${inputs.length > inputLabels.length ? ', ...' : ''}.`);
+  }
+  parts.push(`Output: ${workflow.img3dOutputFormat.toUpperCase()}, textures ${formatYesNo(workflow.img3dIncludeTextures)}.`);
+  if (workflow.img3dIncludeTextures) {
+    parts.push('Textures: generate clean UVs with consistent albedo; avoid seams, stretching, or mismatched scale.');
+  } else {
+    parts.push('Textures: do not fabricate textures; focus on clean geometry and basic material grouping only.');
+  }
+
+  const constraints = [
+    hasSourceImage ? 'Use the input images as ground-truth appearance and proportions.' : null,
+    'Reconstruct a single coherent model that fits all views; resolve conflicts by prioritizing the primary view.',
+    'Preserve overall scale, vertical alignment, and building proportions; keep walls straight and edges crisp.',
+    'Model real openings (doors, windows) accurately; avoid inventing new structures or props.',
+    'Fill occluded areas conservatively and maintain architectural continuity.',
+    'Keep the mesh watertight where appropriate; avoid floating or intersecting geometry.',
+    'Optimize topology for export while preserving key silhouette and facade details.',
+  ].filter(Boolean);
+  parts.push(`Constraints: ${constraints.join(' ')}`);
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 function generateMultiAnglePrompt(state: AppState): string {
-  const { workflow, activeStyleId, customStyles } = state;
+  const { workflow, activeStyleId, customStyles, lighting, context, camera } = state;
   const parts: string[] = [];
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
   const isNoStyle = style?.id === 'no-style';
+  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
+  const presetHints: Record<string, string> = {
+    turntable: 'Orbit around the subject at a fixed radius and steady elevation.',
+    architectural: 'Use architectural eye-level perspectives with straight verticals.',
+    'birds-eye': 'Use higher elevation angles to reveal roof and site context.',
+    custom: 'Follow the specified ranges and manual angles exactly.',
+  };
 
   if (state.prompt?.trim()) {
     parts.push(state.prompt.trim());
@@ -1954,6 +2061,8 @@ function generateMultiAnglePrompt(state: AppState): string {
     parts.push('Generate consistent multi-angle views of the same subject.');
   }
 
+  const presetHint = presetHints[workflow.multiAnglePreset];
+  parts.push(presetHint ? `Preset: ${workflow.multiAnglePreset}. ${presetHint}` : `Preset: ${workflow.multiAnglePreset}.`);
   parts.push(`Views: ${workflow.multiAngleViewCount}.`);
   parts.push(
     `Azimuth range ${workflow.multiAngleAzimuthRange[0]}°-${workflow.multiAngleAzimuthRange[1]}°, elevation range ${workflow.multiAngleElevationRange[0]}°-${workflow.multiAngleElevationRange[1]}°.`
@@ -1961,17 +2070,67 @@ function generateMultiAnglePrompt(state: AppState): string {
   parts.push(`Distribution: ${workflow.multiAngleDistribution}.`);
   parts.push(`Lock consistency: ${formatYesNo(workflow.multiAngleLockConsistency)}.`);
 
-  if (workflow.multiAngleAngles.length > 0) {
+  if (workflow.multiAngleDistribution === 'manual') {
+    if (workflow.multiAngleAngles.length > 0) {
+      const list = workflow.multiAngleAngles
+        .slice(0, 12)
+        .map((angle) => `${angle.azimuth}°/${angle.elevation}°`)
+        .join(', ');
+      parts.push(`Manual angles (az/elev in order): ${list}${workflow.multiAngleAngles.length > 12 ? ', ...' : ''}.`);
+    } else {
+      parts.push('Manual angles: none provided; fall back to even spacing across the ranges.');
+    }
+  } else if (workflow.multiAngleAngles.length > 0) {
     const list = workflow.multiAngleAngles
       .slice(0, 12)
       .map((angle) => `${angle.azimuth}°/${angle.elevation}°`)
       .join(', ');
-    parts.push(`Angles: ${list}${workflow.multiAngleAngles.length > 12 ? ', ...' : ''}.`);
+    parts.push(`Preview angles: ${list}${workflow.multiAngleAngles.length > 12 ? ', ...' : ''}.`);
   }
 
   if (!isNoStyle && style) {
     parts.push(`Style: ${style.name}.`);
+    if (style.description) {
+      const desc = style.description.trim();
+      parts.push(desc.endsWith('.') ? desc : `${desc}.`);
+    }
+    if (style.promptBundle) {
+      const architectureVocabulary = style.promptBundle.architectureVocabulary || [];
+      const materialBias = style.promptBundle.materialBias || {};
+      if (architectureVocabulary.length > 0) {
+        parts.push(`Architecture: ${architectureVocabulary.slice(0, 3).join(', ')}.`);
+      }
+      const primaryMaterials = materialBias.primary || [];
+      const secondaryMaterials = materialBias.secondary || [];
+      if (primaryMaterials.length > 0 || secondaryMaterials.length > 0) {
+        const primaryText = primaryMaterials.length > 0 ? primaryMaterials.join(', ') : 'balanced materials';
+        const secondaryText = secondaryMaterials.slice(0, 2).join(', ');
+        const materialsText = secondaryText ? `${primaryText} and ${secondaryText}` : primaryText;
+        parts.push(`Materials: ${materialsText}.`);
+      }
+    }
   }
+
+  parts.push(`Lighting: ${lighting.timeOfDay}, ${lighting.weather}, ${lighting.cloudType} sky.`);
+  if (context.vegetation) {
+    parts.push(`Surroundings: ${context.vegetationDensity > 50 ? 'dense' : 'sparse'} ${context.season} vegetation.`);
+  }
+  if (context.people) {
+    parts.push('Include people.');
+  }
+  parts.push(`Camera: ${camera.viewType}, ${camera.projection} projection.`);
+
+  const constraints = [
+    hasSourceImage ? 'Use the input image as ground-truth subject, scale, and material reference.' : null,
+    'Keep the same subject identity, geometry, and proportions across all views.',
+    'Only change camera azimuth/elevation within the specified ranges.',
+    'Keep focal length, lens distortion, and framing consistent so scale matches between views.',
+    workflow.multiAngleLockConsistency
+      ? 'Lock lighting direction, exposure, weather, time of day, color grading, and background across all views.'
+      : 'Keep materials and style consistent; allow only subtle lighting shifts caused by angle.',
+    'Do not add, remove, or swap objects, vegetation, people, or props between views unless explicitly requested.',
+  ].filter(Boolean);
+  parts.push(`Constraints: ${constraints.join(' ')}`);
   return parts.filter(p => p.trim()).join(' ');
 }
 
@@ -2275,6 +2434,9 @@ export function generatePrompt(state: AppState): string {
   }
   if (state.mode === 'upscale') {
     return generateUpscalePrompt(state);
+  }
+  if (state.mode === 'img-to-3d') {
+    return generateImageTo3DPrompt(state);
   }
   if (state.mode === 'multi-angle') {
     return generateMultiAnglePrompt(state);
