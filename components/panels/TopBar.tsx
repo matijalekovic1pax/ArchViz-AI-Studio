@@ -631,74 +631,75 @@ export const TopBar: React.FC = () => {
           </button>
 
           {showControlsMenu && (
-            <div className="absolute left-0 top-full mt-1.5 w-60 bg-surface-elevated rounded-lg shadow-elevated border border-border p-2 z-50 animate-fade-in origin-top-left">
-              <div className="flex items-center justify-between mb-1.5 pb-1.5 border-b border-border-subtle">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
-                  Canvas Controls
-                </span>
+            <div className="absolute left-0 top-full mt-1 w-52 bg-surface-elevated rounded-md shadow-elevated border border-border p-1.5 z-50 animate-fade-in origin-top-left">
+              <div className="flex items-center justify-between mb-1 pb-1 border-b border-border-subtle">
+                <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-foreground-muted">
+                  <SlidersHorizontal size={11} />
+                  Quick Controls
+                </div>
                 <button
                   onClick={() => setShowControlsMenu(false)}
                   className="text-foreground-muted hover:text-foreground"
                   title="Close"
                 >
-                  <X size={12} />
+                  <X size={11} />
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
-                  <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
+              <div className="grid gap-1">
+                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
+                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
                     History
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  </span>
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={handleUndoSelection}
                       disabled={!canUndoSelection}
                       className={cn(
-                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
                         canUndoSelection
                           ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                           : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                       )}
                       title="Undo"
                     >
-                      <Undo size={11} />
+                      <Undo size={10} />
                       Undo
                     </button>
                     <button
                       onClick={handleRedoSelection}
                       disabled={!canRedoSelection}
                       className={cn(
-                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
                         canRedoSelection
                           ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                           : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                       )}
                       title="Redo"
                     >
-                      <Redo size={11} />
+                      <Redo size={10} />
                       Redo
                     </button>
                   </div>
                 </div>
 
-                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
-                  <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
+                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
+                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
                     Canvas
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  </span>
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={handleFitToScreen}
                       disabled={!state.uploadedImage}
                       className={cn(
-                        "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
                         !state.uploadedImage
                           ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                           : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                       )}
                       title="Fit to Screen"
                     >
-                      <Minimize2 size={11} />
+                      <Minimize2 size={10} />
                       Fit
                     </button>
                     {!isVideoMode && (
@@ -706,7 +707,7 @@ export const TopBar: React.FC = () => {
                         onClick={handleToggleSplit}
                         disabled={!state.uploadedImage}
                         className={cn(
-                          "flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                          "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
                           !state.uploadedImage
                             ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                             : state.workflow.canvasSync
@@ -715,68 +716,64 @@ export const TopBar: React.FC = () => {
                         )}
                         title="Toggle Split View"
                       >
-                        <Columns size={11} />
+                        <Columns size={10} />
                         Split
                       </button>
                     )}
                     <button
                       onClick={handleClearImage}
                       disabled={!state.uploadedImage}
+                      aria-label="Clear Image"
                       className={cn(
-                        "col-span-2 flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold transition-colors",
+                        "flex items-center justify-center h-6 w-6 rounded-md border text-[8px] font-semibold transition-colors",
                         !state.uploadedImage
                           ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                           : "border-border text-red-600 hover:bg-red-50"
                       )}
                       title="Clear Image"
                     >
-                      <Trash2 size={11} />
-                      Clear Image
+                      <Trash2 size={10} />
                     </button>
                   </div>
                 </div>
 
-                <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted">
-                      Zoom
-                    </span>
-                    <span className="text-[8px] font-mono text-foreground-muted select-none">
-                      {Math.round(state.canvas.zoom * 100)}%
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
+                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
+                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
+                    Zoom
+                  </span>
+                  <div className="flex items-center gap-1">
                     <button
-                      className="flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(-0.25)}
                       title="Zoom Out"
                     >
-                      <ZoomOut size={11} />
-                      Zoom Out
+                      <ZoomOut size={10} />
                     </button>
+                    <span className="min-w-[34px] text-center text-[7px] font-mono text-foreground-muted select-none">
+                      {Math.round(state.canvas.zoom * 100)}%
+                    </span>
                     <button
-                      className="flex items-center justify-center gap-1.5 h-7 rounded-md border text-[9px] font-semibold text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(0.25)}
                       title="Zoom In"
                     >
-                      <ZoomIn size={11} />
-                      Zoom In
+                      <ZoomIn size={10} />
                     </button>
                   </div>
                 </div>
 
                 {!isVideoMode && (
-                  <div className="rounded-md border border-border-subtle bg-surface-sunken p-1.5">
-                    <div className="text-[8px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5">
-                      Resolution
-                    </div>
-                    <div className="grid grid-cols-3 gap-1">
+                  <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
+                    <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
+                      Res
+                    </span>
+                    <div className="flex items-center gap-1">
                       {resolutionOptions.map((option) => (
                         <button
                           key={option.value}
                           onClick={() => handleResolutionChange(option.value)}
                           className={cn(
-                            "h-6 rounded-md text-[8px] font-semibold border transition-all",
+                            "h-5 px-1.5 rounded-md text-[7px] font-semibold border transition-all",
                             state.output.resolution === option.value
                               ? "bg-foreground text-background border-foreground shadow-sm"
                               : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"

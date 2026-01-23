@@ -13,6 +13,7 @@ import { GoogleGenAI, type GenerateContentResponse } from '@google/genai';
 // Default model for native image generation
 export const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
 export const IMAGE_MODEL = 'gemini-3-pro-image-preview';
+export const TEXT_MODEL = 'gemini-3-pro-preview';
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -28,9 +29,16 @@ export interface ImageData {
   height?: number;
 }
 
+export interface AttachmentData {
+  base64: string;
+  mimeType: string;
+  name?: string;
+}
+
 export interface GeminiRequest {
   prompt: string;
   images?: ImageData[];
+  attachments?: AttachmentData[];
   generationConfig?: GenerationConfig;
 }
 
@@ -46,6 +54,10 @@ export interface GenerationConfig {
   maxOutputTokens?: number;
   responseModalities?: Array<'TEXT' | 'IMAGE'>;
   imageConfig?: ImageConfig;
+  thinkingConfig?: {
+    thinkingBudget?: number;
+    thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
+  };
 }
 
 export interface GeminiResponse {
@@ -262,15 +274,17 @@ export class GeminiService {
    */
   async generateText(request: GeminiRequest): Promise<string> {
     const contents = this.buildContents(request);
+    const baseConfig: GenerationConfig = {
+      ...request.generationConfig,
+      responseModalities: ['TEXT']
+    };
+    const config = this.normalizeThinkingConfig(TEXT_MODEL, baseConfig);
 
     const response = await this.executeWithRetry(() =>
       this.ai.models.generateContent({
-        model: this.model,
+        model: TEXT_MODEL,
         contents,
-        config: {
-          ...request.generationConfig,
-          responseModalities: ['TEXT']
-        }
+        config
       })
     );
 
@@ -504,27 +518,99 @@ export class GeminiService {
   // Private Helper Methods
   // --------------------------------------------------------------------------
 
-  private buildContents(request: GeminiRequest): string | Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> {
-    // If no images, just return the prompt string
-    if (!request.images || request.images.length === 0) {
-      return request.prompt;
-    }
-
-    // Build parts array with images first, then text
+  private buildContents(request: GeminiRequest): Array<{ role: 'user'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    const attachments = request.attachments || [];
+    const hasNonImageAttachment = attachments.some((attachment) => !attachment.mimeType.startsWith('image/'));
 
-    for (const image of request.images) {
-      parts.push({
-        inlineData: {
-          mimeType: image.mimeType,
-          data: image.base64
+    if (hasNonImageAttachment) {
+      // For document workflows, keep prompt first, then documents, then images.
+      if (request.prompt) {
+        parts.push({ text: request.prompt });
+      }
+      for (const attachment of attachments) {
+        parts.push({
+          inlineData: {
+            mimeType: attachment.mimeType,
+            data: attachment.base64
+          }
+        });
+      }
+      if (request.images) {
+        for (const image of request.images) {
+          parts.push({
+            inlineData: {
+              mimeType: image.mimeType,
+              data: image.base64
+            }
+          });
         }
-      });
+      }
+    } else {
+      // For image-only flows, keep images first, then text.
+      if (attachments.length > 0) {
+        for (const attachment of attachments) {
+          parts.push({
+            inlineData: {
+              mimeType: attachment.mimeType,
+              data: attachment.base64
+            }
+          });
+        }
+      }
+      if (request.images) {
+        for (const image of request.images) {
+          parts.push({
+            inlineData: {
+              mimeType: image.mimeType,
+              data: image.base64
+            }
+          });
+        }
+      }
+      if (request.prompt) {
+        parts.push({ text: request.prompt });
+      }
     }
 
-    parts.push({ text: request.prompt });
+    // Always return a properly shaped contents array for the SDK.
+    return [{ role: 'user', parts }];
+  }
 
-    return parts;
+  private normalizeThinkingConfig(model: string, config: GenerationConfig): GenerationConfig {
+    const modelId = model.toLowerCase();
+    const isGemini3 = modelId.startsWith('gemini-3');
+    const isGemini25 = modelId.startsWith('gemini-2.5');
+
+    if (!isGemini3 && !isGemini25) {
+      return config;
+    }
+
+    const incomingThinking = config.thinkingConfig || {};
+    const thinkingConfig: GenerationConfig['thinkingConfig'] = { ...incomingThinking };
+
+    if (isGemini3) {
+      // Gemini 3 uses thinkingLevel; ensure we don't send a zero thinking budget.
+      if ('thinkingBudget' in thinkingConfig) {
+        delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
+      }
+      if (!thinkingConfig.thinkingLevel) {
+        thinkingConfig.thinkingLevel = 'low';
+      }
+    } else {
+      // Gemini 2.5 uses thinkingBudget.
+      if ('thinkingLevel' in thinkingConfig) {
+        delete (thinkingConfig as { thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' }).thinkingLevel;
+      }
+      if (typeof thinkingConfig.thinkingBudget !== 'number' || thinkingConfig.thinkingBudget <= 0) {
+        thinkingConfig.thinkingBudget = 256;
+      }
+    }
+
+    return {
+      ...config,
+      thinkingConfig
+    };
   }
 
   private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {

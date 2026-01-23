@@ -366,7 +366,7 @@ const BoQRow: React.FC<BoQRowProps> = ({ material, item, issues, expanded, onExp
 // --- MAIN VIEW ---
 
 export const MaterialValidationView: React.FC = () => {
-  const { state } = useAppStore();
+  const { state, dispatch } = useAppStore();
   const { generate, isReady } = useGeneration();
   const [activeTab, setActiveTab] = useState<'technical' | 'boq'>('technical');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -376,16 +376,50 @@ export const MaterialValidationView: React.FC = () => {
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const { documents, materials, issues, boqItems, error } = state.materialValidation;
+  const technicalIssueTypes = new Set<ValidationIssue['type']>(['technical', 'drawing', 'documentation']);
+  const issuesByCode = new Map<string, ValidationIssue[]>();
+
+  issues.forEach((issue) => {
+     const code = issue.code?.trim();
+     if (!code) return;
+     const bucket = issuesByCode.get(code) || [];
+     bucket.push(issue);
+     issuesByCode.set(code, bucket);
+  });
+
+  const extendedMaterials: ExtendedMaterial[] = materials.map((material, index) => {
+     const code = material.code?.trim() || `MAT-${index + 1}`;
+     const materialIssues = (issuesByCode.get(code) || []).filter((issue) => technicalIssueTypes.has(issue.type));
+     const status = materialIssues.some((issue) => issue.severity === 'error')
+        ? 'error'
+        : materialIssues.some((issue) => issue.severity === 'warning')
+          ? 'warning'
+          : 'ok';
+     const application = material.application || material.description || material.name;
+     return {
+        ...material,
+        code,
+        status,
+        application,
+        checks: {
+           typology: Boolean(material.category),
+           dimensions: material.dimensions ? 'ok' : 'warning',
+           application: Boolean(application)
+        }
+     };
+  });
+
   // Stats calculation
-  const totalItems = MOCK_MATERIALS.length;
-  const errors = MOCK_MATERIALS.filter(m => m.status === 'error').length;
-  const warnings = MOCK_MATERIALS.filter(m => m.status === 'warning').length;
-  const passed = totalItems - errors - warnings;
-  const score = Math.round((passed / totalItems) * 100);
+  const totalItems = extendedMaterials.length;
+  const errors = extendedMaterials.filter(m => m.status === 'error').length;
+  const warnings = extendedMaterials.filter(m => m.status === 'warning').length;
+  const passed = Math.max(totalItems - errors - warnings, 0);
+  const score = totalItems > 0 ? Math.round((passed / totalItems) * 100) : 0;
 
   // Filter Logic
   const getFilteredMaterials = () => {
-     return MOCK_MATERIALS.filter(m => {
+     return extendedMaterials.filter(m => {
         if (filterCategory !== 'All' && m.category !== filterCategory) return false;
         if (issuesOnly && m.status === 'ok') return false;
         if (searchQuery && !m.name.toLowerCase().includes(searchQuery.toLowerCase()) && !m.code.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -397,22 +431,49 @@ export const MaterialValidationView: React.FC = () => {
 
   // Combined list for BoQ view (materials + orphan boq items)
   const getBoQData = () => {
-     // Start with materials, find their BoQ matches
+     const materialMap = new Map(extendedMaterials.map((material) => [material.code, material]));
      const data = filteredData.map(mat => ({
         type: 'material',
         key: mat.code,
         material: mat,
-        boqItem: MOCK_BOQ_ITEMS.find(b => b.materialRef === mat.code)
+        boqItem: boqItems.find(b => b.materialRef === mat.code)
      }));
 
-     // Add orphan BoQ items (simulated)
-     // In a real app, we'd check all BoQ items against materials
+     const searchLower = searchQuery.toLowerCase();
+     const orphanBoqItems = filterCategory === 'All'
+        ? boqItems.filter((item) => {
+             if (materialMap.has(item.materialRef)) return false;
+             if (!searchLower) return true;
+             return (
+                item.description.toLowerCase().includes(searchLower) ||
+                item.code.toLowerCase().includes(searchLower) ||
+                item.materialRef.toLowerCase().includes(searchLower)
+             );
+          })
+        : [];
+
+     orphanBoqItems.forEach((item) => {
+        data.push({
+           type: 'boq',
+           key: `boq-${item.code}`,
+           material: undefined,
+           boqItem: item
+        });
+     });
+
      return data;
   };
 
   const boqData = getBoQData();
 
   const handleRunValidation = async () => {
+     if (documents.length === 0) {
+        dispatch({
+           type: 'UPDATE_MATERIAL_VALIDATION',
+           payload: { error: 'Upload material schedule and BoQ documents to run validation.' }
+        });
+        return;
+     }
      await generate();
   };
 
@@ -448,10 +509,10 @@ export const MaterialValidationView: React.FC = () => {
                </button>
                <button
                   onClick={handleRunValidation}
-                  disabled={!isReady || state.materialValidation.isRunning}
+                  disabled={!isReady || state.materialValidation.isRunning || documents.length === 0}
                   className={cn(
                      "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-colors shadow-md",
-                     !isReady || state.materialValidation.isRunning
+                     !isReady || state.materialValidation.isRunning || documents.length === 0
                         ? "bg-surface-sunken text-foreground-muted cursor-not-allowed"
                         : "bg-foreground text-background hover:bg-foreground/90"
                   )}
@@ -470,7 +531,7 @@ export const MaterialValidationView: React.FC = () => {
             </div>
          </div>
 
-         {(state.materialValidation.isRunning || state.materialValidation.aiSummary) && (
+         {(state.materialValidation.isRunning || state.materialValidation.aiSummary || error) && (
             <div className="px-6 py-3 border-t border-border-subtle bg-background/60">
                <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-1">
                   AI Summary
@@ -480,6 +541,9 @@ export const MaterialValidationView: React.FC = () => {
                      <Loader2 size={12} className="animate-spin" />
                      Analyzing materials and documents...
                   </div>
+               )}
+               {!state.materialValidation.isRunning && error && (
+                  <div className="text-xs text-red-600">{error}</div>
                )}
                {!state.materialValidation.isRunning && state.materialValidation.aiSummary && (
                   <div className="text-xs text-foreground leading-relaxed">
@@ -579,7 +643,11 @@ export const MaterialValidationView: React.FC = () => {
                      {activeTab === 'technical' ? (
                         filteredData.length > 0 ? (
                            filteredData.map(mat => {
-                              const matIssues = MOCK_ISSUES.filter(i => i.code === mat.code && i.type === 'technical');
+                              const matIssues = issues.filter(
+                                 i =>
+                                   i.code === mat.code &&
+                                   (i.type === 'technical' || i.type === 'drawing' || i.type === 'documentation')
+                              );
                               return (
                                  <TechnicalRow 
                                     key={mat.code}
@@ -604,7 +672,8 @@ export const MaterialValidationView: React.FC = () => {
                      ) : (
                         boqData.length > 0 ? (
                            boqData.map((item) => {
-                              const itemIssues = MOCK_ISSUES.filter(i => i.code === item.key && i.type === 'boq');
+                              const issueKey = item.material?.code || item.boqItem?.code || item.key;
+                              const itemIssues = issues.filter(i => i.code === issueKey && i.type === 'boq');
                               return (
                                  <BoQRow 
                                     key={item.key}

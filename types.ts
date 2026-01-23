@@ -741,6 +741,7 @@ export interface ParsedMaterial {
   source: 'terminal' | 'cargo';
   dimensions?: string;
   notes: string[];
+  application?: string;
 }
 
 export interface BoQItem {
@@ -748,7 +749,7 @@ export interface BoQItem {
   section: string;
   description: string;
   materialRef: string;
-  product: {
+  product?: {
     type: string;
     brand: string;
   };
@@ -759,13 +760,30 @@ export interface BoQItem {
   };
 }
 
+export interface MaterialValidationDocument {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: number;
+}
+
+export interface MaterialValidationChecks {
+  crossReferenceBoq: boolean;
+  technicalSpec: boolean;
+  dimensions: boolean;
+  productRefs: boolean;
+  quantities: boolean;
+}
+
 export interface MaterialValidationState {
   activeTab: 'dashboard' | 'documents' | 'materials' | 'drawings' | 'boq' | 'issues' | 'reports';
-  documents: {
-    terminal: boolean;
-    cargo: boolean;
-    boq: boolean;
-  };
+  documents: MaterialValidationDocument[];
+  checks: MaterialValidationChecks;
+  materials: ParsedMaterial[];
+  boqItems: BoQItem[];
+  issues: ValidationIssue[];
   stats: {
     total: number;
     validated: number;
@@ -776,6 +794,7 @@ export interface MaterialValidationState {
   isRunning: boolean;
   lastRunAt: number | null;
   aiSummary: string | null;
+  error?: string | null;
 }
 
 export interface GeometryState {

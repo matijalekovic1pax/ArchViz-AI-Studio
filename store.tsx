@@ -650,21 +650,28 @@ const initialWorkflow: WorkflowSettings = {
 
 const initialMaterialValidation: MaterialValidationState = {
   activeTab: 'materials',
-  documents: {
-    terminal: true, // Mock pre-loaded
-    cargo: true,    // Mock pre-loaded
-    boq: true       // Mock pre-loaded
+  documents: [],
+  checks: {
+    crossReferenceBoq: true,
+    technicalSpec: true,
+    dimensions: true,
+    productRefs: true,
+    quantities: true,
   },
+  materials: [],
+  boqItems: [],
+  issues: [],
   stats: {
-    total: 38,
-    validated: 42,
-    warnings: 8,
-    errors: 3
+    total: 0,
+    validated: 0,
+    warnings: 0,
+    errors: 0
   },
   selectedMaterialCode: null,
   isRunning: false,
   lastRunAt: null,
-  aiSummary: null
+  aiSummary: null,
+  error: null
 };
 
 const initialGeometry: GeometryState = {
