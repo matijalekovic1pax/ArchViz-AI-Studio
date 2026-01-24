@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, ChangeEvent } from 'react';
 import { nanoid } from 'nanoid';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
@@ -8,7 +8,7 @@ import { Toggle } from '../../ui/Toggle';
 import { StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
-import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw } from 'lucide-react';
+import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw, Upload, X, Image as ImageIcon, ChevronDown } from 'lucide-react';
 import {
     getGeminiService,
     initGeminiService,
@@ -33,6 +33,33 @@ export const LeftRenderCADPanel = () => {
     const windowMenuRef = useRef<HTMLDivElement>(null);
     const doorMenuRef = useRef<HTMLDivElement>(null);
     const lastLayerScanRef = useRef<string | null>(null);
+    const backgroundInputRef = useRef<HTMLInputElement>(null);
+
+    const handleBackgroundUpload = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        updateWf({
+          backgroundReferenceImage: dataUrl,
+          backgroundReferenceEnabled: true
+        });
+      };
+      reader.readAsDataURL(file);
+
+      if (backgroundInputRef.current) {
+        backgroundInputRef.current.value = '';
+      }
+    }, [updateWf]);
+
+    const handleRemoveBackground = useCallback(() => {
+      updateWf({
+        backgroundReferenceImage: null,
+        backgroundReferenceEnabled: false
+      });
+    }, [updateWf]);
     const availableStyles = useMemo(
       () => [...BUILT_IN_STYLES, ...state.customStyles],
       [state.customStyles]
@@ -45,66 +72,131 @@ export const LeftRenderCADPanel = () => {
         : state.activeStyleId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
     }, [availableStyles, state.activeStyleId]);
 
-    const roomTypeOptions = [
-      'Airport Departure Hall',
-      'Airport Arrivals Hall',
-      'Check-in Counter',
-      'Ticketing Area',
-      'Main Concourse',
-      'Terminal Atrium',
-      'Gate Waiting Area',
-      'Jet Bridge / Boarding Gate',
-      'Security Checkpoint',
-      'Passport Control',
-      'Customs Hall',
-      'Immigration Area',
-      'Baggage Claim',
-      'Baggage Drop-off',
-      'Oversized Baggage',
-      'Lost Baggage Office',
-      'Duty-Free Shop',
-      'Food Court',
-      'Restaurant / Bar',
-      'Retail Corridor',
-      'Airline Lounge',
-      'Business Class Lounge',
-      'First Class Lounge',
-      'Transit Lounge',
-      'Family Waiting Area',
-      'Information Desk',
-      'Ground Transportation',
-      'Taxi / Rideshare Pickup',
-      'Parking Garage',
-      'Rental Car Center',
-      'Control Tower (Exterior)',
-      'Maintenance Hangar',
-      'Cargo Terminal',
-      'Runway View',
-      'Apron / Tarmac',
-      'Airport Entry Plaza',
-      'Airport Office',
-      'Terminal Curbside',
-      'Hotel Lobby',
-      'Conference / Event Hall',
-      'Museum / Gallery',
-      'Office Open Plan',
-      'Office Reception',
-      'Hospitality Lounge',
-      'Retail Store',
-      'Restaurant Dining',
-      'Library',
-      'Atrium / Public Hall',
-      'Lobby / Reception',
-      'Corridor / Circulation',
-      'Stair / Vertical Core',
-      'Service Corridor',
-      'Loading Dock',
-      'Storage / Back-of-house',
-      'Restroom',
-      'Mechanical / Utility',
-      'Outdoor Plaza',
-      'Covered Walkway',
-      'Urban Streetscape',
+    const roomTypeCategories = [
+      {
+        label: 'Terminal & Public',
+        options: [
+          'Airport Departure Hall',
+          'Airport Arrivals Hall',
+          'Check-in Counter',
+          'Ticketing Area',
+          'Main Concourse',
+          'Terminal Atrium',
+          'Information Desk',
+          'Terminal Curbside',
+        ]
+      },
+      {
+        label: 'Security & Processing',
+        options: [
+          'Security Checkpoint',
+          'Passport Control',
+          'Customs Hall',
+          'Immigration Area',
+        ]
+      },
+      {
+        label: 'Gates & Boarding',
+        options: [
+          'Gate Waiting Area',
+          'Jet Bridge / Boarding Gate',
+          'Family Waiting Area',
+        ]
+      },
+      {
+        label: 'Lounges',
+        options: [
+          'Airline Lounge',
+          'Business Class Lounge',
+          'First Class Lounge',
+          'Transit Lounge',
+          'Hospitality Lounge',
+        ]
+      },
+      {
+        label: 'Baggage',
+        options: [
+          'Baggage Claim',
+          'Baggage Drop-off',
+          'Oversized Baggage',
+          'Lost Baggage Office',
+        ]
+      },
+      {
+        label: 'Retail & Dining',
+        options: [
+          'Duty-Free Shop',
+          'Food Court',
+          'Restaurant / Bar',
+          'Restaurant Dining',
+          'Retail Corridor',
+          'Retail Store',
+        ]
+      },
+      {
+        label: 'Transport & Access',
+        options: [
+          'Ground Transportation',
+          'Taxi / Rideshare Pickup',
+          'Parking Garage',
+          'Rental Car Center',
+          'Airport Entry Plaza',
+        ]
+      },
+      {
+        label: 'Airside & Operations',
+        options: [
+          'Control Tower (Exterior)',
+          'Maintenance Hangar',
+          'Cargo Terminal',
+          'Runway View',
+          'Apron / Tarmac',
+        ]
+      },
+      {
+        label: 'Office & Commercial',
+        options: [
+          'Airport Office',
+          'Office Open Plan',
+          'Office Reception',
+          'Conference / Event Hall',
+        ]
+      },
+      {
+        label: 'Hospitality & Culture',
+        options: [
+          'Hotel Lobby',
+          'Museum / Gallery',
+          'Library',
+        ]
+      },
+      {
+        label: 'Circulation & Public',
+        options: [
+          'Atrium / Public Hall',
+          'Lobby / Reception',
+          'Corridor / Circulation',
+          'Stair / Vertical Core',
+          'Covered Walkway',
+        ]
+      },
+      {
+        label: 'Back of House',
+        options: [
+          'Service Corridor',
+          'Loading Dock',
+          'Storage / Back-of-house',
+          'Restroom',
+          'Mechanical / Utility',
+        ]
+      },
+      {
+        label: 'Exterior',
+        options: [
+          'Outdoor Plaza',
+          'Urban Streetscape',
+        ]
+      },
     ];
     const ceilingOptions = [
       { value: 'flat', label: 'Flat' },
@@ -328,6 +420,31 @@ export const LeftRenderCADPanel = () => {
           onAddStyle={(style) => dispatch({ type: 'ADD_CUSTOM_STYLE', payload: style })}
         />
 
+        {/* Source Image Indicator */}
+        {state.sourceImage && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-sunken border border-border">
+            <div className="w-12 h-12 rounded overflow-hidden border border-border flex-shrink-0">
+              <img
+                src={state.sourceImage}
+                alt="Source"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-foreground-muted">Original Source</p>
+              <p className="text-[9px] text-foreground-muted/60 truncate">Locked for consistent renders</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_SOURCE_IMAGE', payload: null })}
+              className="p-1.5 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
+              title="Reset source image"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         <div>
           <SectionHeader title="Drawing Type" />
           <div className="grid grid-cols-2 gap-2 mb-3">
@@ -404,6 +521,108 @@ export const LeftRenderCADPanel = () => {
           />
         </div>
 
+        {/* Background/Environment Reference */}
+        <div>
+          <SectionHeader title="Background Reference" />
+          <div className="space-y-3">
+            <p className="text-[10px] text-foreground-muted">
+              Upload an environment photo to guide the scene context and atmosphere.
+            </p>
+
+            <input
+              ref={backgroundInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleBackgroundUpload}
+              className="hidden"
+            />
+
+            {wf.backgroundReferenceImage ? (
+              <div className="relative group">
+                <div className="aspect-video rounded-lg overflow-hidden border border-border bg-surface-sunken">
+                  <img
+                    src={wf.backgroundReferenceImage}
+                    alt="Background reference"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => backgroundInputRef.current?.click()}
+                    className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                    title="Replace image"
+                  >
+                    <Upload size={16} className="text-white" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveBackground}
+                    className="p-2 bg-white/20 hover:bg-red-500/70 rounded-lg transition-colors"
+                    title="Remove image"
+                  >
+                    <X size={16} className="text-white" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => backgroundInputRef.current?.click()}
+                className={cn(
+                  "w-full aspect-video rounded-lg border-2 border-dashed border-border",
+                  "bg-surface-sunken hover:bg-surface-elevated hover:border-accent/50",
+                  "flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer"
+                )}
+              >
+                <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
+                  <ImageIcon size={20} className="text-foreground-muted" />
+                </div>
+                <span className="text-xs text-foreground-muted">Click to upload</span>
+                <span className="text-[10px] text-foreground-muted/60">JPEG, PNG, WebP</span>
+              </button>
+            )}
+
+            <div className={cn(
+              "flex items-center justify-between p-2 rounded-lg border transition-colors",
+              wf.backgroundReferenceImage
+                ? "bg-surface-elevated border-border"
+                : "bg-surface-sunken border-border/50 opacity-50"
+            )}>
+              <div className="flex items-center gap-2">
+                <ImageIcon size={14} className="text-foreground-muted" />
+                <span className="text-xs">Use for background</span>
+              </div>
+              <button
+                type="button"
+                disabled={!wf.backgroundReferenceImage}
+                onClick={() => updateWf({ backgroundReferenceEnabled: !wf.backgroundReferenceEnabled })}
+                className={cn(
+                  "relative w-9 h-5 rounded-full transition-colors flex-shrink-0",
+                  wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
+                    ? "bg-accent"
+                    : "bg-surface-sunken border border-border"
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200",
+                    wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
+                      ? "left-[18px]"
+                      : "left-0.5"
+                  )}
+                />
+              </button>
+            </div>
+
+            {wf.backgroundReferenceEnabled && wf.backgroundReferenceImage && (
+              <p className="text-[10px] text-accent">
+                Background reference will be used to match environment, lighting, and atmosphere.
+              </p>
+            )}
+          </div>
+        </div>
+
         <div>
           <SectionHeader title="Space Interpretation" />
           <div className="space-y-3">
@@ -416,27 +635,50 @@ export const LeftRenderCADPanel = () => {
                 aria-expanded={openMenu === 'room'}
               >
                 <span className="truncate">{cadSpace.roomType}</span>
-                <span className="text-[10px] text-foreground-muted">v</span>
+                <ChevronDown size={12} className={cn(
+                  "text-foreground-muted transition-transform",
+                  openMenu === 'room' && "rotate-180"
+                )} />
               </button>
               {openMenu === 'room' && (
-                <div className="mt-2 max-h-48 overflow-y-auto rounded border border-border bg-surface-elevated text-xs shadow-sm">
-                  {roomTypeOptions.map((room) => (
-                    <button
-                      key={room}
-                      type="button"
-                      onClick={() => {
-                        updateWf({ cadSpace: { ...cadSpace, roomType: room } });
-                        setOpenMenu(null);
-                      }}
-                      className={cn(
-                        "w-full text-left px-2 py-1.5 transition-colors",
-                        room === cadSpace.roomType
-                          ? "bg-surface-sunken text-foreground"
-                          : "text-foreground-muted hover:text-foreground hover:bg-surface-sunken/50"
-                      )}
-                    >
-                      {room}
-                    </button>
+                <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-border bg-surface-elevated text-xs shadow-xl">
+                  {roomTypeCategories.map((category, catIndex) => (
+                    <div key={category.label}>
+                      <div className={cn(
+                        "sticky top-0 z-10 px-3 py-2 flex items-center gap-2",
+                        "bg-gradient-to-r from-accent/20 via-accent/10 to-transparent",
+                        "border-y border-accent/30",
+                        catIndex > 0 && "mt-1"
+                      )}>
+                        <div className="w-2 h-2 rounded-full bg-accent shadow-sm shadow-accent/50" />
+                        <span className="text-[11px] font-bold text-accent uppercase tracking-wider">
+                          {category.label}
+                        </span>
+                        <span className="text-[9px] text-foreground-muted ml-auto bg-surface-sunken px-1.5 py-0.5 rounded">
+                          {category.options.length}
+                        </span>
+                      </div>
+                      <div className="py-0.5">
+                        {category.options.map((room) => (
+                          <button
+                            key={room}
+                            type="button"
+                            onClick={() => {
+                              updateWf({ cadSpace: { ...cadSpace, roomType: room } });
+                              setOpenMenu(null);
+                            }}
+                            className={cn(
+                              "w-full text-left px-4 py-1.5 transition-colors border-l-2",
+                              room === cadSpace.roomType
+                                ? "bg-accent text-white font-medium border-l-accent"
+                                : "text-foreground hover:bg-surface-sunken border-l-transparent hover:border-l-accent/50"
+                            )}
+                          >
+                            {room}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

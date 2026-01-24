@@ -940,133 +940,229 @@ const getEmphasisMaterials = (emphasis: Record<string, number>): string[] => {
 // that work better with AI image generation models
 // ============================================================================
 
+// ============================================================================
+// ENHANCED DESCRIPTION HELPERS - Granular architectural visualization language
+// ============================================================================
+
 const describeSunPosition = (azimuth: number, elevation: number): string => {
-  // Determine horizontal direction based on azimuth
-  let direction = '';
-  if (azimuth >= 337.5 || azimuth < 22.5) direction = 'from the north';
-  else if (azimuth >= 22.5 && azimuth < 67.5) direction = 'from the northeast';
-  else if (azimuth >= 67.5 && azimuth < 112.5) direction = 'from the east';
-  else if (azimuth >= 112.5 && azimuth < 157.5) direction = 'from the southeast';
-  else if (azimuth >= 157.5 && azimuth < 202.5) direction = 'from the south';
-  else if (azimuth >= 202.5 && azimuth < 247.5) direction = 'from the southwest';
-  else if (azimuth >= 247.5 && azimuth < 292.5) direction = 'from the west';
-  else direction = 'from the northwest';
+  // Precise directional mapping with architectural implications
+  const directions: Record<string, { dir: string; quality: string }> = {
+    north: { dir: 'from the north', quality: 'cool, even illumination typical of north-facing facades' },
+    northeast: { dir: 'from the northeast', quality: 'crisp morning light with soft diagonal shadows' },
+    east: { dir: 'from the east', quality: 'classic morning light revealing eastern elevations' },
+    southeast: { dir: 'from the southeast', quality: 'warm mid-morning light with favorable shadow angles' },
+    south: { dir: 'from the south', quality: 'strong direct light illuminating southern exposures fully' },
+    southwest: { dir: 'from the southwest', quality: 'rich afternoon warmth with elongating shadows' },
+    west: { dir: 'from the west', quality: 'dramatic evening light catching western facades' },
+    northwest: { dir: 'from the northwest', quality: 'soft late-day light with gentle shadow play' },
+  };
 
-  // Determine vertical position based on elevation
-  let height = '';
-  if (elevation < 15) height = 'low on the horizon, creating long dramatic shadows';
-  else if (elevation < 30) height = 'at a low angle, casting extended shadows across surfaces';
-  else if (elevation < 45) height = 'at a pleasing mid-angle, balancing shadow and light';
-  else if (elevation < 60) height = 'fairly high in the sky, with moderate shadow length';
-  else if (elevation < 75) height = 'high overhead, minimizing shadows';
-  else height = 'nearly directly overhead';
+  let dirKey = 'north';
+  if (azimuth >= 337.5 || azimuth < 22.5) dirKey = 'north';
+  else if (azimuth >= 22.5 && azimuth < 67.5) dirKey = 'northeast';
+  else if (azimuth >= 67.5 && azimuth < 112.5) dirKey = 'east';
+  else if (azimuth >= 112.5 && azimuth < 157.5) dirKey = 'southeast';
+  else if (azimuth >= 157.5 && azimuth < 202.5) dirKey = 'south';
+  else if (azimuth >= 202.5 && azimuth < 247.5) dirKey = 'southwest';
+  else if (azimuth >= 247.5 && azimuth < 292.5) dirKey = 'west';
+  else dirKey = 'northwest';
 
-  return `sunlight streaming ${direction}, positioned ${height}`;
+  const { dir, quality } = directions[dirKey];
+
+  // Elevation with precise shadow length implications
+  let elevationDesc = '';
+  if (elevation < 10) elevationDesc = `positioned extremely low on the horizon (${elevation}°), creating dramatically elongated shadows that stretch 5-6x object height`;
+  else if (elevation < 20) elevationDesc = `low on the horizon (${elevation}°), casting long theatrical shadows approximately 3x object height`;
+  else if (elevation < 35) elevationDesc = `at a favorable low-mid angle (${elevation}°), producing shadows roughly 1.5-2x object height ideal for revealing form`;
+  else if (elevation < 50) elevationDesc = `at a balanced mid-angle (${elevation}°), with shadows approximately equal to object height`;
+  else if (elevation < 65) elevationDesc = `moderately high (${elevation}°), creating compact shadows about half the object height`;
+  else if (elevation < 80) elevationDesc = `high in the sky (${elevation}°), with minimal shadow extension`;
+  else elevationDesc = `nearly overhead (${elevation}°), creating almost no horizontal shadows`;
+
+  return `sunlight streaming ${dir} (azimuth ${Math.round(azimuth)}°), ${elevationDesc}, providing ${quality}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {
-  if (intensity < 20) return 'very soft, almost whisper-like sunlight';
-  if (intensity < 40) return 'gentle, subdued sunlight filtering through';
-  if (intensity < 60) return 'moderate sunlight with balanced illumination';
-  if (intensity < 80) return 'strong, confident sunlight';
-  return 'intense, powerful sunlight flooding the scene';
+  // Precise intensity mapping with exposure implications
+  if (intensity < 15) return `very soft sunlight (${intensity}% intensity) - subdued illumination as through heavy diffusion or atmospheric haze, requiring longer exposure`;
+  if (intensity < 30) return `gentle sunlight (${intensity}% intensity) - delicate illumination as through thin clouds or morning mist`;
+  if (intensity < 50) return `moderate sunlight (${intensity}% intensity) - balanced illumination typical of partly cloudy conditions or early/late day`;
+  if (intensity < 70) return `strong sunlight (${intensity}% intensity) - confident illumination with clear definition between lit and shadowed areas`;
+  if (intensity < 85) return `bright sunlight (${intensity}% intensity) - powerful direct illumination creating high contrast`;
+  return `intense sunlight (${intensity}% intensity) - maximum solar illumination with potential for blown highlights in lighter materials`;
 };
 
 const describeColorTemperature = (kelvin: number): string => {
-  if (kelvin < 3000) return 'deeply warm, amber-toned light reminiscent of candlelight';
-  if (kelvin < 4000) return 'warm golden light like late afternoon sun';
-  if (kelvin < 5000) return 'pleasantly warm light with honey undertones';
-  if (kelvin < 5500) return 'balanced, natural daylight';
-  if (kelvin < 6500) return 'clean, neutral white light';
-  if (kelvin < 8000) return 'cool, crisp light with subtle blue undertones';
-  return 'cold, blue-tinted light like an overcast winter day';
+  // Precise Kelvin mapping with real-world equivalents
+  if (kelvin < 2700) return `deeply warm amber light (${kelvin}K) - matching candlelight or tungsten bulbs, casting orange-gold tones across all surfaces`;
+  if (kelvin < 3200) return `warm incandescent light (${kelvin}K) - soft golden illumination like classic interior lighting`;
+  if (kelvin < 4000) return `warm golden daylight (${kelvin}K) - characteristic of golden hour sun, enriching warm materials like wood and brick`;
+  if (kelvin < 4500) return `neutral-warm light (${kelvin}K) - balanced daylight with subtle warmth, flattering to most architectural materials`;
+  if (kelvin < 5500) return `neutral daylight (${kelvin}K) - true color rendering matching midday sun conditions`;
+  if (kelvin < 6500) return `clean daylight (${kelvin}K) - crisp illumination typical of overcast sky or north-facing light`;
+  if (kelvin < 7500) return `cool daylight (${kelvin}K) - blue-tinted illumination suggesting shade or cloudy conditions`;
+  return `cold blue light (${kelvin}K) - distinctly cool tones matching deep shade or heavily overcast winter sky`;
 };
 
 const describeShadows = (softness: number, intensity: number): string => {
-  const softDesc = softness > 70 ? 'soft, diffused' : softness > 40 ? 'moderately soft' : 'crisp, well-defined';
-  const intensityDesc = intensity > 70 ? 'deep, pronounced' : intensity > 40 ? 'visible but balanced' : 'subtle, delicate';
-  return `${softDesc} shadows that are ${intensityDesc}`;
+  // Precise shadow characteristics
+  const softDesc = softness > 80
+    ? `extremely soft, diffused shadows (${softness}% softness) with gradual falloff spanning many inches`
+    : softness > 60
+      ? `soft shadows (${softness}% softness) with gentle penumbra edges`
+      : softness > 40
+        ? `moderately defined shadows (${softness}% softness) balancing clarity with naturalism`
+        : softness > 20
+          ? `fairly crisp shadows (${softness}% softness) with discernible but not harsh edges`
+          : `razor-sharp shadows (${softness}% softness) with minimal penumbra, typical of direct sunlight`;
+
+  const intensityDesc = intensity > 80
+    ? `rendered at high density (${intensity}% intensity) - deep, nearly black in umbra regions`
+    : intensity > 60
+      ? `at medium-high density (${intensity}% intensity) - clearly visible with good contrast`
+      : intensity > 40
+        ? `at balanced density (${intensity}% intensity) - present but not dominating`
+        : intensity > 20
+          ? `at reduced density (${intensity}% intensity) - visible but lifted, showing detail in shadow`
+          : `at minimal density (${intensity}% intensity) - very subtle, almost transparent`;
+
+  return `${softDesc}, ${intensityDesc}`;
 };
 
 const describeLens = (mm: number): string => {
-  if (mm < 24) return `an ultra-wide ${mm}mm lens that dramatically expands the sense of space`;
-  if (mm < 35) return `a wide-angle ${mm}mm lens that captures the full architectural context`;
-  if (mm < 50) return `a versatile ${mm}mm lens offering natural perspective`;
-  if (mm < 85) return `a classic ${mm}mm lens with minimal distortion, ideal for architectural detail`;
-  if (mm < 135) return `a ${mm}mm portrait-length lens that compresses perspective elegantly`;
-  return `a telephoto ${mm}mm lens that flattens perspective and isolates subjects`;
+  // Precise lens characteristics with architectural implications
+  if (mm < 18) return `an extreme ultra-wide ${mm}mm lens - dramatic spatial expansion with significant barrel distortion, requiring careful vertical correction; captures entire rooms from corners`;
+  if (mm < 24) return `an ultra-wide ${mm}mm lens - substantial spatial expansion ideal for confined interiors; some barrel distortion present but manageable with corrections`;
+  if (mm < 28) return `a wide-angle ${mm}mm lens - professional architectural standard for interiors; minimal distortion while capturing generous spatial context`;
+  if (mm < 35) return `a moderate wide-angle ${mm}mm lens - versatile for both interior and exterior work; natural perspective with minimal corrections needed`;
+  if (mm < 50) return `a standard ${mm}mm lens - closest to human eye perspective; minimal distortion, excellent for detail shots and balanced compositions`;
+  if (mm < 70) return `a short telephoto ${mm}mm lens - slight compression flatters architectural facades; reduced keystone effect makes vertical lines naturally straighter`;
+  if (mm < 100) return `a medium telephoto ${mm}mm lens - noticeable perspective compression; ideal for facade details and avoiding foreground distractions`;
+  if (mm < 150) return `a telephoto ${mm}mm lens - significant compression flattening spatial depth; excellent for isolating building elements from distance`;
+  return `a long telephoto ${mm}mm lens - extreme compression creating layered, graphic compositions; requires considerable distance from subject`;
 };
 
 const describeFOV = (fov: number): string => {
-  if (fov < 40) return 'a narrow field of view focusing attention on specific details';
-  if (fov < 60) return 'a moderate field of view capturing the subject naturally';
-  if (fov < 80) return 'a wide field of view encompassing the full scene';
-  if (fov < 100) return 'an expansive field of view stretching across the entire space';
-  return 'an extremely wide field of view creating an immersive panoramic feel';
+  // Field of view with precise spatial implications
+  if (fov < 30) return `an extremely narrow ${fov}° field of view - tight framing isolating specific details, creating compressed layered compositions`;
+  if (fov < 45) return `a narrow ${fov}° field of view - selective framing capturing focused vignettes of the architecture`;
+  if (fov < 60) return `a moderate ${fov}° field of view - balanced framing showing the subject in context without excessive peripheral information`;
+  if (fov < 75) return `a standard-wide ${fov}° field of view - comfortable spatial capture typical of professional architectural photography`;
+  if (fov < 90) return `a wide ${fov}° field of view - expansive framing encompassing full elevations or complete interior volumes`;
+  if (fov < 110) return `a very wide ${fov}° field of view - immersive capture stretching to peripheral vision, requiring distortion management`;
+  return `an ultra-wide ${fov}° field of view - panoramic capture creating dramatic spatial exaggeration and immersive perspectives`;
 };
 
 const describeDepthOfField = (aperture: number, focusDist: number): string => {
-  const dofDesc = aperture < 2.8 ? 'very shallow depth of field with creamy bokeh' :
-    aperture < 5.6 ? 'pleasantly shallow depth of field separating subject from background' :
-    aperture < 11 ? 'moderate depth of field keeping most elements in focus' :
-    'deep depth of field with everything sharply rendered';
+  // Precise aperture and focus distance mapping
+  const dofDesc = aperture < 1.8
+    ? `extremely shallow depth of field (f/${aperture}) - razor-thin focus plane with pronounced optical bokeh, only millimeters in focus`
+    : aperture < 2.8
+      ? `very shallow depth of field (f/${aperture}) - clearly defined subject separation with creamy out-of-focus areas`
+      : aperture < 4
+        ? `shallow depth of field (f/${aperture}) - noticeable background softening while maintaining subject clarity`
+        : aperture < 5.6
+          ? `moderate-shallow depth of field (f/${aperture}) - gentle subject separation with slightly softened distant elements`
+          : aperture < 8
+            ? `moderate depth of field (f/${aperture}) - balanced sharpness with subtle depth falloff in far background`
+            : aperture < 11
+              ? `extended depth of field (f/${aperture}) - most of the scene sharp, only very distant elements softening`
+              : aperture < 16
+                ? `deep depth of field (f/${aperture}) - near-complete sharpness from foreground to background`
+                : `maximum depth of field (f/${aperture}) - everything in focus from closest elements to infinity`;
 
-  const focusDesc = focusDist < 5 ? 'focused on nearby details' :
-    focusDist < 15 ? 'focused on the mid-ground subject' :
-    'focused on distant elements';
+  const focusDesc = focusDist < 2
+    ? `focus point set at very close range (${focusDist}m) - macro-level detail emphasis`
+    : focusDist < 5
+      ? `focus point at near distance (${focusDist}m) - foreground elements in critical focus`
+      : focusDist < 10
+        ? `focus point at mid-ground (${focusDist}m) - optimal for capturing building details`
+        : focusDist < 25
+          ? `focus point at standard architectural distance (${focusDist}m) - balanced for full building capture`
+          : focusDist < 50
+            ? `focus point at medium distance (${focusDist}m) - optimized for full elevation views`
+            : `focus point at far distance (${focusDist}m) - hyperfocal setting for maximum depth`;
 
-  return `${dofDesc}, ${focusDesc}`;
+  return `${dofDesc}; ${focusDesc}`;
 };
 
 const describeEdgeMode = (mode: string): string => {
   const descriptions: Record<string, string> = {
-    'soft': 'softly defined edges that blend naturally into surroundings',
-    'sharp': 'crisp, precisely defined edges with clear delineation',
-    'architectural': 'clean architectural edges typical of professional visualization',
-    'natural': 'organically rendered edges as they would appear in reality',
+    'soft': 'softly antialiased edges with gentle transitions - lines appear organic and painterly, suitable for artistic interpretations',
+    'medium': 'balanced edge definition with natural antialiasing - professional quality that avoids both harshness and excessive softness',
+    'sharp': 'crisp, precisely defined edges with minimal antialiasing - clean delineation emphasizing architectural precision and drafting quality',
+    'architectural': 'technically precise edges typical of professional archviz - sharp where materials meet, softer where natural weathering occurs',
+    'natural': 'photographically authentic edges as they appear in reality - varying sharpness based on material, distance, and lighting conditions',
   };
-  return descriptions[mode] || `${mode} edge treatment`;
+  return descriptions[mode] || `${mode} edge treatment with appropriate antialiasing`;
 };
 
 const describeLOD = (level: string): string => {
   const descriptions: Record<string, string> = {
-    'low': 'simplified detail level focusing on overall form and massing',
-    'medium': 'balanced detail capturing essential architectural elements',
-    'high': 'rich detail revealing textures, joints, and fine craftsmanship',
-    'ultra': 'extraordinary detail where every surface imperfection and material nuance is visible',
+    'minimal': 'minimal detail level - focus on pure form, massing, and silhouette without surface articulation; suitable for early concept visualization',
+    'low': 'reduced detail level - primary architectural elements visible but fine details simplified; window frames suggested rather than fully modeled',
+    'medium': 'balanced detail level - all significant architectural features present including window mullions, door panels, visible structural elements; standard for presentation renders',
+    'high': 'rich detail level - fine architectural craftsmanship visible including hardware, gaskets, weatherstripping, mortar joints, and subtle material variations',
+    'ultra': 'extraordinary detail level - microscopic surface characteristics visible; every screw head, grain pattern, surface imperfection, and material nuance rendered with forensic precision',
   };
-  return descriptions[level] || `${level} level of detail`;
+  return descriptions[level] || `${level} level of detail with proportionate surface articulation`;
 };
 
 const describeSmoothing = (intensity: number, preserveHardEdges: boolean): string => {
-  const smoothDesc = intensity < 30 ? 'minimal surface smoothing maintaining raw authenticity' :
-    intensity < 60 ? 'gentle smoothing for a refined appearance' :
-    'significant smoothing creating polished, idealized surfaces';
+  const smoothDesc = intensity < 20
+    ? `minimal surface smoothing (${intensity}%) - raw, unrefined surfaces maintaining construction authenticity and material honesty`
+    : intensity < 40
+      ? `light surface smoothing (${intensity}%) - subtle refinement reducing obvious mesh faceting while preserving surface character`
+      : intensity < 60
+        ? `moderate surface smoothing (${intensity}%) - balanced refinement for professional visualization, natural-looking curved surfaces`
+        : intensity < 80
+          ? `significant surface smoothing (${intensity}%) - polished appearance with idealized surface continuity`
+          : `heavy surface smoothing (${intensity}%) - highly refined, almost porcelain-like surface quality`;
 
-  return preserveHardEdges ? `${smoothDesc} while preserving intentional hard edges and corners` : smoothDesc;
+  const edgeNote = preserveHardEdges
+    ? '; CRITICAL: intentional hard edges at material transitions, corners, and architectural details must remain crisp and unsmoothed'
+    : '; smoothing applied uniformly including corners and transitions';
+
+  return `${smoothDesc}${edgeNote}`;
 };
 
 const describeDepthLayers = (fg: number, mg: number, bg: number): string => {
-  const fgDesc = fg > 70 ? 'prominently rendered' : fg > 40 ? 'well-defined' : 'subtly present';
-  const mgDesc = mg > 70 ? 'strongly emphasized' : mg > 40 ? 'clearly visible' : 'softly rendered';
-  const bgDesc = bg > 70 ? 'detailed and sharp' : bg > 40 ? 'gently fading' : 'atmospheric and distant';
+  const descLayer = (value: number, name: string) => {
+    if (value > 85) return `${name} rendered with maximum emphasis (${value}%) - full detail and contrast`;
+    if (value > 70) return `${name} prominently rendered (${value}%) - high detail and presence`;
+    if (value > 50) return `${name} clearly defined (${value}%) - balanced detail and visibility`;
+    if (value > 30) return `${name} moderately present (${value}%) - visible but not dominating`;
+    if (value > 15) return `${name} subtly suggested (${value}%) - soft presence adding depth`;
+    return `${name} minimal (${value}%) - barely perceptible, creating atmospheric depth`;
+  };
 
-  return `layered depth with ${fgDesc} foreground elements, ${mgDesc} middle ground, and ${bgDesc} background`;
+  return `layered spatial depth: ${descLayer(fg, 'foreground elements')}; ${descLayer(mg, 'middle ground')}; ${descLayer(bg, 'background/sky')}`;
 };
 
 const describeDisplacement = (scale: string, strength: number, adaptToMaterial: boolean): string => {
-  const scaleDesc: Record<string, string> = {
-    'micro': 'subtle micro-detail displacement adding tactile realism',
-    'small': 'fine displacement revealing surface texture',
-    'medium': 'noticeable displacement enhancing material depth',
-    'large': 'pronounced displacement creating dramatic surface relief',
+  const scaleDescriptions: Record<string, string> = {
+    'fine': 'fine-scale displacement (sub-millimeter) - micro surface relief for textures like fabric weave, fine wood grain, brushed metal striations',
+    'medium': 'medium-scale displacement (millimeter range) - visible surface relief for textures like brick courses, stone weathering, concrete board marks',
+    'coarse': 'coarse-scale displacement (centimeter range) - pronounced relief for features like masonry joints, deep wood grain, rough stone faces',
   };
 
-  const base = scaleDesc[scale] || `${scale} displacement`;
-  const strengthDesc = strength > 70 ? 'strongly applied' : strength > 40 ? 'moderately applied' : 'delicately applied';
-  const adaptDesc = adaptToMaterial ? ', intelligently adapting to each material type' : '';
+  const base = scaleDescriptions[scale] || `${scale}-scale displacement`;
 
-  return `${base}, ${strengthDesc}${adaptDesc}`;
+  const strengthDesc = strength > 80
+    ? `applied at maximum strength (${strength}%) - dramatic, almost sculptural surface relief`
+    : strength > 60
+      ? `applied strongly (${strength}%) - clearly visible depth and shadow-catching relief`
+      : strength > 40
+        ? `applied moderately (${strength}%) - perceptible but subtle surface variation`
+        : strength > 20
+          ? `applied gently (${strength}%) - understated surface texture`
+          : `applied minimally (${strength}%) - barely perceptible, adding only slight tactility`;
+
+  const adaptNote = adaptToMaterial
+    ? '; displacement automatically calibrated per-material (stronger on rough stone, gentler on polished surfaces)'
+    : '; uniform displacement strength across all materials';
+
+  return `${base}, ${strengthDesc}${adaptNote}`;
 };
 
 const describeReflectivity = (value: number): string => {
@@ -1291,13 +1387,23 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(`${geoDescParts.join('')}.`);
 
   if (workflow.prioritizationEnabled) {
-    const problemAreas = [...workflow.detectedElements].sort((a, b) => b.confidence - a.confidence);
+    const problemAreas = [...workflow.detectedElements]
+      .filter((el) => el.selected !== false)
+      .sort((a, b) => b.confidence - a.confidence);
     if (problemAreas.length > 0) {
-      const detailList = problemAreas.map((el) => {
-        const level = el.confidence >= 0.8 ? 'requires special attention' : el.confidence >= 0.6 ? 'needs careful handling' : 'should be monitored';
-        return `the ${el.name} (${level})`;
-      });
-      parts.push(`Pay particular attention to challenging areas: ${detailList.join(', ')}.`);
+      const instructions = problemAreas
+        .filter((el) => el.detail?.trim())
+        .map((el) => {
+          const priority = el.confidence >= 0.8
+            ? 'CRITICAL'
+            : el.confidence >= 0.6
+              ? 'IMPORTANT'
+              : 'Note';
+          return `[${priority}] ${el.detail.trim()}`;
+        });
+      if (instructions.length > 0) {
+        parts.push(`**Rendering Instructions for Problem Areas:** ${instructions.join(' ')}`);
+      }
     }
   }
 
@@ -1400,6 +1506,11 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   parts.push(`${sceneParts.join('')}.`);
+
+  // 9b. BACKGROUND REFERENCE - Environment matching instruction
+  if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
+    parts.push(`**Environment Reference (CRITICAL):** A reference photo showing the desired environment context is provided. IMPORTANT: Do NOT simply paste or composite the background behind the subject. Instead, use the reference to understand and recreate the environmental qualities: the time of day, sky conditions, ambient light color temperature, atmospheric haze and depth, weather mood, and overall color grading. The architecture must appear as if it was actually photographed in that environment - with matching shadow directions, consistent horizon line, natural atmospheric perspective (distant elements should have appropriate haze/desaturation), unified color palette, and seamless ground plane integration. The final image must look like a single cohesive photograph, not a collage.`);
+  }
 
   // 10. RENDER FORMAT & OUTPUT - Professional finish description
   const rend = r3d.render;
@@ -1554,12 +1665,17 @@ const generateVisualEditPrompt = (state: AppState): string => {
   };
 
   if (tool === 'select') {
-    parts.push('Create a precise selection that will define where future edits will be applied.');
-    parts.push(...selectionParts);
-    if (userPrompt) {
-      parts.push(`The selection should capture: ${userPrompt}.`);
+    const basePrompt = state.prompt?.trim();
+    if (basePrompt) {
+      parts.push(`Base scene intent: "${basePrompt}".`);
     }
-    parts.push('This is purely a selection operation - do not alter any pixels, colors, lighting, or geometry in the image. Simply output an accurate selection mask that matches the described intent.');
+    if (userPrompt) {
+      parts.push(`Edit instruction: "${userPrompt}".`);
+    }
+    parts.push('Apply the edit ONLY inside the selected area. Do not alter any pixels outside the selection.');
+    parts.push('Keep everything outside the selection identical to the original image: geometry, lighting, materials, perspective, and composition must remain unchanged.');
+    parts.push(...selectionParts);
+    parts.push('Strict constraint: no edits, relighting, retouching, or cleanup outside the selected area. Preserve the rest of the image exactly.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -2093,6 +2209,11 @@ function generateCadRenderPrompt(state: AppState): string {
   }
   if (scene.cars.enabled) {
     parts.push('Vehicles are realistically placed in the scene.');
+  }
+
+  // Background Reference - Environment matching instruction
+  if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
+    parts.push(`**Environment Reference (CRITICAL):** A reference photo showing the desired environment context is provided. IMPORTANT: Do NOT simply paste or composite the background behind the subject. Instead, use the reference to understand and recreate the environmental qualities: the time of day, sky conditions, ambient light color temperature, atmospheric haze and depth, weather mood, and overall color grading. The architecture must appear as if it was actually photographed in that environment - with matching shadow directions, consistent horizon line, natural atmospheric perspective (distant elements should have appropriate haze/desaturation), unified color palette, and seamless ground plane integration. The final image must look like a single cohesive photograph, not a collage.`);
   }
 
   // Output quality

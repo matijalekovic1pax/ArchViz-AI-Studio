@@ -689,20 +689,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 // 7. RENDER
                 { id: 'render', title: 'Render Format', content: (
                     <div>
-                       
-                       <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">
-                            Resolution
-                          </label>
-                          <SegmentedControl 
-                             value={settings.render.resolution}
-                             options={[
-                                {label: 'HD', value: '720p'}, {label: 'FHD', value: '1080p'}, {label: '4K', value: '4k'}, {label: 'Print', value: 'print'}
-                             ]}
-                             onChange={(v) => updateSection('render', { resolution: v })}
-                          />
-                       </div>
-
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-1.5 block">
                             Aspect Ratio
@@ -719,31 +705,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                              ]}
                              onChange={(v) => updateSection('render', { aspectRatio: v })}
                           />
-                       </div>
-
-                       <div className="mb-4">
-                          <label className="text-xs font-medium text-foreground mb-1.5 block">
-                            View Type
-                          </label>
-                          <select 
-                             className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
-                             value={settings.render.viewType}
-                             onChange={(e) => updateSection('render', { viewType: e.target.value })}
-                          >
-                             <option value="passenger-pov">Passenger POV - eye-level walking through</option>
-                             <option value="concourse-walk">Concourse Walk - corridor perspective</option>
-                             <option value="atrium-overview">Atrium Overview - ground level looking up</option>
-                             <option value="gate-seating">Gate Seating - seated passenger view</option>
-                             <option value="lounge-interior">Lounge Interior - luxury seated angle</option>
-                             <option value="mezzanine-view">Mezzanine View - from upper level down</option>
-                             <option value="drone-low">Drone Low - facade hero shot</option>
-                             <option value="drone-high">Drone High - full terminal context</option>
-                             <option value="section-cut">Section Cut - interior reveal</option>
-                             <option value="spherical-360">360 Spherical - VR panorama</option>
-                          </select>
-                          <p className="text-[9px] text-foreground-muted mt-1 leading-normal">
-                             View preset controls the camera viewpoint and composition for the render.
-                          </p>
                        </div>
 
                        <div className="mb-4">

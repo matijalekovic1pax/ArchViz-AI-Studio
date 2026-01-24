@@ -39,6 +39,7 @@ export interface DetectedElement {
   name: string;
   confidence: number;
   type: 'structural' | 'envelope' | 'interior' | 'site';
+  detail?: string;
   selected: boolean;
 }
 
@@ -185,6 +186,10 @@ export interface WorkflowSettings {
   canvasSync: boolean; // Used for Split View toggle
   compareMode: boolean;
   render3d: Render3DSettings;
+
+  // Background/Environment Reference
+  backgroundReferenceImage: string | null;
+  backgroundReferenceEnabled: boolean;
 
   // 2. CAD to Render
   cadDrawingType: 'plan' | 'section' | 'elevation' | 'site';
@@ -795,6 +800,53 @@ export interface MaterialValidationState {
   lastRunAt: number | null;
   aiSummary: string | null;
   error?: string | null;
+}
+
+// --- Enhanced Material Validation Types for Batch Processing ---
+
+/** Content fetched from a web link accompanying a material specification */
+export interface FetchedLinkContent {
+  url: string;
+  title?: string;
+  /** Extracted text content (max ~2000 chars) */
+  content: string;
+  fetchedAt: number;
+  error?: string;
+}
+
+/** Material candidate enriched with fetched web content */
+export interface EnrichedMaterialCandidate {
+  id: string;
+  code: string;
+  name: string;
+  specText: string;
+  links: string[];
+  docId: string;
+  docName: string;
+  source: 'terminal' | 'cargo';
+  pageRef?: string;
+  /** Web content fetched from material reference links */
+  fetchedLinks: FetchedLinkContent[];
+}
+
+/** Batch processing state for progress tracking */
+export interface BatchProcessingState {
+  currentDocument: string;
+  currentPhase: 'parsing' | 'fetching-links' | 'technical-validation' | 'boq-validation';
+  documentsProcessed: number;
+  documentsTotal: number;
+  materialsProcessed: number;
+  materialsTotal: number;
+  batchJobId?: string;
+  batchJobState?: string;
+}
+
+/** Result from the material validation service */
+export interface MaterialValidationResult {
+  materials: ParsedMaterial[];
+  issues: ValidationIssue[];
+  boqItems: BoQItem[];
+  summary: string;
 }
 
 export interface GeometryState {

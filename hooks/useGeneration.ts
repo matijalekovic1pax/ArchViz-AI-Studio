@@ -17,6 +17,8 @@ import {
   GeneratedImage,
   AttachmentData
 } from '../services/geminiService';
+import { classifyDocumentRole } from '../services/materialValidationPipeline';
+import { createMaterialValidationService } from '../services/materialValidationService';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode } from '../types';
 
@@ -309,6 +311,74 @@ export function useGeneration(): UseGenerationReturn {
   }, []);
 
   /**
+   * Run batch material validation using the new MaterialValidationService
+   * Processes documents one at a time, fetches web links, and uses batch API
+   */
+  const runBatchMaterialValidation = useCallback(async () => {
+    const { documents, checks } = state.materialValidation;
+    const materialDocs = documents.filter((doc) => classifyDocumentRole(doc) === 'materials');
+    const boqDocs = documents.filter((doc) => classifyDocumentRole(doc) === 'boq');
+
+    if (materialDocs.length === 0) {
+      throw new Error('No material documents found. Upload at least one material schedule.');
+    }
+
+    // Clear previous results and set initial state
+    dispatch({
+      type: 'UPDATE_MATERIAL_VALIDATION',
+      payload: {
+        materials: [],
+        issues: [],
+        boqItems: [],
+        aiSummary: 'Starting batch validation...',
+        error: null
+      }
+    });
+
+    // Create validation service with progress callback
+    const validationService = createMaterialValidationService((progress) => {
+      // Calculate overall progress percentage
+      const docsWeight = progress.documentsTotal > 0 ? progress.documentsProcessed / progress.documentsTotal : 0;
+      const matWeight = progress.materialsTotal > 0 ? progress.materialsProcessed / progress.materialsTotal : 0;
+      const overallProgress = Math.min(90, Math.round((docsWeight * 0.7 + matWeight * 0.3) * 90));
+
+      dispatch({ type: 'SET_PROGRESS', payload: overallProgress });
+      dispatch({
+        type: 'UPDATE_MATERIAL_VALIDATION',
+        payload: {
+          aiSummary: `${progress.phase}${progress.document ? ` - ${progress.document}` : ''}: ${progress.materialsProcessed}/${progress.materialsTotal || '...'}`
+        }
+      });
+    });
+
+    // Run the batch validation
+    const result = await validationService.validateDocuments(materialDocs, boqDocs, checks);
+
+    // Calculate final stats
+    const errorCount = result.issues.filter(i => i.severity === 'error').length;
+    const warningCount = result.issues.filter(i => i.severity === 'warning').length;
+
+    // Update final state
+    dispatch({
+      type: 'UPDATE_MATERIAL_VALIDATION',
+      payload: {
+        materials: result.materials,
+        issues: result.issues,
+        boqItems: result.boqItems,
+        aiSummary: result.summary,
+        stats: {
+          total: result.materials.length,
+          validated: result.materials.length,
+          warnings: warningCount,
+          errors: errorCount
+        }
+      }
+    });
+
+    dispatch({ type: 'SET_PROGRESS', payload: 100 });
+  }, [state.materialValidation, dispatch]);
+
+  /**
    * Build generation config based on current mode and state
    */
   const buildGenerationConfig = useCallback((state: AppState) => {
@@ -440,17 +510,15 @@ export function useGeneration(): UseGenerationReturn {
         }
       }
 
-      // Add material validation documents
-      if (state.mode === 'material-validation') {
-        for (const doc of state.materialValidation.documents) {
-          const parsed = parseDataUrl(doc.dataUrl);
-          if (parsed) {
-            attachments.push({
-              base64: parsed.base64,
-              mimeType: parsed.mimeType,
-              name: doc.name
-            });
-          }
+      // Add background reference image for render-3d and render-cad modes if enabled
+      if (
+        (state.mode === 'render-3d' || state.mode === 'render-cad') &&
+        state.workflow.backgroundReferenceEnabled &&
+        state.workflow.backgroundReferenceImage
+      ) {
+        const bgImgData = dataUrlToImageData(state.workflow.backgroundReferenceImage);
+        if (bgImgData) {
+          images.push(bgImgData);
         }
       }
 
@@ -481,7 +549,7 @@ export function useGeneration(): UseGenerationReturn {
       const isVideoMode = state.mode === 'video';
 
       let progressInterval: ReturnType<typeof setInterval> | null = null;
-      if (!isMultiAngleMode && !isUpscaleMode) {
+      if (!isMultiAngleMode && !isUpscaleMode && state.mode !== 'material-validation') {
         let currentProgress = 0;
         progressInterval = setInterval(() => {
           currentProgress = Math.min(currentProgress + 5, 90);
@@ -502,27 +570,22 @@ export function useGeneration(): UseGenerationReturn {
             type: 'UPDATE_MATERIAL_VALIDATION',
             payload: { isRunning: true, aiSummary: null, lastRunAt: Date.now(), error: null }
           });
+          await runBatchMaterialValidation();
+          result = { text: null, images: [] };
+        } else {
+          const textGenerationConfig = generationConfig;
+          // Text-only generation (analysis modes)
+          const text = await service.generateText({
+            prompt: fullPrompt || 'Analyze the provided materials and return a concise validation summary.',
+            images,
+            attachments,
+            generationConfig: textGenerationConfig
+          });
+          if (!text.trim()) {
+            throw new Error('No text returned from Gemini. Ensure the model supports document analysis.');
+          }
+          result = { text, images: [] };
         }
-        const textGenerationConfig = state.mode === 'material-validation'
-          ? {
-              temperature: 0.2,
-              maxOutputTokens: 20000,
-              thinkingConfig: {
-                thinkingLevel: 'low'
-              }
-            }
-          : generationConfig;
-        // Text-only generation (analysis modes)
-        const text = await service.generateText({
-          prompt: fullPrompt || 'Analyze the provided materials and return a concise validation summary.',
-          images,
-          attachments,
-          generationConfig: textGenerationConfig
-        });
-        if (!text.trim()) {
-          throw new Error('No text returned from Gemini. Ensure the model supports document analysis.');
-        }
-        result = { text, images: [] };
       } else if (isMultiAngleMode) {
         const wf = state.workflow;
         const count = Math.max(1, wf.multiAngleViewCount);
@@ -719,6 +782,21 @@ export function useGeneration(): UseGenerationReturn {
           dispatch({
             type: 'UPDATE_VIDEO_STATE',
             payload: { generatedVideoUrl: generatedImageUrl }
+          });
+        }
+        if (isVisualEditMode) {
+          dispatch({
+            type: 'UPDATE_WORKFLOW',
+            payload: {
+              visualSelections: [],
+              visualSelectionUndoStack: [],
+              visualSelectionRedoStack: [],
+              visualSelectionMask: null,
+              visualSelectionMaskSize: null,
+              visualSelectionViewScale: null,
+              visualSelectionComposite: null,
+              visualSelectionCompositeSize: null,
+            }
           });
         }
 

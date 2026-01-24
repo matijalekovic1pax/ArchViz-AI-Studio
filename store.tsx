@@ -123,16 +123,15 @@ const initialWorkflow: WorkflowSettings = {
   sourceType: 'rhino',
   viewType: 'exterior',
   prioritizationEnabled: false,
-  detectedElements: [
-    { id: '1', name: 'Facade Patterning', type: 'envelope', confidence: 0.9, selected: true },
-    { id: '2', name: 'Glazing Reflections', type: 'envelope', confidence: 0.84, selected: true },
-    { id: '3', name: 'Roofline Detailing', type: 'structural', confidence: 0.78, selected: true },
-    { id: '4', name: 'Paving Texture', type: 'site', confidence: 0.62, selected: true },
-  ],
+  detectedElements: [],
   renderMode: 'enhance',
   canvasSync: false,
   compareMode: false,
   render3d: initialRender3D,
+
+  // Background/Environment Reference
+  backgroundReferenceImage: null,
+  backgroundReferenceEnabled: false,
 
   // 2. CAD to Render
   cadDrawingType: 'plan',
@@ -790,7 +789,7 @@ const initialContext: ContextState = {
 };
 
 const initialOutput: OutputState = {
-  resolution: '4k',
+  resolution: '2k',
   customResolution: { width: 1920, height: 1080 },
   aspectRatio: '16:9',
   customAspectRatio: { width: 16, height: 9 },

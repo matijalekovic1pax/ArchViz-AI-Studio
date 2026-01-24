@@ -40,6 +40,7 @@ export interface GeminiRequest {
   images?: ImageData[];
   attachments?: AttachmentData[];
   generationConfig?: GenerationConfig;
+  model?: string;
 }
 
 export interface ImageConfig {
@@ -52,6 +53,8 @@ export interface GenerationConfig {
   topP?: number;
   topK?: number;
   maxOutputTokens?: number;
+  responseMimeType?: string;
+  abortSignal?: AbortSignal;
   responseModalities?: Array<'TEXT' | 'IMAGE'>;
   imageConfig?: ImageConfig;
   thinkingConfig?: {
@@ -82,6 +85,16 @@ export interface BatchImageRequest {
 export interface BatchImageResponse {
   images: GeneratedImage[];
   text: string | null;
+}
+
+export interface BatchTextResult {
+  text: string | null;
+  error?: string;
+}
+
+export interface BatchTextOptions {
+  displayName?: string;
+  pollIntervalMs?: number;
 }
 
 export interface ImageEditRequest {
@@ -278,11 +291,12 @@ export class GeminiService {
       ...request.generationConfig,
       responseModalities: ['TEXT']
     };
-    const config = this.normalizeThinkingConfig(TEXT_MODEL, baseConfig);
+    const model = request.model || TEXT_MODEL;
+    const config = this.normalizeThinkingConfig(model, baseConfig);
 
     const response = await this.executeWithRetry(() =>
       this.ai.models.generateContent({
-        model: TEXT_MODEL,
+        model,
         contents,
         config
       })
@@ -461,6 +475,66 @@ export class GeminiService {
    */
   async generateBatchImagesParallel(request: BatchImageRequest): Promise<BatchImageResponse> {
     return this.generateBatchImages(request);
+  }
+
+  // --------------------------------------------------------------------------
+  // Batch Text Generation (Batch API)
+  // --------------------------------------------------------------------------
+
+  async generateBatchText(
+    requests: GeminiRequest[],
+    options: BatchTextOptions = {}
+  ): Promise<BatchTextResult[]> {
+    if (!requests.length) return [];
+    const pollIntervalMs = options.pollIntervalMs ?? 5000;
+    const ai = this.ai as any;
+
+    const src = requests.map((request) => {
+      const contents = this.buildContents(request);
+      const config = this.normalizeThinkingConfig(TEXT_MODEL, {
+        ...request.generationConfig,
+        responseModalities: ['TEXT']
+      });
+      return { contents, config };
+    });
+
+    const batchJob = await this.executeWithRetry(() =>
+      ai.batches.create({
+        model: TEXT_MODEL,
+        src,
+        config: options.displayName ? { displayName: options.displayName } : undefined
+      })
+    );
+
+    let job = batchJob as any;
+    // Poll until completion
+    while (true) {
+      const state = typeof job.state === 'string' ? job.state : job.state?.name;
+      if (state === 'JOB_STATE_SUCCEEDED' || state === 'JOB_STATE_FAILED' || state === 'JOB_STATE_CANCELLED') {
+        break;
+      }
+      await this.sleep(pollIntervalMs);
+      job = await ai.batches.get({ name: job.name });
+    }
+
+    const finalState = typeof job.state === 'string' ? job.state : job.state?.name;
+    if (finalState !== 'JOB_STATE_SUCCEEDED') {
+      throw new GeminiError(`Batch job failed: ${finalState || 'unknown'}`);
+    }
+
+    const dest = job.dest || {};
+    const inlineResponses = dest.inlinedResponses || dest.inlined_responses || dest.inlineResponses || [];
+
+    return inlineResponses.map((response: any) => {
+      if (response?.response) {
+        const parsed = this.parseResponse(response.response as GenerateContentResponse);
+        return { text: parsed.text };
+      }
+      if (response?.error) {
+        return { text: null, error: response.error?.message || 'Batch item failed.' };
+      }
+      return { text: null, error: 'Batch item returned no response.' };
+    });
   }
 
   // --------------------------------------------------------------------------

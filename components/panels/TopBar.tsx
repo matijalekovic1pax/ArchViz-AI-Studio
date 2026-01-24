@@ -61,10 +61,10 @@ const drawSelectionOverlay = (
   ctx.rect(0, 0, outputWidth, outputHeight);
   ctx.clip();
 
-  const selectionFill = 'rgba(56, 189, 248, 0.14)';
-  const selectionStroke = 'rgba(56, 189, 248, 0.6)';
-  const brushFill = 'rgba(56, 189, 248, 0.14)';
-  const brushOutline = 'rgba(56, 189, 248, 0.6)';
+  const selectionFill = 'rgba(56, 189, 248, 0.28)';
+  const selectionStroke = 'rgba(56, 189, 248, 0.9)';
+  const brushFill = 'rgba(56, 189, 248, 0.28)';
+  const brushOutline = 'rgba(56, 189, 248, 0.9)';
   const brushShapes = shapes.filter((shape) => shape.type === 'brush');
   const otherShapes = shapes.filter((shape) => shape.type !== 'brush');
 

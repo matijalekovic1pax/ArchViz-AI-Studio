@@ -930,7 +930,12 @@ const StandardCanvas: React.FC = () => {
       reader.onload = (ev) => {
         const dataUrl = ev.target?.result as string;
         dispatch({ type: 'SET_IMAGE', payload: dataUrl });
-        dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
+        // For source-locked modes, only set sourceImage if not already set
+        const sourceLockedModes = ['render-3d', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'multi-angle'];
+        const isSourceLocked = sourceLockedModes.includes(state.mode);
+        if (!isSourceLocked || !state.sourceImage) {
+          dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
+        }
         handleFitToScreen();
       };
       reader.readAsDataURL(file);
@@ -947,7 +952,12 @@ const StandardCanvas: React.FC = () => {
       reader.onload = (ev) => {
         const dataUrl = ev.target?.result as string;
         dispatch({ type: 'SET_IMAGE', payload: dataUrl });
-        dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
+        // For source-locked modes, only set sourceImage if not already set
+        const sourceLockedModes = ['render-3d', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'multi-angle'];
+        const isSourceLocked = sourceLockedModes.includes(state.mode);
+        if (!isSourceLocked || !state.sourceImage) {
+          dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
+        }
         handleFitToScreen();
       };
       reader.readAsDataURL(file);
@@ -1510,11 +1520,7 @@ const StandardCanvas: React.FC = () => {
                                        </svg>
                                     </div>
                                  )}
-                                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-0 group-hover/image:opacity-100 transition-opacity">
-                                    <div className="bg-black/30 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
-                                        <Maximize2 size={12} /> Click to Expand
-                                    </div>
-                                 </div>
+                                 
                             </div>
                          )}
                       </div>

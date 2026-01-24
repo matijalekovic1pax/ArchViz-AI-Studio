@@ -1,12 +1,12 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, ChangeEvent } from 'react';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionHeader, StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
-import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
+import { BUILT_IN_STYLES, generatePrompt } from '../../../engine/promptEngine';
 import { nanoid } from 'nanoid';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Upload, X, Image as ImageIcon } from 'lucide-react';
 import {
   getGeminiService,
   initGeminiService,
@@ -19,7 +19,11 @@ export const LeftRender3DPanel = () => {
   const { state, dispatch } = useAppStore();
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analyzingRef = useRef(false);
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
   const wf = state.workflow;
+  const PREPROCESS_MODEL = 'gemini-3-flash-preview';
+  const PREPROCESS_TIMEOUT_MS = 60000;
 
   const availableStyles = useMemo(
     () => [...BUILT_IN_STYLES, ...state.customStyles],
@@ -37,6 +41,33 @@ export const LeftRender3DPanel = () => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload });
   }, [dispatch]);
 
+  const handleBackgroundUpload = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      updateWf({
+        backgroundReferenceImage: dataUrl,
+        backgroundReferenceEnabled: true
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so same file can be selected again
+    if (backgroundInputRef.current) {
+      backgroundInputRef.current.value = '';
+    }
+  }, [updateWf]);
+
+  const handleRemoveBackground = useCallback(() => {
+    updateWf({
+      backgroundReferenceImage: null,
+      backgroundReferenceEnabled: false
+    });
+  }, [updateWf]);
+
   const getRiskMeta = useCallback((confidence: number) => {
     if (confidence >= 0.8) {
       return { label: 'High', dotClass: 'bg-rose-500', textClass: 'text-rose-500' };
@@ -46,48 +77,6 @@ export const LeftRender3DPanel = () => {
     }
     return { label: 'Low', dotClass: 'bg-emerald-500', textClass: 'text-emerald-600' };
   }, []);
-
-  const buildProblemAreas = useCallback(() => {
-    const presets: Record<string, { name: string; type: 'structural' | 'envelope' | 'interior' | 'site' }[]> = {
-      exterior: [
-        { name: 'Facade Patterning', type: 'envelope' },
-        { name: 'Glazing Reflections', type: 'envelope' },
-        { name: 'Roofline Detailing', type: 'structural' },
-        { name: 'Entrance Canopy Structure', type: 'structural' },
-        { name: 'Paving Texture', type: 'site' },
-        { name: 'Landscape Foliage', type: 'site' }
-      ],
-      interior: [
-        { name: 'Ceiling Grid', type: 'interior' },
-        { name: 'Lighting Fixtures', type: 'interior' },
-        { name: 'Seating Upholstery', type: 'interior' },
-        { name: 'Floor Patterning', type: 'interior' },
-        { name: 'Glazing Reflections', type: 'envelope' },
-        { name: 'Wayfinding Graphics', type: 'interior' }
-      ],
-      aerial: [
-        { name: 'Roofscape Detailing', type: 'structural' },
-        { name: 'Facade Rhythm', type: 'envelope' },
-        { name: 'Site Circulation', type: 'site' },
-        { name: 'Landscape Texture', type: 'site' },
-        { name: 'Parking Layout', type: 'site' }
-      ],
-      detail: [
-        { name: 'Material Joints', type: 'structural' },
-        { name: 'Surface Texture', type: 'interior' },
-        { name: 'Fenestration Detailing', type: 'envelope' },
-        { name: 'Edge Trim', type: 'structural' }
-      ]
-    };
-    const list = presets[wf.viewType] || presets.exterior;
-    return list.map((item, index) => ({
-      id: nanoid(),
-      name: item.name,
-      type: item.type,
-      confidence: Math.max(0.55, 0.9 - index * 0.07),
-      selected: true
-    }));
-  }, [wf.viewType]);
 
   const getApiKey = useCallback((): string | null => {
     // @ts-ignore - Vite injects this
@@ -125,7 +114,16 @@ export const LeftRender3DPanel = () => {
     return parsed
       .slice(0, 10)
       .map((item: any, index: number) => {
-        const name = typeof item?.name === 'string' ? item.name : `Area ${index + 1}`;
+        const rawName = typeof item?.name === 'string' ? item.name : `Area ${index + 1}`;
+        const name = rawName.length > 60 ? `${rawName.slice(0, 57).trimEnd()}...` : rawName;
+        const detail =
+          typeof item?.detail === 'string'
+            ? item.detail
+            : typeof item?.description === 'string'
+              ? item.description
+              : typeof item?.guidance === 'string'
+                ? item.guidance
+                : '';
         const type = ['structural', 'envelope', 'interior', 'site'].includes(item?.type)
           ? item.type
           : 'interior';
@@ -135,6 +133,7 @@ export const LeftRender3DPanel = () => {
           id: nanoid(),
           name,
           type,
+          detail: detail.trim(),
           confidence,
           selected: true
         };
@@ -142,38 +141,122 @@ export const LeftRender3DPanel = () => {
   }, []);
 
   const analyzeProblemAreas = useCallback(async () => {
+    if (analyzingRef.current) return;
     const sourceImage = state.sourceImage || state.uploadedImage;
     if (!sourceImage) {
       updateWf({ detectedElements: [] });
       return;
     }
     if (!ensureServiceInitialized()) {
-      updateWf({ detectedElements: buildProblemAreas() });
+      updateWf({ detectedElements: [] });
       return;
     }
 
     setIsAnalyzing(true);
+    analyzingRef.current = true;
     try {
       const service = getGeminiService();
       const imageData = ImageUtils.dataUrlToImageData(sourceImage);
-      const prompt = [
-        `Analyze this ${wf.viewType} architectural render and list the top problem areas that need extra attention.`,
-        'Return ONLY a JSON array of objects: [{ "name": string, "type": "structural"|"envelope"|"interior"|"site", "confidence": number }].',
-        'Confidence should be between 0 and 1.'
-      ].join(' ');
-      const text = await service.generateText({
-        prompt,
-        images: [imageData]
+      const renderIntent = generatePrompt({
+        ...state,
+        workflow: {
+          ...state.workflow,
+          detectedElements: [],
+          prioritizationEnabled: false
+        }
       });
+      const settingsContext = {
+        mode: state.mode,
+        viewType: wf.viewType,
+        sourceType: wf.sourceType,
+        renderMode: wf.renderMode,
+        activeStyle: {
+          id: state.activeStyleId,
+          name: activeStyleLabel
+        },
+        render3d: wf.render3d,
+        geometry: state.geometry,
+        camera: state.camera,
+        lighting: state.lighting,
+        materials: state.materials,
+        context: state.context,
+        output: state.output
+      };
+      const prompt = [
+        `You are an expert architectural visualization analyst. Analyze this ${wf.viewType} 3D render/model image and identify specific areas that could be problematic during AI image generation.`,
+        '',
+        '**Your Task:**',
+        'Examine the source image and identify areas that may cause issues when rendering a photorealistic architectural visualization. Consider the following render settings and intended style:',
+        '',
+        `**Render Intent:** ${renderIntent}`,
+        '',
+        `**Current Settings:** ${JSON.stringify(settingsContext, null, 2)}`,
+        '',
+        '**What to Look For:**',
+        '- Complex geometry that may lose definition (ornate details, thin elements, intricate patterns)',
+        '- Areas with challenging material transitions or reflections',
+        '- Regions with difficult lighting conditions (deep shadows, bright highlights, glass reflections)',
+        '- Elements that commonly get distorted or hallucinated (window frames, railings, furniture details)',
+        '- Perspective-sensitive areas that may drift during generation',
+        '- Fine details that need preservation (textures, edges, proportions)',
+        '',
+        '**Response Format:**',
+        'Return ONLY a valid JSON array with 3-8 problem areas. Each object must have:',
+        '```json',
+        '[',
+        '  {',
+        '    "name": "Short title (2-5 words) for display in UI",',
+        '    "detail": "Specific instruction for the AI on how to handle this area. Be precise and actionable. Example: Preserve the sharp edges of the window frames and maintain accurate glass reflections without distortion.",',
+        '    "type": "structural|envelope|interior|site",',
+        '    "confidence": 0.3-0.99 (how likely this area will cause issues)',
+        '  }',
+        ']',
+        '```',
+        '',
+        'The "name" will be shown to the user. The "detail" will be included as a rendering instruction. Make details specific and actionable.'
+      ].join('\n');
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), PREPROCESS_TIMEOUT_MS);
+      let text = '';
+      try {
+        text = await service.generateText({
+          prompt,
+          images: [imageData],
+          model: PREPROCESS_MODEL,
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 1024,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: 'minimal' },
+            abortSignal: controller.signal
+          }
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const parsed = parseProblemAreas(text);
       updateWf({ detectedElements: parsed });
     } catch (error) {
-      console.error('Problem area analysis failed:', error);
-      updateWf({ detectedElements: buildProblemAreas() });
+      if (error instanceof Error && (error.name === 'AbortError' || /aborted/i.test(error.message))) {
+        console.warn('Problem area analysis timed out.');
+      } else {
+        console.error('Problem area analysis failed:', error);
+      }
+      updateWf({ detectedElements: [] });
     } finally {
       setIsAnalyzing(false);
+      analyzingRef.current = false;
     }
-  }, [state.sourceImage, state.uploadedImage, wf.viewType, ensureServiceInitialized, parseProblemAreas, updateWf, buildProblemAreas]);
+  }, [
+    state,
+    wf.viewType,
+    wf.sourceType,
+    wf.renderMode,
+    activeStyleLabel,
+    ensureServiceInitialized,
+    parseProblemAreas,
+    updateWf
+  ]);
 
   const problemAreas = useMemo(() => {
     return [...wf.detectedElements].sort((a, b) => b.confidence - a.confidence);
@@ -205,6 +288,30 @@ export const LeftRender3DPanel = () => {
       <div>
         <SectionHeader title="Source Analysis" />
         <div className="space-y-3">
+          {/* Source Image Indicator */}
+          {state.sourceImage && (
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-sunken border border-border">
+              <div className="w-12 h-12 rounded overflow-hidden border border-border flex-shrink-0">
+                <img
+                  src={state.sourceImage}
+                  alt="Source"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-foreground-muted">Original Source</p>
+                <p className="text-[9px] text-foreground-muted/60 truncate">Locked for consistent renders</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_SOURCE_IMAGE', payload: null })}
+                className="p-1.5 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
+                title="Reset source image"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
           <div>
             <label className="text-xs text-foreground-muted mb-1 block">Source Type</label>
             <select
@@ -249,6 +356,112 @@ export const LeftRender3DPanel = () => {
           onBrowse={() => setIsBrowserOpen(true)}
           styles={availableStyles}
         />
+      </div>
+
+      {/* Background/Environment Reference */}
+      <div>
+        <SectionHeader title="Background Reference" />
+        <div className="space-y-3">
+          <p className="text-[10px] text-foreground-muted">
+            Upload an environment or background photo to guide the AI in matching the scene context.
+          </p>
+
+          {/* Hidden file input */}
+          <input
+            ref={backgroundInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleBackgroundUpload}
+            className="hidden"
+          />
+
+          {/* Upload area / Preview */}
+          {wf.backgroundReferenceImage ? (
+            <div className="relative group">
+              <div className="aspect-video rounded-lg overflow-hidden border border-border bg-surface-sunken">
+                <img
+                  src={wf.backgroundReferenceImage}
+                  alt="Background reference"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {/* Overlay controls */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => backgroundInputRef.current?.click()}
+                  className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                  title="Replace image"
+                >
+                  <Upload size={16} className="text-white" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveBackground}
+                  className="p-2 bg-white/20 hover:bg-red-500/70 rounded-lg transition-colors"
+                  title="Remove image"
+                >
+                  <X size={16} className="text-white" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => backgroundInputRef.current?.click()}
+              className={cn(
+                "w-full aspect-video rounded-lg border-2 border-dashed border-border",
+                "bg-surface-sunken hover:bg-surface-elevated hover:border-accent/50",
+                "flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer"
+              )}
+            >
+              <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
+                <ImageIcon size={20} className="text-foreground-muted" />
+              </div>
+              <span className="text-xs text-foreground-muted">Click to upload</span>
+              <span className="text-[10px] text-foreground-muted/60">JPEG, PNG, WebP</span>
+            </button>
+          )}
+
+          {/* Toggle switch */}
+          <div className={cn(
+            "flex items-center justify-between p-2 rounded-lg border transition-colors",
+            wf.backgroundReferenceImage
+              ? "bg-surface-elevated border-border"
+              : "bg-surface-sunken border-border/50 opacity-50"
+          )}>
+            <div className="flex items-center gap-2">
+              <ImageIcon size={14} className="text-foreground-muted" />
+              <span className="text-xs">Use for background</span>
+            </div>
+            <button
+              type="button"
+              disabled={!wf.backgroundReferenceImage}
+              onClick={() => updateWf({ backgroundReferenceEnabled: !wf.backgroundReferenceEnabled })}
+              className={cn(
+                "relative w-9 h-5 rounded-full transition-colors flex-shrink-0",
+                wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
+                  ? "bg-accent"
+                  : "bg-surface-sunken border border-border"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200",
+                  wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
+                    ? "left-[18px]"
+                    : "left-0.5"
+                )}
+              />
+            </button>
+          </div>
+
+          {wf.backgroundReferenceEnabled && wf.backgroundReferenceImage && (
+            <p className="text-[10px] text-accent">
+              Background reference will be used to match environment, lighting, and atmosphere.
+            </p>
+          )}
+        </div>
       </div>
 
       <div>
