@@ -522,6 +522,19 @@ export function useGeneration(): UseGenerationReturn {
         }
       }
 
+      // Add background reference image for visual-edit background tool if enabled
+      if (
+        state.mode === 'visual-edit' &&
+        state.workflow.activeTool === 'background' &&
+        state.workflow.visualBackground.referenceEnabled &&
+        state.workflow.visualBackground.referenceImage
+      ) {
+        const bgImgData = dataUrlToImageData(state.workflow.visualBackground.referenceImage);
+        if (bgImgData) {
+          images.push(bgImgData);
+        }
+      }
+
       // Add attachments
       if (options.attachments) {
         for (const attachment of options.attachments) {

@@ -3,7 +3,7 @@ import React from 'react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
-import { MousePointer, Paintbrush, Sun, Home, Cloud, Trash2, Wrench, Expand } from 'lucide-react';
+import { MousePointer, Paintbrush, Sun, Home, Cloud, Trash2, Wrench, Expand, Image } from 'lucide-react';
 
 export const LeftVisualEditPanel = () => {
     const { state, dispatch } = useAppStore();
@@ -18,6 +18,7 @@ export const LeftVisualEditPanel = () => {
        { id: 'remove', icon: Trash2, label: 'Remove' },
        { id: 'adjust', icon: Wrench, label: 'Adjust' },
        { id: 'extend', icon: Expand, label: 'Extend' },
+       { id: 'background', icon: Image, label: 'Background' },
     ];
 
     return (

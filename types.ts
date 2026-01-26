@@ -328,7 +328,7 @@ export interface WorkflowSettings {
   };
 
   // 4. Visual Edit
-  activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend';
+  activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend' | 'background';
   visualPrompt: string; // The specific prompt for the active operation
   visualSelection: {
     mode: 'rect' | 'brush' | 'lasso' | 'ai';
@@ -488,6 +488,15 @@ export interface WorkflowSettings {
     lockAspectRatio: boolean;
     seamlessBlend: boolean;
     highDetail: boolean;
+    quality: 'draft' | 'standard' | 'high';
+  };
+  visualBackground: {
+    referenceImage: string | null;
+    referenceEnabled: boolean;
+    matchPerspective: boolean;
+    matchLighting: boolean;
+    seamlessBlend: boolean;
+    preserveDepth: boolean;
     quality: 'draft' | 'standard' | 'high';
   };
   editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];

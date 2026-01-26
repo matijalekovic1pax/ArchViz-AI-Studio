@@ -430,6 +430,15 @@ const initialWorkflow: WorkflowSettings = {
     highDetail: false,
     quality: 'standard',
   },
+  visualBackground: {
+    referenceImage: null,
+    referenceEnabled: false,
+    matchPerspective: true,
+    matchLighting: true,
+    seamlessBlend: true,
+    preserveDepth: true,
+    quality: 'standard',
+  },
   editLayers: [
     { id: '1', name: 'Material - Floor', type: 'material', visible: true, locked: false },
     { id: '2', name: 'Lighting Adj', type: 'lighting', visible: true, locked: false },

@@ -2013,6 +2013,46 @@ const generateVisualEditPrompt = (state: AppState): string => {
     return parts.filter(Boolean).join(' ');
   }
 
+  if (tool === 'background') {
+    parts.push('Replace the background of this architectural image using the provided reference image as inspiration, while preserving the selected area completely untouched.');
+    parts.push(...selectionParts);
+    parts.push(describeUserIntent(userPrompt));
+
+    const background = workflow.visualBackground;
+
+    if (background.referenceEnabled && background.referenceImage) {
+      parts.push('**Background Reference (CRITICAL):** A reference image is provided showing the desired background environment. Use this reference to understand and recreate the environmental qualities around the selected area.');
+      parts.push('IMPORTANT: The selected area must remain COMPLETELY UNCHANGED - do not modify, retouch, or alter any pixels within the selection. Only replace the background around it.');
+
+      if (background.matchPerspective) {
+        parts.push('Match the perspective and horizon line from the reference image, ensuring the background aligns naturally with the architectural elements in the preserved selection.');
+      }
+
+      if (background.matchLighting) {
+        parts.push('Match the lighting conditions from the reference: time of day, sky conditions, ambient light color temperature, and shadow directions. The preserved selection should appear as if it was photographed in the reference environment.');
+      }
+
+      if (background.seamlessBlend) {
+        parts.push('Create a seamless blend at the edges of the selection. The transition between the preserved area and new background must be natural and imperceptible, with proper atmospheric perspective and depth integration.');
+      }
+
+      if (background.preserveDepth) {
+        parts.push('Maintain proper depth relationships. Apply appropriate atmospheric haze and desaturation to background elements based on their distance, ensuring the preserved selection appears naturally integrated into the space.');
+      }
+
+      parts.push('The final image must look like a single cohesive photograph where the preserved area naturally exists in the new background environment.');
+    } else {
+      parts.push('No background reference is provided. Apply a natural background replacement based on the context and user instructions.');
+    }
+
+    const qualityDesc = background.quality === 'high' ? 'with maximum detail and photorealism' :
+      background.quality === 'standard' ? 'with balanced quality' : 'with faster processing';
+    parts.push(`Process ${qualityDesc}.`);
+
+    parts.push('Critical constraints: ABSOLUTELY NO modifications to pixels within the selected area. Only replace the background. Ensure matching horizon lines, consistent color grading, unified atmospheric conditions, proper ground plane integration, and natural depth cues. The selection and new background must appear as a single unified photograph, never as a composite or collage.');
+    return parts.filter(Boolean).join(' ');
+  }
+
   parts.push(...selectionParts);
   return parts.filter(Boolean).join(' ');
 };
