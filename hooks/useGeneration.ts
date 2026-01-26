@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { generatePrompt } from '../engine/promptEngine';
 import {
@@ -21,6 +22,7 @@ import {
 } from '../services/geminiService';
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
+import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode } from '../types';
 
@@ -71,6 +73,7 @@ export interface UseGenerationReturn {
 
 export function useGeneration(): UseGenerationReturn {
   const { state, dispatch } = useAppStore();
+  const { i18n } = useTranslation();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const isReady = ensureServiceInitialized();
@@ -486,11 +489,22 @@ export function useGeneration(): UseGenerationReturn {
       }
 
       // Build prompt from state or use provided prompt
-      const basePrompt = options.prompt || (
+      let basePrompt = options.prompt || (
         state.mode === 'material-validation'
           ? ''
           : generatePrompt(state)
       );
+
+      // Translate user-entered prompts to English if needed
+      // Note: Generated prompts from promptEngine are already in English
+      if (options.prompt && needsTranslation(i18n.language)) {
+        try {
+          basePrompt = await translateToEnglish(basePrompt, i18n.language);
+        } catch (error) {
+          console.error('Translation failed, using original prompt:', error);
+        }
+      }
+
       const modePrefix = getModePromptPrefix(state.mode);
       const fullPrompt = state.mode === 'material-validation'
         ? buildMaterialValidationPrompt(options.prompt)

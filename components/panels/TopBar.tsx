@@ -1,12 +1,13 @@
 
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Globe } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
 import { VisualSelectionShape } from '../../types';
 import { useGeneration } from '../../hooks/useGeneration';
+import { useTranslation } from 'react-i18next';
 
 const drawSelectionOverlay = (
   ctx: CanvasRenderingContext2D,
@@ -171,11 +172,13 @@ const drawSelectionOverlay = (
 
 export const TopBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { t, i18n } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showControlsMenu, setShowControlsMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const { generate, cancelGeneration } = useGeneration();
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
@@ -457,20 +460,33 @@ export const TopBar: React.FC = () => {
     }
   };
 
+  const handleLanguageChange = (lang: string) => {
+    i18n.changeLanguage(lang);
+    setShowLanguageMenu(false);
+  };
+
+  const getLanguageLabel = () => {
+    switch (i18n.language) {
+      case 'es': return 'Español';
+      case 'fr': return 'Français';
+      default: return 'English';
+    }
+  };
+
   const getGenerateLabel = () => {
     switch (state.mode) {
-      case 'masterplan': return 'Generate Masterplan';
-      case 'exploded': return 'Generate Exploded View';
-      case 'section': return 'Generate Section';
-      case 'multi-angle': return 'Generate Angles';
-      case 'upscale': return 'Upscale Image';
-      case 'img-to-cad': return 'Convert to CAD';
-      case 'img-to-3d': return 'Generate 3D Model';
-      case 'video': return 'Generate Video';
-      case 'visual-edit': return 'Apply Edits';
-      case 'material-validation': return 'Run Validation';
-      case 'render-sketch': return 'Render Sketch';
-      default: return 'Generate Render';
+      case 'masterplan': return t('generation.generateMasterplan');
+      case 'exploded': return t('generation.generateExplodedView');
+      case 'section': return t('generation.generateSection');
+      case 'multi-angle': return t('generation.generateAngles');
+      case 'upscale': return t('generation.upscaleImage');
+      case 'img-to-cad': return t('generation.convertToCAD');
+      case 'img-to-3d': return t('generation.generate3DModel');
+      case 'video': return t('generation.generateVideo');
+      case 'visual-edit': return t('generation.applyEdits');
+      case 'material-validation': return t('generation.runValidation');
+      case 'render-sketch': return t('generation.renderSketch');
+      default: return t('generation.generateRender');
     }
   };
 
@@ -484,8 +500,8 @@ export const TopBar: React.FC = () => {
             <span className="text-surface-elevated font-bold text-sm">AV</span>
           </div>
           <div className="flex flex-col shrink-0">
-            <h1 className="font-bold text-sm leading-tight whitespace-nowrap">ArchViz Studio</h1>
-            <p className="text-[10px] text-foreground-muted whitespace-nowrap">Stateless Session</p>
+            <h1 className="font-bold text-sm leading-tight whitespace-nowrap">{t('app.title')}</h1>
+            <p className="text-[10px] text-foreground-muted whitespace-nowrap">{t('app.subtitle')}</p>
           </div>
         </div>
 
@@ -501,7 +517,7 @@ export const TopBar: React.FC = () => {
                   ? "hover:text-foreground hover:bg-surface-elevated"
                   : "opacity-40 cursor-not-allowed"
               )}
-              title="Undo"
+              title={t('topBar.undo')}
             >
               <Undo size={14} />
             </button>
@@ -514,7 +530,7 @@ export const TopBar: React.FC = () => {
                   ? "hover:text-foreground hover:bg-surface-elevated"
                   : "opacity-40 cursor-not-allowed"
               )}
-              title="Redo"
+              title={t('topBar.redo')}
             >
               <Redo size={14} />
             </button>
@@ -531,7 +547,7 @@ export const TopBar: React.FC = () => {
                  ? "text-foreground-muted/30 cursor-not-allowed" 
                  : "text-foreground-secondary hover:text-red-600 hover:bg-surface-elevated"
              )}
-             title="Clear Image"
+             title={t('topBar.clearImage')}
           >
              <Trash2 size={14} />
           </button>
@@ -539,7 +555,7 @@ export const TopBar: React.FC = () => {
           <div className="w-px h-3 bg-border mx-1" />
 
           {/* Canvas Controls: Fit & Split */}
-          <button 
+          <button
             onClick={handleFitToScreen}
             disabled={!state.uploadedImage}
             className={cn(
@@ -548,7 +564,7 @@ export const TopBar: React.FC = () => {
                   ? "text-foreground-muted/30 cursor-not-allowed"
                   : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
             )}
-            title="Fit to Screen"
+            title={t('topBar.fitToScreen')}
           >
             <Minimize2 size={14} />
           </button>
@@ -565,7 +581,7 @@ export const TopBar: React.FC = () => {
                         ? "text-foreground bg-surface-elevated shadow-sm"
                         : "text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                )}
-               title="Toggle Split View"
+               title={t('topBar.toggleSplitView')}
             >
                <Columns size={14} />
             </button>
@@ -573,20 +589,20 @@ export const TopBar: React.FC = () => {
 
           <div className="w-px h-3 bg-border mx-1" />
 
-          <button 
+          <button
             className="p-1.5 text-foreground-secondary hover:text-foreground hover:bg-surface-elevated rounded-md transition-all"
             onClick={() => handleZoom(-0.25)}
-            title="Zoom Out"
+            title={t('topBar.zoomOut')}
           >
             <ZoomOut size={14} />
           </button>
           <span className="text-[10px] font-mono w-10 text-center text-foreground-muted select-none">
              {Math.round(state.canvas.zoom * 100)}%
           </span>
-          <button 
+          <button
             className="p-1.5 text-foreground-secondary hover:text-foreground hover:bg-surface-elevated rounded-md transition-all"
             onClick={() => handleZoom(0.25)}
-            title="Zoom In"
+            title={t('topBar.zoomIn')}
           >
             <ZoomIn size={14} />
           </button>
@@ -596,7 +612,7 @@ export const TopBar: React.FC = () => {
               <div className="w-px h-3 bg-border mx-1" />
               <div className="flex items-center gap-1 px-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted px-1">
-                  Res
+                  {t('topBar.resolution')}
                 </span>
                 <div className="flex items-center gap-1 bg-surface-elevated/70 rounded-md p-0.5">
                   {resolutionOptions.map((option) => (
@@ -624,10 +640,10 @@ export const TopBar: React.FC = () => {
           <button
             onClick={() => setShowControlsMenu((prev) => !prev)}
             className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-full border border-border-subtle bg-surface-elevated text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
-            title="Controls"
+            title={t('topBar.controls')}
           >
             <SlidersHorizontal size={12} />
-            Controls
+            {t('topBar.controls')}
           </button>
 
           {showControlsMenu && (
@@ -635,12 +651,12 @@ export const TopBar: React.FC = () => {
               <div className="flex items-center justify-between mb-1 pb-1 border-b border-border-subtle">
                 <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-foreground-muted">
                   <SlidersHorizontal size={11} />
-                  Quick Controls
+                  {t('topBar.quickControls')}
                 </div>
                 <button
                   onClick={() => setShowControlsMenu(false)}
                   className="text-foreground-muted hover:text-foreground"
-                  title="Close"
+                  title={t('topBar.close')}
                 >
                   <X size={11} />
                 </button>
@@ -649,7 +665,7 @@ export const TopBar: React.FC = () => {
               <div className="grid gap-1">
                 <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
                   <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                    History
+                    {t('topBar.history')}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -661,10 +677,10 @@ export const TopBar: React.FC = () => {
                           ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                           : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                       )}
-                      title="Undo"
+                      title={t('topBar.undo')}
                     >
                       <Undo size={10} />
-                      Undo
+                      {t('topBar.undo')}
                     </button>
                     <button
                       onClick={handleRedoSelection}
@@ -675,17 +691,17 @@ export const TopBar: React.FC = () => {
                           ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                           : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                       )}
-                      title="Redo"
+                      title={t('topBar.redo')}
                     >
                       <Redo size={10} />
-                      Redo
+                      {t('topBar.redo')}
                     </button>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
                   <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                    Canvas
+                    {t('topBar.canvas')}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -697,10 +713,10 @@ export const TopBar: React.FC = () => {
                           ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                           : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                       )}
-                      title="Fit to Screen"
+                      title={t('topBar.fitToScreen')}
                     >
                       <Minimize2 size={10} />
-                      Fit
+                      {t('topBar.fit')}
                     </button>
                     {!isVideoMode && (
                       <button
@@ -714,23 +730,23 @@ export const TopBar: React.FC = () => {
                               ? "border-foreground text-foreground bg-surface-elevated"
                               : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
                         )}
-                        title="Toggle Split View"
+                        title={t('topBar.toggleSplitView')}
                       >
                         <Columns size={10} />
-                        Split
+                        {t('topBar.split')}
                       </button>
                     )}
                     <button
                       onClick={handleClearImage}
                       disabled={!state.uploadedImage}
-                      aria-label="Clear Image"
+                      aria-label={t('topBar.clearImage')}
                       className={cn(
                         "flex items-center justify-center h-6 w-6 rounded-md border text-[8px] font-semibold transition-colors",
                         !state.uploadedImage
                           ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                           : "border-border text-red-600 hover:bg-red-50"
                       )}
-                      title="Clear Image"
+                      title={t('topBar.clearImage')}
                     >
                       <Trash2 size={10} />
                     </button>
@@ -739,13 +755,13 @@ export const TopBar: React.FC = () => {
 
                 <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
                   <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                    Zoom
+                    {t('topBar.zoom')}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(-0.25)}
-                      title="Zoom Out"
+                      title={t('topBar.zoomOut')}
                     >
                       <ZoomOut size={10} />
                     </button>
@@ -755,7 +771,7 @@ export const TopBar: React.FC = () => {
                     <button
                       className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(0.25)}
-                      title="Zoom In"
+                      title={t('topBar.zoomIn')}
                     >
                       <ZoomIn size={10} />
                     </button>
@@ -765,7 +781,7 @@ export const TopBar: React.FC = () => {
                 {!isVideoMode && (
                   <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
                     <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                      Res
+                      {t('topBar.resolution')}
                     </span>
                     <div className="flex items-center gap-1">
                       {resolutionOptions.map((option) => (
@@ -817,7 +833,7 @@ export const TopBar: React.FC = () => {
                   <>
                     <Loader2 className="animate-spin" size={18} />
                     <div className="flex flex-col items-start leading-none">
-                      <span className="font-bold text-xs">Generating</span>
+                      <span className="font-bold text-xs">{t('generation.generating')}</span>
                       <span className="text-[9px] opacity-80 font-mono">{state.progress}%</span>
                     </div>
                   </>
@@ -839,7 +855,7 @@ export const TopBar: React.FC = () => {
                   className="flex items-center gap-2 px-3 py-2.5 rounded-full shadow-elevated bg-red-600 text-white hover:bg-red-500 active:scale-95 transition-all duration-200"
                 >
                   <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider">Cancel</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">{t('generation.cancel')}</span>
                 </button>
               </div>
             )}
@@ -849,51 +865,102 @@ export const TopBar: React.FC = () => {
 
       {/* Right: Actions */}
       <div className="flex items-center justify-end gap-3 flex-1 min-w-0 relative">
+        {/* Language Selector */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
+            title={t('topBar.language')}
+          >
+            <Globe size={14} />
+            <span className="hidden lg:inline">{getLanguageLabel()}</span>
+            <ChevronDown size={12} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
+          </button>
+
+          {showLanguageMenu && (
+            <div className="absolute right-0 top-full mt-1 w-40 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right">
+              <button
+                onClick={() => handleLanguageChange('en')}
+                className={cn(
+                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  i18n.language === 'en'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+              >
+                English
+              </button>
+              <button
+                onClick={() => handleLanguageChange('es')}
+                className={cn(
+                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  i18n.language === 'es'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+              >
+                Español
+              </button>
+              <button
+                onClick={() => handleLanguageChange('fr')}
+                className={cn(
+                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  i18n.language === 'fr'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+              >
+                Français
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Subtle Project Management Tools */}
         <div className="flex items-center gap-1 mr-2 shrink-0">
-            <button 
+            <button
               onClick={handleReset}
               className="p-2 text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-              title="Reset Project"
+              title={t('topBar.resetProject')}
             >
               <RotateCcw size={16} />
             </button>
-            
+
             <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept="application/json" />
-            <button 
+            <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
-              title="Load Project"
+              title={t('topBar.loadProject')}
             >
               <FolderOpen size={16} />
             </button>
 
             {/* Save Project Button */}
-            <button 
+            <button
               onClick={handleExportProject}
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
-              title="Save Project State (JSON)"
+              title={t('topBar.saveProject')}
             >
               <FileJson size={14} />
-              <span className="hidden lg:inline">Save Project</span>
+              <span className="hidden lg:inline">{t('topBar.saveProject')}</span>
             </button>
         </div>
 
         {/* Download Button Group */}
         <div className="relative shrink-0">
-          <button 
+          <button
             onClick={handleDownloadClick}
             disabled={!state.uploadedImage}
             className={cn(
               "h-9 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-xs font-bold border",
-              state.uploadedImage 
-                ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken hover:border-foreground-muted shadow-sm" 
+              state.uploadedImage
+                ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken hover:border-foreground-muted shadow-sm"
                 : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
             )}
-            title={!state.uploadedImage ? "Generate output first" : "Download options"}
+            title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
           >
             {isVideoMode ? <Video size={14} /> : <Download size={14} />}
-            <span className="hidden sm:inline">Download</span>
+            <span className="hidden sm:inline">{t('topBar.download')}</span>
             {state.uploadedImage && <ChevronDown size={12} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />}
           </button>
 
@@ -901,8 +968,8 @@ export const TopBar: React.FC = () => {
           {showDownloadMenu && (
             <div className="absolute top-full right-0 mt-2 w-72 bg-surface-elevated rounded-xl shadow-elevated border border-border p-4 z-50 animate-fade-in origin-top-right">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-subtle">
-                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Download Settings</span>
-                <button onClick={() => setShowDownloadMenu(false)} className="text-foreground-muted hover:text-foreground"><X size={14}/></button>
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">{t('topBar.downloadSettings')}</span>
+                <button onClick={() => setShowDownloadMenu(false)} className="text-foreground-muted hover:text-foreground" title={t('topBar.close')}><X size={14}/></button>
               </div>
               
               <div className="space-y-4">
@@ -910,7 +977,7 @@ export const TopBar: React.FC = () => {
                    /* VIDEO SPECIFIC OPTIONS */
                    <>
                       <div className="space-y-2">
-                        <label className="text-xs text-foreground-secondary font-medium">Video Resolution</label>
+                        <label className="text-xs text-foreground-secondary font-medium">{t('topBar.videoResolution')}</label>
                         <div className="grid grid-cols-2 gap-2">
                             <button 
                               onClick={() => setDownloadResolution('full')} 
@@ -944,13 +1011,13 @@ export const TopBar: React.FC = () => {
                             </button>
                         </div>
                       </div>
-                      
+
                       <div className="space-y-2">
-                         <label className="text-xs text-foreground-secondary font-medium">Format</label>
+                         <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
                          <div className="grid grid-cols-1 gap-2">
                             <div className="p-2 border border-foreground bg-surface-sunken rounded text-center opacity-70 cursor-not-allowed">
                                <span className="text-xs font-bold">MP4</span>
-                               <span className="block text-[9px] text-foreground-muted">Universal Video Format</span>
+                               <span className="block text-[9px] text-foreground-muted">{t('topBar.universalVideoFormat')}</span>
                             </div>
                          </div>
                       </div>
@@ -959,67 +1026,67 @@ export const TopBar: React.FC = () => {
                    /* IMAGE SPECIFIC OPTIONS */
                    <>
                     <div className="space-y-2">
-                        <label className="text-xs text-foreground-secondary font-medium">Format</label>
+                        <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
                         <div className="grid grid-cols-2 gap-2">
-                          <button 
-                              onClick={() => setDownloadFormat('png')} 
+                          <button
+                              onClick={() => setDownloadFormat('png')}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                downloadFormat === 'png' 
-                                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                                downloadFormat === 'png'
+                                  ? "bg-foreground text-background border-foreground shadow-sm"
                                   : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
                               )}
                           >
                               <span className="text-xs font-bold">PNG</span>
-                              <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>Lossless</span>
+                              <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
                           </button>
-                          <button 
-                              onClick={() => setDownloadFormat('jpg')} 
+                          <button
+                              onClick={() => setDownloadFormat('jpg')}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                downloadFormat === 'jpg' 
-                                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                                downloadFormat === 'jpg'
+                                  ? "bg-foreground text-background border-foreground shadow-sm"
                                   : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
                               )}
                           >
                               <span className="text-xs font-bold">JPG</span>
-                              <span className={cn("text-[9px]", downloadFormat === 'jpg' ? "text-white/70" : "text-foreground-muted")}>Compact</span>
+                              <span className={cn("text-[9px]", downloadFormat === 'jpg' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.compact')}</span>
                           </button>
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-xs text-foreground-secondary font-medium">Resolution</label>
+                        <label className="text-xs text-foreground-secondary font-medium">{t('topBar.resolution')}</label>
                         <div className="grid grid-cols-2 gap-2">
-                          <button 
-                              onClick={() => setDownloadResolution('full')} 
+                          <button
+                              onClick={() => setDownloadResolution('full')}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                downloadResolution === 'full' 
-                                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                                downloadResolution === 'full'
+                                  ? "bg-foreground text-background border-foreground shadow-sm"
                                   : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
                               )}
                           >
                               <span className="flex items-center gap-1">
                                 <Maximize2 size={10} />
-                                <span className="text-xs font-bold">Full Res</span>
+                                <span className="text-xs font-bold">{t('topBar.fullRes')}</span>
                               </span>
-                              <span className={cn("text-[9px]", downloadResolution === 'full' ? "text-white/70" : "text-foreground-muted")}>Original Size</span>
+                              <span className={cn("text-[9px]", downloadResolution === 'full' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.originalSize')}</span>
                           </button>
-                          <button 
-                              onClick={() => setDownloadResolution('medium')} 
+                          <button
+                              onClick={() => setDownloadResolution('medium')}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                downloadResolution === 'medium' 
-                                  ? "bg-foreground text-background border-foreground shadow-sm" 
+                                downloadResolution === 'medium'
+                                  ? "bg-foreground text-background border-foreground shadow-sm"
                                   : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
                               )}
                           >
                               <span className="flex items-center gap-1">
                                 <Minimize2 size={10} />
-                                <span className="text-xs font-bold">Medium</span>
+                                <span className="text-xs font-bold">{t('topBar.medium')}</span>
                               </span>
-                              <span className={cn("text-[9px]", downloadResolution === 'medium' ? "text-white/70" : "text-foreground-muted")}>50% Scale</span>
+                              <span className={cn("text-[9px]", downloadResolution === 'medium' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.scalePercent')}</span>
                           </button>
                         </div>
                     </div>
@@ -1028,12 +1095,12 @@ export const TopBar: React.FC = () => {
 
                  <div className="h-px bg-border-subtle my-2" />
 
-                 <button 
+                 <button
                   onClick={performDownload}
                   className="w-full py-2.5 bg-foreground text-background rounded-lg text-xs font-bold hover:bg-foreground/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
                  >
                     <FileDown size={14} />
-                    Download Now
+                    {t('topBar.downloadNow')}
                  </button>
               </div>
             </div>
@@ -1051,19 +1118,19 @@ export const TopBar: React.FC = () => {
                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                       <AlertTriangle size={20} />
                    </div>
-                   <h3 className="text-lg font-bold text-foreground">Clear Canvas?</h3>
+                   <h3 className="text-lg font-bold text-foreground">{t('topBar.clearCanvas')}</h3>
                </div>
                <p className="text-sm text-foreground-secondary leading-relaxed mb-6">
-                  Are you sure you want to clear the current image? This action cannot be undone and will remove your current workspace content.
+                  {t('topBar.clearCanvasMessage')}
                </p>
                <div className="flex gap-3">
-                  <button 
+                  <button
                      onClick={() => setShowClearConfirm(false)}
                      className="flex-1 py-2.5 text-xs font-bold text-foreground border border-border rounded-lg hover:bg-surface-sunken transition-colors"
                   >
-                     Cancel
+                     {t('topBar.cancel')}
                   </button>
-                  <button 
+                  <button
                      onClick={() => {
                         dispatch({ type: 'SET_IMAGE', payload: null });
                         dispatch({ type: 'SET_SOURCE_IMAGE', payload: null });
@@ -1071,7 +1138,7 @@ export const TopBar: React.FC = () => {
                      }}
                      className="flex-1 py-2.5 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm"
                   >
-                     Clear Image
+                     {t('topBar.confirmClear')}
                   </button>
                </div>
             </div>
@@ -1087,42 +1154,42 @@ export const TopBar: React.FC = () => {
                <div className="w-12 h-12 bg-surface-sunken rounded-full flex items-center justify-center mb-4 text-accent">
                   <FileJson size={24} />
                </div>
-               <h3 className="text-lg font-bold mb-2">Save Project Workspace</h3>
+               <h3 className="text-lg font-bold mb-2">{t('topBar.saveProjectWorkspace')}</h3>
                <p className="text-sm text-foreground-secondary leading-relaxed mb-4">
-                  This action will export your current session to a <code className="bg-surface-sunken px-1 rounded border border-border text-foreground">.json</code> file.
+                  {t('topBar.saveProjectMessage')}
                </p>
                <ul className="space-y-3 mb-6">
                   <li className="flex gap-3 text-xs text-foreground-muted">
                      <CheckCircle2 size={16} className="text-green-600 shrink-0" />
-                     <span>Includes all generation history and images</span>
+                     <span>{t('topBar.includesHistory')}</span>
                   </li>
                   <li className="flex gap-3 text-xs text-foreground-muted">
                      <CheckCircle2 size={16} className="text-green-600 shrink-0" />
-                     <span>Preserves current prompt, parameters, and style settings</span>
+                     <span>{t('topBar.preservesSettings')}</span>
                   </li>
                   <li className="flex gap-3 text-xs text-foreground-muted">
                      <CheckCircle2 size={16} className="text-green-600 shrink-0" />
-                     <span>Can be restored using the "Load Project" button</span>
+                     <span>{t('topBar.canBeRestored')}</span>
                   </li>
                </ul>
                <div className="bg-surface-sunken p-3 rounded-lg border border-border-subtle mb-6">
-                  <p className="text-[10px] text-foreground-muted uppercase tracking-wider font-bold mb-1">Privacy Notice</p>
+                  <p className="text-[10px] text-foreground-muted uppercase tracking-wider font-bold mb-1">{t('topBar.privacyNotice')}</p>
                   <p className="text-[11px] text-foreground-secondary">
-                     No data is stored on our servers. This file is saved locally to your device.
+                     {t('topBar.privacyMessage')}
                   </p>
                </div>
                <div className="flex gap-3">
-                  <button 
+                  <button
                      onClick={() => setShowSaveInfo(false)}
                      className="flex-1 py-2.5 text-xs font-bold text-foreground border border-border rounded-lg hover:bg-surface-sunken transition-colors"
                   >
-                     Cancel
+                     {t('topBar.cancel')}
                   </button>
-                  <button 
+                  <button
                      onClick={confirmExportProject}
                      className="flex-1 py-2.5 text-xs font-bold text-white bg-foreground rounded-lg hover:bg-foreground/90 transition-colors shadow-sm"
                   >
-                     Save Project
+                     {t('topBar.confirmSave')}
                   </button>
                </div>
             </div>

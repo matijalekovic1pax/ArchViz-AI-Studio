@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AuthUser, initializeGoogleSignIn, getAllowedDomain } from '../../lib/googleAuth';
 
 interface LoginPageProps {
@@ -6,6 +7,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const { t } = useTranslation();
   const buttonRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -33,10 +35,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         {/* Logo/Title */}
         <div className="text-center mb-12">
           <h1 className="text-2xl font-semibold text-foreground mb-2">
-            ArchViz AI Studio
+            {t('app.title')}
           </h1>
           <p className="text-foreground-muted text-sm">
-            Sign in to continue
+            {t('auth.signInMessage')}
           </p>
         </div>
 
@@ -66,7 +68,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Footer */}
         <p className="text-center text-foreground-subtle text-xs mt-8">
-          Sign in with your Google Workspace account
+          {t('auth.signInWithGoogle')}
         </p>
       </div>
     </div>
