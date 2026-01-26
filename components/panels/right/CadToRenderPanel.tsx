@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../../../store';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
@@ -16,6 +16,7 @@ export const CadToRenderPanel = () => {
   const cadCamera = wf.cadCamera;
   const cadFurnishing = wf.cadFurnishing;
   const cadContext = wf.cadContext;
+  const [openSection, setOpenSection] = useState<string | null>(null);
   const generationModes = [
     { id: 'enhance', label: 'Enhance', desc: 'Improves lighting and textures while keeping geometry.' },
     { id: 'stylize', label: 'Stylize', desc: 'Applies artistic styles to the base model.' },
@@ -64,7 +65,7 @@ export const CadToRenderPanel = () => {
       <Accordion
         items={[
           {
-            id: 'camera',
+            id: 'cad-camera',
             title: 'Camera and Viewpoint',
             content: (
               <div className="space-y-4">
@@ -135,7 +136,7 @@ export const CadToRenderPanel = () => {
             ),
           },
           {
-            id: 'furnishing',
+            id: 'cad-furnishing',
             title: 'Furnishing',
             content: (
               <div className="space-y-4">
@@ -182,7 +183,7 @@ export const CadToRenderPanel = () => {
             ),
           },
           {
-            id: 'context',
+            id: 'cad-context',
             title: 'Context (Exterior Views)',
             content: (
               <div className="space-y-4">
@@ -231,8 +232,16 @@ export const CadToRenderPanel = () => {
             ),
           },
         ]}
+        value={openSection}
+        onValueChange={setOpenSection}
       />
-      <Render3DPanel showGenerationMode={false} includeCamera={false} />
+      <Render3DPanel
+        showGenerationMode={false}
+        includeCamera={false}
+        accordionValue={openSection}
+        onAccordionChange={setOpenSection}
+        accordionIdPrefix="render3d-"
+      />
     </div>
   );
 };

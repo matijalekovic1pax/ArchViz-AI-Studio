@@ -12,11 +12,26 @@ interface AccordionItem {
 interface AccordionProps {
   items: AccordionItem[];
   defaultValue?: string;
+  value?: string | null;
+  onValueChange?: (value: string | null) => void;
 }
 
-export const Accordion: React.FC<AccordionProps> = ({ items, defaultValue }) => {
+export const Accordion: React.FC<AccordionProps> = ({ items, defaultValue, value, onValueChange }) => {
+  const handleValueChange = (nextValue: string) => {
+    if (onValueChange) {
+      onValueChange(nextValue ? nextValue : null);
+    }
+  };
+
   return (
-    <AccordionPrimitive.Root type="single" defaultValue={defaultValue} collapsible className="w-full">
+    <AccordionPrimitive.Root
+      type="single"
+      collapsible
+      className="w-full"
+      value={value !== undefined ? value ?? '' : undefined}
+      defaultValue={value === undefined ? defaultValue : undefined}
+      onValueChange={onValueChange ? handleValueChange : undefined}
+    >
       {items.map((item) => (
         <AccordionPrimitive.Item key={item.id} value={item.id} className="border-b border-border-subtle last:border-0">
           <AccordionPrimitive.Header className="flex">

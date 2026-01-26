@@ -8,7 +8,7 @@ import { Toggle } from '../../ui/Toggle';
 import { StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
-import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw, Upload, X, Image as ImageIcon, ChevronDown } from 'lucide-react';
+import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw, X, ChevronDown } from 'lucide-react';
 import {
     getGeminiService,
     initGeminiService,
@@ -523,102 +523,42 @@ export const LeftRenderCADPanel = () => {
 
         {/* Background/Environment Reference */}
         <div>
-          <SectionHeader title="Background Reference" />
-          <div className="space-y-3">
-            <p className="text-[10px] text-foreground-muted">
-              Upload an environment photo to guide the scene context and atmosphere.
-            </p>
-
-            <input
-              ref={backgroundInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleBackgroundUpload}
-              className="hidden"
-            />
-
-            {wf.backgroundReferenceImage ? (
-              <div className="relative group">
-                <div className="aspect-video rounded-lg overflow-hidden border border-border bg-surface-sunken">
-                  <img
-                    src={wf.backgroundReferenceImage}
-                    alt="Background reference"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => backgroundInputRef.current?.click()}
-                    className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    title="Replace image"
-                  >
-                    <Upload size={16} className="text-white" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRemoveBackground}
-                    className="p-2 bg-white/20 hover:bg-red-500/70 rounded-lg transition-colors"
-                    title="Remove image"
-                  >
-                    <X size={16} className="text-white" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => backgroundInputRef.current?.click()}
-                className={cn(
-                  "w-full aspect-video rounded-lg border-2 border-dashed border-border",
-                  "bg-surface-sunken hover:bg-surface-elevated hover:border-accent/50",
-                  "flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer"
-                )}
-              >
-                <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
-                  <ImageIcon size={20} className="text-foreground-muted" />
-                </div>
-                <span className="text-xs text-foreground-muted">Click to upload</span>
-                <span className="text-[10px] text-foreground-muted/60">JPEG, PNG, WebP</span>
-              </button>
-            )}
-
-            <div className={cn(
-              "flex items-center justify-between p-2 rounded-lg border transition-colors",
-              wf.backgroundReferenceImage
-                ? "bg-surface-elevated border-border"
-                : "bg-surface-sunken border-border/50 opacity-50"
-            )}>
-              <div className="flex items-center gap-2">
-                <ImageIcon size={14} className="text-foreground-muted" />
-                <span className="text-xs">Use for background</span>
-              </div>
-              <button
-                type="button"
-                disabled={!wf.backgroundReferenceImage}
-                onClick={() => updateWf({ backgroundReferenceEnabled: !wf.backgroundReferenceEnabled })}
-                className={cn(
-                  "relative w-9 h-5 rounded-full transition-colors flex-shrink-0",
-                  wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
-                    ? "bg-accent"
-                    : "bg-surface-sunken border border-border"
-                )}
-              >
-                <span
-                  className={cn(
-                    "absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200",
-                    wf.backgroundReferenceEnabled && wf.backgroundReferenceImage
-                      ? "left-[18px]"
-                      : "left-0.5"
-                  )}
+          <label className="text-xs font-medium text-foreground mb-1.5 block">
+            Background Reference
+          </label>
+          <input
+            ref={backgroundInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleBackgroundUpload}
+            className="hidden"
+          />
+          <div className="flex items-center gap-2">
+            {wf.backgroundReferenceImage && (
+              <div className="w-8 h-8 rounded overflow-hidden border border-border flex-shrink-0">
+                <img
+                  src={wf.backgroundReferenceImage}
+                  alt="Background reference"
+                  className="w-full h-full object-cover"
                 />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => backgroundInputRef.current?.click()}
+              className="flex-1 h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-left text-foreground-muted hover:border-accent/50 transition-colors"
+            >
+              {wf.backgroundReferenceImage ? 'Change reference...' : 'Upload reference...'}
+            </button>
+            {wf.backgroundReferenceImage && (
+              <button
+                type="button"
+                onClick={handleRemoveBackground}
+                className="w-8 h-8 flex items-center justify-center rounded border border-border bg-surface-elevated text-foreground-muted hover:text-rose-500 hover:border-rose-500/50 transition-colors"
+                title="Remove reference"
+              >
+                <X size={14} />
               </button>
-            </div>
-
-            {wf.backgroundReferenceEnabled && wf.backgroundReferenceImage && (
-              <p className="text-[10px] text-accent">
-                Background reference will be used to match environment, lighting, and atmosphere.
-              </p>
             )}
           </div>
         </div>

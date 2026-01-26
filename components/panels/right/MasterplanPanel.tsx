@@ -155,7 +155,6 @@ export const MasterplanPanel = () => {
   return (
     <div className="space-y-6">
       <Accordion
-        defaultValue="output-style"
         items={[
           {
             id: 'output-style',

@@ -14,11 +14,17 @@ import { Render3DSettings } from '../../../types';
 interface Render3DPanelProps {
   showGenerationMode?: boolean;
   includeCamera?: boolean;
+  accordionValue?: string | null;
+  onAccordionChange?: (value: string | null) => void;
+  accordionIdPrefix?: string;
 }
 
 export const Render3DPanel: React.FC<Render3DPanelProps> = ({
     showGenerationMode = true,
     includeCamera = true,
+    accordionValue,
+    onAccordionChange,
+    accordionIdPrefix,
 }) => {
     const { state, dispatch } = useAppStore();
     const wf = state.workflow;
@@ -48,6 +54,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
       { key: 'paint', label: 'Paint' },
       { key: 'flooring', label: 'Flooring' }
     ];
+    const sectionId = (id: string) => (accordionIdPrefix ? `${accordionIdPrefix}${id}` : id);
 
     return (
         <div className="space-y-6">
@@ -77,9 +84,10 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 </div>
             )}
 
-            <Accordion items={[
+            <Accordion
+              items={[
                 // 1. GEOMETRY
-                { id: 'geometry', title: 'Geometry', content: (
+                { id: sectionId('geometry'), title: 'Geometry', content: (
                     <div>
                        
                        <div className="mb-4">
@@ -313,7 +321,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 )},
 
                 // 2. LIGHTING
-                { id: 'lighting', title: 'Lighting', content: (
+                { id: sectionId('lighting'), title: 'Lighting', content: (
                     <div>
                        
                        <div className="flex justify-between items-center mb-2">
@@ -400,7 +408,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
 
                 ...(includeCamera ? [
                   // 3. CAMERA
-                  { id: 'camera', title: 'Camera', content: (
+                  { id: sectionId('camera'), title: 'Camera', content: (
                     <div>
                        
                        <div className="mb-4">
@@ -442,7 +450,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 ] : []),
 
                 // 4. MATERIALS
-                { id: 'materials', title: 'Materials', content: (
+                { id: sectionId('materials'), title: 'Materials', content: (
                     <div>
                        
                        <div className="mb-4">
@@ -499,7 +507,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 )},
 
                 // 5. ATMOSPHERE
-                { id: 'atmosphere', title: 'Atmosphere', content: (
+                { id: sectionId('atmosphere'), title: 'Atmosphere', content: (
                     <div>
                        
                        <div className="grid grid-cols-3 gap-2 mb-4">
@@ -565,7 +573,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 )},
 
                 // 6. SCENERY
-                { id: 'scenery', title: 'Scenery', content: (
+                { id: sectionId('scenery'), title: 'Scenery', content: (
                     <div>
                        
                        <div className="space-y-4">
@@ -687,7 +695,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 )},
 
                 // 7. RENDER
-                { id: 'render', title: 'Render Format', content: (
+                { id: sectionId('render'), title: 'Render Format', content: (
                     <div>
                        <div className="mb-4">
                           <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -724,7 +732,10 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                        </div>
                     </div>
                 )}
-            ]} />
+            ]}
+              value={accordionValue}
+              onValueChange={onAccordionChange}
+            />
         </div>
     );
 };
