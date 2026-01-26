@@ -80,6 +80,7 @@ export interface BatchImageRequest {
   referenceImages?: ImageData[];
   numberOfImages: number;
   imageConfig?: ImageConfig;
+  abortSignal?: AbortSignal;
 }
 
 export interface BatchImageResponse {
@@ -357,7 +358,8 @@ export class GeminiService {
           prompt,
           images: request.referenceImages,
           generationConfig: {
-            imageConfig: request.imageConfig
+            imageConfig: request.imageConfig,
+            abortSignal: request.abortSignal
           }
         })
       );
@@ -550,7 +552,7 @@ export class GeminiService {
 
     // Use streaming endpoint
     const stream = await this.ai.models.generateContentStream({
-      model: this.model,
+      model: request.model || this.model,
       contents,
       config: {
         ...restConfig,

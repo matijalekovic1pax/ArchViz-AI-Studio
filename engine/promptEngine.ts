@@ -2014,15 +2014,20 @@ const generateVisualEditPrompt = (state: AppState): string => {
   }
 
   if (tool === 'background') {
-    parts.push('Replace the background of this architectural image using the provided reference image as inspiration, while preserving the selected area completely untouched.');
+    parts.push('Replace the background of this architectural image while preserving the selected area completely untouched.');
     parts.push(...selectionParts);
-    parts.push(describeUserIntent(userPrompt));
-
     const background = workflow.visualBackground;
+    const backgroundPrompt = background.prompt?.trim() || userPrompt;
 
-    if (background.referenceEnabled && background.referenceImage) {
-      parts.push('**Background Reference (CRITICAL):** A reference image is provided showing the desired background environment. Use this reference to understand and recreate the environmental qualities around the selected area.');
+    if (background.mode === 'image' && background.referenceImage) {
+      parts.push('Background Reference: A reference image is provided showing the desired background environment.');
       parts.push('IMPORTANT: The selected area must remain COMPLETELY UNCHANGED - do not modify, retouch, or alter any pixels within the selection. Only replace the background around it.');
+
+      if (background.referenceMode === 'absolute') {
+        parts.push('Treat the reference image as the exact background to integrate into. Preserve its layout, horizon line, dominant elements, and overall composition. Do not introduce new background elements that conflict with the reference.');
+      } else {
+        parts.push('Use the reference image as creative guidance. Match its mood, palette, and environmental cues, but allow tasteful variation and creativity in the background.');
+      }
 
       if (background.matchPerspective) {
         parts.push('Match the perspective and horizon line from the reference image, ensuring the background aligns naturally with the architectural elements in the preserved selection.');
@@ -2042,7 +2047,11 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
       parts.push('The final image must look like a single cohesive photograph where the preserved area naturally exists in the new background environment.');
     } else {
-      parts.push('No background reference is provided. Apply a natural background replacement based on the context and user instructions.');
+      if (backgroundPrompt) {
+        parts.push(`Background direction: "${backgroundPrompt}".`);
+      } else {
+        parts.push('No background reference is provided. Apply a natural background replacement based on the context and user instructions.');
+      }
     }
 
     const qualityDesc = background.quality === 'high' ? 'with maximum detail and photorealism' :

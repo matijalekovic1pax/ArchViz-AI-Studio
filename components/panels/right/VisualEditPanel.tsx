@@ -1369,7 +1369,7 @@ export const VisualEditPanel = () => {
       const dataUrl = reader.result as string;
       updateBackground({
         referenceImage: dataUrl,
-        referenceEnabled: true
+        mode: 'image'
       });
     };
     reader.readAsDataURL(file);
@@ -1381,8 +1381,7 @@ export const VisualEditPanel = () => {
 
   const handleRemoveBackground = useCallback(() => {
     updateBackground({
-      referenceImage: null,
-      referenceEnabled: false
+      referenceImage: null
     });
   }, [updateBackground]);
 
@@ -3000,129 +2999,156 @@ export const VisualEditPanel = () => {
         return (
           <div className="space-y-4 animate-fade-in">
             <SectionDesc>
-              Upload a background reference image. The AI will replace the background around your selected area while preserving the selection.
+              Choose how to define the background around your selected area. Use a freeform prompt or a reference image.
             </SectionDesc>
 
-            {/* Hidden file input */}
-            <input
-              ref={backgroundInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleBackgroundUpload}
-              className="hidden"
+            <SegmentedControl
+              value={wf.visualBackground.mode}
+              options={[
+                { label: 'Prompt', value: 'prompt' },
+                { label: 'Reference Image', value: 'image' },
+              ]}
+              onChange={(value) => updateBackground({ mode: value })}
             />
 
-            {/* Image Upload/Preview */}
-            <div>
-              <label className="text-xs font-medium text-foreground mb-2 block">Reference Image</label>
-              {wf.visualBackground.referenceImage ? (
-                <div className="relative group aspect-video rounded-lg border border-border overflow-hidden bg-surface-sunken">
-                  <img
-                    src={wf.visualBackground.referenceImage}
-                    alt="Background reference"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            {wf.visualBackground.mode === 'prompt' ? (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground mb-2 block">Background Prompt</label>
+                <textarea
+                  value={wf.visualBackground.prompt}
+                  onChange={(event) => updateBackground({ prompt: event.target.value })}
+                  placeholder="Describe the background you want (e.g., misty forest, urban skyline at dusk)..."
+                  className="w-full min-h-[96px] resize-none bg-surface-elevated border border-border rounded text-xs p-2 leading-relaxed focus:outline-none focus:border-accent"
+                />
+                <div className="text-[10px] text-foreground-muted">
+                  This prompt controls only the background. The selected area stays untouched.
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Hidden file input */}
+                <input
+                  ref={backgroundInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleBackgroundUpload}
+                  className="hidden"
+                />
+
+                {/* Image Upload/Preview */}
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-2 block">Reference Image</label>
+                  {wf.visualBackground.referenceImage ? (
+                    <div className="relative group aspect-video rounded-lg border border-border overflow-hidden bg-surface-sunken">
+                      <img
+                        src={wf.visualBackground.referenceImage}
+                        alt="Background reference"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => backgroundInputRef.current?.click()}
+                          className="p-2 bg-surface-elevated hover:bg-surface-sunken rounded-lg text-foreground-secondary hover:text-foreground transition-colors"
+                          title="Replace image"
+                        >
+                          <Upload size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveBackground}
+                          className="p-2 bg-surface-elevated hover:bg-surface-sunken rounded-lg text-foreground-secondary hover:text-foreground transition-colors"
+                          title="Remove image"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => backgroundInputRef.current?.click()}
-                      className="p-2 bg-surface-elevated hover:bg-surface-sunken rounded-lg text-foreground-secondary hover:text-foreground transition-colors"
-                      title="Replace image"
+                      className="w-full aspect-video rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-surface-sunken transition-all flex flex-col items-center justify-center gap-2 text-foreground-muted hover:text-foreground group"
                     >
-                      <Upload size={18} />
+                      <div className="w-10 h-10 rounded-full bg-surface-sunken group-hover:bg-surface-elevated flex items-center justify-center transition-colors">
+                        <ImageIcon size={20} />
+                      </div>
+                      <div className="text-xs font-medium">Click to upload</div>
+                      <div className="text-[10px] text-foreground-muted">JPEG, PNG, WebP</div>
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleRemoveBackground}
-                      className="p-2 bg-surface-elevated hover:bg-surface-sunken rounded-lg text-foreground-secondary hover:text-foreground transition-colors"
-                      title="Remove image"
-                    >
-                      <X size={18} />
-                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground mb-2 block">Reference Behavior</label>
+                  <SegmentedControl
+                    value={wf.visualBackground.referenceMode}
+                    options={[
+                      { label: 'Exact Match', value: 'absolute' },
+                      { label: 'Creative Reference', value: 'reference' },
+                    ]}
+                    onChange={(value) => updateBackground({ referenceMode: value })}
+                  />
+                  <div className="p-3 bg-surface-sunken rounded-lg border border-border-subtle">
+                    <p className="text-[10px] text-foreground-secondary leading-relaxed">
+                      {wf.visualBackground.referenceMode === 'absolute'
+                        ? 'Use the reference image as the exact background composition. Integrate the preserved area into that scene.'
+                        : 'Use the reference image as inspiration. Match its mood and environment, but allow creative variation.'}
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => backgroundInputRef.current?.click()}
-                  className="w-full aspect-video rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-surface-sunken transition-all flex flex-col items-center justify-center gap-2 text-foreground-muted hover:text-foreground group"
-                >
-                  <div className="w-10 h-10 rounded-full bg-surface-sunken group-hover:bg-surface-elevated flex items-center justify-center transition-colors">
-                    <ImageIcon size={20} />
-                  </div>
-                  <div className="text-xs font-medium">Click to upload</div>
-                  <div className="text-[10px] text-foreground-muted">JPEG, PNG, WebP</div>
-                </button>
-              )}
-            </div>
 
-            {/* Enable Toggle */}
-            <div className="flex items-center justify-between py-2">
-              <label className="text-xs font-medium text-foreground">Use for background</label>
-              <Toggle
-                enabled={wf.visualBackground.referenceEnabled}
-                onChange={(enabled) => updateBackground({ referenceEnabled: enabled })}
-                disabled={!wf.visualBackground.referenceImage}
-              />
-            </div>
+                {/* Settings */}
+                {wf.visualBackground.referenceImage && (
+                  <>
+                    <div className="pt-2 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-foreground">Match Perspective</label>
+                        <Toggle
+                          enabled={wf.visualBackground.matchPerspective}
+                          onChange={(enabled) => updateBackground({ matchPerspective: enabled })}
+                        />
+                      </div>
 
-            {wf.visualBackground.referenceEnabled && wf.visualBackground.referenceImage && (
-              <div className="p-3 bg-surface-sunken rounded-lg border border-border-subtle">
-                <p className="text-[10px] text-foreground-secondary leading-relaxed">
-                  The AI will use this image as a reference to replace the background, matching the environment, lighting, and atmosphere while preserving your selected area.
-                </p>
-              </div>
-            )}
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-foreground">Match Lighting</label>
+                        <Toggle
+                          enabled={wf.visualBackground.matchLighting}
+                          onChange={(enabled) => updateBackground({ matchLighting: enabled })}
+                        />
+                      </div>
 
-            {/* Settings */}
-            {wf.visualBackground.referenceImage && (
-              <>
-                <div className="pt-2 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-foreground">Match Perspective</label>
-                    <Toggle
-                      enabled={wf.visualBackground.matchPerspective}
-                      onChange={(enabled) => updateBackground({ matchPerspective: enabled })}
-                    />
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-foreground">Seamless Blend</label>
+                        <Toggle
+                          enabled={wf.visualBackground.seamlessBlend}
+                          onChange={(enabled) => updateBackground({ seamlessBlend: enabled })}
+                        />
+                      </div>
 
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-foreground">Match Lighting</label>
-                    <Toggle
-                      enabled={wf.visualBackground.matchLighting}
-                      onChange={(enabled) => updateBackground({ matchLighting: enabled })}
-                    />
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-foreground">Preserve Depth</label>
+                        <Toggle
+                          enabled={wf.visualBackground.preserveDepth}
+                          onChange={(enabled) => updateBackground({ preserveDepth: enabled })}
+                        />
+                      </div>
 
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-foreground">Seamless Blend</label>
-                    <Toggle
-                      enabled={wf.visualBackground.seamlessBlend}
-                      onChange={(enabled) => updateBackground({ seamlessBlend: enabled })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-foreground">Preserve Depth</label>
-                    <Toggle
-                      enabled={wf.visualBackground.preserveDepth}
-                      onChange={(enabled) => updateBackground({ preserveDepth: enabled })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-medium text-foreground mb-2 block">Quality</label>
-                    <select
-                      className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
-                      value={wf.visualBackground.quality}
-                      onChange={(e) => updateBackground({ quality: e.target.value as any })}
-                    >
-                      <option value="draft">Draft (fast)</option>
-                      <option value="standard">Standard</option>
-                      <option value="high">High (slower)</option>
-                    </select>
-                  </div>
-                </div>
+                      <div>
+                        <label className="text-xs font-medium text-foreground mb-2 block">Quality</label>
+                        <select
+                          className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
+                          value={wf.visualBackground.quality}
+                          onChange={(e) => updateBackground({ quality: e.target.value as any })}
+                        >
+                          <option value="draft">Draft (fast)</option>
+                          <option value="standard">Standard</option>
+                          <option value="high">High (slower)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>

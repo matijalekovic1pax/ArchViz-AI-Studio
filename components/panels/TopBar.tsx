@@ -176,7 +176,7 @@ export const TopBar: React.FC = () => {
   const [showControlsMenu, setShowControlsMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const { generate } = useGeneration();
+  const { generate, cancelGeneration } = useGeneration();
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
   const selectionRedoStack = state.workflow.visualSelectionRedoStack;
@@ -795,37 +795,55 @@ export const TopBar: React.FC = () => {
       {/* Center: Generate Button (Hidden in generate-text mode) */}
       <div className="flex items-center justify-center shrink-0 mx-4">
         {state.mode !== 'generate-text' && (
-          <button
-            aria-label="generate-trigger"
-            onClick={handleGenerate}
-            disabled={isDisabled || state.isGenerating}
-            className={cn(
-              "relative group flex items-center gap-3 px-8 py-2.5 rounded-full transition-all duration-300 border border-transparent overflow-hidden",
-              isDisabled 
-                ? "bg-surface-sunken text-foreground-muted cursor-not-allowed" 
-                : "bg-foreground text-background shadow-lg hover:scale-105 active:scale-95 hover:shadow-xl hover:border-accent/50"
-            )}
-          >
-            {/* Animated Background Gradient for Active State */}
-            {!isDisabled && !state.isGenerating && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
-            )}
+          <div className="relative flex items-center">
+            <div className="relative">
+              <button
+                aria-label="generate-trigger"
+                onClick={handleGenerate}
+                disabled={isDisabled || state.isGenerating}
+                className={cn(
+                  "relative group flex items-center gap-3 px-8 py-2.5 rounded-full transition-all duration-300 border border-transparent overflow-hidden",
+                  isDisabled 
+                    ? "bg-surface-sunken text-foreground-muted cursor-not-allowed" 
+                    : "bg-foreground text-background shadow-lg hover:scale-105 active:scale-95 hover:shadow-xl hover:border-accent/50"
+                )}
+              >
+                {/* Animated Background Gradient for Active State */}
+                {!isDisabled && !state.isGenerating && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
+                )}
 
-            {state.isGenerating ? (
-              <>
-                <Loader2 className="animate-spin" size={18} />
-                <div className="flex flex-col items-start leading-none">
-                  <span className="font-bold text-xs">Generating</span>
-                  <span className="text-[9px] opacity-80 font-mono">{state.progress}%</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <Sparkles size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
-                <span className="font-bold text-sm tracking-wide">{getGenerateLabel()}</span>
-              </>
+                {state.isGenerating ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    <div className="flex flex-col items-start leading-none">
+                      <span className="font-bold text-xs">Generating</span>
+                      <span className="text-[9px] opacity-80 font-mono">{state.progress}%</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                    <span className="font-bold text-sm tracking-wide">{getGenerateLabel()}</span>
+                  </>
+                )}
+              </button>
+              {state.isGenerating && null}
+            </div>
+
+            {state.isGenerating && (
+              <div className="ml-2 origin-left animate-cancel-emerge">
+                <button
+                  aria-label="cancel-generation"
+                  onClick={cancelGeneration}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-full shadow-elevated bg-red-600 text-white hover:bg-red-500 active:scale-95 transition-all duration-200"
+                >
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">Cancel</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
         )}
       </div>
 

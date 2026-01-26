@@ -491,8 +491,10 @@ export interface WorkflowSettings {
     quality: 'draft' | 'standard' | 'high';
   };
   visualBackground: {
+    mode: 'prompt' | 'image';
+    prompt: string;
     referenceImage: string | null;
-    referenceEnabled: boolean;
+    referenceMode: 'absolute' | 'reference';
     matchPerspective: boolean;
     matchLighting: boolean;
     seamlessBlend: boolean;

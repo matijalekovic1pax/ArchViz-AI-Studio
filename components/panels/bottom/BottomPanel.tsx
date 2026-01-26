@@ -11,17 +11,17 @@ export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const prompt = generatePrompt(state);
 
-  if (state.mode === 'generate-text') return null;
-
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
   const showEditStack = state.mode === 'visual-edit';
   const showCleanup = state.mode === 'img-to-cad';
-  const resolvedBottomTab =
-    !showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab;
+  const isGenerateTextMode = state.mode === 'generate-text';
+  const resolvedBottomTab = isGenerateTextMode
+    ? 'history'
+    : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
 
   const renderContent = () => {
-    if (resolvedBottomTab === 'prompt') {
+    if (!isGenerateTextMode && resolvedBottomTab === 'prompt') {
       return (
         <div className="absolute inset-0 p-4 overflow-y-auto font-mono text-sm leading-relaxed text-foreground-secondary group">
           {prompt}
@@ -165,7 +165,14 @@ export const BottomPanel: React.FC = () => {
     >
       <div className="h-9 flex items-center justify-between px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
         <div className="flex h-full overflow-x-auto no-scrollbar">
-           {['prompt', 'history', ...(showTimeline ? ['timeline'] : []), ...(showLegend ? ['legend'] : []), ...(showEditStack ? ['edit-stack'] : []), ...(showCleanup ? ['cleanup'] : [])].map(tab => (
+           {[
+             ...(isGenerateTextMode ? [] : ['prompt']),
+             'history',
+             ...(showTimeline ? ['timeline'] : []),
+             ...(showLegend ? ['legend'] : []),
+             ...(showEditStack ? ['edit-stack'] : []),
+             ...(showCleanup ? ['cleanup'] : [])
+           ].map(tab => (
              <button 
                key={tab}
                onClick={() => dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: tab })}

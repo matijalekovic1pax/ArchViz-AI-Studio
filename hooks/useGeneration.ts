@@ -11,11 +11,13 @@ import {
   isGeminiServiceInitialized,
   initGeminiService,
   ImageUtils,
+  IMAGE_MODEL,
   GeminiResponse,
   ImageData,
   ImageEditRequest,
   GeneratedImage,
-  AttachmentData
+  AttachmentData,
+  GenerationConfig
 } from '../services/geminiService';
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
@@ -62,6 +64,7 @@ export interface GenerationOptions {
 export interface UseGenerationReturn {
   generate: (options?: GenerationOptions) => Promise<void>;
   generateFromState: () => Promise<void>;
+  cancelGeneration: () => void;
   isReady: boolean;
   setApiKey: (key: string) => void;
 }
@@ -460,11 +463,28 @@ export function useGeneration(): UseGenerationReturn {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
+    const abortSignal = abortControllerRef.current.signal;
+
+    const isMaterialValidationMode = state.mode === 'material-validation';
+    let lastProgress = 0;
+    const updateProgress = (value: number) => {
+      if (isMaterialValidationMode) return;
+      const next = Math.min(100, Math.max(value, lastProgress));
+      if (next !== lastProgress) {
+        lastProgress = next;
+        dispatch({ type: 'SET_PROGRESS', payload: next });
+      }
+    };
 
     dispatch({ type: 'SET_GENERATING', payload: true });
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
+    updateProgress(2);
 
     try {
+      if (abortSignal.aborted) {
+        throw new DOMException('Request aborted', 'AbortError');
+      }
+
       // Build prompt from state or use provided prompt
       const basePrompt = options.prompt || (
         state.mode === 'material-validation'
@@ -526,7 +546,7 @@ export function useGeneration(): UseGenerationReturn {
       if (
         state.mode === 'visual-edit' &&
         state.workflow.activeTool === 'background' &&
-        state.workflow.visualBackground.referenceEnabled &&
+        state.workflow.visualBackground.mode === 'image' &&
         state.workflow.visualBackground.referenceImage
       ) {
         const bgImgData = dataUrlToImageData(state.workflow.visualBackground.referenceImage);
@@ -561,17 +581,65 @@ export function useGeneration(): UseGenerationReturn {
       const isVisualEditMode = state.mode === 'visual-edit';
       const isVideoMode = state.mode === 'video';
 
-      let progressInterval: ReturnType<typeof setInterval> | null = null;
-      if (!isMultiAngleMode && !isUpscaleMode && state.mode !== 'material-validation') {
-        let currentProgress = 0;
-        progressInterval = setInterval(() => {
-          currentProgress = Math.min(currentProgress + 5, 90);
-          dispatch({ type: 'SET_PROGRESS', payload: currentProgress });
-        }, 500);
-      }
+      const buildImagePrompt = (prompt: string) => (
+        prompt.includes('generate') || prompt.includes('create')
+          ? prompt
+          : `Generate an image: ${prompt}`
+      );
+
+      const runStreamedImageGeneration = async (request: {
+        prompt: string;
+        images?: ImageData[];
+        generationConfig?: GenerationConfig;
+      }): Promise<GeminiResponse> => {
+        updateProgress(10);
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
+        }
+        let chunkCount = 0;
+        let sawImage = false;
+        let text: string | null = null;
+        let imagesOut: GeneratedImage[] = [];
+
+        for await (const chunk of service.generateStream({
+          ...request,
+          prompt: buildImagePrompt(request.prompt),
+          model: IMAGE_MODEL
+        })) {
+          if (abortSignal.aborted) {
+            throw new DOMException('Request aborted', 'AbortError');
+          }
+          chunkCount += 1;
+          if (typeof chunk.text === 'string') {
+            text = chunk.text;
+          }
+          if (Array.isArray(chunk.images)) {
+            imagesOut = chunk.images;
+          }
+
+          if (chunkCount === 1) {
+            updateProgress(35);
+          }
+
+          if (!sawImage && chunk.images && chunk.images.length > 0) {
+            sawImage = true;
+            updateProgress(90);
+          } else if (!sawImage) {
+            const paced = Math.min(80, 35 + chunkCount * 5);
+            updateProgress(paced);
+          }
+        }
+
+        updateProgress(sawImage ? 95 : 85);
+        return { text, images: imagesOut };
+      };
 
       // Build generation config
       const generationConfig = buildGenerationConfig(state);
+      const generationConfigWithAbort: GenerationConfig = {
+        ...generationConfig,
+        abortSignal
+      };
 
       let result: GeminiResponse;
 
@@ -586,13 +654,14 @@ export function useGeneration(): UseGenerationReturn {
           await runBatchMaterialValidation();
           result = { text: null, images: [] };
         } else {
+          updateProgress(10);
           const textGenerationConfig = generationConfig;
           // Text-only generation (analysis modes)
           const text = await service.generateText({
             prompt: fullPrompt || 'Analyze the provided materials and return a concise validation summary.',
             images,
             attachments,
-            generationConfig: textGenerationConfig
+            generationConfig: generationConfigWithAbort
           });
           if (!text.trim()) {
             throw new Error('No text returned from Gemini. Ensure the model supports document analysis.');
@@ -600,6 +669,10 @@ export function useGeneration(): UseGenerationReturn {
           result = { text, images: [] };
         }
       } else if (isMultiAngleMode) {
+        updateProgress(10);
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
+        }
         const wf = state.workflow;
         const count = Math.max(1, wf.multiAngleViewCount);
         const [azStart, azEnd] = wf.multiAngleAzimuthRange;
@@ -621,12 +694,15 @@ export function useGeneration(): UseGenerationReturn {
         const imagesOut: GeneratedImage[] = [];
 
         for (let i = 0; i < angleViews.length; i++) {
+          if (abortSignal.aborted) {
+            throw new DOMException('Request aborted', 'AbortError');
+          }
           const view = angleViews[i];
           const anglePrompt = `${fullPrompt} Angle ${i + 1}: azimuth ${view.azimuth} deg, elevation ${view.elevation} deg.`;
           const angleResult = await service.generateImages({
             prompt: anglePrompt,
             images: images.length > 0 ? images : undefined,
-            generationConfig
+            generationConfig: generationConfigWithAbort
           });
           if (angleResult.images?.[0]) {
             outputs.push({
@@ -641,17 +717,21 @@ export function useGeneration(): UseGenerationReturn {
             });
           }
           const progress = Math.round(((i + 1) / angleViews.length) * 90);
-          dispatch({ type: 'SET_PROGRESS', payload: progress });
+          updateProgress(progress);
         }
 
         dispatch({ type: 'UPDATE_WORKFLOW', payload: { multiAngleOutputs: outputs } });
         result = { text: null, images: imagesOut };
       } else if (isUpscaleMode) {
+        updateProgress(10);
         const wf = state.workflow;
         const queued = wf.upscaleBatch.map((item) => ({ ...item }));
         const imagesOut: GeneratedImage[] = [];
 
         for (let i = 0; i < queued.length; i++) {
+          if (abortSignal.aborted) {
+            throw new DOMException('Request aborted', 'AbortError');
+          }
           const item = queued[i];
           if (item.status === 'done' && item.url) {
             const existing = dataUrlToImageData(item.url);
@@ -680,7 +760,7 @@ export function useGeneration(): UseGenerationReturn {
           const upscaleResult = await service.generateImages({
             prompt: fullPrompt,
             images: [source],
-            generationConfig
+            generationConfig: generationConfigWithAbort
           });
 
           if (upscaleResult.images?.[0]) {
@@ -695,12 +775,16 @@ export function useGeneration(): UseGenerationReturn {
           }
 
           const progress = Math.round(((i + 1) / queued.length) * 90);
-          dispatch({ type: 'SET_PROGRESS', payload: progress });
+          updateProgress(progress);
           dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
         }
 
         result = { text: null, images: imagesOut };
       } else if (isVisualEditMode) {
+        updateProgress(10);
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
+        }
         const sourceImage = state.uploadedImage ? dataUrlToImageData(state.uploadedImage) : null;
         if (!sourceImage) {
           throw new Error('No source image available for visual edit.');
@@ -727,36 +811,34 @@ export function useGeneration(): UseGenerationReturn {
           maskImage: maskImage || undefined,
           prompt: basePrompt,
           editType,
-          generationConfig
+          generationConfig: generationConfigWithAbort
         });
       } else if (isVideoMode) {
-        result = await service.generateImages({
+        result = await runStreamedImageGeneration({
           prompt: fullPrompt,
           images: images.length > 0 ? images : undefined,
-          generationConfig
+          generationConfig: generationConfigWithAbort
         });
       } else if (options.numberOfImages && options.numberOfImages > 1) {
+        updateProgress(10);
         // Batch image generation
         const batchResult = await service.generateBatchImages({
           prompt: fullPrompt,
           referenceImages: images.length > 0 ? images : undefined,
           numberOfImages: options.numberOfImages,
-          imageConfig: generationConfig.imageConfig
+          imageConfig: generationConfig.imageConfig,
+          abortSignal
         });
         result = { text: batchResult.text, images: batchResult.images };
       } else {
         // Standard image generation
-        result = await service.generateImages({
+        result = await runStreamedImageGeneration({
           prompt: fullPrompt,
           images: images.length > 0 ? images : undefined,
-          generationConfig
+          generationConfig: generationConfigWithAbort
         });
       }
-
-      if (progressInterval) {
-        clearInterval(progressInterval);
-      }
-      dispatch({ type: 'SET_PROGRESS', payload: 100 });
+      updateProgress(95);
 
       // Debug: Log the full result
       console.log('Gemini API Response:', result);
@@ -902,10 +984,22 @@ export function useGeneration(): UseGenerationReturn {
         });
       }
 
+      updateProgress(100);
       dispatch({ type: 'SET_GENERATING', payload: false });
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
 
     } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') {
+        if (state.mode === 'material-validation') {
+          dispatch({
+            type: 'UPDATE_MATERIAL_VALIDATION',
+            payload: { isRunning: false, error: 'Validation canceled.' }
+          });
+        }
+        dispatch({ type: 'SET_GENERATING', payload: false });
+        dispatch({ type: 'SET_PROGRESS', payload: 0 });
+        return;
+      }
       console.error('Generation failed:', error);
       if (state.mode === 'material-validation') {
         dispatch({
@@ -940,9 +1034,25 @@ export function useGeneration(): UseGenerationReturn {
     return generate();
   }, [generate]);
 
+  const cancelGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (state.mode === 'material-validation') {
+      dispatch({
+        type: 'UPDATE_MATERIAL_VALIDATION',
+        payload: { isRunning: false, error: 'Validation canceled.' }
+      });
+    }
+    dispatch({ type: 'SET_GENERATING', payload: false });
+    dispatch({ type: 'SET_PROGRESS', payload: 0 });
+  }, [dispatch, state.mode]);
+
   return {
     generate,
     generateFromState,
+    cancelGeneration,
     isReady,
     setApiKey
   };

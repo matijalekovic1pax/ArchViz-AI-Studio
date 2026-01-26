@@ -8,6 +8,7 @@ import { LeftSidebar } from './components/panels/left/LeftSidebar';
 import { RightPanel } from './components/panels/right/RightPanel';
 import { BottomPanel } from './components/panels/bottom/BottomPanel';
 import { ImageCanvas } from './components/canvas/ImageCanvas';
+import { FloatingGenerateButton } from './components/FloatingGenerateButton';
 import { MaterialValidationView } from './components/MaterialValidationView';
 import { GenerationMode } from './types';
 
@@ -77,6 +78,7 @@ const Layout: React.FC = () => {
           ) : (
              <ImageCanvas />
           )}
+          <FloatingGenerateButton />
           <BottomPanel />
         </div>
         <RightPanel />
