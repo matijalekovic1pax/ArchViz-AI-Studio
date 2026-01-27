@@ -141,7 +141,7 @@
     "dropOrClick": "Arrastre o haga clic para subir",
     "supportedFormats": "PDF, Word (.docx)",
     "removeDocument": "Eliminar documento",
-    "languages": "Idiomas",
+    "languagesTitle": "Idiomas",
     "sourceLanguage": "De",
     "targetLanguage": "A",
     "preservesFormatting": "Conservación de Estructura",

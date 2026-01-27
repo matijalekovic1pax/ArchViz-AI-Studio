@@ -85,16 +85,16 @@ export const DocumentTranslatePanel: React.FC = () => {
 
       {/* Success + Download */}
       {progress.phase === 'complete' && docTranslate.translatedDocumentUrl && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="bg-surface-elevated border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
-            <CheckCircle2 size={18} className="text-green-600" />
-            <span className="text-sm font-medium text-green-800">
+            <CheckCircle2 size={18} className="text-accent" />
+            <span className="text-sm font-medium text-foreground">
               {t('documentTranslate.translationComplete')}
             </span>
           </div>
           <button
             onClick={handleDownload}
-            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-700 transition-colors"
+            className="w-full px-4 py-3 bg-foreground text-background rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors shadow-sm"
           >
             <Download size={16} />
             {t('documentTranslate.downloadTranslated')}

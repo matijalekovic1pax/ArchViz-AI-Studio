@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
-import { FileText, Loader2, CheckCircle2, Download } from 'lucide-react';
+import { FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import mammoth from 'mammoth';
@@ -190,10 +190,16 @@ export const DocumentTranslateView: React.FC = () => {
     return (
       <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex items-center justify-center z-10">
         <div className="max-w-md w-full mx-auto px-6">
-          <div className="bg-surface-elevated border border-border rounded-lg p-6 shadow-lg">
-            <div className="flex items-center gap-3 mb-4">
+          <div className={cn(
+            "bg-surface-elevated border border-border rounded-lg p-6 shadow-lg",
+            progress.phase === 'complete' && "text-center"
+          )}>
+            <div className={cn(
+              "flex items-center gap-3 mb-4",
+              progress.phase === 'complete' && "justify-center"
+            )}>
               {progress.phase === 'complete' ? (
-                <CheckCircle2 size={24} className="text-green-500" />
+                <CheckCircle2 size={24} className="text-accent" />
               ) : (
                 <Loader2 size={24} className="text-accent animate-spin" />
               )}
@@ -201,7 +207,7 @@ export const DocumentTranslateView: React.FC = () => {
                 {progress.phase === 'parsing' && t('documentTranslate.progress.parsing')}
                 {progress.phase === 'translating' && t('documentTranslate.progress.translating')}
                 {progress.phase === 'rebuilding' && t('documentTranslate.progress.rebuilding')}
-                {progress.phase === 'complete' && t('documentTranslate.progress.complete')}
+                {progress.phase === 'complete' && t('documentTranslate.translationComplete')}
                 {progress.phase === 'error' && t('documentTranslate.progress.error')}
               </h3>
             </div>
@@ -221,18 +227,7 @@ export const DocumentTranslateView: React.FC = () => {
               </div>
             )}
 
-            {progress.phase === 'complete' && translatedDocumentUrl && (
-              <div className="mt-4">
-                <a
-                  href={translatedDocumentUrl}
-                  download={`translated_${sourceDocument?.name}`}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors font-medium"
-                >
-                  <Download size={18} />
-                  {t('documentTranslate.downloadTranslated')}
-                </a>
-              </div>
-            )}
+            {progress.phase === 'complete' && translatedDocumentUrl && null}
 
             {error && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">

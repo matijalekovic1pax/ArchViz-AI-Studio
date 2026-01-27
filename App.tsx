@@ -82,7 +82,7 @@ const Layout: React.FC = () => {
              <ImageCanvas />
           )}
           <FloatingGenerateButton />
-          <BottomPanel />
+          {state.mode !== 'document-translate' && <BottomPanel />}
         </div>
         <RightPanel />
       </div>

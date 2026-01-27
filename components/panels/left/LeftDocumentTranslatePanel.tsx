@@ -150,7 +150,7 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
 
       {/* Language Selection */}
       <div>
-        <SectionHeader title={t('documentTranslate.languages')} />
+        <SectionHeader title={t('documentTranslate.languagesTitle')} />
         <div className="space-y-3">
           {/* Source Language */}
           <div>

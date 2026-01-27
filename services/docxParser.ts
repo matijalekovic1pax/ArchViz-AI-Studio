@@ -2,6 +2,8 @@
  * DOCX Parser Service
  * Parses and rebuilds Word documents while preserving structure
  * Uses JSZip for DOCX manipulation (DOCX is essentially a ZIP file with XML)
+ *
+ * Strategy: Extract text at paragraph level (<w:p>) to preserve context and spacing
  */
 
 import JSZip from 'jszip';
@@ -10,14 +12,14 @@ export interface TextSegment {
   id: string;
   text: string;
   xmlPath: string; // Path in the ZIP file (e.g., 'word/document.xml')
-  elementIndex: number; // Index of the text element within the file
+  paragraphElement: Element; // Reference to the paragraph element
   context: 'paragraph' | 'table-cell' | 'header' | 'footer';
 }
 
 export interface DocxParseResult {
   segments: TextSegment[];
   zip: JSZip;
-  xmlContents: Map<string, string>; // filename -> XML string
+  xmlDocuments: Map<string, Document>; // filename -> Parsed XML Document
 }
 
 const WORD_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -43,7 +45,7 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
   const zip = await JSZip.loadAsync(bytes);
 
   const segments: TextSegment[] = [];
-  const xmlContents = new Map<string, string>();
+  const xmlDocuments = new Map<string, Document>();
 
   // Files to parse for text content
   const filesToParse = [
@@ -66,7 +68,6 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
     if (!file) continue;
 
     const xmlString = await file.async('string');
-    xmlContents.set(path, xmlString);
 
     // Parse XML
     const parser = new DOMParser();
@@ -79,54 +80,73 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
       continue;
     }
 
-    // Extract text elements
-    extractTextSegments(doc, path, context, segments);
+    xmlDocuments.set(path, doc);
+
+    // Extract paragraphs
+    extractParagraphSegments(doc, path, context, segments);
   }
 
-  return { segments, zip, xmlContents };
+  console.log(`Extracted ${segments.length} paragraph segments from DOCX`);
+
+  return { segments, zip, xmlDocuments };
 }
 
 /**
- * Extract text segments from an XML document
+ * Extract text segments at paragraph level from an XML document
  */
-function extractTextSegments(
+function extractParagraphSegments(
   doc: Document,
   xmlPath: string,
   context: TextSegment['context'],
   segments: TextSegment[]
 ): void {
-  // Find all <w:t> elements (text elements in OOXML)
-  const textElements = doc.getElementsByTagNameNS(WORD_NS, 't');
+  // Find all <w:p> elements (paragraph elements in OOXML)
+  const paragraphs = doc.getElementsByTagNameNS(WORD_NS, 'p');
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const para = paragraphs[i];
+
+    // Extract all text from this paragraph
+    const text = extractParagraphText(para);
+
+    if (text.trim().length === 0) {
+      continue; // Skip empty paragraphs
+    }
+
+    // Determine context more precisely
+    let actualContext = context;
+    let node: Element | null = para.parentElement;
+    while (node) {
+      if (node.localName === 'tc') {
+        actualContext = 'table-cell';
+        break;
+      }
+      node = node.parentElement;
+    }
+
+    segments.push({
+      id: `docx-${xmlPath.replace(/[\/\.]/g, '-')}-para-${i}`,
+      text,
+      xmlPath,
+      paragraphElement: para,
+      context: actualContext,
+    });
+  }
+}
+
+/**
+ * Extract all text content from a paragraph element
+ */
+function extractParagraphText(paragraph: Element): string {
+  const textElements = paragraph.getElementsByTagNameNS(WORD_NS, 't');
+  let fullText = '';
 
   for (let i = 0; i < textElements.length; i++) {
-    const el = textElements[i];
-    const text = el.textContent?.trim();
-
-    if (text && text.length > 0) {
-      // Determine context more precisely
-      let actualContext = context;
-      const parent = el.parentElement;
-      if (parent) {
-        // Check if inside a table cell
-        let node: Element | null = parent;
-        while (node) {
-          if (node.localName === 'tc') {
-            actualContext = 'table-cell';
-            break;
-          }
-          node = node.parentElement;
-        }
-      }
-
-      segments.push({
-        id: `docx-${xmlPath.replace(/[\/\.]/g, '-')}-${segments.length}`,
-        text: el.textContent || '', // Keep original text including whitespace
-        xmlPath,
-        elementIndex: i,
-        context: actualContext,
-      });
-    }
+    const textEl = textElements[i];
+    fullText += textEl.textContent || '';
   }
+
+  return fullText;
 }
 
 /**
@@ -136,7 +156,7 @@ export async function rebuildDocx(
   parseResult: DocxParseResult,
   translations: Map<string, string>
 ): Promise<string> {
-  const { zip, xmlContents, segments } = parseResult;
+  const { zip, xmlDocuments, segments } = parseResult;
 
   // Group segments by XML path
   const segmentsByPath = new Map<string, TextSegment[]>();
@@ -148,25 +168,16 @@ export async function rebuildDocx(
 
   // Process each XML file
   for (const [xmlPath, pathSegments] of segmentsByPath.entries()) {
-    const xmlString = xmlContents.get(xmlPath);
-    if (!xmlString) continue;
+    const doc = xmlDocuments.get(xmlPath);
+    if (!doc) continue;
 
-    // Parse the XML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlString, 'application/xml');
-
-    // Get all text elements
-    const textElements = doc.getElementsByTagNameNS(WORD_NS, 't');
-
-    // Apply translations
+    // Apply translations to each paragraph
     for (const segment of pathSegments) {
       const translation = translations.get(segment.id);
       if (translation === undefined) continue;
 
-      const el = textElements[segment.elementIndex];
-      if (el) {
-        el.textContent = translation;
-      }
+      // Replace text in the paragraph
+      replaceParagraphText(segment.paragraphElement, translation);
     }
 
     // Serialize back to XML
@@ -189,6 +200,39 @@ export async function rebuildDocx(
     reader.onerror = () => reject(new Error('Failed to convert blob to data URL'));
     reader.readAsDataURL(blob);
   });
+}
+
+/**
+ * Replace all text in a paragraph with translated text
+ */
+function replaceParagraphText(paragraph: Element, translatedText: string): void {
+  const textElements = paragraph.getElementsByTagNameNS(WORD_NS, 't');
+
+  if (textElements.length === 0) {
+    return;
+  }
+
+  // Put all translated text in the first <w:t> element
+  textElements[0].textContent = translatedText;
+
+  // Remove remaining <w:t> elements to avoid duplication
+  for (let i = textElements.length - 1; i > 0; i--) {
+    const textEl = textElements[i];
+    const run = textEl.parentElement; // <w:r> element
+
+    if (run && run.parentElement) {
+      // If the run only contains this text element, remove the entire run
+      const runChildren = Array.from(run.children);
+      const hasOnlyText = runChildren.length === 1 && runChildren[0] === textEl;
+
+      if (hasOnlyText) {
+        run.parentElement.removeChild(run);
+      } else {
+        // Just remove the text element
+        run.removeChild(textEl);
+      }
+    }
+  }
 }
 
 /**

@@ -10,8 +10,8 @@ import type { DocumentTranslateDocument, TranslationProgress } from '../types';
 
 // Translation settings
 const TRANSLATION_MODEL = 'gemini-2.5-flash';
-const BATCH_SIZE = 50; // Max segments per batch
-const MAX_CHARS_PER_BATCH = 8000; // Max characters per batch
+const BATCH_SIZE = 20; // Max segments per batch (reduced for paragraph-level translation)
+const MAX_CHARS_PER_BATCH = 12000; // Max characters per batch
 const MAX_CONCURRENT_BATCHES = 3;
 
 export type TextSegment = DocxTextSegment | PdfTextSegment;
@@ -225,38 +225,54 @@ async function translateBatch(
   const sourceLangDisplay = sourceLanguage === 'auto' ? 'the detected language' : getLanguageName(sourceLanguage);
   const targetLangDisplay = getLanguageName(targetLanguage);
 
-  const prompt = `Translate the following text segments from ${sourceLangDisplay} to ${targetLangDisplay}.
+  const prompt = `You are translating a professional document from ${sourceLangDisplay} to ${targetLangDisplay}.
 
-CRITICAL RULES:
-1. Return ONLY a valid JSON object with a "translations" array
-2. The array MUST have exactly ${texts.length} elements, matching the input order
-3. Preserve formatting markers, numbers, dates, and special characters exactly
-4. Keep proper nouns, brand names, product codes, and technical terms unchanged
-5. Match the tone and formality level of the original text
-6. For very short segments (single words or phrases), translate contextually
-7. If a segment cannot be translated (e.g., it's a number or code), return it unchanged
+CRITICAL INSTRUCTIONS:
+1. You MUST return EXACTLY ${texts.length} translations in a JSON array
+2. Each translation corresponds to the input segment at the same index
+3. Return ONLY valid JSON - no markdown, no code blocks, no explanations
+4. Preserve spacing, punctuation, line breaks, and formatting exactly
+5. Keep numbers, dates, times, codes, and references unchanged
+6. Keep proper nouns, brand names, and technical terms unchanged
+7. Maintain the same tone and formality level as the original
+8. If a segment is already in ${targetLangDisplay}, return it unchanged
 
-Input segments:
-${JSON.stringify(texts)}
+Input array (${texts.length} segments):
+${JSON.stringify(texts, null, 2)}
 
-Response format (MUST be valid JSON):
-{"translations": ["translated text 1", "translated text 2", ...]}`;
+Required JSON response format:
+{
+  "translations": [
+    "translation of segment 0",
+    "translation of segment 1",
+    ...
+  ]
+}
+
+Return the JSON now:`;
 
   const response = await service.generateText({
     prompt,
     model: TRANSLATION_MODEL,
     generationConfig: {
-      temperature: 0.3, // Lower temperature for more consistent translations
-      maxOutputTokens: 8192,
+      temperature: 0.4, // Balanced temperature for quality and consistency
+      maxOutputTokens: 16384, // Increased for longer paragraphs
       abortSignal,
     },
   });
 
   // Parse response
   try {
+    // Clean up response - remove markdown code blocks if present
+    let cleanResponse = response.trim();
+    if (cleanResponse.startsWith('```')) {
+      cleanResponse = cleanResponse.replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '');
+    }
+
     // Try to extract JSON from the response
-    const jsonMatch = response.match(/\{[\s\S]*"translations"[\s\S]*\}/);
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*"translations"[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('No valid JSON found in response. Response:', response.substring(0, 500));
       throw new Error('No valid JSON found in response');
     }
 
@@ -271,17 +287,26 @@ Response format (MUST be valid JSON):
       console.warn(
         `Translation count mismatch: expected ${texts.length}, got ${parsed.translations.length}`
       );
-      // Pad or trim to match
+      console.warn('Sample input texts:', texts.slice(0, 3));
+      console.warn('Sample output translations:', parsed.translations.slice(0, 3));
+
+      // Pad with original text if we're missing translations
       while (parsed.translations.length < texts.length) {
-        parsed.translations.push(texts[parsed.translations.length]);
+        const missingIndex = parsed.translations.length;
+        console.warn(`Missing translation at index ${missingIndex}, using original: "${texts[missingIndex].substring(0, 50)}..."`);
+        parsed.translations.push(texts[missingIndex]);
       }
-      parsed.translations = parsed.translations.slice(0, texts.length);
+
+      // Trim if we have too many
+      if (parsed.translations.length > texts.length) {
+        parsed.translations = parsed.translations.slice(0, texts.length);
+      }
     }
 
     return parsed.translations;
   } catch (error) {
     console.error('Failed to parse translation response:', error);
-    console.error('Raw response:', response);
+    console.error('Raw response (first 1000 chars):', response.substring(0, 1000));
     // Return original texts on parse failure
     return texts;
   }

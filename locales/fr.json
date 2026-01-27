@@ -141,7 +141,7 @@
     "dropOrClick": "Glissez ou cliquez pour télécharger",
     "supportedFormats": "PDF, Word (.docx)",
     "removeDocument": "Supprimer le document",
-    "languages": "Langues",
+    "languagesTitle": "Langues",
     "sourceLanguage": "De",
     "targetLanguage": "Vers",
     "preservesFormatting": "Conservation de la Structure",
