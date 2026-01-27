@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(dir /s /b \"c:\\\\Users\\\\1Pax Mateja\\\\Documents\\\\ArchViz\\\\ArchViz-AI-Studio\\\\*.tsx\")",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(npm run dev:*)"
     ]
   }
 }

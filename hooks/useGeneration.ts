@@ -23,10 +23,11 @@ import {
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
+import { translateDocument } from '../services/documentTranslationService';
 import { nanoid } from 'nanoid';
-import type { AppState, GenerationMode } from '../types';
+import type { AppState, GenerationMode, TranslationProgress } from '../types';
 
-const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation'];
+const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
 // Get API key from environment or localStorage
 const getApiKey = (): string | null => {
@@ -461,6 +462,14 @@ export function useGeneration(): UseGenerationReturn {
       return;
     }
 
+    if (state.mode === 'document-translate' && !state.workflow.documentTranslate.sourceDocument) {
+      dispatch({
+        type: 'UPDATE_DOCUMENT_TRANSLATE',
+        payload: { error: 'Please upload a document to translate.' }
+      });
+      return;
+    }
+
     // Cancel any ongoing generation
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -666,6 +675,87 @@ export function useGeneration(): UseGenerationReturn {
             payload: { isRunning: true, aiSummary: null, lastRunAt: Date.now(), error: null }
           });
           await runBatchMaterialValidation();
+          result = { text: null, images: [] };
+        } else if (state.mode === 'document-translate') {
+          // Document translation mode
+          const docTranslate = state.workflow.documentTranslate;
+
+          if (!docTranslate.sourceDocument) {
+            dispatch({
+              type: 'UPDATE_DOCUMENT_TRANSLATE',
+              payload: { error: 'Please upload a document to translate.' }
+            });
+            dispatch({ type: 'SET_GENERATING', payload: false });
+            return;
+          }
+
+          // Reset state
+          dispatch({
+            type: 'UPDATE_DOCUMENT_TRANSLATE',
+            payload: {
+              error: null,
+              translatedDocumentUrl: null,
+              progress: {
+                phase: 'parsing',
+                currentSegment: 0,
+                totalSegments: 0,
+                currentBatch: 0,
+                totalBatches: 0,
+              }
+            }
+          });
+
+          try {
+            const translatedUrl = await translateDocument({
+              sourceDocument: docTranslate.sourceDocument,
+              sourceLanguage: docTranslate.sourceLanguage,
+              targetLanguage: docTranslate.targetLanguage,
+              onProgress: (progress: TranslationProgress) => {
+                dispatch({
+                  type: 'UPDATE_DOCUMENT_TRANSLATE',
+                  payload: { progress }
+                });
+                // Update global progress based on translation progress
+                const percent = progress.totalSegments > 0
+                  ? Math.round((progress.currentSegment / progress.totalSegments) * 100)
+                  : 0;
+                dispatch({ type: 'SET_PROGRESS', payload: percent });
+              },
+              abortSignal,
+            });
+
+            dispatch({
+              type: 'UPDATE_DOCUMENT_TRANSLATE',
+              payload: {
+                translatedDocumentUrl: translatedUrl,
+                progress: {
+                  phase: 'complete',
+                  currentSegment: 0,
+                  totalSegments: 0,
+                  currentBatch: 0,
+                  totalBatches: 0,
+                }
+              }
+            });
+          } catch (error) {
+            if ((error as DOMException)?.name === 'AbortError') {
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: {
+                  error: 'Translation cancelled.',
+                  progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+                }
+              });
+            } else {
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: {
+                  error: error instanceof Error ? error.message : 'Translation failed.',
+                  progress: { phase: 'error', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+                }
+              });
+            }
+          }
           result = { text: null, images: [] };
         } else {
           updateProgress(10);
@@ -1096,6 +1186,15 @@ export function useGeneration(): UseGenerationReturn {
       dispatch({
         type: 'UPDATE_MATERIAL_VALIDATION',
         payload: { isRunning: false, error: 'Validation canceled.' }
+      });
+    }
+    if (state.mode === 'document-translate') {
+      dispatch({
+        type: 'UPDATE_DOCUMENT_TRANSLATE',
+        payload: {
+          error: 'Translation cancelled.',
+          progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+        }
       });
     }
     dispatch({ type: 'SET_GENERATING', payload: false });

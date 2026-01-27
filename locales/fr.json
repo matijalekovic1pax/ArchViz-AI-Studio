@@ -65,6 +65,7 @@
     "renderSketch": "Rendre l'Esquisse",
     "generateRender": "Générer le Rendu",
     "generateOutputFirst": "Générer la sortie d'abord",
+    "translateDocument": "Traduire le Document",
     "cancel": "Annuler"
   },
   "modes": {
@@ -135,6 +136,47 @@
     "noDocuments": "Aucun document téléchargé",
     "uploadToStart": "Téléchargez le programme des matériaux et les documents BoQ pour commencer la validation"
   },
+  "documentTranslate": {
+    "uploadDocument": "Document",
+    "dropOrClick": "Glissez ou cliquez pour télécharger",
+    "supportedFormats": "PDF, Word (.docx)",
+    "removeDocument": "Supprimer le document",
+    "languages": "Langues",
+    "sourceLanguage": "De",
+    "targetLanguage": "Vers",
+    "preservesFormatting": "Conservation de la Structure",
+    "formattingNote": "Les en-têtes, pieds de page, images et tableaux resteront en place. Seul le contenu textuel est traduit.",
+    "translationComplete": "Traduction Terminée!",
+    "downloadTranslated": "Télécharger le Document Traduit",
+    "noDocumentUploaded": "Téléchargez un document à gauche pour commencer la traduction.",
+    "settings": "Paramètres",
+    "preserveFormattingLabel": "Conserver le Formatage",
+    "preserveFormattingDesc": "Conserve les polices, styles et mise en page d'origine lorsque possible.",
+    "pdfWarningTitle": "Note:",
+    "pdfWarningMessage": "La traduction PDF peut présenter des différences mineures de mise en page en raison des limitations d'intégration des polices.",
+    "progress": {
+      "parsing": "Analyse du document...",
+      "translating": "Traduction en cours...",
+      "rebuilding": "Reconstruction du document...",
+      "complete": "Terminé",
+      "error": "Erreur",
+      "batch": "Lot {{current}} sur {{total}}"
+    },
+    "languages": {
+      "auto": "Détection automatique",
+      "en": "Anglais",
+      "es": "Espagnol",
+      "fr": "Français",
+      "de": "Allemand",
+      "it": "Italien",
+      "pt": "Portugais",
+      "zh": "Chinois",
+      "ja": "Japonais",
+      "ko": "Coréen",
+      "ar": "Arabe",
+      "ru": "Russe"
+    }
+  },
   "workflows": {
     "generateText": "Generer",
     "render3d": "3D vers Rendu",
@@ -142,6 +184,7 @@
     "masterplan": "Plans Directeurs",
     "visualEdit": "Editeur Visuel",
     "materialValidation": "Validation des Materiaux",
+    "documentTranslate": "Traducteur de Docs",
     "exploded": "Vues Eclatees",
     "section": "Rendu en Section",
     "renderSketch": "Esquisse vers Rendu",
@@ -534,6 +577,10 @@
     "materialValidation": {
       "title": "Validation",
       "description": "Examinez les materiaux detectes par rapport au BoQ et aux specs techniques."
+    },
+    "documentTranslate": {
+      "title": "Traduction",
+      "description": "Configurez les parametres de traduction et telechargez les documents traduits."
     }
   },
   "bottomPanel": {

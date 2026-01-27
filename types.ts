@@ -1,19 +1,20 @@
 
-export type GenerationMode = 
+export type GenerationMode =
   | 'generate-text'
-  | 'render-3d' 
-  | 'render-cad' 
-  | 'masterplan' 
-  | 'visual-edit' 
-  | 'exploded' 
-  | 'section' 
-  | 'render-sketch' 
+  | 'render-3d'
+  | 'render-cad'
+  | 'masterplan'
+  | 'visual-edit'
+  | 'exploded'
+  | 'section'
+  | 'render-sketch'
   | 'multi-angle'
-  | 'upscale' 
-  | 'img-to-cad' 
-  | 'img-to-3d' 
+  | 'upscale'
+  | 'img-to-cad'
+  | 'img-to-3d'
   | 'video'
-  | 'material-validation';
+  | 'material-validation'
+  | 'document-translate';
 
 export interface StyleConfiguration {
   id: string;
@@ -685,6 +686,9 @@ export interface WorkflowSettings {
 
   // 12. Video Studio
   videoState: VideoState;
+
+  // 13. Document Translation
+  documentTranslate: DocumentTranslateState;
 }
 
 export type VideoModel = 'veo-2' | 'kling-1.6';
@@ -858,6 +862,37 @@ export interface MaterialValidationResult {
   issues: ValidationIssue[];
   boqItems: BoQItem[];
   summary: string;
+}
+
+// --- Document Translation Types ---
+
+export interface DocumentTranslateDocument {
+  id: string;
+  name: string;
+  type: 'pdf' | 'docx';
+  mimeType: 'application/pdf' | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  size: number;
+  dataUrl: string;
+  uploadedAt: number;
+}
+
+export interface TranslationProgress {
+  phase: 'idle' | 'parsing' | 'translating' | 'rebuilding' | 'complete' | 'error';
+  currentSegment: number;
+  totalSegments: number;
+  currentBatch: number;
+  totalBatches: number;
+  message?: string;
+}
+
+export interface DocumentTranslateState {
+  sourceDocument: DocumentTranslateDocument | null;
+  sourceLanguage: string;
+  targetLanguage: string;
+  preserveFormatting: boolean;
+  progress: TranslationProgress;
+  translatedDocumentUrl: string | null;
+  error: string | null;
 }
 
 export interface GeometryState {
@@ -1071,4 +1106,6 @@ export type Action =
   | { type: 'TOGGLE_RIGHT_PANEL' }
   | { type: 'ADD_HISTORY'; payload: HistoryItem }
   | { type: 'LOAD_PROJECT'; payload: AppState }
-  | { type: 'RESET_PROJECT' };
+  | { type: 'RESET_PROJECT' }
+  // Document Translation
+  | { type: 'UPDATE_DOCUMENT_TRANSLATE'; payload: Partial<DocumentTranslateState> };

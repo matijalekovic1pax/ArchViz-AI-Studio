@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
@@ -113,6 +113,22 @@ const initialRender3D: Render3DSettings = {
     viewType: 'passenger-pov',
     quality: 'production',
   },
+};
+
+const initialDocumentTranslate: DocumentTranslateState = {
+  sourceDocument: null,
+  sourceLanguage: 'auto',
+  targetLanguage: 'en',
+  preserveFormatting: true,
+  progress: {
+    phase: 'idle',
+    currentSegment: 0,
+    totalSegments: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+  },
+  translatedDocumentUrl: null,
+  error: null,
 };
 
 const initialWorkflow: WorkflowSettings = {
@@ -652,6 +668,9 @@ const initialWorkflow: WorkflowSettings = {
 
   // 12. Video Studio
   videoState: initialVideoState,
+
+  // 13. Document Translation
+  documentTranslate: initialDocumentTranslate,
 };
 
 const initialMaterialValidation: MaterialValidationState = {
@@ -861,6 +880,9 @@ function appReducer(state: AppState, action: Action): AppState {
 
     // Material Validation Reducer
     case 'UPDATE_MATERIAL_VALIDATION': return { ...state, materialValidation: { ...state.materialValidation, ...action.payload } };
+
+    // Document Translation Reducer
+    case 'UPDATE_DOCUMENT_TRANSLATE': return { ...state, workflow: { ...state.workflow, documentTranslate: { ...state.workflow.documentTranslate, ...action.payload } } };
 
     // Chat Reducers
     case 'ADD_CHAT_MESSAGE': return { ...state, chatMessages: [...state.chatMessages, action.payload] };

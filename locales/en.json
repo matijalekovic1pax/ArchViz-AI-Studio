@@ -65,6 +65,7 @@
     "renderSketch": "Render Sketch",
     "generateRender": "Generate Render",
     "generateOutputFirst": "Generate output first",
+    "translateDocument": "Translate Document",
     "cancel": "Cancel"
   },
   "modes": {
@@ -135,6 +136,47 @@
     "noDocuments": "No documents uploaded",
     "uploadToStart": "Upload material schedule and BoQ documents to start validation"
   },
+  "documentTranslate": {
+    "uploadDocument": "Document",
+    "dropOrClick": "Drop or click to upload",
+    "supportedFormats": "PDF, Word (.docx)",
+    "removeDocument": "Remove document",
+    "languages": "Languages",
+    "sourceLanguage": "From",
+    "targetLanguage": "To",
+    "preservesFormatting": "Structure Preservation",
+    "formattingNote": "Headers, footers, images, and tables will remain in place. Only text content is translated.",
+    "translationComplete": "Translation Complete!",
+    "downloadTranslated": "Download Translated Document",
+    "noDocumentUploaded": "Upload a document on the left to begin translation.",
+    "settings": "Settings",
+    "preserveFormattingLabel": "Preserve Formatting",
+    "preserveFormattingDesc": "Maintains original fonts, styles, and layout where possible.",
+    "pdfWarningTitle": "Note:",
+    "pdfWarningMessage": "PDF translation may have minor layout differences due to font embedding limitations.",
+    "progress": {
+      "parsing": "Parsing document...",
+      "translating": "Translating...",
+      "rebuilding": "Rebuilding document...",
+      "complete": "Complete",
+      "error": "Error",
+      "batch": "Batch {{current}} of {{total}}"
+    },
+    "languages": {
+      "auto": "Auto-detect",
+      "en": "English",
+      "es": "Spanish",
+      "fr": "French",
+      "de": "German",
+      "it": "Italian",
+      "pt": "Portuguese",
+      "zh": "Chinese",
+      "ja": "Japanese",
+      "ko": "Korean",
+      "ar": "Arabic",
+      "ru": "Russian"
+    }
+  },
   "workflows": {
     "generateText": "Generate",
     "render3d": "3D to Render",
@@ -142,6 +184,7 @@
     "masterplan": "Masterplans",
     "visualEdit": "Visual Editor",
     "materialValidation": "Material Validation",
+    "documentTranslate": "Doc Translator",
     "exploded": "Exploded Views",
     "section": "Render to Section",
     "renderSketch": "Sketch to Render",
@@ -534,6 +577,10 @@
     "materialValidation": {
       "title": "Validation",
       "description": "Review detected materials against BoQ and technical specifications."
+    },
+    "documentTranslate": {
+      "title": "Translation",
+      "description": "Configure translation settings and download translated documents."
     }
   },
   "bottomPanel": {

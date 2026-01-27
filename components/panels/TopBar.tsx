@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -260,9 +260,11 @@ export const TopBar: React.FC = () => {
   const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
   const isDisabled = state.mode === 'material-validation'
     ? false
-    : isUpscaleMode
-      ? !upscaleQueueReady
-      : !state.uploadedImage;
+    : state.mode === 'document-translate'
+      ? !state.workflow.documentTranslate.sourceDocument
+      : isUpscaleMode
+        ? !upscaleQueueReady
+        : !state.uploadedImage;
   const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
@@ -298,6 +300,11 @@ export const TopBar: React.FC = () => {
   const handleGenerate = async () => {
     if (state.isGenerating) return;
     if (state.mode === 'material-validation') {
+      await generate();
+      return;
+    }
+    if (state.mode === 'document-translate') {
+      if (!state.workflow.documentTranslate.sourceDocument) return;
       await generate();
       return;
     }
@@ -503,6 +510,7 @@ export const TopBar: React.FC = () => {
       case 'visual-edit': return t('generation.applyEdits');
       case 'material-validation': return t('generation.runValidation');
       case 'render-sketch': return t('generation.renderSketch');
+      case 'document-translate': return t('generation.translateDocument');
       default: return t('generation.generateRender');
     }
   };
@@ -856,7 +864,11 @@ export const TopBar: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Sparkles size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                    {state.mode === 'document-translate' ? (
+                      <Languages size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                    ) : (
+                      <Sparkles size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                    )}
                     <span className="font-bold text-sm tracking-wide">{getGenerateLabel()}</span>
                   </>
                 )}

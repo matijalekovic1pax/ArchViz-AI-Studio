@@ -2151,6 +2151,24 @@ function generateCadRenderPrompt(state: AppState): string {
     cam.height < 2.5 ? 'slightly elevated viewpoint' : 'commanding elevated perspective';
   parts.push(`The view is captured from a ${heightDesc}, using ${describeLens(cam.focalLength)}.`);
 
+  if (cam.position) {
+    parts.push(`Camera position on plan: ${Math.round(cam.position.x)}% from left, ${Math.round(cam.position.y)}% from top.`);
+  }
+
+  const lookAtDesc: Record<string, string> = {
+    n: 'looking north',
+    ne: 'looking northeast',
+    e: 'looking east',
+    se: 'looking southeast',
+    s: 'looking south',
+    sw: 'looking southwest',
+    w: 'looking west',
+    nw: 'looking northwest',
+  };
+  if (cam.lookAt) {
+    parts.push(`View direction is ${lookAtDesc[cam.lookAt] || `looking ${cam.lookAt}`}.`);
+  }
+
   if (cam.verticalCorrection) {
     parts.push('Vertical lines are corrected to appear perfectly straight, as in professional architectural photography.');
   }
@@ -2538,60 +2556,92 @@ function generateSketchPrompt(state: AppState): string {
 function generateUpscalePrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
-  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
   const userPrompt = state.prompt?.trim();
 
-  // Evocative opening
-  const scaleDesc: Record<string, string> = {
-    '2x': 'double the resolution',
-    '4x': 'quadruple the resolution to reveal extraordinary detail',
-    '8x': 'massively increase the resolution for large-format printing',
-  };
-  parts.push(`Intelligently upscale this architectural visualization to ${scaleDesc[workflow.upscaleFactor] || `${workflow.upscaleFactor} the resolution`}, enhancing detail while preserving the original image\'s integrity.`);
+  parts.push('Ultra-premium cinematic enhancement and extreme-resolution upscaling with absolute content preservation.');
+  parts.push('The input image is the single, immutable source of truth.');
+  parts.push(`Target upscale factor: ${workflow.upscaleFactor}.`);
 
   if (userPrompt) {
-    parts.push(`Specific guidance: ${userPrompt}.`);
+    parts.push(`User notes: ${userPrompt}.`);
   }
 
-  // Enhancement descriptions
-  const enhancementParts: string[] = [];
+  parts.push('1. ABSOLUTE CONTENT & FRAME LOCK -- NON-NEGOTIABLE');
+  parts.push('Preserve the original image exactly as it is, edge to edge.');
+  parts.push('No cropping, no zooming, no shifting, no reframing.');
+  parts.push('No aspect-ratio changes.');
+  parts.push('Composition, perspective, and camera position are fully locked.');
+  parts.push('Do not add, remove, replace, or reinterpret anything:');
+  parts.push('No new or missing people.');
+  parts.push('No altered architecture or geometry.');
+  parts.push('No substituted materials.');
+  parts.push('All proportions, spacing, and relationships must remain pixel-identical to the source image.');
 
-  if (workflow.upscaleSharpness > 60) {
-    enhancementParts.push('crisp, well-defined edges throughout');
-  } else if (workflow.upscaleSharpness > 30) {
-    enhancementParts.push('naturally sharp detail');
-  }
+  parts.push('2. RESOLUTION & PERCEPTUAL DETAIL -- PUSH TO THE LIMIT');
+  parts.push('Upscale to true ultra-HD clarity (8K-12K perceptual detail).');
+  parts.push('Every edge must be surgically sharp and perfectly clean.');
+  parts.push('Fine lines, joints, seams, and structural details must read clearly, even at distance.');
+  parts.push('Zero blur, zero softness, zero noise, zero compression artifacts.');
+  parts.push('The image should feel as if it were rendered with infinite samples and flawless precision.');
 
-  if (workflow.upscaleClarity > 60) {
-    enhancementParts.push('enhanced mid-tone contrast for visual punch');
-  } else if (workflow.upscaleClarity > 30) {
-    enhancementParts.push('clear, readable details');
-  }
+  parts.push('3. VISUAL GOAL -- "CINEMATIC FUTURE REALISM"');
+  parts.push('Aim for a flagship sci-fi airport terminal look:');
+  parts.push('High-budget cinematic realism.');
+  parts.push('Competition-grade architectural visualization.');
+  parts.push('Hyper-real and physically plausible.');
+  parts.push('Not stylized. Not painterly. Not cartoonish.');
+  parts.push('More real than reality -- but never fake.');
 
-  if (workflow.upscaleEdgeDefinition > 60) {
-    enhancementParts.push('precisely defined architectural edges');
-  }
+  parts.push('4. LIFE & MICRO-DETAILS -- THIS IS CRITICAL');
+  parts.push('Small elements are what make the scene feel alive.');
+  parts.push('Enhance them carefully, without changing or inventing anything:');
+  parts.push('Trees & vegetation: clearer silhouettes, refined leaves, natural depth and layering.');
+  parts.push('People: crisp outlines, readable posture, natural scale -- no smoothing or distortion.');
+  parts.push('Cars & vehicles: sharper body lines, cleaner reflections, readable details.');
+  parts.push('Planes & distant objects: enhanced clarity and definition, not exaggerated scale.');
+  parts.push('Street elements (signage, lights, markings): legible, precise, and grounded.');
+  parts.push('Nothing new is added -- only clarity, presence, and realism are increased.');
 
-  if (workflow.upscaleFineDetail > 60) {
-    enhancementParts.push('revealing fine textures and subtle material variations');
-  } else if (workflow.upscaleFineDetail > 30) {
-    enhancementParts.push('preserving important fine details');
-  }
+  parts.push('5. COLOR & CINEMATIC ENERGY');
+  parts.push('Elevate the image with controlled cinematic richness:');
+  parts.push('Selective, intelligent saturation -- never flat, never overdone.');
+  parts.push('Whites should feel clean, luminous, and premium.');
+  parts.push('Shadows should be deep but detailed, never crushed.');
+  parts.push('Strong local contrast to separate forms and layers.');
+  parts.push('Use subtle glow only where physically justified (lighting, glass, reflections).');
+  parts.push('The image should feel vibrant, alive, and high-end -- not neutral or dull.');
 
-  if (enhancementParts.length > 0) {
-    parts.push(`Enhance the image with ${enhancementParts.join(', ')}.`);
-  }
+  parts.push('6. LIGHTING -- INTENTIONAL & ART-DIRECTED');
+  parts.push('Lighting must feel designed, not accidental:');
+  parts.push('Balanced exposure across the entire frame.');
+  parts.push('Clear depth separation: foreground, midground, background.');
+  parts.push('Materials must read cleanly under light -- no muddy or flat surfaces.');
 
-  // Constraints in natural language
-  if (hasSourceImage) {
-    parts.push('The original image is the absolute reference for content and composition.');
-  }
+  parts.push('7. MATERIAL & SURFACE FIDELITY');
+  parts.push('Enhance realism without changing materials:');
+  parts.push('Metal: smooth gradients, refined reflections.');
+  parts.push('Glass: crystal-clear, sharp reflections, zero distortion.');
+  parts.push('Wood: visible grain and depth, clean rhythm.');
+  parts.push('Floors: premium polish with controlled reflections.');
+  parts.push('Skin & clothing: crisp silhouettes, natural texture, no AI smearing.');
 
-  parts.push('This is purely an upscaling operation. Do not add, remove, or modify any objects, materials, or architectural elements. The camera angle, perspective, framing, and aspect ratio must remain exactly as in the original. Colors, lighting levels, and overall exposure should be preserved faithfully without any style transfer or color grading changes.');
+  parts.push('8. STRICT ANTI-AI RULES');
+  parts.push('Do not hallucinate or invent details.');
+  parts.push('Do not introduce textures, objects, or people.');
+  parts.push('If something is unclear, improve clarity, not content.');
+  parts.push('No painterly effects, no fantasy lighting, no AI artifacts.');
 
-  parts.push('Maintain perfectly straight architectural lines without introducing waviness or artifacts. Keep any text or signage clearly legible. Edges should remain crisp without halos, ringing, or artificial sharpening artifacts. Reduce noise and compression artifacts subtly while preserving the authentic texture of surfaces - materials should look natural, not plasticky or over-smoothed.');
+  parts.push('FINAL QUALITY BAR');
+  parts.push('The final image must look like:');
+  parts.push('A hero shot from a top-tier sci-fi architectural competition.');
+  parts.push('A magazine-cover-ready, print-grade visualization.');
+  parts.push('It should make viewers think: "This looks impossibly sharp, alive, and premium."');
 
-  return parts.filter(p => p.trim()).join(' ');
+  parts.push('OVERRIDING RULE');
+  parts.push('If there is ever a conflict between enhancement and preservation: PRESERVE THE IMAGE EXACTLY AS PROVIDED. ALWAYS.');
+  parts.push('This is super important, when i zoom in i want to be able to see every detail.');
+
+  return parts.filter(p => p.trim()).join('\n');
 }
 
 function generateImageTo3DPrompt(state: AppState): string {

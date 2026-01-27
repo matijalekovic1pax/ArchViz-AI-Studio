@@ -2,9 +2,9 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
-import { 
-  Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings, 
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera
+import {
+  Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings,
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -19,6 +19,7 @@ import { ImageToCadPanel } from './ImageToCadPanel';
 import { ImageTo3DPanel } from './ImageTo3DPanel';
 import { VideoPanel } from './VideoPanel';
 import { ValidationPanel } from './ValidationPanel';
+import { DocumentTranslatePanel } from './DocumentTranslatePanel';
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -133,11 +134,17 @@ export const RightPanel: React.FC = () => {
         panelDescription = t('rightPanel.video.description');
         panelContent = <VideoPanel />; 
         break;
-      case 'material-validation': 
-        panelTitle = t('rightPanel.materialValidation.title'); 
-        PanelIcon = CheckCircle2; 
+      case 'material-validation':
+        panelTitle = t('rightPanel.materialValidation.title');
+        PanelIcon = CheckCircle2;
         panelDescription = t('rightPanel.materialValidation.description');
-        panelContent = <ValidationPanel />; 
+        panelContent = <ValidationPanel />;
+        break;
+      case 'document-translate':
+        panelTitle = t('rightPanel.documentTranslate.title');
+        PanelIcon = Languages;
+        panelDescription = t('rightPanel.documentTranslate.description');
+        panelContent = <DocumentTranslatePanel />;
         break;
       default: 
         panelTitle = t('rightPanel.settings.title'); 

@@ -65,6 +65,7 @@
     "renderSketch": "Renderizar Boceto",
     "generateRender": "Generar Renderizado",
     "generateOutputFirst": "Generar salida primero",
+    "translateDocument": "Traducir Documento",
     "cancel": "Cancelar"
   },
   "modes": {
@@ -135,6 +136,47 @@
     "noDocuments": "No se han subido documentos",
     "uploadToStart": "Suba el programa de materiales y los documentos de BoQ para comenzar la validación"
   },
+  "documentTranslate": {
+    "uploadDocument": "Documento",
+    "dropOrClick": "Arrastre o haga clic para subir",
+    "supportedFormats": "PDF, Word (.docx)",
+    "removeDocument": "Eliminar documento",
+    "languages": "Idiomas",
+    "sourceLanguage": "De",
+    "targetLanguage": "A",
+    "preservesFormatting": "Conservación de Estructura",
+    "formattingNote": "Encabezados, pies de página, imágenes y tablas permanecerán en su lugar. Solo se traduce el contenido de texto.",
+    "translationComplete": "¡Traducción Completa!",
+    "downloadTranslated": "Descargar Documento Traducido",
+    "noDocumentUploaded": "Suba un documento a la izquierda para comenzar la traducción.",
+    "settings": "Configuración",
+    "preserveFormattingLabel": "Conservar Formato",
+    "preserveFormattingDesc": "Mantiene fuentes, estilos y diseño originales cuando sea posible.",
+    "pdfWarningTitle": "Nota:",
+    "pdfWarningMessage": "La traducción de PDF puede tener diferencias menores de diseño debido a limitaciones de incrustación de fuentes.",
+    "progress": {
+      "parsing": "Analizando documento...",
+      "translating": "Traduciendo...",
+      "rebuilding": "Reconstruyendo documento...",
+      "complete": "Completo",
+      "error": "Error",
+      "batch": "Lote {{current}} de {{total}}"
+    },
+    "languages": {
+      "auto": "Detectar automáticamente",
+      "en": "Inglés",
+      "es": "Español",
+      "fr": "Francés",
+      "de": "Alemán",
+      "it": "Italiano",
+      "pt": "Portugués",
+      "zh": "Chino",
+      "ja": "Japonés",
+      "ko": "Coreano",
+      "ar": "Árabe",
+      "ru": "Ruso"
+    }
+  },
   "workflows": {
     "generateText": "Generar",
     "render3d": "3D a Render",
@@ -142,6 +184,7 @@
     "masterplan": "Planes Maestros",
     "visualEdit": "Editor Visual",
     "materialValidation": "Validación de Materiales",
+    "documentTranslate": "Traductor de Docs",
     "exploded": "Vistas Explosionadas",
     "section": "Render a Sección",
     "renderSketch": "Boceto a Render",
@@ -534,6 +577,10 @@
     "materialValidation": {
       "title": "Validación",
       "description": "Revisa materiales detectados frente al BoQ y especificaciones técnicas."
+    },
+    "documentTranslate": {
+      "title": "Traducción",
+      "description": "Configura ajustes de traducción y descarga documentos traducidos."
     }
   },
   "bottomPanel": {

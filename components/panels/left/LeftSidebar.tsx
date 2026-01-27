@@ -2,10 +2,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
-import { 
-  Palette, FileCode, Map, Eraser, Layers, RectangleVertical, 
+import {
+  Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
-  ChevronsLeft, ChevronsRight
+  ChevronsLeft, ChevronsRight, Languages
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -22,6 +22,7 @@ import { LeftImageToCADPanel } from './LeftImageToCADPanel';
 import { LeftImageTo3DPanel } from './LeftImageTo3DPanel';
 import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
+import { LeftDocumentTranslatePanel } from './LeftDocumentTranslatePanel';
 
 // --- Workflow Navigation ---
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
@@ -31,6 +32,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
+  { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
   { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
   { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
   { id: 'render-sketch', labelKey: 'workflows.renderSketch', icon: Pencil },
@@ -56,6 +58,7 @@ export const LeftSidebar: React.FC = () => {
       case 'render-3d': return <LeftRender3DPanel />;
       case 'render-cad': return <LeftRenderCADPanel />;
       case 'material-validation': return <LeftValidationPanel />;
+      case 'document-translate': return <LeftDocumentTranslatePanel />;
       case 'masterplan': return <LeftMasterplanPanel />;
       case 'visual-edit': return <LeftVisualEditPanel />;
       case 'exploded': return <LeftExplodedPanel />;

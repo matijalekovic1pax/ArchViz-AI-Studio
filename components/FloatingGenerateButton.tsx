@@ -8,12 +8,8 @@ export const FloatingGenerateButton: React.FC = () => {
   const { state } = useAppStore();
   const { generate, isReady, cancelGeneration } = useGeneration();
 
-  const showGenerateButton = state.mode !== 'generate-text';
-  const showCancelButton = state.isGenerating;
-
-  // Only use the floating control in generate-text mode.
-  if (state.mode !== 'generate-text') return null;
-  if (!showGenerateButton && !showCancelButton) return null;
+  // Don't show in any mode - TopBar button handles everything
+  return null;
 
   const handleGenerate = async () => {
     if (!state.uploadedImage || state.isGenerating) return;
