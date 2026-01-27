@@ -1,8 +1,7 @@
 import React, { useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
-import { Toggle } from '../../ui/Toggle';
-import { Accordion } from '../../ui/Accordion';
+import { cn } from '../../../lib/utils';
 
 export const UpscalePanel = () => {
   const { state, dispatch } = useAppStore();
@@ -13,10 +12,44 @@ export const UpscalePanel = () => {
     [dispatch]
   );
 
-  const formats = ['png', 'jpg', 'tiff'] as const;
+  const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
+    { value: '2k', label: '2K' },
+    { value: '4k', label: '4K' },
+    { value: '8k', label: '8K', title: '8K (API capped at 4K)' },
+  ];
+
+  const handleResolutionChange = (resolution: '2k' | '4k' | '8k') => {
+    if (resolution === state.output.resolution) return;
+    dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution } });
+  };
 
   return (
     <div className="space-y-6">
+      {/* Resolution */}
+      <div>
+        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+          Resolution
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {resolutionOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              title={option.title || `Set ${option.label} output resolution`}
+              onClick={() => handleResolutionChange(option.value)}
+              className={cn(
+                "text-[11px] font-semibold uppercase border rounded py-2 transition-colors",
+                state.output.resolution === option.value
+                  ? "bg-foreground text-background border-foreground shadow-sm"
+                  : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Enhancement Sliders */}
       <div>
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
@@ -78,44 +111,6 @@ export const UpscalePanel = () => {
         </div>
       </div>
 
-      {/* Output Section */}
-      <Accordion
-        items={[
-          {
-            id: 'output',
-            title: 'Output',
-            content: (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs text-foreground-muted mb-2 block">
-                    Format
-                  </label>
-                  <div className="grid grid-cols-3 gap-1">
-                    {formats.map((format) => (
-                      <button
-                        key={format}
-                        onClick={() => updateWf({ upscaleFormat: format })}
-                        className={`text-[10px] uppercase border rounded py-1.5 transition-colors ${
-                          wf.upscaleFormat === format
-                            ? 'bg-accent text-white border-accent'
-                            : 'border-border hover:bg-surface-elevated'
-                        }`}
-                      >
-                        {format}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <Toggle
-                  label="Preserve Metadata"
-                  checked={wf.upscalePreserveMetadata}
-                  onChange={(checked) => updateWf({ upscalePreserveMetadata: checked })}
-                />
-              </div>
-            ),
-          },
-        ]}
-      />
     </div>
   );
 };

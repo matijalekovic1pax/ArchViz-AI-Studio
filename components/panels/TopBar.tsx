@@ -256,7 +256,13 @@ export const TopBar: React.FC = () => {
   const [downloadResolution, setDownloadResolution] = useState<'full' | 'medium'>('full');
   
   const isVideoMode = state.mode === 'video';
-  const isDisabled = !state.uploadedImage && state.mode !== 'material-validation'; // Material validation doesn't need an image
+  const isUpscaleMode = state.mode === 'upscale';
+  const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
+  const isDisabled = state.mode === 'material-validation'
+    ? false
+    : isUpscaleMode
+      ? !upscaleQueueReady
+      : !state.uploadedImage;
   const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
@@ -290,7 +296,17 @@ export const TopBar: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if ((!state.uploadedImage && state.mode !== 'material-validation') || state.isGenerating) return;
+    if (state.isGenerating) return;
+    if (state.mode === 'material-validation') {
+      await generate();
+      return;
+    }
+    if (isUpscaleMode) {
+      if (!upscaleQueueReady) return;
+      await generate();
+      return;
+    }
+    if (!state.uploadedImage) return;
     await generate();
   };
 

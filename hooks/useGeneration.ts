@@ -740,13 +740,17 @@ export function useGeneration(): UseGenerationReturn {
         updateProgress(10);
         const wf = state.workflow;
         const queued = wf.upscaleBatch.map((item) => ({ ...item }));
+        const completedIds = new Set(queued.filter((item) => item.status === 'done').map((item) => item.id));
         const imagesOut: GeneratedImage[] = [];
 
-        for (let i = 0; i < queued.length; i++) {
+        const totalCount = queued.length;
+        let processedCount = 0;
+
+        while (queued.length > 0) {
           if (abortSignal.aborted) {
             throw new DOMException('Request aborted', 'AbortError');
           }
-          const item = queued[i];
+          const item = queued[0];
           if (item.status === 'done' && item.url) {
             const existing = dataUrlToImageData(item.url);
             if (existing) {
@@ -756,18 +760,31 @@ export function useGeneration(): UseGenerationReturn {
                 dataUrl: item.url
               });
             }
+            queued.shift();
+            processedCount += 1;
+            const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
+            updateProgress(progress);
+            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
             continue;
           }
           if (!item.url) {
-            queued[i] = { ...item, status: 'done' };
+            queued.shift();
+            processedCount += 1;
+            const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
+            updateProgress(progress);
+            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
             continue;
           }
-          queued[i] = { ...item, status: 'processing' };
+          queued[0] = { ...item, status: 'processing' };
           dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
 
           const source = dataUrlToImageData(item.url);
           if (!source) {
-            queued[i] = { ...item, status: 'done' };
+            queued.shift();
+            processedCount += 1;
+            const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
+            updateProgress(progress);
+            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
             continue;
           }
 
@@ -778,17 +795,39 @@ export function useGeneration(): UseGenerationReturn {
           });
 
           if (upscaleResult.images?.[0]) {
-            queued[i] = { ...item, status: 'done', url: upscaleResult.images[0].dataUrl };
+            const outputUrl = upscaleResult.images[0].dataUrl;
+            queued[0] = { ...item, status: 'done', url: outputUrl };
             imagesOut.push({
               base64: upscaleResult.images[0].base64,
               mimeType: upscaleResult.images[0].mimeType,
-              dataUrl: upscaleResult.images[0].dataUrl
+              dataUrl: outputUrl
             });
+
+            dispatch({ type: 'SET_IMAGE', payload: outputUrl });
+            dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+            dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+
+            if (!completedIds.has(item.id)) {
+              dispatch({
+                type: 'ADD_HISTORY',
+                payload: {
+                  id: nanoid(),
+                  timestamp: Date.now(),
+                  thumbnail: outputUrl,
+                  prompt: basePrompt,
+                  attachments: attachmentUrls,
+                  mode: state.mode
+                }
+              });
+              completedIds.add(item.id);
+            }
           } else {
-            queued[i] = { ...item, status: 'done' };
+            queued[0] = { ...item, status: 'done' };
           }
 
-          const progress = Math.round(((i + 1) / queued.length) * 90);
+          queued.shift();
+          processedCount += 1;
+          const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
           updateProgress(progress);
           dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
         }
@@ -860,7 +899,7 @@ export function useGeneration(): UseGenerationReturn {
       console.log('Text:', result.text);
 
       // Process result
-      if (result.images && result.images.length > 0) {
+      if (result.images && result.images.length > 0 && !isUpscaleMode) {
         const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
         const hasSourceEntry = sourceForHistory
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')

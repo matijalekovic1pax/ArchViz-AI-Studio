@@ -1,26 +1,141 @@
 
 
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
-import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Slider } from '../../ui/Slider';
+import type { HistoryItem } from '../../../types';
 
 export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
   const prompt = generatePrompt(state);
+  const [historySelectMode, setHistorySelectMode] = useState(false);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(() => new Set());
 
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
   const showEditStack = state.mode === 'visual-edit';
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
+  const isUpscaleMode = state.mode === 'upscale';
   const resolvedBottomTab = isGenerateTextMode
     ? 'history'
     : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
+
+  useEffect(() => {
+    if (!isUpscaleMode || resolvedBottomTab !== 'history') {
+      setHistorySelectMode(false);
+      setSelectedHistoryIds(new Set());
+    }
+  }, [isUpscaleMode, resolvedBottomTab]);
+
+  const toggleHistorySelection = useCallback((id: string) => {
+    setSelectedHistoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const getHistoryExtension = useCallback((dataUrl: string) => {
+    const match = dataUrl.match(/^data:([^;]+);/);
+    const mimeType = match?.[1] || '';
+    switch (mimeType) {
+      case 'image/png':
+        return 'png';
+      case 'image/jpeg':
+        return 'jpg';
+      case 'image/webp':
+        return 'webp';
+      case 'image/tiff':
+        return 'tiff';
+      default:
+        return 'png';
+    }
+  }, []);
+
+  const downloadHistoryItem = useCallback(async (item: HistoryItem, index: number) => {
+    const source = item.thumbnail;
+    if (!source) return;
+    const filename = `archviz-history-${index + 1}-${item.timestamp}.png`;
+
+    const exportAsPng = () => new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('No canvas context');
+          ctx.drawImage(img, 0, 0, img.width, img.height);
+          const dataUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = source;
+    });
+
+    try {
+      await exportAsPng();
+    } catch (error) {
+      console.error('History PNG export failed, falling back to original.', error);
+      const ext = getHistoryExtension(source);
+      const fallbackName = `archviz-history-${index + 1}-${item.timestamp}.${ext}`;
+      try {
+        const response = await fetch(source);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fallbackName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      } catch (fallbackError) {
+        console.error('History download failed, falling back to direct link.', fallbackError);
+        const link = document.createElement('a');
+        link.href = source;
+        link.download = fallbackName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    }
+  }, [getHistoryExtension]);
+
+  const downloadHistoryItems = useCallback((items: HistoryItem[]) => {
+    items.forEach((item, index) => {
+      window.setTimeout(() => {
+        void downloadHistoryItem(item, index);
+      }, index * 120);
+    });
+  }, [downloadHistoryItem]);
+
+  const historyItems = state.history;
+  const selectedHistoryItems = useMemo(
+    () => historyItems.filter((item) => selectedHistoryIds.has(item.id)),
+    [historyItems, selectedHistoryIds]
+  );
 
   const renderContent = () => {
     if (!isGenerateTextMode && resolvedBottomTab === 'prompt') {
@@ -119,38 +234,151 @@ export const BottomPanel: React.FC = () => {
     
     // ... (Keep existing handlers for legend, edit-stack, cleanup, history)
     if (resolvedBottomTab === 'history') {
+        if (!isUpscaleMode) {
+          return (
+            <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
+              {historyItems.length === 0 ? (
+                 <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
+                    <Clock size={24} className="opacity-20" />
+                    <span className="text-xs">{t('bottomPanel.history.empty')}</span>
+                  </div>
+              ) : (
+                 historyItems.map((item) => (
+                   <button 
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
+                        if (item.settings?.kind === 'source') {
+                          dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
+                        }
+                        dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+                        dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+                      }}
+                      className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden"
+                   >
+                      <div className="absolute inset-0 bg-surface-sunken">
+                         <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                         <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
+                         <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
+                      </div>
+                   </button>
+                 ))
+              )}
+            </div>
+          );
+        }
+
         return (
-          <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
-            {state.history.length === 0 ? (
-               <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
-                  <Clock size={24} className="opacity-20" />
-                  <span className="text-xs">{t('bottomPanel.history.empty')}</span>
-                </div>
-            ) : (
-               state.history.map((item) => (
-                 <button 
-                    key={item.id}
+          <div className="absolute inset-0 p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
+                {t('bottomPanel.tabs.history')}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadHistoryItems(historyItems)}
+                  disabled={historyItems.length === 0}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                    historyItems.length === 0
+                      ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                      : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
+                  )}
+                >
+                  <Download size={12} />
+                  Download All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (historySelectMode) {
+                      setSelectedHistoryIds(new Set());
+                    }
+                    setHistorySelectMode((prev) => !prev);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                    historySelectMode
+                      ? "border-accent text-accent bg-accent/10"
+                      : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
+                  )}
+                >
+                  <Check size={12} />
+                  {historySelectMode ? 'Cancel' : 'Select'}
+                </button>
+                {historySelectMode && (
+                  <button
                     type="button"
-                    onClick={() => {
-                      dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
-                      if (item.settings?.kind === 'source') {
-                        dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
-                      }
-                      dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
-                      dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
-                    }}
-                    className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden"
-                 >
-                    <div className="absolute inset-0 bg-surface-sunken">
-                       <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                       <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
-                       <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
-                    </div>
-                 </button>
-               ))
-            )}
+                    onClick={() => downloadHistoryItems(selectedHistoryItems)}
+                    disabled={selectedHistoryItems.length === 0}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                      selectedHistoryItems.length === 0
+                        ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                        : "border-accent text-white bg-accent hover:bg-accent/90"
+                    )}
+                  >
+                    <Download size={12} />
+                    Download Selected {selectedHistoryItems.length > 0 ? `(${selectedHistoryItems.length})` : ''}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-x-auto flex items-center gap-4 custom-scrollbar">
+              {historyItems.length === 0 ? (
+                 <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
+                    <Clock size={24} className="opacity-20" />
+                    <span className="text-xs">{t('bottomPanel.history.empty')}</span>
+                  </div>
+              ) : (
+                 historyItems.map((item) => {
+                   const isSelected = selectedHistoryIds.has(item.id);
+                   return (
+                     <button 
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (historySelectMode) {
+                            toggleHistorySelection(item.id);
+                            return;
+                          }
+                          dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
+                          if (item.settings?.kind === 'source') {
+                            dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
+                          }
+                          dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+                          dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+                        }}
+                        className={cn(
+                          "min-w-[140px] aspect-video rounded-lg border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group relative overflow-hidden",
+                          isSelected ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-foreground"
+                        )}
+                     >
+                        <div className="absolute inset-0 bg-surface-sunken">
+                           <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                           <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
+                           <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
+                        </div>
+                        {historySelectMode && (
+                          <div className={cn(
+                            "absolute top-2 right-2 h-5 w-5 rounded-full flex items-center justify-center border text-white",
+                            isSelected ? "bg-accent border-accent" : "bg-black/40 border-white/30"
+                          )}>
+                            {isSelected ? <Check size={12} /> : null}
+                          </div>
+                        )}
+                     </button>
+                   );
+                 })
+              )}
+            </div>
           </div>
         );
     }

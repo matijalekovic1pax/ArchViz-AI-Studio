@@ -10,6 +10,7 @@ export const LeftUpscalePanel = () => {
    const { state, dispatch } = useAppStore();
    const wf = state.workflow;
    const fileInputRef = useRef<HTMLInputElement>(null);
+   const maxBatchSize = 20;
 
    const updateWf = useCallback(
       (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),
@@ -28,9 +29,14 @@ export const LeftUpscalePanel = () => {
    const handleAddImages = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
       if (files.length === 0) return;
+      const remainingSlots = Math.max(0, maxBatchSize - wf.upscaleBatch.length);
+      if (remainingSlots === 0) {
+         event.target.value = '';
+         return;
+      }
       try {
          const results = await Promise.all(
-            files.map(async (file) => {
+            files.slice(0, remainingSlots).map(async (file) => {
                const url = await readFileAsDataUrl(file);
                return {
                   id: nanoid(),
@@ -46,7 +52,7 @@ export const LeftUpscalePanel = () => {
       } finally {
          event.target.value = '';
       }
-   }, [readFileAsDataUrl, updateWf, wf.upscaleBatch]);
+   }, [maxBatchSize, readFileAsDataUrl, updateWf, wf.upscaleBatch.length]);
 
    const handleRemove = useCallback((id: string) => {
       updateWf({ upscaleBatch: wf.upscaleBatch.filter((item) => item.id !== id) });
@@ -60,6 +66,7 @@ export const LeftUpscalePanel = () => {
    }, [dispatch]);
 
    const total = wf.upscaleBatch.length;
+   const remainingSlots = Math.max(0, maxBatchSize - total);
    const completed = wf.upscaleBatch.filter((item) => item.status === 'done').length;
 
    return (
@@ -115,10 +122,16 @@ export const LeftUpscalePanel = () => {
                )})}
                <button
                   type="button"
-                  className="w-full py-2 border border-dashed border-border text-xs text-foreground-muted rounded hover:bg-surface-elevated transition-colors"
+                  disabled={remainingSlots === 0}
+                  className={cn(
+                     "w-full py-2 border border-dashed text-xs rounded transition-colors",
+                     remainingSlots === 0
+                        ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                        : "border-border text-foreground-muted hover:bg-surface-elevated"
+                  )}
                   onClick={() => fileInputRef.current?.click()}
                >
-                  + Add Images
+                  {remainingSlots === 0 ? `Queue Full (${maxBatchSize} max)` : `+ Add Images (${remainingSlots} left)`}
                </button>
                <input
                   ref={fileInputRef}
