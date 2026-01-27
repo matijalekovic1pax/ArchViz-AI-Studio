@@ -1,5 +1,6 @@
 
 import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -27,6 +28,7 @@ type SelectionShape =
 const PromptBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { generate } = useGeneration();
+  const { t } = useTranslation();
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -131,7 +133,7 @@ const PromptBar: React.FC = () => {
                         "hover:bg-white hover:shadow-2xl hover:scale-105 active:scale-95",
                         isHistoryOpen ? "ring-2 ring-accent/40" : "ring-1 ring-black/5"
                     )}
-                    title="Prompt History"
+                    title={t('canvas.promptHistory.title')}
                     aria-expanded={isHistoryOpen}
                 >
                     <History size={18} className="text-foreground" />
@@ -141,11 +143,11 @@ const PromptBar: React.FC = () => {
                     <div className="absolute bottom-full left-0 mb-3 z-50">
                         <div className="w-[420px] max-w-[85vw] max-h-[60vh] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/70 ring-1 ring-black/5 overflow-hidden flex flex-col">
                             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle/60">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-foreground-muted">Prompt History</div>
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-foreground-muted">{t('canvas.promptHistory.title')}</div>
                                 <button
                                     onClick={() => setIsHistoryOpen(false)}
                                     className="p-1 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
-                                    title="Close"
+                                    title={t('common.close')}
                                 >
                                     <X size={14} />
                                 </button>
@@ -153,8 +155,8 @@ const PromptBar: React.FC = () => {
                             <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
                                 {historyItems.length === 0 ? (
                                     <div className="py-10 text-center text-foreground-muted">
-                                        <div className="text-xs font-semibold uppercase tracking-wider">No prompts yet</div>
-                                        <div className="text-[11px] mt-2">Your recent prompts will appear here.</div>
+                                        <div className="text-xs font-semibold uppercase tracking-wider">{t('canvas.promptHistory.emptyTitle')}</div>
+                                        <div className="text-[11px] mt-2">{t('canvas.promptHistory.emptySubtitle')}</div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
@@ -209,7 +211,7 @@ const PromptBar: React.FC = () => {
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         className="p-3 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-all shrink-0 active:scale-95"
-                        title="Add Reference Image"
+                        title={t('canvas.promptHistory.addReference')}
                     >
                         <Plus size={20} strokeWidth={2.5} />
                     </button>
@@ -220,7 +222,7 @@ const PromptBar: React.FC = () => {
                         value={inputText}
                         onChange={handleInput}
                         onKeyDown={handleKeyDown}
-                        placeholder="Describe your architectural vision..."
+                        placeholder={t('canvas.promptBar.placeholder')}
                         className="flex-1 bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-2 max-h-[140px] text-[15px] leading-relaxed custom-scrollbar placeholder:text-foreground-muted/60 font-medium text-foreground"
                         rows={1}
                     />
@@ -248,7 +250,7 @@ const PromptBar: React.FC = () => {
         </div>
         <div className="text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-500">
             <span className="text-[10px] text-foreground-muted/50 font-medium tracking-wide">
-                Press Enter to Generate
+                {t('canvas.promptBar.pressEnter')}
             </span>
         </div>
     </div>
@@ -259,6 +261,7 @@ const PromptBar: React.FC = () => {
 
 const StandardCanvas: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -1360,7 +1363,7 @@ const StandardCanvas: React.FC = () => {
                  <button 
                     onClick={() => setIsFullscreen(false)}
                     className="p-3 bg-surface-elevated/90 backdrop-blur rounded-full shadow-lg border border-border hover:bg-surface-sunken transition-all"
-                    title="Close Fullscreen (Esc)"
+                    title={t('canvas.fullscreen.close')}
                  >
                     <X size={20} className="text-foreground" />
                  </button>
@@ -1370,7 +1373,7 @@ const StandardCanvas: React.FC = () => {
                       src={state.uploadedImage} 
                       className="max-w-full max-h-full w-auto h-auto object-contain shadow-2xl rounded-sm"
                       onClick={() => setIsFullscreen(false)}
-                      title="Click to close"
+                      title={t('canvas.fullscreen.clickToClose')}
                   />
               </div>
           </div>
@@ -1543,9 +1546,9 @@ const StandardCanvas: React.FC = () => {
                            <Wand2 size={40} className="text-accent" />
                        </div>
                        <div>
-                           <h3 className="text-xl font-medium text-foreground tracking-tight">Canvas Ready</h3>
+                           <h3 className="text-xl font-medium text-foreground tracking-tight">{t('canvas.empty.title')}</h3>
                            <p className="text-sm text-foreground-muted mt-2 leading-relaxed max-w-xs mx-auto">
-                               Enter your prompt below to generate. The result will appear here.
+                               {t('canvas.empty.subtitle')}
                            </p>
                        </div>
                    </div>
@@ -1562,8 +1565,8 @@ const StandardCanvas: React.FC = () => {
                            <UploadCloud className="text-foreground-muted group-hover:text-foreground" size={36} />
                        </div>
                        <div className="text-center space-y-1.5">
-                           <p className="font-semibold text-foreground text-lg">Upload Source Image</p>
-                           <p className="text-xs text-foreground-muted">Drag & drop or click to browse</p>
+                           <p className="font-semibold text-foreground text-lg">{t('canvas.upload.title')}</p>
+                           <p className="text-xs text-foreground-muted">{t('canvas.upload.subtitle')}</p>
                            <div className="flex gap-2 justify-center mt-2">
                                <span className="px-2 py-1 bg-surface-sunken rounded text-[10px] text-foreground-secondary font-mono">PNG</span>
                                <span className="px-2 py-1 bg-surface-sunken rounded text-[10px] text-foreground-secondary font-mono">JPG</span>
@@ -1584,8 +1587,8 @@ const StandardCanvas: React.FC = () => {
                          <Sparkles size={24} className="absolute inset-0 m-auto text-accent animate-pulse" />
                      </div>
                      <div className="text-center">
-                         <h4 className="text-sm font-bold text-foreground">Generating...</h4>
-                         <p className="text-xs text-foreground-muted mt-1">Refining geometry & lighting</p>
+                         <h4 className="text-sm font-bold text-foreground">{t('generation.generating')}</h4>
+                         <p className="text-xs text-foreground-muted mt-1">{t('canvas.generating.subtitle')}</p>
                      </div>
                  </div>
              </div>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
 import * as Switch from '@radix-ui/react-switch';
 import { Plus, RefreshCw, Trash2 } from 'lucide-react';
@@ -77,6 +78,7 @@ const SketchToggle: React.FC<{
 
 export const LeftSketchPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const wf = state.workflow;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
@@ -88,16 +90,19 @@ export const LeftSketchPanel = () => {
     () => [...BUILT_IN_STYLES, ...state.customStyles],
     [state.customStyles]
   );
+  const getStyleDisplayName = useCallback(
+    (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
+    [t]
+  );
+  const toTitle = useCallback(
+    (value: string) => value.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
+    []
+  );
 
   const activeStyleLabel = useMemo(() => {
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
-    return activeStyle
-      ? activeStyle.name
-      : state.activeStyleId
-          .split('-')
-          .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-          .join(' ');
-  }, [availableStyles, state.activeStyleId]);
+    return activeStyle ? getStyleDisplayName(activeStyle) : toTitle(state.activeStyleId);
+  }, [availableStyles, getStyleDisplayName, state.activeStyleId, toTitle]);
 
   const updateWf = useCallback(
     (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),

@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Globe } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -466,10 +466,11 @@ export const TopBar: React.FC = () => {
   };
 
   const getLanguageLabel = () => {
-    switch (i18n.language) {
-      case 'es': return 'Español';
-      case 'fr': return 'Français';
-      default: return 'English';
+    const lang = (i18n.language || 'en').split('-')[0];
+    switch (lang) {
+      case 'es': return 'ES';
+      case 'fr': return 'FR';
+      default: return 'EN';
     }
   };
 
@@ -869,48 +870,50 @@ export const TopBar: React.FC = () => {
         <div className="relative shrink-0">
           <button
             onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
             title={t('topBar.language')}
           >
-            <Globe size={14} />
-            <span className="hidden lg:inline">{getLanguageLabel()}</span>
-            <ChevronDown size={12} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
+            <span>{getLanguageLabel()}</span>
+            <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
           </button>
 
           {showLanguageMenu && (
-            <div className="absolute right-0 top-full mt-1 w-40 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right">
+            <div className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right">
               <button
                 onClick={() => handleLanguageChange('en')}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
                   i18n.language === 'en'
                     ? "bg-foreground text-background"
                     : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
                 )}
+                title="English"
               >
-                English
+                EN
               </button>
               <button
                 onClick={() => handleLanguageChange('es')}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
                   i18n.language === 'es'
                     ? "bg-foreground text-background"
                     : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
                 )}
+                title="Spanish"
               >
-                Español
+                ES
               </button>
               <button
                 onClick={() => handleLanguageChange('fr')}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
                   i18n.language === 'fr'
                     ? "bg-foreground text-background"
                     : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
                 )}
+                title="French"
               >
-                Français
+                FR
               </button>
             </div>
           )}

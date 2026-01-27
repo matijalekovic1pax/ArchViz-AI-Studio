@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, X, Grid, Box, Check, Plus, Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
@@ -22,6 +23,7 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
   styles,
   onAddStyle
 }) => {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [detailStyle, setDetailStyle] = useState<StyleConfiguration | null>(null);
@@ -47,6 +49,8 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
       e.currentTarget.src = fallbackPreview;
     }
   };
+  const getStyleName = (style: StyleConfiguration) =>
+    t(`styles.names.${style.id}`, { defaultValue: style.name });
 
   useEffect(() => {
     return () => {
@@ -237,7 +241,7 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
                        <>
                          <img
                            src={resolvePreviewUrl(style.previewUrl)}
-                           alt={style.name}
+                           alt={getStyleName(style)}
                            onError={handlePreviewError}
                            data-fallback={fallbackPhoto}
                            className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105"
@@ -260,7 +264,7 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
                             isNoStyle ? "text-foreground" : "text-white"
                           )}
                         >
-                          {style.name}
+                          {getStyleName(style)}
                         </p>
                      </div>
                   </button>
@@ -297,7 +301,7 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
         <div className="w-[520px] max-w-[95vw] bg-background rounded-2xl border border-border shadow-2xl overflow-hidden animate-scale-in">
           <div className="h-11 px-4 flex items-center justify-between border-b border-border bg-surface-elevated">
-            <div className="text-xs font-bold tracking-tight">{detailStyle.name}</div>
+            <div className="text-xs font-bold tracking-tight">{getStyleName(detailStyle)}</div>
             <button
               onClick={() => setDetailStyle(null)}
               className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
@@ -310,19 +314,19 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
             <div className="relative w-full h-48 rounded-xl overflow-hidden border border-border bg-surface-sunken">
               {detailStyle.id === 'no-style' ? (
                 <div className="absolute inset-0 bg-surface-sunken flex items-center justify-center text-sm font-semibold text-foreground">
-                  No Style
+                  {getStyleName(detailStyle)}
                 </div>
               ) : (
                 <>
                   <img
                     src={resolvePreviewUrl(detailStyle.previewUrl)}
-                    alt={detailStyle.name}
+                    alt={getStyleName(detailStyle)}
                     onError={handlePreviewError}
                     data-fallback={fallbackPhoto}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 text-white text-sm font-semibold">{detailStyle.name}</div>
+                  <div className="absolute bottom-3 left-3 text-white text-sm font-semibold">{getStyleName(detailStyle)}</div>
                 </>
               )}
             </div>

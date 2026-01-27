@@ -109,7 +109,8 @@
     "disabled": "Deshabilitado",
     "auto": "Auto",
     "manual": "Manual",
-    "custom": "Personalizado"
+    "custom": "Personalizado",
+    "degrees": "grados"
   },
   "workflow": {
     "geometry": "Geometría",
@@ -133,5 +134,849 @@
     "errors": "Errores",
     "noDocuments": "No se han subido documentos",
     "uploadToStart": "Suba el programa de materiales y los documentos de BoQ para comenzar la validación"
+  },
+  "workflows": {
+    "generateText": "Generar",
+    "render3d": "3D a Render",
+    "renderCad": "CAD a Render",
+    "masterplan": "Planes Maestros",
+    "visualEdit": "Editor Visual",
+    "materialValidation": "Validación de Materiales",
+    "exploded": "Vistas Explosionadas",
+    "section": "Render a Sección",
+    "renderSketch": "Boceto a Render",
+    "multiAngle": "Multi-Ángulo",
+    "upscale": "Ampliador de Imagen",
+    "imgToCad": "Imagen a CAD",
+    "imgTo3d": "Imagen a 3D",
+    "video": "Estudio de Video"
+  },
+  "leftSidebar": {
+    "collapse": "Contraer barra",
+    "expand": "Expandir barra"
+  },
+  "styles": {
+    "browseAll": "Ver todos los estilos",
+    "names": {
+      "no-style": "Sin estilo",
+      "contemporary-minimalist": "Minimalista contemporaneo",
+      "brutalist": "Neo-brutalista",
+      "parametric": "Fluidez parametrica",
+      "vernacular": "Vernaculo moderno",
+      "scandinavian": "Escandinavo",
+      "industrial-loft": "Loft industrial",
+      "biophilic": "Diseno biofilico",
+      "mid-century": "Moderno de mediados de siglo",
+      "japanese-zen": "Zen japones",
+      "cyberpunk": "Cyberpunk",
+      "bauhaus": "Bauhaus",
+      "tropical-modern": "Modernismo tropical",
+      "alpine-chalet": "Chalet alpino",
+      "desert-modern": "Modernismo del desierto",
+      "art-deco": "Art deco",
+      "beaux-arts": "Beaux-Arts",
+      "gothic-revival": "Renacimiento gotico",
+      "victorian": "Victoriano",
+      "mediterranean": "Renacimiento mediterraneo",
+      "tudor": "Renacimiento Tudor",
+      "craftsman": "Artesanal",
+      "prairie": "Estilo pradera",
+      "international": "Estilo internacional",
+      "deconstructivism": "Deconstructivismo",
+      "high-tech": "Alta tecnologia",
+      "postmodern": "Postmodernismo",
+      "metabolism": "Metabolismo",
+      "eco-brutalism": "Eco-brutalismo",
+      "tiny-house": "Casa diminuta",
+      "shipping-container": "Arquitectura de contenedores",
+      "earthship": "Earthship",
+      "bamboo": "Arquitectura de bambu",
+      "nordic-noir": "Noir nordico",
+      "a-frame": "Casa en A",
+      "geodesic": "Domo geodesico",
+      "parametric-timber": "Madera parametrica",
+      "floating-home": "Arquitectura flotante",
+      "mars-habitat": "Habitat en Marte",
+      "solarpunk": "Solarpunk",
+      "steampunk": "Steampunk",
+      "islamic-modern": "Moderno islamico",
+      "chinese-modern": "Moderno chino",
+      "wabi-sabi": "Wabi-sabi",
+      "memphis": "Grupo Memphis",
+      "art-nouveau": "Art nouveau",
+      "neoclassical": "Neoclasico",
+      "colonial": "Renacimiento colonial",
+      "ranch": "Estilo rancho",
+      "swiss-chalet": "Chalet suizo",
+      "pueblo": "Renacimiento pueblo",
+      "greek-revival": "Renacimiento griego",
+      "italianate": "Italianizante",
+      "futuristic-organic": "Organico futurista",
+      "cyber-organic": "Ciber-organico"
+    }
+  },
+  "render3d": {
+    "sourceAnalysis": {
+      "title": "Análisis de Fuente",
+      "originalSource": "Fuente Original",
+      "lockedForConsistency": "Bloqueado para renders consistentes",
+      "resetSource": "Restablecer imagen fuente",
+      "sourceType": "Tipo de Fuente",
+      "viewType": "Tipo de Vista",
+      "sourceOptions": {
+        "rhino": "Rhino",
+        "revit": "Revit",
+        "sketchup": "SketchUp",
+        "blender": "Blender",
+        "3dsmax": "3ds Max",
+        "archicad": "ArchiCAD",
+        "cinema4d": "Cinema 4D",
+        "clay": "Render de Arcilla",
+        "other": "Otro"
+      },
+      "viewOptions": {
+        "exterior": "Exterior",
+        "interior": "Interior",
+        "aerial": "Aéreo"
+      }
+    },
+    "style": {
+      "title": "Estilo"
+    },
+    "backgroundReference": {
+      "title": "Referencia de Fondo",
+      "upload": "Subir referencia...",
+      "change": "Cambiar referencia...",
+      "remove": "Eliminar referencia",
+      "alt": "Referencia de fondo"
+    },
+    "problemAreas": {
+      "title": "Áreas Problemáticas",
+      "description": "La IA marca áreas detalladas o con patrones que pueden requerir más cuidado. El color indica dificultad.",
+      "run": "Ejecutar preprocesado de IA",
+      "rerun": "Repetir preprocesado de IA",
+      "analyzing": "Analizando...",
+      "analyzingStatus": "Analizando áreas problemáticas...",
+      "waiting": "Esperando resultados del análisis...",
+      "none": "No se detectaron áreas problemáticas.",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    }
+  },
+  "masterplan": {
+    "planType": {
+      "title": "Tipo de Plan"
+    },
+    "planTypes": {
+      "site": "Plano de Sitio",
+      "urban": "Urbano",
+      "zoning": "Zonificación",
+      "massing": "Massing"
+    },
+    "scaleOrientation": {
+      "title": "Escala y Orientación",
+      "scale": "Escala",
+      "customScale": "Escala personalizada: 1:",
+      "northRotation": "Rotación Norte",
+      "north": "N"
+    },
+    "scale": {
+      "1_200": "1:200 (Detalle arquitectónico)",
+      "1_500": "1:500 (Detalle de sitio)",
+      "1_1000": "1:1000 (Sitio estándar)",
+      "1_2500": "1:2500 (Distrito)",
+      "1_5000": "1:5000 (Ciudad)",
+      "1_10000": "1:10000 (Metropolitano)",
+      "custom": "Personalizado..."
+    },
+    "zones": {
+      "title": "Definición de Zonas",
+      "autoDetect": "Detectar zonas automáticamente",
+      "detecting": "Detectando zonas...",
+      "newZonePlaceholder": "Nombre de nueva zona",
+      "add": "Agregar zona",
+      "addCta": "+ Agregar zona",
+      "defaultName": "Zona {{index}}",
+      "errors": {
+        "uploadFirst": "Sube una imagen para detectar zonas automáticamente.",
+        "noneDetected": "No se detectaron zonas. Intenta de nuevo o refina la imagen.",
+        "failed": "Fallo al detectar zonas. Intenta de nuevo."
+      }
+    },
+    "zoneTypes": {
+      "residentialLow": "Residencial - Baja densidad",
+      "residentialMedium": "Residencial - Media",
+      "residentialHigh": "Residencial - Alta densidad",
+      "commercial": "Comercial",
+      "retail": "Retail",
+      "office": "Oficinas",
+      "industrial": "Industrial",
+      "mixed": "Uso mixto",
+      "green": "Zona verde / Parque",
+      "water": "Agua",
+      "infra": "Infraestructura / Vías",
+      "institutional": "Institucional",
+      "civic": "Cívico / Público",
+      "parking": "Estacionamiento",
+      "future": "Reservado / Futuro"
+    },
+    "boundary": {
+      "title": "Límite del Sitio",
+      "lassoOn": "Lazo activo (clic para desactivar)",
+      "lassoOff": "Lazo de límite",
+      "instructions": "Dibuja un lazo verde en el lienzo para definir el límite del sitio."
+    },
+    "context": {
+      "title": "Contexto",
+      "clear": "Limpiar contexto",
+      "load": "Cargar desde ubicación"
+    },
+    "outputStyles": {
+      "photorealistic": "Fotorrealista",
+      "diagrammatic": "Diagramatico",
+      "hybrid": "Hibrido",
+      "illustrative": "Ilustrativo"
+    },
+    "viewAngles": {
+      "top": "Superior",
+      "isoNe": "Iso NE",
+      "isoNw": "Iso NW",
+      "isoSe": "Iso SE",
+      "isoSw": "Iso SW",
+      "custom": "Personalizado"
+    },
+    "buildingStyles": {
+      "contemporaryMixed": "Contemporaneo mixto",
+      "modernMinimal": "Moderno minimal",
+      "highTechGlass": "Vidrio high-tech",
+      "brutalist": "Brutalista",
+      "traditionalEuropean": "Tradicional europeo",
+      "mediterranean": "Mediterraneo",
+      "colonial": "Colonial",
+      "asianContemporary": "Asiatico contemporaneo",
+      "industrialWarehouse": "Industrial / almacen",
+      "mixedIndustrial": "Industrial mixto",
+      "matchSurroundings": "Coincidir entorno (AI)"
+    },
+    "roofStyles": {
+      "flat": "Plano",
+      "gabled": "A dos aguas",
+      "hip": "A cuatro aguas",
+      "mansard": "Mansarda",
+      "green": "Verde",
+      "mixed": "Mixto"
+    },
+    "labelStyles": {
+      "modern": "Moderno",
+      "classic": "Clasico",
+      "technical": "Tecnico",
+      "handwritten": "Escrito a mano",
+      "minimal": "Minimal"
+    },
+    "legendStyles": {
+      "compact": "Compacto",
+      "detailed": "Detallado",
+      "professional": "Profesional",
+      "minimal": "Minimal"
+    },
+    "sections": {
+      "outputStyle": {
+        "title": "Estilo de salida"
+      },
+      "viewAngle": {
+        "title": "Angulo de vista",
+        "elevation": "Angulo de elevacion",
+        "rotation": "Angulo de rotacion",
+        "perspective": "Fuerza de perspectiva"
+      },
+      "buildings": {
+        "title": "Edificios",
+        "heightMode": "Modo de altura",
+        "heightModeOptions": {
+          "uniform": "Uniforme",
+          "fromColor": "Desde color",
+          "vary": "Variar"
+        },
+        "defaultHeight": "Altura por defecto",
+        "heightRange": "Rango de altura",
+        "floorHeight": "Altura de piso",
+        "showShadows": "Mostrar sombras de edificios",
+        "transparent": "Edificios transparentes",
+        "facadeVariation": "Variacion de fachada",
+        "showFloorLabels": "Mostrar etiquetas de pisos"
+      },
+      "landscape": {
+        "title": "Paisaje",
+        "seasonOptions": {
+          "spring": "Primavera",
+          "summer": "Verano",
+          "autumn": "Otono",
+          "winter": "Invierno"
+        },
+        "vegetationDensity": "Densidad de vegetacion",
+        "treeVariation": "Variacion de tamano de arbol",
+        "trees": "Arboles y arbustos",
+        "grass": "Cesped y cubiertas",
+        "water": "Elementos de agua",
+        "pathways": "Caminos y plazas",
+        "streetFurniture": "Mobiliario urbano",
+        "vehicles": "Vehiculos",
+        "people": "Personas",
+        "vegetationStyleOptions": {
+          "realistic": "Realista",
+          "stylized": "Estilizado / iconico",
+          "watercolor": "Acuarela",
+          "technical": "Tecnico (simbolos)"
+        }
+      },
+      "annotations": {
+        "title": "Anotaciones",
+        "zoneLabels": "Etiquetas de zona",
+        "streetNames": "Nombres de calles",
+        "buildingLabels": "Etiquetas de edificio",
+        "lotNumbers": "Numeros de lote",
+        "scaleBar": "Barra de escala",
+        "northArrow": "Flecha norte",
+        "dimensions": "Dimensiones",
+        "areaCalculations": "Calculos de area",
+        "contourLabels": "Etiquetas de contorno",
+        "labelSizeOptions": {
+          "small": "Pequeno",
+          "medium": "Medio",
+          "large": "Grande"
+        },
+        "labelColorOptions": {
+          "auto": "Auto",
+          "dark": "Oscuro",
+          "light": "Claro"
+        },
+        "labelHalo": "Fondo de etiqueta (halo)"
+      },
+      "legend": {
+        "title": "Leyenda",
+        "include": "Incluir leyenda",
+        "positionOptions": {
+          "topLeft": "Arriba-izquierda",
+          "topRight": "Arriba-derecha",
+          "bottom": "Abajo"
+        },
+        "zoneColorsNames": "Colores y nombres de zonas",
+        "zoneAreas": "Areas de zona",
+        "buildingTypes": "Tipos de edificios",
+        "landscapeElements": "Elementos de paisaje",
+        "infrastructure": "Infraestructura"
+      }
+    }
+  },
+  "rightPanel": {
+    "settings": {
+      "title": "Ajustes",
+      "description": "Ajusta la configuración del flujo actual."
+    },
+    "expand": "Expandir panel",
+    "collapse": "Contraer panel",
+    "toggleHelp": "Alternar ayuda",
+    "panelInfo": "Info del Panel",
+    "viewDocs": "Ver documentación →",
+    "selectWorkflow": "Selecciona un flujo",
+    "generateText": {
+      "title": "Generación de Imagen"
+    },
+    "render3d": {
+      "title": "3D a Render",
+      "description": "Controla geometría, iluminación, cámara y materiales para convertir modelos 3D en renders fotorrealistas."
+    },
+    "renderCad": {
+      "title": "CAD a Render",
+      "description": "Configura interpretación de líneas, espacio y auto-mobiliario para renders desde CAD."
+    },
+    "masterplan": {
+      "title": "Plan Maestro",
+      "description": "Configura tipos de plan, detección de zonas y paisajismo para masterplans a gran escala."
+    },
+    "visualEdit": {
+      "title": "Editor Visual",
+      "description": "Selecciona herramientas para inpainting, cambio de materiales y ajustes de iluminación."
+    },
+    "exploded": {
+      "title": "Vista Explosionada",
+      "description": "Gestiona separación de componentes y animación para vistas axonométricas explotadas."
+    },
+    "section": {
+      "title": "Render a Sección",
+      "description": "Define planos de corte, grosores de línea y tramas para secciones arquitectónicas."
+    },
+    "renderSketch": {
+      "title": "Boceto a Render",
+      "description": "Controla geometría, iluminación, cámara y materiales para boceto a render."
+    },
+    "multiAngle": {
+      "title": "Multi-Ángulo",
+      "description": "Genera vistas consistentes en múltiples ángulos con iluminación y estilo bloqueados."
+    },
+    "upscale": {
+      "title": "Ampliador",
+      "description": "Configura mejoras y formato de salida para resultados de mayor resolución."
+    },
+    "imgToCad": {
+      "title": "Imagen a CAD",
+      "description": "Ajustes para vectorizar imágenes ráster en formatos CAD como DXF o DWG."
+    },
+    "imgTo3d": {
+      "title": "Imagen a 3D",
+      "description": "Previsualiza y exporta modelos 3D generados desde tus imágenes."
+    },
+    "video": {
+      "title": "Estudio de Video",
+      "description": "Define duración, movimiento de cámara y transiciones para generación de video."
+    },
+    "materialValidation": {
+      "title": "Validación",
+      "description": "Revisa materiales detectados frente al BoQ y especificaciones técnicas."
+    }
+  },
+  "bottomPanel": {
+    "copyPrompt": "Copiar prompt",
+    "tabs": {
+      "prompt": "Prompt",
+      "history": "Historial",
+      "timeline": "Línea de tiempo",
+      "legend": "Leyenda",
+      "edit-stack": "Pila de Edición",
+      "cleanup": "Limpieza"
+    },
+    "history": {
+      "empty": "No hay historial en esta sesión."
+    },
+    "timeline": {
+      "mainSequence": "Secuencia Principal",
+      "start": "Inicio",
+      "keyframe": "Fotograma clave",
+      "end": "Fin"
+    }
+  },
+  "canvas": {
+    "promptHistory": {
+      "title": "Historial de Prompts",
+      "emptyTitle": "Aún no hay prompts",
+      "emptySubtitle": "Tus prompts recientes aparecerán aquí.",
+      "addReference": "Agregar imagen de referencia"
+    },
+    "promptBar": {
+      "placeholder": "Describe tu visión arquitectónica...",
+      "pressEnter": "Presiona Enter para generar"
+    },
+    "upload": {
+      "title": "Subir Imagen Fuente",
+      "subtitle": "Arrastra y suelta o haz clic para explorar"
+    },
+    "fullscreen": {
+      "close": "Cerrar pantalla completa (Esc)",
+      "clickToClose": "Haz clic para cerrar"
+    },
+    "generating": {
+      "subtitle": "Refinando geometría e iluminación"
+    },
+    "empty": {
+      "title": "Lienzo listo",
+      "subtitle": "Introduce tu prompt abajo para generar. El resultado aparecera aqui."
+    }
+  },
+  "render3dSettings": {
+    "generationMode": {
+      "title": "Modo de generacion",
+      "options": {
+        "enhance": {
+          "label": "Mejorar",
+          "desc": "Mejora la iluminacion y texturas manteniendo la geometria."
+        },
+        "stylize": {
+          "label": "Estilizar",
+          "desc": "Aplica estilos artisticos al modelo base."
+        },
+        "hybrid": {
+          "label": "Hibrido",
+          "desc": "Equilibra precision estructural con detalles creativos."
+        },
+        "strictRealism": {
+          "label": "Realismo estricto",
+          "desc": "Precision fotografica, minima alucinacion."
+        },
+        "conceptPush": {
+          "label": "Impulso conceptual",
+          "desc": "Alta creatividad, explora nuevas formas."
+        }
+      }
+    },
+    "sections": {
+      "geometry": {
+        "title": "Geometria",
+        "edgeMode": {
+          "label": "Modo de borde",
+          "soft": "Suave",
+          "medium": "Medio",
+          "sharp": "Nitido"
+        },
+        "preservation": {
+          "title": "Preservacion",
+          "strict": "Preservacion estricta de geometria",
+          "alteration": "Alteracion de geometria",
+          "alterationHint": "Valores mas altos permiten que el modelo se desvie de la geometria original."
+        },
+        "detailLevel": {
+          "label": "Nivel de detalle",
+          "low": "Bajo",
+          "medium": "Medio",
+          "high": "Alto",
+          "preserveOrnaments": "Preservar ornamentos",
+          "preserveMoldings": "Preservar molduras",
+          "preserveTrim": "Preservar remates"
+        },
+        "smoothing": {
+          "title": "Suavizado de superficie",
+          "intensity": "Intensidad",
+          "preserveHardEdges": "Preservar bordes duros",
+          "edgeThreshold": "Umbral de borde",
+          "edgeThresholdHint": "Angulos por debajo del umbral permanecen duros."
+        },
+        "depthLayers": {
+          "title": "Capas de profundidad",
+          "foreground": "Calidad del primer plano",
+          "midground": "Calidad del plano medio",
+          "background": "Calidad del fondo"
+        },
+        "displacement": {
+          "title": "Desplazamiento",
+          "strength": "Fuerza",
+          "scale": "Escala",
+          "fine": "Fino",
+          "medium": "Medio",
+          "coarse": "Grueso",
+          "adaptToMaterial": "Adaptar al material",
+          "adaptHint": "Ajuste automatico por tipo de superficie."
+        }
+      },
+      "lighting": {
+        "title": "Iluminacion",
+        "sunPosition": "Posicion del sol",
+        "intensity": "Intensidad",
+        "colorTemp": "Temperatura de color",
+        "shadows": {
+          "title": "Sombras",
+          "opacity": "Opacidad",
+          "softness": "Suavidad"
+        },
+        "timeOfDay": {
+          "label": "Hora del dia",
+          "options": {
+            "preDawn": "Antes del amanecer",
+            "sunrise": "Amanecer",
+            "earlyMorning": "Temprano por la manana",
+            "highNoon": "Mediodia",
+            "lateAfternoon": "Tarde",
+            "goldenHour": "Hora dorada",
+            "sunsetGlow": "Resplandor del atardecer",
+            "blueHour": "Hora azul",
+            "moonlitNight": "Noche con luna"
+          }
+        }
+      },
+      "camera": {
+        "title": "Camara",
+        "lens": "Lente (distancia focal)",
+        "fieldOfView": "Campo de vision",
+        "autoCorrectPerspective": "Corregir perspectiva automaticamente",
+        "depthOfField": "Profundidad de campo",
+        "aperture": "Apertura",
+        "focusDistance": "Distancia de enfoque"
+      },
+      "materials": {
+        "title": "Materiales",
+        "emphasisLabel": "Enfasis de material",
+        "emphasis": {
+          "concrete": "Concreto",
+          "wood": "Madera",
+          "metal": "Metal",
+          "glass": "Vidrio",
+          "stone": "Piedra",
+          "brick": "Ladrillo",
+          "tile": "Baldosa",
+          "fabric": "Tela",
+          "paint": "Pintura",
+          "flooring": "Pavimento"
+        },
+        "globalReflectivity": "Reflectividad global",
+        "surfaceRoughness": "Rugosidad de superficie",
+        "weathering": {
+          "title": "Envejecimiento",
+          "intensity": "Intensidad",
+          "options": {
+            "dirt": "Suciedad",
+            "moss": "Musgo",
+            "rust": "Oxido",
+            "cracks": "Grietas"
+          }
+        }
+      },
+      "atmosphere": {
+        "title": "Atmosfera",
+        "moods": {
+          "natural": "Natural",
+          "warm": "Calido",
+          "cool": "Frio",
+          "dramatic": "Dramatico",
+          "soft": "Suave",
+          "moody": "Sombrio",
+          "luxury": "Lujo",
+          "cinematic": "Cinematico",
+          "hazy": "Neblina",
+          "crisp": "Claro",
+          "stormy": "Tormentoso",
+          "noir": "Noir"
+        },
+        "temperature": "Temperatura",
+        "fog": {
+          "title": "Niebla",
+          "density": "Densidad"
+        },
+        "bloom": {
+          "title": "Resplandor",
+          "intensity": "Intensidad"
+        }
+      },
+      "scenery": {
+        "title": "Escena",
+        "people": {
+          "title": "Personas",
+          "count": "Cantidad"
+        },
+        "vegetation": {
+          "title": "Vegetacion",
+          "density": "Densidad"
+        },
+        "vehicles": {
+          "title": "Vehiculos",
+          "count": "Cantidad"
+        },
+        "contextPreset": {
+          "label": "Preset de contexto",
+          "groups": {
+            "terminalPublic": "Terminal y areas publicas",
+            "securityProcessing": "Seguridad y control",
+            "waitingLounges": "Espera y salas",
+            "baggage": "Equipaje",
+            "retailDining": "Comercio y comida",
+            "transportAccess": "Transporte y acceso",
+            "operationsSupport": "Operaciones y soporte",
+            "exterior": "Exterior"
+          },
+          "options": {
+            "departureHall": "Sala de salidas",
+            "arrivalsHall": "Sala de llegadas",
+            "checkInCounter": "Mostradores de check-in",
+            "ticketingArea": "Area de tickets",
+            "mainConcourse": "Concourse principal",
+            "terminalAtrium": "Atrio de terminal",
+            "securityCheckpoint": "Control de seguridad",
+            "passportControl": "Control de pasaportes",
+            "customsHall": "Sala de aduanas",
+            "immigrationArea": "Area de inmigracion",
+            "tsaScreening": "Revision TSA",
+            "gateWaitingArea": "Area de espera de puerta",
+            "businessClassLounge": "Sala business",
+            "firstClassLounge": "Sala primera clase",
+            "airlineLounge": "Sala de aerolinea",
+            "transitLounge": "Sala de transito",
+            "familyWaitingArea": "Area de espera familiar",
+            "baggageClaim": "Recogida de equipaje",
+            "baggageDropoff": "Entrega de equipaje",
+            "oversizedBaggage": "Equipaje sobredimensionado",
+            "lostBaggageOffice": "Oficina de equipaje perdido",
+            "dutyFreeShop": "Tienda duty-free",
+            "foodCourt": "Zona de comidas",
+            "restaurantBar": "Restaurante/Bar",
+            "retailCorridor": "Corredor comercial",
+            "newsstand": "Quiosco/Conveniencia",
+            "jetBridgeGate": "Pasarela/puerta de embarque",
+            "busGateArea": "Area de puertas de bus",
+            "groundTransportation": "Transporte terrestre",
+            "taxiRidesharePickup": "Recogida taxi/rideshare",
+            "parkingGarage": "Parking",
+            "rentalCarCenter": "Centro de alquiler de autos",
+            "informationDesk": "Mostrador de informacion",
+            "airportOffice": "Oficina del aeropuerto",
+            "controlTowerExterior": "Torre de control (exterior)",
+            "maintenanceHangar": "Hangar de mantenimiento",
+            "cargoTerminal": "Terminal de carga",
+            "terminalCurbside": "Acceso terminal",
+            "runwayView": "Vista de pista",
+            "apronTarmac": "Plataforma/tarmac",
+            "airportEntryPlaza": "Plaza de entrada"
+          }
+        }
+      },
+      "render": {
+        "title": "Formato de render",
+        "aspectRatio": "Relacion de aspecto",
+        "quality": "Calidad",
+        "qualityOptions": {
+          "draft": "Borrador (rapido)",
+          "preview": "Previa",
+          "production": "Produccion",
+          "ultra": "Ultra"
+        }
+      }
+    }
+  },
+  "cadToRender": {
+    "sections": {
+      "camera": {
+        "title": "Camara y punto de vista",
+        "height": "Altura de camara (m)",
+        "focalLength": "Distancia focal (mm)",
+        "positionPicker": "Selector de posicion de camara",
+        "positionHint": "Haz clic en el plano para colocar la camara.",
+        "lookAt": "Direccion de mirada",
+        "verticalCorrection": "Correccion vertical"
+      },
+      "furnishing": {
+        "title": "Amueblado",
+        "occupancy": "Sensacion de ocupacion",
+        "occupancyOptions": {
+          "empty": "Vacio",
+          "staged": "Preparado",
+          "livedIn": "Habitado"
+        },
+        "clutterLevel": "Nivel de desorden",
+        "peopleEntourage": "Personas / Entourage",
+        "entourageLevel": "Nivel de entourage"
+      },
+      "context": {
+        "title": "Contexto (vistas exteriores)",
+        "landscapeStyle": "Estilo de paisaje",
+        "landscapeOptions": {
+          "formalGarden": "Jardin formal",
+          "nativePlanting": "Plantacion nativa",
+          "minimal": "Minimal",
+          "lushTropical": "Tropical exuberante",
+          "dryXeriscape": "Xeriscape seco"
+        },
+        "environment": "Entorno",
+        "environmentOptions": {
+          "urban": "Urbano",
+          "suburban": "Suburbano",
+          "rural": "Rural"
+        },
+        "season": "Temporada",
+        "seasonOptions": {
+          "spring": "Primavera",
+          "summer": "Verano",
+          "autumn": "Otono",
+          "winter": "Invierno"
+        }
+      }
+    }
+  },
+  "exploded": {
+    "dissectionStyles": {
+      "stacked": "Capas apiladas",
+      "radial": "Explosion radial",
+      "sequential": "Pelado secuencial",
+      "coreShell": "Nucleo + envolvente",
+      "sliceLift": "Corte y elevacion",
+      "systems": "Enfoque de sistemas"
+    },
+    "view": {
+      "title": "Vista",
+      "type": {
+        "axonometric": "Axonometrica",
+        "perspective": "Perspectiva"
+      },
+      "angle": "Angulo",
+      "iso": {
+        "ne": "ISO NE",
+        "nw": "ISO NW",
+        "se": "ISO SE",
+        "sw": "ISO SW"
+      },
+      "cameraHeight": "Altura de camara (m)",
+      "fieldOfView": "Campo de vision (deg)",
+      "lookAt": "Mirar a",
+      "lookAtOptions": {
+        "center": "Centro",
+        "top": "Arriba",
+        "bottom": "Abajo"
+      }
+    },
+    "sections": {
+      "dissectionStyle": {
+        "title": "Estilo de diseccion",
+        "colorMode": "Modo de color",
+        "colorModeOptions": {
+          "material": "Colores de material",
+          "system": "Colores de sistema",
+          "monochrome": "Monocromo"
+        },
+        "systemColors": {
+          "structure": "Estructura",
+          "envelope": "Envolvente",
+          "mep": "MEP",
+          "interior": "Interior"
+        },
+        "edgeStyle": "Estilo de borde",
+        "edgeStyleOptions": {
+          "hiddenRemoved": "Lineas ocultas eliminadas",
+          "hiddenDashed": "Lineas ocultas discontinuas",
+          "allVisible": "Todos los bordes visibles",
+          "silhouette": "Solo silueta"
+        },
+        "lineWeight": "Grosor de linea"
+      },
+      "annotations": {
+        "title": "Anotaciones",
+        "componentLabels": "Etiquetas de componentes",
+        "leaderLines": "Lineas de guia",
+        "dimensions": "Dimensiones",
+        "assemblyNumbers": "Numeros de ensamblaje",
+        "materialCallouts": "Notas de materiales",
+        "labelStyle": "Estilo de etiqueta",
+        "labelStyleOptions": {
+          "minimal": "Minimal",
+          "technical": "Tecnico",
+          "descriptive": "Descriptivo"
+        },
+        "leaderStyle": "Estilo de guia",
+        "leaderStyleOptions": {
+          "straight": "Recto",
+          "angled": "Angulado",
+          "curved": "Curvo"
+        },
+        "fontSize": "Tamano de fuente",
+        "fontSizeOptions": {
+          "small": "S",
+          "medium": "M",
+          "large": "L"
+        }
+      }
+    }
+  },
+  "locationModal": {
+    "title": "Cargar contexto desde ubicacion",
+    "mapPreview": "Vista del mapa",
+    "empty": "Busca una ubicacion a la derecha",
+    "searchPlaceholder": "Buscar direccion o coordenadas...",
+    "radius": "Radio",
+    "radiusHint": "{{radius}}m alrededor del punto central",
+    "dataToLoad": "Datos a cargar",
+    "data": {
+      "buildings": "Edificios",
+      "roads": "Carreteras",
+      "water": "Agua",
+      "terrain": "Terreno",
+      "transit": "Lineas de transporte"
+    },
+    "loading": "Cargando...",
+    "loadContext": "Cargar contexto"
   }
 }

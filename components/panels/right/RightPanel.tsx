@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { 
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings, 
@@ -21,6 +22,7 @@ import { ValidationPanel } from './ValidationPanel';
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const { rightPanelOpen, rightPanelWidth, mode } = state;
   const [showHelp, setShowHelp] = useState(false);
 
@@ -32,7 +34,7 @@ export const RightPanel: React.FC = () => {
         <button 
           onClick={() => dispatch({ type: 'TOGGLE_RIGHT_PANEL' })}
           className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-md transition-all"
-          title="Expand Panel"
+          title={t('rightPanel.expand')}
         >
           <ChevronsLeft size={20} />
         </button>
@@ -41,7 +43,7 @@ export const RightPanel: React.FC = () => {
               className="text-xs font-bold text-foreground-muted uppercase tracking-widest whitespace-nowrap transform rotate-180" 
               style={{ writingMode: 'vertical-rl' }}
             >
-              Settings
+              {t('rightPanel.settings.title')}
             </span>
         </div>
       </div>
@@ -49,97 +51,97 @@ export const RightPanel: React.FC = () => {
   }
 
   let panelContent: React.ReactNode = null;
-  let panelTitle = "Settings";
+  let panelTitle = t('rightPanel.settings.title');
   let PanelIcon = Settings;
-  let panelDescription = "Adjust settings for the current workflow.";
+  let panelDescription = t('rightPanel.settings.description');
 
   switch (mode) {
       case 'generate-text': 
-        panelTitle = "Image Generation"; 
+        panelTitle = t('rightPanel.generateText.title'); 
         PanelIcon = Sparkle; 
         panelContent = null; 
         break;
       case 'render-3d': 
-        panelTitle = "3D to Render"; 
+        panelTitle = t('rightPanel.render3d.title'); 
         PanelIcon = Box; 
-        panelDescription = "Control geometry preservation, lighting, camera settings, and materials for converting 3D models to photorealistic renders.";
+        panelDescription = t('rightPanel.render3d.description');
         panelContent = <Render3DPanel />; 
         break;
       case 'render-cad': 
-        panelTitle = "CAD to Render"; 
+        panelTitle = t('rightPanel.renderCad.title'); 
         PanelIcon = FileCode; 
-        panelDescription = "Configure line interpretation, spatial settings, and auto-furnishing for generating renders from CAD drawings.";
+        panelDescription = t('rightPanel.renderCad.description');
         panelContent = <CadToRenderPanel />; 
         break;
       case 'masterplan': 
-        panelTitle = "Masterplan"; 
+        panelTitle = t('rightPanel.masterplan.title'); 
         PanelIcon = Grid; 
-        panelDescription = "Set up plan types, zone detection, and landscaping options for large-scale masterplan visualizations.";
+        panelDescription = t('rightPanel.masterplan.description');
         panelContent = <MasterplanPanel />; 
         break;
       case 'visual-edit': 
-        panelTitle = "Visual Editor"; 
+        panelTitle = t('rightPanel.visualEdit.title'); 
         PanelIcon = Wrench; 
-        panelDescription = "Select tools for in-painting, material swapping, and lighting adjustments on the generated image.";
+        panelDescription = t('rightPanel.visualEdit.description');
         panelContent = <VisualEditPanel />; 
         break;
       case 'exploded': 
-        panelTitle = "Exploded View"; 
+        panelTitle = t('rightPanel.exploded.title'); 
         PanelIcon = Layers; 
-        panelDescription = "Manage component separation and animation settings for creating exploded axonometric views.";
+        panelDescription = t('rightPanel.exploded.description');
         panelContent = <ExplodedPanel />; 
         break;
       case 'section': 
-        panelTitle = "Render to Section"; 
+        panelTitle = t('rightPanel.section.title'); 
         PanelIcon = RectangleVertical; 
-        panelDescription = "Define cut planes, line weights, and hatch styles for generating architectural sections.";
+        panelDescription = t('rightPanel.section.description');
         panelContent = <SectionPanel />; 
         break;
       case 'render-sketch': 
-        panelTitle = "Sketch to Render"; 
+        panelTitle = t('rightPanel.renderSketch.title'); 
         PanelIcon = Brush; 
-        panelDescription = "Control geometry, lighting, camera, and materials for sketch-to-render conversion.";
+        panelDescription = t('rightPanel.renderSketch.description');
         panelContent = <Render3DPanel />; 
         break;
       case 'multi-angle':
-        panelTitle = "Multi-Angle";
+        panelTitle = t('rightPanel.multiAngle.title');
         PanelIcon = Camera;
-        panelDescription = "Generate consistent views across multiple angles while keeping lighting and style locked.";
+        panelDescription = t('rightPanel.multiAngle.description');
         panelContent = <MultiAnglePanel />;
         break;
       case 'upscale': 
-        panelTitle = "Upscaler"; 
+        panelTitle = t('rightPanel.upscale.title'); 
         PanelIcon = Maximize2; 
-        panelDescription = "Configure enhancement settings and output format for higher-resolution results.";
+        panelDescription = t('rightPanel.upscale.description');
         panelContent = <UpscalePanel />; 
         break;
       case 'img-to-cad': 
-        panelTitle = "Image to CAD"; 
+        panelTitle = t('rightPanel.imgToCad.title'); 
         PanelIcon = FileCode; 
-        panelDescription = "Settings for vectorizing raster images into CAD-ready formats like DXF or DWG.";
+        panelDescription = t('rightPanel.imgToCad.description');
         panelContent = <ImageToCadPanel />; 
         break;
       case 'img-to-3d':
-        panelTitle = "Image to 3D";
+        panelTitle = t('rightPanel.imgTo3d.title');
         PanelIcon = Cuboid;
-        panelDescription = "Preview and export 3D models generated from your images using SAM AI.";
+        panelDescription = t('rightPanel.imgTo3d.description');
         panelContent = <ImageTo3DPanel />;
         break;
       case 'video': 
-        panelTitle = "Video Studio"; 
+        panelTitle = t('rightPanel.video.title'); 
         PanelIcon = Video; 
-        panelDescription = "Set duration, camera motion, and transition effects for AI video generation.";
+        panelDescription = t('rightPanel.video.description');
         panelContent = <VideoPanel />; 
         break;
       case 'material-validation': 
-        panelTitle = "Validation"; 
+        panelTitle = t('rightPanel.materialValidation.title'); 
         PanelIcon = CheckCircle2; 
-        panelDescription = "Review detected materials against BoQ and technical specifications.";
+        panelDescription = t('rightPanel.materialValidation.description');
         panelContent = <ValidationPanel />; 
         break;
       default: 
-        panelTitle = "Settings"; 
-        panelContent = <div className="p-4 text-center text-xs text-foreground-muted">Select a workflow</div>;
+        panelTitle = t('rightPanel.settings.title'); 
+        panelContent = <div className="p-4 text-center text-xs text-foreground-muted">{t('rightPanel.selectWorkflow')}</div>;
   }
 
   // Use wider panel for img-to-3d mode to accommodate the 3D viewer
@@ -161,14 +163,14 @@ export const RightPanel: React.FC = () => {
             <button 
                 className={cn("text-foreground-muted hover:text-foreground p-1 rounded-md transition-colors", showHelp && "bg-surface-sunken text-foreground")}
                 onClick={() => setShowHelp(!showHelp)}
-                title="Toggle Help"
+                title={t('rightPanel.toggleHelp')}
             >
                 <HelpCircle size={14}/>
             </button>
             <button 
                 onClick={() => dispatch({ type: 'TOGGLE_RIGHT_PANEL' })}
                 className="text-foreground-muted hover:text-foreground hover:bg-surface-sunken p-1 rounded-md transition-colors"
-                title="Collapse Panel"
+                title={t('rightPanel.collapse')}
             >
                 <ChevronsRight size={16} />
             </button>
@@ -180,7 +182,7 @@ export const RightPanel: React.FC = () => {
                 <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-1.5 text-accent">
                         <Info size={14} />
-                        <h4 className="text-xs font-bold text-foreground">Panel Info</h4>
+                        <h4 className="text-xs font-bold text-foreground">{t('rightPanel.panelInfo')}</h4>
                     </div>
                     <button onClick={() => setShowHelp(false)} className="text-foreground-muted hover:text-foreground">
                         <X size={12} />
@@ -190,7 +192,7 @@ export const RightPanel: React.FC = () => {
                     {panelDescription}
                 </p>
                 <div className="mt-3 pt-2 border-t border-border-subtle flex justify-end">
-                    <a href="#" className="text-[10px] text-accent hover:underline font-medium">View Documentation →</a>
+                    <a href="#" className="text-[10px] text-accent hover:underline font-medium">{t('rightPanel.viewDocs')}</a>
                 </div>
                 
                 {/* Little triangle arrow pointing up */}

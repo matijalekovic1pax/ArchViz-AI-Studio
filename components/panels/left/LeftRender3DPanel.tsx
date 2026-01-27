@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useRef, ChangeEvent } from 'react';
 import { useAppStore } from '../../../store';
+import { useTranslation } from 'react-i18next';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionHeader, StyleGrid } from './SharedLeftComponents';
@@ -17,6 +18,7 @@ import {
 
 export const LeftRender3DPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const analyzingRef = useRef(false);
@@ -29,13 +31,23 @@ export const LeftRender3DPanel = () => {
     () => [...BUILT_IN_STYLES, ...state.customStyles],
     [state.customStyles]
   );
+  const getStyleDisplayName = useCallback(
+    (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
+    [t]
+  );
+  const toTitle = useCallback(
+    (value: string) => value.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
+    []
+  );
 
+  const activeStyleRawName = useMemo(() => {
+    const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
+    return activeStyle ? activeStyle.name : toTitle(state.activeStyleId);
+  }, [availableStyles, state.activeStyleId, toTitle]);
   const activeStyleLabel = useMemo(() => {
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
-    return activeStyle
-      ? activeStyle.name
-      : state.activeStyleId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-  }, [availableStyles, state.activeStyleId]);
+    return activeStyle ? getStyleDisplayName(activeStyle) : toTitle(state.activeStyleId);
+  }, [availableStyles, getStyleDisplayName, state.activeStyleId, toTitle]);
 
   const updateWf = useCallback((payload: Partial<typeof wf>) => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload });
@@ -70,13 +82,13 @@ export const LeftRender3DPanel = () => {
 
   const getRiskMeta = useCallback((confidence: number) => {
     if (confidence >= 0.8) {
-      return { label: 'High', dotClass: 'bg-rose-500', textClass: 'text-rose-500' };
+      return { label: t('render3d.problemAreas.high'), dotClass: 'bg-rose-500', textClass: 'text-rose-500' };
     }
     if (confidence >= 0.6) {
-      return { label: 'Medium', dotClass: 'bg-amber-500', textClass: 'text-amber-600' };
+      return { label: t('render3d.problemAreas.medium'), dotClass: 'bg-amber-500', textClass: 'text-amber-600' };
     }
-    return { label: 'Low', dotClass: 'bg-emerald-500', textClass: 'text-emerald-600' };
-  }, []);
+    return { label: t('render3d.problemAreas.low'), dotClass: 'bg-emerald-500', textClass: 'text-emerald-600' };
+  }, [t]);
 
   const getApiKey = useCallback((): string | null => {
     // @ts-ignore - Vite injects this
@@ -172,7 +184,7 @@ export const LeftRender3DPanel = () => {
         renderMode: wf.renderMode,
         activeStyle: {
           id: state.activeStyleId,
-          name: activeStyleLabel
+          name: activeStyleRawName
         },
         render3d: wf.render3d,
         geometry: state.geometry,
@@ -269,10 +281,10 @@ export const LeftRender3DPanel = () => {
   }, [analyzeProblemAreas, isAnalyzing, updateWf]);
 
   const problemAreasActionLabel = isAnalyzing
-    ? 'Analyzing...'
+    ? t('render3d.problemAreas.analyzing')
     : problemAreas.length > 0
-      ? 'Re-run AI Pre-Processing'
-      : 'Run AI Pre-Processing';
+      ? t('render3d.problemAreas.rerun')
+      : t('render3d.problemAreas.run');
 
   return (
     <div className="space-y-6">
@@ -286,7 +298,7 @@ export const LeftRender3DPanel = () => {
       />
 
       <div>
-        <SectionHeader title="Source Analysis" />
+        <SectionHeader title={t('render3d.sourceAnalysis.title')} />
         <div className="space-y-3">
           {/* Source Image Indicator */}
           {state.sourceImage && (
@@ -299,46 +311,46 @@ export const LeftRender3DPanel = () => {
                 />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-foreground-muted">Original Source</p>
-                <p className="text-[9px] text-foreground-muted/60 truncate">Locked for consistent renders</p>
+                <p className="text-[10px] text-foreground-muted">{t('render3d.sourceAnalysis.originalSource')}</p>
+                <p className="text-[9px] text-foreground-muted/60 truncate">{t('render3d.sourceAnalysis.lockedForConsistency')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'SET_SOURCE_IMAGE', payload: null })}
                 className="p-1.5 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
-                title="Reset source image"
+                title={t('render3d.sourceAnalysis.resetSource')}
               >
                 <X size={14} />
               </button>
             </div>
           )}
           <div>
-            <label className="text-xs text-foreground-muted mb-1 block">Source Type</label>
+            <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.sourceType')}</label>
             <select
               className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
               value={wf.sourceType}
               onChange={(e) => updateWf({ sourceType: e.target.value as any })}
             >
-              <option value="rhino">Rhino</option>
-              <option value="revit">Revit</option>
-              <option value="sketchup">SketchUp</option>
-              <option value="blender">Blender</option>
-              <option value="3dsmax">3ds Max</option>
-              <option value="archicad">ArchiCAD</option>
-              <option value="cinema4d">Cinema 4D</option>
-              <option value="clay">Clay Render</option>
-              <option value="other">Other</option>
+              <option value="rhino">{t('render3d.sourceAnalysis.sourceOptions.rhino')}</option>
+              <option value="revit">{t('render3d.sourceAnalysis.sourceOptions.revit')}</option>
+              <option value="sketchup">{t('render3d.sourceAnalysis.sourceOptions.sketchup')}</option>
+              <option value="blender">{t('render3d.sourceAnalysis.sourceOptions.blender')}</option>
+              <option value="3dsmax">{t('render3d.sourceAnalysis.sourceOptions.3dsmax')}</option>
+              <option value="archicad">{t('render3d.sourceAnalysis.sourceOptions.archicad')}</option>
+              <option value="cinema4d">{t('render3d.sourceAnalysis.sourceOptions.cinema4d')}</option>
+              <option value="clay">{t('render3d.sourceAnalysis.sourceOptions.clay')}</option>
+              <option value="other">{t('render3d.sourceAnalysis.sourceOptions.other')}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-foreground-muted mb-1 block">View Type</label>
+            <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.viewType')}</label>
             <SegmentedControl
               value={wf.viewType}
               onChange={(v) => updateWf({ viewType: v })}
               options={[
-                { label: 'Exterior', value: 'exterior' },
-                { label: 'Interior', value: 'interior' },
-                { label: 'Aerial', value: 'aerial' }
+                { label: t('render3d.sourceAnalysis.viewOptions.exterior'), value: 'exterior' },
+                { label: t('render3d.sourceAnalysis.viewOptions.interior'), value: 'interior' },
+                { label: t('render3d.sourceAnalysis.viewOptions.aerial'), value: 'aerial' }
               ]}
             />
           </div>
@@ -347,7 +359,7 @@ export const LeftRender3DPanel = () => {
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <SectionHeader title="Style" />
+          <SectionHeader title={t('render3d.style.title')} />
           <span className="text-[9px] text-foreground-muted font-mono">{activeStyleLabel}</span>
         </div>
         <StyleGrid
@@ -361,7 +373,7 @@ export const LeftRender3DPanel = () => {
       {/* Background/Environment Reference */}
       <div>
         <label className="text-xs font-medium text-foreground mb-1.5 block">
-          Background Reference
+          {t('render3d.backgroundReference.title')}
         </label>
         <input
           ref={backgroundInputRef}
@@ -375,7 +387,7 @@ export const LeftRender3DPanel = () => {
             <div className="w-8 h-8 rounded overflow-hidden border border-border flex-shrink-0">
               <img
                 src={wf.backgroundReferenceImage}
-                alt="Background reference"
+                alt={t('render3d.backgroundReference.alt')}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -385,14 +397,16 @@ export const LeftRender3DPanel = () => {
             onClick={() => backgroundInputRef.current?.click()}
             className="flex-1 h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-left text-foreground-muted hover:border-accent/50 transition-colors"
           >
-            {wf.backgroundReferenceImage ? 'Change reference...' : 'Upload reference...'}
+            {wf.backgroundReferenceImage
+              ? t('render3d.backgroundReference.change')
+              : t('render3d.backgroundReference.upload')}
           </button>
           {wf.backgroundReferenceImage && (
             <button
               type="button"
               onClick={handleRemoveBackground}
               className="w-8 h-8 flex items-center justify-center rounded border border-border bg-surface-elevated text-foreground-muted hover:text-rose-500 hover:border-rose-500/50 transition-colors"
-              title="Remove reference"
+              title={t('render3d.backgroundReference.remove')}
             >
               <X size={14} />
             </button>
@@ -401,7 +415,7 @@ export const LeftRender3DPanel = () => {
       </div>
 
       <div>
-        <SectionHeader title="Problem Areas" />
+        <SectionHeader title={t('render3d.problemAreas.title')} />
         <div className="space-y-3">
           <button
             type="button"
@@ -420,19 +434,21 @@ export const LeftRender3DPanel = () => {
           {wf.prioritizationEnabled && (
             <>
               <p className="text-[10px] text-foreground-muted">
-                AI flags detailed or patterned areas that may need extra care. Color shows difficulty.
+                {t('render3d.problemAreas.description')}
               </p>
 
               <div className="space-y-1">
                 {isAnalyzing && (
                   <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
                     <RefreshCw size={12} className="animate-spin" />
-                    Analyzing problem areas...
+                    {t('render3d.problemAreas.analyzingStatus')}
                   </div>
                 )}
                 {problemAreas.length === 0 && (
                   <div className="text-[10px] text-foreground-muted py-2">
-                    {isAnalyzing ? 'Waiting for analysis results...' : 'No problem areas detected yet.'}
+                    {isAnalyzing
+                      ? t('render3d.problemAreas.waiting')
+                      : t('render3d.problemAreas.none')}
                   </div>
                 )}
 

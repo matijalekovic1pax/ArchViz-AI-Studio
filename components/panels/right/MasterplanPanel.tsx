@@ -1,4 +1,5 @@
 ﻿import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Slider } from '../../ui/Slider';
@@ -13,7 +14,7 @@ const buildStylePreview = (svg: string) => `data:image/svg+xml;utf8,${encodeURIC
 const outputStyles = [
   {
     id: 'photorealistic',
-    label: 'Photorealistic',
+    labelKey: 'masterplan.outputStyles.photorealistic',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
         <defs>
@@ -51,7 +52,7 @@ const outputStyles = [
   },
   {
     id: 'diagrammatic',
-    label: 'Diagrammatic',
+    labelKey: 'masterplan.outputStyles.diagrammatic',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
         <rect width="240" height="160" fill="#ffffff"/>
@@ -67,7 +68,7 @@ const outputStyles = [
   },
   {
     id: 'hybrid',
-    label: 'Hybrid',
+    labelKey: 'masterplan.outputStyles.hybrid',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
         <defs>
@@ -93,7 +94,7 @@ const outputStyles = [
   },
   {
     id: 'illustrative',
-    label: 'Illustrative',
+    labelKey: 'masterplan.outputStyles.illustrative',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
         <rect width="240" height="160" fill="#faf2e8"/>
@@ -115,36 +116,55 @@ const outputStyles = [
 ];
 
 const viewAngles = [
-  { id: 'top', label: 'Top', icon: Layout },
-  { id: 'iso-ne', label: 'Iso NE', icon: ArrowUpRight },
-  { id: 'iso-nw', label: 'Iso NW', icon: ArrowUpLeft },
-  { id: 'iso-se', label: 'Iso SE', icon: ArrowDownRight },
-  { id: 'iso-sw', label: 'Iso SW', icon: ArrowDownLeft },
-  { id: 'custom', label: 'Custom', icon: Crosshair },
+  { id: 'top', labelKey: 'masterplan.viewAngles.top', icon: Layout },
+  { id: 'iso-ne', labelKey: 'masterplan.viewAngles.isoNe', icon: ArrowUpRight },
+  { id: 'iso-nw', labelKey: 'masterplan.viewAngles.isoNw', icon: ArrowUpLeft },
+  { id: 'iso-se', labelKey: 'masterplan.viewAngles.isoSe', icon: ArrowDownRight },
+  { id: 'iso-sw', labelKey: 'masterplan.viewAngles.isoSw', icon: ArrowDownLeft },
+  { id: 'custom', labelKey: 'masterplan.viewAngles.custom', icon: Crosshair },
 ];
 
 const buildingStyles = [
-  'Contemporary Mixed',
-  'Modern Minimal',
-  'High-Tech Glass',
-  'Brutalist',
-  'Traditional European',
-  'Mediterranean',
-  'Colonial',
-  'Asian Contemporary',
-  'Industrial / Warehouse',
-  'Mixed Industrial',
-  'Match Surroundings (AI)',
+  { value: 'Contemporary Mixed', labelKey: 'masterplan.buildingStyles.contemporaryMixed' },
+  { value: 'Modern Minimal', labelKey: 'masterplan.buildingStyles.modernMinimal' },
+  { value: 'High-Tech Glass', labelKey: 'masterplan.buildingStyles.highTechGlass' },
+  { value: 'Brutalist', labelKey: 'masterplan.buildingStyles.brutalist' },
+  { value: 'Traditional European', labelKey: 'masterplan.buildingStyles.traditionalEuropean' },
+  { value: 'Mediterranean', labelKey: 'masterplan.buildingStyles.mediterranean' },
+  { value: 'Colonial', labelKey: 'masterplan.buildingStyles.colonial' },
+  { value: 'Asian Contemporary', labelKey: 'masterplan.buildingStyles.asianContemporary' },
+  { value: 'Industrial / Warehouse', labelKey: 'masterplan.buildingStyles.industrialWarehouse' },
+  { value: 'Mixed Industrial', labelKey: 'masterplan.buildingStyles.mixedIndustrial' },
+  { value: 'Match Surroundings (AI)', labelKey: 'masterplan.buildingStyles.matchSurroundings' },
 ];
 
-const roofStyles = ['Flat', 'Gabled', 'Hip', 'Mansard', 'Green', 'Mixed'];
+const roofStyles = [
+  { value: 'flat', labelKey: 'masterplan.roofStyles.flat' },
+  { value: 'gabled', labelKey: 'masterplan.roofStyles.gabled' },
+  { value: 'hip', labelKey: 'masterplan.roofStyles.hip' },
+  { value: 'mansard', labelKey: 'masterplan.roofStyles.mansard' },
+  { value: 'green', labelKey: 'masterplan.roofStyles.green' },
+  { value: 'mixed', labelKey: 'masterplan.roofStyles.mixed' },
+];
 
-const labelStyles = ['modern', 'classic', 'technical', 'handwritten', 'minimal'];
+const labelStyles = [
+  { value: 'modern', labelKey: 'masterplan.labelStyles.modern' },
+  { value: 'classic', labelKey: 'masterplan.labelStyles.classic' },
+  { value: 'technical', labelKey: 'masterplan.labelStyles.technical' },
+  { value: 'handwritten', labelKey: 'masterplan.labelStyles.handwritten' },
+  { value: 'minimal', labelKey: 'masterplan.labelStyles.minimal' },
+];
 
-const legendStyles = ['compact', 'detailed', 'professional', 'minimal'];
+const legendStyles = [
+  { value: 'compact', labelKey: 'masterplan.legendStyles.compact' },
+  { value: 'detailed', labelKey: 'masterplan.legendStyles.detailed' },
+  { value: 'professional', labelKey: 'masterplan.legendStyles.professional' },
+  { value: 'minimal', labelKey: 'masterplan.legendStyles.minimal' },
+];
 
 export const MasterplanPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const wf = state.workflow;
 
   const updateWf = useCallback(
@@ -158,7 +178,7 @@ export const MasterplanPanel = () => {
         items={[
           {
             id: 'output-style',
-            title: 'Output Style',
+            title: t('masterplan.sections.outputStyle.title'),
             content: (
               <div className="grid grid-cols-2 gap-2">
                 {outputStyles.map((style) => {
@@ -177,7 +197,7 @@ export const MasterplanPanel = () => {
                         <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent" />
                       </div>
-                      <div className="text-center">{style.label}</div>
+                      <div className="text-center">{t(style.labelKey)}</div>
                     </button>
                   );
                 })}
@@ -186,7 +206,7 @@ export const MasterplanPanel = () => {
           },
           {
             id: 'view-angle',
-            title: 'View Angle',
+            title: t('masterplan.sections.viewAngle.title'),
             content: (
               <div>
                 <div className="grid grid-cols-3 gap-2">
@@ -204,7 +224,7 @@ export const MasterplanPanel = () => {
                         )}
                       >
                         <Icon size={18} className={cn(selected ? 'text-foreground' : 'text-foreground-muted')} />
-                        <span className={cn('text-[9px] mt-1', selected && 'font-bold')}>{view.label}</span>
+                        <span className={cn('text-[9px] mt-1', selected && 'font-bold')}>{t(view.labelKey)}</span>
                       </button>
                     );
                   })}
@@ -212,21 +232,21 @@ export const MasterplanPanel = () => {
                 {wf.mpViewAngle === 'custom' && (
                   <div className="mt-3 space-y-2">
                     <Slider
-                      label="Elevation Angle"
+                      label={t('masterplan.sections.viewAngle.elevation')}
                       value={wf.mpViewCustom.elevation}
                       min={0}
                       max={90}
                       onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, elevation: value } })}
                     />
                     <Slider
-                      label="Rotation Angle"
+                      label={t('masterplan.sections.viewAngle.rotation')}
                       value={wf.mpViewCustom.rotation}
                       min={0}
                       max={360}
                       onChange={(value) => updateWf({ mpViewCustom: { ...wf.mpViewCustom, rotation: value } })}
                     />
                     <Slider
-                      label="Perspective Strength"
+                      label={t('masterplan.sections.viewAngle.perspective')}
                       value={wf.mpViewCustom.perspective}
                       min={0}
                       max={100}
@@ -239,7 +259,7 @@ export const MasterplanPanel = () => {
           },
           {
             id: 'buildings',
-            title: 'Buildings',
+            title: t('masterplan.sections.buildings.title'),
             content: (
               <div className="space-y-3">
                 <select
@@ -248,39 +268,39 @@ export const MasterplanPanel = () => {
                   onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, style: e.target.value } })}
                 >
                   {buildingStyles.map((style) => (
-                    <option key={style} value={style}>
-                      {style}
+                    <option key={style.value} value={style.value}>
+                      {t(style.labelKey)}
                     </option>
                   ))}
                 </select>
                 <div>
-                  <span className="text-[10px] text-foreground-muted block mb-1">Height Mode</span>
+                  <span className="text-[10px] text-foreground-muted block mb-1">{t('masterplan.sections.buildings.heightMode')}</span>
                   <SegmentedControl
                     value={wf.mpBuildings.heightMode}
                     options={[
-                      { label: 'Uniform', value: 'uniform' },
-                      { label: 'From Color', value: 'from-color' },
-                      { label: 'Vary', value: 'vary' },
+                      { label: t('masterplan.sections.buildings.heightModeOptions.uniform'), value: 'uniform' },
+                      { label: t('masterplan.sections.buildings.heightModeOptions.fromColor'), value: 'from-color' },
+                      { label: t('masterplan.sections.buildings.heightModeOptions.vary'), value: 'vary' },
                     ]}
                     onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightMode: value as any } })}
                   />
                 </div>
                 <Slider
-                  label="Default Height"
+                  label={t('masterplan.sections.buildings.defaultHeight')}
                   value={wf.mpBuildings.defaultHeight}
                   min={3}
                   max={100}
                   onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, defaultHeight: value } })}
                 />
                 <RangeSlider
-                  label="Height Range"
+                  label={t('masterplan.sections.buildings.heightRange')}
                   value={[wf.mpBuildings.heightRange.min, wf.mpBuildings.heightRange.max]}
                   min={3}
                   max={150}
                   onChange={([min, max]) => updateWf({ mpBuildings: { ...wf.mpBuildings, heightRange: { min, max } } })}
                 />
                 <Slider
-                  label="Floor Height"
+                  label={t('masterplan.sections.buildings.floorHeight')}
                   value={wf.mpBuildings.floorHeight}
                   min={2.5}
                   max={5}
@@ -293,29 +313,29 @@ export const MasterplanPanel = () => {
                   onChange={(e) => updateWf({ mpBuildings: { ...wf.mpBuildings, roofStyle: e.target.value as any } })}
                 >
                   {roofStyles.map((style) => (
-                    <option key={style} value={style.toLowerCase()}>
-                      {style}
+                    <option key={style.value} value={style.value}>
+                      {t(style.labelKey)}
                     </option>
                   ))}
                 </select>
                 <div className="space-y-2">
                   <Toggle
-                    label="Show Building Shadows"
+                    label={t('masterplan.sections.buildings.showShadows')}
                     checked={wf.mpBuildings.showShadows}
                     onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showShadows: value } })}
                   />
                   <Toggle
-                    label="Transparent Buildings"
+                    label={t('masterplan.sections.buildings.transparent')}
                     checked={wf.mpBuildings.transparent}
                     onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, transparent: value } })}
                   />
                   <Toggle
-                    label="Facade Variation"
+                    label={t('masterplan.sections.buildings.facadeVariation')}
                     checked={wf.mpBuildings.facadeVariation}
                     onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, facadeVariation: value } })}
                   />
                   <Toggle
-                    label="Show Floor Count Labels"
+                    label={t('masterplan.sections.buildings.showFloorLabels')}
                     checked={wf.mpBuildings.showFloorLabels}
                     onChange={(value) => updateWf({ mpBuildings: { ...wf.mpBuildings, showFloorLabels: value } })}
                   />
@@ -325,28 +345,28 @@ export const MasterplanPanel = () => {
           },
           {
             id: 'landscape',
-            title: 'Landscape',
+            title: t('masterplan.sections.landscape.title'),
             content: (
               <div className="space-y-3">
                 <SegmentedControl
                   value={wf.mpLandscape.season}
                   options={[
-                    { label: 'Spring', value: 'spring' },
-                    { label: 'Summer', value: 'summer' },
-                    { label: 'Autumn', value: 'autumn' },
-                    { label: 'Winter', value: 'winter' },
+                    { label: t('masterplan.sections.landscape.seasonOptions.spring'), value: 'spring' },
+                    { label: t('masterplan.sections.landscape.seasonOptions.summer'), value: 'summer' },
+                    { label: t('masterplan.sections.landscape.seasonOptions.autumn'), value: 'autumn' },
+                    { label: t('masterplan.sections.landscape.seasonOptions.winter'), value: 'winter' },
                   ]}
                   onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, season: value as any } })}
                 />
                 <Slider
-                  label="Vegetation Density"
+                  label={t('masterplan.sections.landscape.vegetationDensity')}
                   value={wf.mpLandscape.vegetationDensity}
                   min={0}
                   max={100}
                   onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationDensity: value } })}
                 />
                 <Slider
-                  label="Tree Size Variation"
+                  label={t('masterplan.sections.landscape.treeVariation')}
                   value={wf.mpLandscape.treeVariation}
                   min={0}
                   max={100}
@@ -354,37 +374,37 @@ export const MasterplanPanel = () => {
                 />
                 <div className="space-y-2">
                   <Toggle
-                    label="Trees & Shrubs"
+                    label={t('masterplan.sections.landscape.trees')}
                     checked={wf.mpLandscape.trees}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, trees: value } })}
                   />
                   <Toggle
-                    label="Grass & Ground Cover"
+                    label={t('masterplan.sections.landscape.grass')}
                     checked={wf.mpLandscape.grass}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, grass: value } })}
                   />
                   <Toggle
-                    label="Water Features"
+                    label={t('masterplan.sections.landscape.water')}
                     checked={wf.mpLandscape.water}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, water: value } })}
                   />
                   <Toggle
-                    label="Pathways & Plazas"
+                    label={t('masterplan.sections.landscape.pathways')}
                     checked={wf.mpLandscape.pathways}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, pathways: value } })}
                   />
                   <Toggle
-                    label="Street Furniture"
+                    label={t('masterplan.sections.landscape.streetFurniture')}
                     checked={wf.mpLandscape.streetFurniture}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, streetFurniture: value } })}
                   />
                   <Toggle
-                    label="Vehicles"
+                    label={t('masterplan.sections.landscape.vehicles')}
                     checked={wf.mpLandscape.vehicles}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, vehicles: value } })}
                   />
                   <Toggle
-                    label="People"
+                    label={t('masterplan.sections.landscape.people')}
                     checked={wf.mpLandscape.people}
                     onChange={(value) => updateWf({ mpLandscape: { ...wf.mpLandscape, people: value } })}
                   />
@@ -395,10 +415,10 @@ export const MasterplanPanel = () => {
                     value={wf.mpLandscape.vegetationStyle}
                     onChange={(e) => updateWf({ mpLandscape: { ...wf.mpLandscape, vegetationStyle: e.target.value as any } })}
                   >
-                    <option value="realistic">Realistic</option>
-                    <option value="stylized">Stylized / Iconic</option>
-                    <option value="watercolor">Watercolor</option>
-                    <option value="technical">Technical (Symbols)</option>
+                    <option value="realistic">{t('masterplan.sections.landscape.vegetationStyleOptions.realistic')}</option>
+                    <option value="stylized">{t('masterplan.sections.landscape.vegetationStyleOptions.stylized')}</option>
+                    <option value="watercolor">{t('masterplan.sections.landscape.vegetationStyleOptions.watercolor')}</option>
+                    <option value="technical">{t('masterplan.sections.landscape.vegetationStyleOptions.technical')}</option>
                   </select>
                 )}
               </div>
@@ -406,52 +426,52 @@ export const MasterplanPanel = () => {
           },
           {
             id: 'annotations',
-            title: 'Annotations',
+            title: t('masterplan.sections.annotations.title'),
             content: (
               <div className="space-y-3">
                 <div className="space-y-2">
                   <Toggle
-                    label="Zone Labels"
+                    label={t('masterplan.sections.annotations.zoneLabels')}
                     checked={wf.mpAnnotations.zoneLabels}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, zoneLabels: value } })}
                   />
                   <Toggle
-                    label="Street Names"
+                    label={t('masterplan.sections.annotations.streetNames')}
                     checked={wf.mpAnnotations.streetNames}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, streetNames: value } })}
                   />
                   <Toggle
-                    label="Building Labels"
+                    label={t('masterplan.sections.annotations.buildingLabels')}
                     checked={wf.mpAnnotations.buildingLabels}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, buildingLabels: value } })}
                   />
                   <Toggle
-                    label="Lot Numbers"
+                    label={t('masterplan.sections.annotations.lotNumbers')}
                     checked={wf.mpAnnotations.lotNumbers}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, lotNumbers: value } })}
                   />
                   <Toggle
-                    label="Scale Bar"
+                    label={t('masterplan.sections.annotations.scaleBar')}
                     checked={wf.mpAnnotations.scaleBar}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, scaleBar: value } })}
                   />
                   <Toggle
-                    label="North Arrow"
+                    label={t('masterplan.sections.annotations.northArrow')}
                     checked={wf.mpAnnotations.northArrow}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, northArrow: value } })}
                   />
                   <Toggle
-                    label="Dimensions"
+                    label={t('masterplan.sections.annotations.dimensions')}
                     checked={wf.mpAnnotations.dimensions}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, dimensions: value } })}
                   />
                   <Toggle
-                    label="Area Calculations"
+                    label={t('masterplan.sections.annotations.areaCalculations')}
                     checked={wf.mpAnnotations.areaCalc}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, areaCalc: value } })}
                   />
                   <Toggle
-                    label="Contour Labels"
+                    label={t('masterplan.sections.annotations.contourLabels')}
                     checked={wf.mpAnnotations.contourLabels}
                     onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, contourLabels: value } })}
                   />
@@ -462,31 +482,31 @@ export const MasterplanPanel = () => {
                   onChange={(e) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelStyle: e.target.value as any } })}
                 >
                   {labelStyles.map((style) => (
-                    <option key={style} value={style}>
-                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                    <option key={style.value} value={style.value}>
+                      {t(style.labelKey)}
                     </option>
                   ))}
                 </select>
                 <SegmentedControl
                   value={wf.mpAnnotations.labelSize}
                   options={[
-                    { label: 'Small', value: 'small' },
-                    { label: 'Medium', value: 'medium' },
-                    { label: 'Large', value: 'large' },
+                    { label: t('masterplan.sections.annotations.labelSizeOptions.small'), value: 'small' },
+                    { label: t('masterplan.sections.annotations.labelSizeOptions.medium'), value: 'medium' },
+                    { label: t('masterplan.sections.annotations.labelSizeOptions.large'), value: 'large' },
                   ]}
                   onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelSize: value as any } })}
                 />
                 <SegmentedControl
                   value={wf.mpAnnotations.labelColor}
                   options={[
-                    { label: 'Auto', value: 'auto' },
-                    { label: 'Dark', value: 'dark' },
-                    { label: 'Light', value: 'light' },
+                    { label: t('masterplan.sections.annotations.labelColorOptions.auto'), value: 'auto' },
+                    { label: t('masterplan.sections.annotations.labelColorOptions.dark'), value: 'dark' },
+                    { label: t('masterplan.sections.annotations.labelColorOptions.light'), value: 'light' },
                   ]}
                   onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelColor: value as any } })}
                 />
                 <Toggle
-                  label="Label Background (Halo)"
+                  label={t('masterplan.sections.annotations.labelHalo')}
                   checked={wf.mpAnnotations.labelHalo}
                   onChange={(value) => updateWf({ mpAnnotations: { ...wf.mpAnnotations, labelHalo: value } })}
                 />
@@ -495,11 +515,11 @@ export const MasterplanPanel = () => {
           },
           {
             id: 'legend',
-            title: 'Legend',
+            title: t('masterplan.sections.legend.title'),
             content: (
               <div className="space-y-3">
                 <Toggle
-                  label="Include Legend"
+                  label={t('masterplan.sections.legend.include')}
                   checked={wf.mpLegend.include}
                   onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, include: value } })}
                 />
@@ -508,35 +528,35 @@ export const MasterplanPanel = () => {
                     <SegmentedControl
                       value={wf.mpLegend.position}
                       options={[
-                        { label: 'Top-Left', value: 'top-left' },
-                        { label: 'Top-Right', value: 'top-right' },
-                        { label: 'Bottom', value: 'bottom' },
+                        { label: t('masterplan.sections.legend.positionOptions.topLeft'), value: 'top-left' },
+                        { label: t('masterplan.sections.legend.positionOptions.topRight'), value: 'top-right' },
+                        { label: t('masterplan.sections.legend.positionOptions.bottom'), value: 'bottom' },
                       ]}
                       onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, position: value as any } })}
                     />
                     <div className="space-y-2">
                       <Toggle
-                        label="Zone Colors & Names"
+                        label={t('masterplan.sections.legend.zoneColorsNames')}
                         checked={wf.mpLegend.showZones}
                         onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZones: value } })}
                       />
                       <Toggle
-                        label="Zone Areas"
+                        label={t('masterplan.sections.legend.zoneAreas')}
                         checked={wf.mpLegend.showZoneAreas}
                         onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showZoneAreas: value } })}
                       />
                       <Toggle
-                        label="Building Types"
+                        label={t('masterplan.sections.legend.buildingTypes')}
                         checked={wf.mpLegend.showBuildings}
                         onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showBuildings: value } })}
                       />
                       <Toggle
-                        label="Landscape Elements"
+                        label={t('masterplan.sections.legend.landscapeElements')}
                         checked={wf.mpLegend.showLandscape}
                         onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showLandscape: value } })}
                       />
                       <Toggle
-                        label="Infrastructure"
+                        label={t('masterplan.sections.legend.infrastructure')}
                         checked={wf.mpLegend.showInfrastructure}
                         onChange={(value) => updateWf({ mpLegend: { ...wf.mpLegend, showInfrastructure: value } })}
                       />
@@ -547,8 +567,8 @@ export const MasterplanPanel = () => {
                       onChange={(e) => updateWf({ mpLegend: { ...wf.mpLegend, style: e.target.value as any } })}
                     >
                       {legendStyles.map((style) => (
-                        <option key={style} value={style}>
-                          {style.charAt(0).toUpperCase() + style.slice(1)}
+                        <option key={style.value} value={style.value}>
+                          {t(style.labelKey)}
                         </option>
                       ))}
                     </select>

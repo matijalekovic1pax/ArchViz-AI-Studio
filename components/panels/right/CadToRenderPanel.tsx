@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
@@ -11,6 +12,7 @@ import { VerticalCard } from './SharedRightComponents';
 
 export const CadToRenderPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const wf = state.workflow;
   const updateWf = (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
   const cadCamera = wf.cadCamera;
@@ -18,11 +20,11 @@ export const CadToRenderPanel = () => {
   const cadContext = wf.cadContext;
   const [openSection, setOpenSection] = useState<string | null>(null);
   const generationModes = [
-    { id: 'enhance', label: 'Enhance', desc: 'Improves lighting and textures while keeping geometry.' },
-    { id: 'stylize', label: 'Stylize', desc: 'Applies artistic styles to the base model.' },
-    { id: 'hybrid', label: 'Hybrid', desc: 'Balances structural accuracy with creative details.' },
-    { id: 'strict-realism', label: 'Strict Realism', desc: 'Photographic accuracy, minimal hallucination.' },
-    { id: 'concept-push', label: 'Concept Push', desc: 'High creativity, explores new forms.' },
+    { id: 'enhance', label: t('render3dSettings.generationMode.options.enhance.label'), desc: t('render3dSettings.generationMode.options.enhance.desc') },
+    { id: 'stylize', label: t('render3dSettings.generationMode.options.stylize.label'), desc: t('render3dSettings.generationMode.options.stylize.desc') },
+    { id: 'hybrid', label: t('render3dSettings.generationMode.options.hybrid.label'), desc: t('render3dSettings.generationMode.options.hybrid.desc') },
+    { id: 'strict-realism', label: t('render3dSettings.generationMode.options.strictRealism.label'), desc: t('render3dSettings.generationMode.options.strictRealism.desc') },
+    { id: 'concept-push', label: t('render3dSettings.generationMode.options.conceptPush.label'), desc: t('render3dSettings.generationMode.options.conceptPush.desc') },
   ];
 
   const directionOptions = [
@@ -48,7 +50,7 @@ export const CadToRenderPanel = () => {
     <div className="space-y-6">
       <div>
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-          Generation Mode
+          {t('render3dSettings.generationMode.title')}
         </label>
         <div className="space-y-1">
           {generationModes.map((mode) => (
@@ -66,11 +68,11 @@ export const CadToRenderPanel = () => {
         items={[
           {
             id: 'cad-camera',
-            title: 'Camera and Viewpoint',
+            title: t('cadToRender.sections.camera.title'),
             content: (
               <div className="space-y-4">
                 <Slider
-                  label="Camera Height (m)"
+                  label={t('cadToRender.sections.camera.height')}
                   value={cadCamera.height}
                   min={0.8}
                   max={5}
@@ -78,7 +80,7 @@ export const CadToRenderPanel = () => {
                   onChange={(value) => updateWf({ cadCamera: { ...cadCamera, height: value } })}
                 />
                 <Slider
-                  label="Focal Length (mm)"
+                  label={t('cadToRender.sections.camera.focalLength')}
                   value={cadCamera.focalLength}
                   min={24}
                   max={85}
@@ -87,7 +89,7 @@ export const CadToRenderPanel = () => {
                 />
 
                 <div className="space-y-2">
-                  <label className="text-xs text-foreground-muted block">Camera Position Picker</label>
+                  <label className="text-xs text-foreground-muted block">{t('cadToRender.sections.camera.positionPicker')}</label>
                   <div
                     className="relative h-28 rounded border border-border bg-surface-sunken cursor-crosshair"
                     onClick={handleCameraPositionClick}
@@ -103,12 +105,12 @@ export const CadToRenderPanel = () => {
                     />
                   </div>
                   <p className="text-[9px] text-foreground-muted">
-                    Click on the plan to place the camera.
+                    {t('cadToRender.sections.camera.positionHint')}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-foreground-muted block">Look-at Direction</label>
+                  <label className="text-xs text-foreground-muted block">{t('cadToRender.sections.camera.lookAt')}</label>
                   <div className="grid grid-cols-4 gap-1">
                     {directionOptions.map((direction) => (
                       <button
@@ -128,7 +130,7 @@ export const CadToRenderPanel = () => {
                 </div>
 
                 <Toggle
-                  label="Vertical Correction"
+                  label={t('cadToRender.sections.camera.verticalCorrection')}
                   checked={cadCamera.verticalCorrection}
                   onChange={(value) => updateWf({ cadCamera: { ...cadCamera, verticalCorrection: value } })}
                 />
@@ -137,24 +139,24 @@ export const CadToRenderPanel = () => {
           },
           {
             id: 'cad-furnishing',
-            title: 'Furnishing',
+            title: t('cadToRender.sections.furnishing.title'),
             content: (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-foreground-muted block mb-1">Occupancy Feel</label>
+                  <label className="text-xs text-foreground-muted block mb-1">{t('cadToRender.sections.furnishing.occupancy')}</label>
                   <SegmentedControl
                     value={cadFurnishing.occupancy}
                     options={[
-                      { label: 'Empty', value: 'empty' },
-                      { label: 'Staged', value: 'staged' },
-                      { label: 'Lived-in', value: 'lived-in' },
+                      { label: t('cadToRender.sections.furnishing.occupancyOptions.empty'), value: 'empty' },
+                      { label: t('cadToRender.sections.furnishing.occupancyOptions.staged'), value: 'staged' },
+                      { label: t('cadToRender.sections.furnishing.occupancyOptions.livedIn'), value: 'lived-in' },
                     ]}
                     onChange={(value) => updateWf({ cadFurnishing: { ...cadFurnishing, occupancy: value } })}
                   />
                 </div>
 
                 <Slider
-                  label="Clutter Level"
+                  label={t('cadToRender.sections.furnishing.clutterLevel')}
                   value={cadFurnishing.clutter}
                   min={0}
                   max={100}
@@ -163,14 +165,14 @@ export const CadToRenderPanel = () => {
 
                 <div className="space-y-2">
                   <Toggle
-                    label="People / Entourage"
+                    label={t('cadToRender.sections.furnishing.peopleEntourage')}
                     checked={cadFurnishing.people}
                     onChange={(value) => updateWf({ cadFurnishing: { ...cadFurnishing, people: value } })}
                   />
                   {cadFurnishing.people && (
                     <div className="pl-2 border-l-2 border-border-subtle">
                       <Slider
-                        label="Entourage Level"
+                        label={t('cadToRender.sections.furnishing.entourageLevel')}
                         value={cadFurnishing.entourage}
                         min={0}
                         max={50}
@@ -184,46 +186,46 @@ export const CadToRenderPanel = () => {
           },
           {
             id: 'cad-context',
-            title: 'Context (Exterior Views)',
+            title: t('cadToRender.sections.context.title'),
             content: (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-foreground-muted block mb-1">Landscape Style</label>
+                  <label className="text-xs text-foreground-muted block mb-1">{t('cadToRender.sections.context.landscapeStyle')}</label>
                   <select
                     className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                     value={cadContext.landscape}
                     onChange={(e) => updateWf({ cadContext: { ...cadContext, landscape: e.target.value as any } })}
                   >
-                    <option value="garden">Formal Garden</option>
-                    <option value="native">Native Planting</option>
-                    <option value="minimal">Minimal</option>
-                    <option value="tropical">Lush Tropical</option>
-                    <option value="xeriscape">Dry Xeriscape</option>
+                    <option value="garden">{t('cadToRender.sections.context.landscapeOptions.formalGarden')}</option>
+                    <option value="native">{t('cadToRender.sections.context.landscapeOptions.nativePlanting')}</option>
+                    <option value="minimal">{t('cadToRender.sections.context.landscapeOptions.minimal')}</option>
+                    <option value="tropical">{t('cadToRender.sections.context.landscapeOptions.lushTropical')}</option>
+                    <option value="xeriscape">{t('cadToRender.sections.context.landscapeOptions.dryXeriscape')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-foreground-muted block mb-1">Environment</label>
+                  <label className="text-xs text-foreground-muted block mb-1">{t('cadToRender.sections.context.environment')}</label>
                   <select
                     className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                     value={cadContext.environment}
                     onChange={(e) => updateWf({ cadContext: { ...cadContext, environment: e.target.value as any } })}
                   >
-                    <option value="urban">Urban</option>
-                    <option value="suburban">Suburban</option>
-                    <option value="rural">Rural</option>
+                    <option value="urban">{t('cadToRender.sections.context.environmentOptions.urban')}</option>
+                    <option value="suburban">{t('cadToRender.sections.context.environmentOptions.suburban')}</option>
+                    <option value="rural">{t('cadToRender.sections.context.environmentOptions.rural')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-foreground-muted block mb-1">Season</label>
+                  <label className="text-xs text-foreground-muted block mb-1">{t('cadToRender.sections.context.season')}</label>
                   <SegmentedControl
                     value={cadContext.season}
                     options={[
-                      { label: 'Spring', value: 'spring' },
-                      { label: 'Summer', value: 'summer' },
-                      { label: 'Autumn', value: 'autumn' },
-                      { label: 'Winter', value: 'winter' },
+                      { label: t('cadToRender.sections.context.seasonOptions.spring'), value: 'spring' },
+                      { label: t('cadToRender.sections.context.seasonOptions.summer'), value: 'summer' },
+                      { label: t('cadToRender.sections.context.seasonOptions.autumn'), value: 'autumn' },
+                      { label: t('cadToRender.sections.context.seasonOptions.winter'), value: 'winter' },
                     ]}
                     onChange={(value) => updateWf({ cadContext: { ...cadContext, season: value as any } })}
                   />

@@ -1,4 +1,5 @@
 ﻿import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Accordion } from '../../ui/Accordion';
@@ -12,7 +13,7 @@ const buildStylePreview = (svg: string) => `data:image/svg+xml;utf8,${encodeURIC
 const dissectionStyles = [
   {
     id: 'stacked',
-    label: 'Stacked Layers',
+    labelKey: 'exploded.dissectionStyles.stacked',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#f5f4f1"/>
@@ -27,7 +28,7 @@ const dissectionStyles = [
   },
   {
     id: 'radial',
-    label: 'Radial Burst',
+    labelKey: 'exploded.dissectionStyles.radial',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#eef3f7"/>
@@ -47,7 +48,7 @@ const dissectionStyles = [
   },
   {
     id: 'sequential',
-    label: 'Sequential Peel',
+    labelKey: 'exploded.dissectionStyles.sequential',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#f8f1e6"/>
@@ -62,7 +63,7 @@ const dissectionStyles = [
   },
   {
     id: 'core-shell',
-    label: 'Core + Shell',
+    labelKey: 'exploded.dissectionStyles.coreShell',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#eef1f4"/>
@@ -73,7 +74,7 @@ const dissectionStyles = [
   },
   {
     id: 'slice',
-    label: 'Slice & Lift',
+    labelKey: 'exploded.dissectionStyles.sliceLift',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#f4f4f4"/>
@@ -87,7 +88,7 @@ const dissectionStyles = [
   },
   {
     id: 'systems',
-    label: 'System Focus',
+    labelKey: 'exploded.dissectionStyles.systems',
     imageUrl: buildStylePreview(
       `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140" viewBox="0 0 240 140">
         <rect width="240" height="140" fill="#eef6f0"/>
@@ -104,6 +105,7 @@ const dissectionStyles = [
 
 export const ExplodedPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const wf = state.workflow;
 
   const updateWf = useCallback(
@@ -114,27 +116,27 @@ export const ExplodedPanel = () => {
   return (
     <div className="space-y-6">
       <div>
-        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">View</label>
+        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">{t('exploded.view.title')}</label>
         <div className="space-y-3">
           <SegmentedControl
             value={wf.explodedView.type}
             options={[
-              { label: 'Axonometric', value: 'axon' },
-              { label: 'Perspective', value: 'perspective' },
+              { label: t('exploded.view.type.axonometric'), value: 'axon' },
+              { label: t('exploded.view.type.perspective'), value: 'perspective' },
             ]}
             onChange={(value) => updateWf({ explodedView: { ...wf.explodedView, type: value as any } })}
           />
 
           {wf.explodedView.type === 'axon' ? (
             <div>
-              <label className="text-[10px] text-foreground-muted mb-1 block">Angle</label>
+              <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.view.angle')}</label>
               <SegmentedControl
                 value={wf.explodedView.angle}
                 options={[
-                  { label: 'ISO NE', value: 'iso-ne' },
-                  { label: 'ISO NW', value: 'iso-nw' },
-                  { label: 'ISO SE', value: 'iso-se' },
-                  { label: 'ISO SW', value: 'iso-sw' },
+                  { label: t('exploded.view.iso.ne'), value: 'iso-ne' },
+                  { label: t('exploded.view.iso.nw'), value: 'iso-nw' },
+                  { label: t('exploded.view.iso.se'), value: 'iso-se' },
+                  { label: t('exploded.view.iso.sw'), value: 'iso-sw' },
                 ]}
                 onChange={(value) => updateWf({ explodedView: { ...wf.explodedView, angle: value as any } })}
               />
@@ -142,7 +144,7 @@ export const ExplodedPanel = () => {
           ) : (
             <div className="space-y-2">
               <Slider
-                label="Camera Height (m)"
+                label={t('exploded.view.cameraHeight')}
                 value={wf.explodedView.cameraHeight}
                 min={0.5}
                 max={10}
@@ -150,22 +152,22 @@ export const ExplodedPanel = () => {
                 onChange={(value) => updateWf({ explodedView: { ...wf.explodedView, cameraHeight: value } })}
               />
               <Slider
-                label="Field of View (deg)"
+                label={t('exploded.view.fieldOfView')}
                 value={wf.explodedView.fov}
                 min={20}
                 max={100}
                 onChange={(value) => updateWf({ explodedView: { ...wf.explodedView, fov: value } })}
               />
               <div>
-                <label className="text-[10px] text-foreground-muted mb-1 block">Look At</label>
+                <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.view.lookAt')}</label>
                 <select
                   className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                   value={wf.explodedView.lookAt}
                   onChange={(e) => updateWf({ explodedView: { ...wf.explodedView, lookAt: e.target.value as any } })}
                 >
-                  <option value="center">Center</option>
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
+                  <option value="center">{t('exploded.view.lookAtOptions.center')}</option>
+                  <option value="top">{t('exploded.view.lookAtOptions.top')}</option>
+                  <option value="bottom">{t('exploded.view.lookAtOptions.bottom')}</option>
                 </select>
               </div>
             </div>
@@ -177,7 +179,7 @@ export const ExplodedPanel = () => {
         items={[
           {
             id: 'render-style',
-            title: 'Dissection Style',
+            title: t('exploded.sections.dissectionStyle.title'),
             content: (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2">
@@ -196,20 +198,20 @@ export const ExplodedPanel = () => {
                         <div className="relative rounded-md h-12 w-full mb-2 border border-border overflow-hidden bg-white">
                           <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
                         </div>
-                        <div className="text-center">{style.label}</div>
+                        <div className="text-center">{t(style.labelKey)}</div>
                       </button>
                     );
                   })}
                 </div>
 
                 <div>
-                  <label className="text-[10px] text-foreground-muted mb-1 block">Color Mode</label>
+                  <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.sections.dissectionStyle.colorMode')}</label>
                   <SegmentedControl
                     value={wf.explodedStyle.colorMode}
                     options={[
-                      { label: 'Material Colors', value: 'material' },
-                      { label: 'System Colors', value: 'system' },
-                      { label: 'Monochrome', value: 'mono' },
+                      { label: t('exploded.sections.dissectionStyle.colorModeOptions.material'), value: 'material' },
+                      { label: t('exploded.sections.dissectionStyle.colorModeOptions.system'), value: 'system' },
+                      { label: t('exploded.sections.dissectionStyle.colorModeOptions.monochrome'), value: 'mono' },
                     ]}
                     onChange={(value) => updateWf({ explodedStyle: { ...wf.explodedStyle, colorMode: value as any } })}
                   />
@@ -218,10 +220,10 @@ export const ExplodedPanel = () => {
                 {wf.explodedStyle.colorMode === 'system' && (
                   <div className="space-y-2">
                     {[
-                      { key: 'structure', label: 'Structure' },
-                      { key: 'envelope', label: 'Envelope' },
-                      { key: 'mep', label: 'MEP' },
-                      { key: 'interior', label: 'Interior' },
+                      { key: 'structure', label: t('exploded.sections.dissectionStyle.systemColors.structure') },
+                      { key: 'envelope', label: t('exploded.sections.dissectionStyle.systemColors.envelope') },
+                      { key: 'mep', label: t('exploded.sections.dissectionStyle.systemColors.mep') },
+                      { key: 'interior', label: t('exploded.sections.dissectionStyle.systemColors.interior') },
                     ].map((item) => (
                       <div key={item.key} className="flex items-center justify-between">
                         <span className="text-xs text-foreground">{item.label}</span>
@@ -242,21 +244,21 @@ export const ExplodedPanel = () => {
                 )}
 
                 <div>
-                  <label className="text-[10px] text-foreground-muted mb-1 block">Edge Style</label>
+                  <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.sections.dissectionStyle.edgeStyle')}</label>
                   <select
                     className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                     value={wf.explodedStyle.edgeStyle}
                     onChange={(e) => updateWf({ explodedStyle: { ...wf.explodedStyle, edgeStyle: e.target.value as any } })}
                   >
-                    <option value="hidden-removed">Hidden lines removed</option>
-                    <option value="hidden-dashed">Hidden lines dashed</option>
-                    <option value="all-visible">All edges visible</option>
-                    <option value="silhouette">Silhouette only</option>
+                    <option value="hidden-removed">{t('exploded.sections.dissectionStyle.edgeStyleOptions.hiddenRemoved')}</option>
+                    <option value="hidden-dashed">{t('exploded.sections.dissectionStyle.edgeStyleOptions.hiddenDashed')}</option>
+                    <option value="all-visible">{t('exploded.sections.dissectionStyle.edgeStyleOptions.allVisible')}</option>
+                    <option value="silhouette">{t('exploded.sections.dissectionStyle.edgeStyleOptions.silhouette')}</option>
                   </select>
                 </div>
 
                 <Slider
-                  label="Line Weight"
+                  label={t('exploded.sections.dissectionStyle.lineWeight')}
                   value={wf.explodedStyle.lineWeight}
                   min={1}
                   max={5}
@@ -267,69 +269,69 @@ export const ExplodedPanel = () => {
           },
           {
             id: 'annotations',
-            title: 'Annotations',
+            title: t('exploded.sections.annotations.title'),
             content: (
               <div className="space-y-3">
                 <Toggle
-                  label="Component Labels"
+                  label={t('exploded.sections.annotations.componentLabels')}
                   checked={wf.explodedAnnotations.labels}
                   onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, labels: value } })}
                 />
                 <Toggle
-                  label="Leader Lines"
+                  label={t('exploded.sections.annotations.leaderLines')}
                   checked={wf.explodedAnnotations.leaders}
                   onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, leaders: value } })}
                 />
                 <Toggle
-                  label="Dimensions"
+                  label={t('exploded.sections.annotations.dimensions')}
                   checked={wf.explodedAnnotations.dimensions}
                   onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, dimensions: value } })}
                 />
                 <Toggle
-                  label="Assembly Numbers"
+                  label={t('exploded.sections.annotations.assemblyNumbers')}
                   checked={wf.explodedAnnotations.assemblyNumbers}
                   onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, assemblyNumbers: value } })}
                 />
                 <Toggle
-                  label="Material Callouts"
+                  label={t('exploded.sections.annotations.materialCallouts')}
                   checked={wf.explodedAnnotations.materialCallouts}
                   onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, materialCallouts: value } })}
                 />
 
                 <div>
-                  <label className="text-[10px] text-foreground-muted mb-1 block">Label Style</label>
+                  <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.sections.annotations.labelStyle')}</label>
                   <select
                     className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
                     value={wf.explodedAnnotations.labelStyle}
                     onChange={(e) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, labelStyle: e.target.value as any } })}
                   >
-                    <option value="minimal">Minimal</option>
-                    <option value="technical">Technical</option>
-                    <option value="descriptive">Descriptive</option>
+                    <option value="minimal">{t('exploded.sections.annotations.labelStyleOptions.minimal')}</option>
+                    <option value="technical">{t('exploded.sections.annotations.labelStyleOptions.technical')}</option>
+                    <option value="descriptive">{t('exploded.sections.annotations.labelStyleOptions.descriptive')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[10px] text-foreground-muted mb-1 block">Leader Style</label>
+                  <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.sections.annotations.leaderStyle')}</label>
                   <SegmentedControl
                     value={wf.explodedAnnotations.leaderStyle}
                     options={[
-                      { label: 'Straight', value: 'straight' },
-                      { label: 'Angled', value: 'angled' },
-                      { label: 'Curved', value: 'curved' },
+                      { label: t('exploded.sections.annotations.leaderStyleOptions.straight'), value: 'straight' },
+                      { label: t('exploded.sections.annotations.leaderStyleOptions.angled'), value: 'angled' },
+                      { label: t('exploded.sections.annotations.leaderStyleOptions.curved'), value: 'curved' },
                     ]}
                     onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, leaderStyle: value as any } })}
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] text-foreground-muted mb-1 block">Font Size</label>
+                  <label className="text-[10px] text-foreground-muted mb-1 block">{t('exploded.sections.annotations.fontSize')}</label>
                   <SegmentedControl
                     value={wf.explodedAnnotations.fontSize}
                     options={[
-                      { label: 'S', value: 'small' },
-                      { label: 'M', value: 'medium' },
-                      { label: 'L', value: 'large' },
+                      { label: t('exploded.sections.annotations.fontSizeOptions.small'), value: 'small' },
+                      { label: t('exploded.sections.annotations.fontSizeOptions.medium'), value: 'medium' },
+                      { label: t('exploded.sections.annotations.fontSizeOptions.large'), value: 'large' },
                     ]}
                     onChange={(value) => updateWf({ explodedAnnotations: { ...wf.explodedAnnotations, fontSize: value as any } })}
                   />

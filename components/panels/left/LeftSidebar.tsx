@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { 
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical, 
@@ -23,27 +24,28 @@ import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
 
 // --- Workflow Navigation ---
-const WORKFLOWS: { id: GenerationMode; label: string; icon: React.ElementType }[] = [
-  { id: 'generate-text', label: 'Generate', icon: Sparkles },
-  { id: 'render-3d', label: '3D to Render', icon: Palette },
-  { id: 'render-cad', label: 'CAD to Render', icon: FileCode },
-  { id: 'masterplan', label: 'Masterplans', icon: Map },
-  { id: 'visual-edit', label: 'Visual Editor', icon: Eraser },
-  { id: 'material-validation', label: 'Material Validation', icon: ClipboardCheck },
-  { id: 'exploded', label: 'Exploded Views', icon: Layers },
-  { id: 'section', label: 'Render to Section', icon: RectangleVertical },
-  { id: 'render-sketch', label: 'Sketch to Render', icon: Pencil },
-  { id: 'multi-angle', label: 'Multi-Angle', icon: Camera },
-  { id: 'upscale', label: 'Image Upscaler', icon: Maximize },
-  { id: 'img-to-cad', label: 'Image to CAD', icon: PenTool },
-  { id: 'img-to-3d', label: 'Image to 3D', icon: Cuboid },
-  { id: 'video', label: 'Video Studio', icon: Video },
+const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
+  { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
+  { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
+  { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
+  { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
+  { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
+  { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
+  { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
+  { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
+  { id: 'render-sketch', labelKey: 'workflows.renderSketch', icon: Pencil },
+  { id: 'multi-angle', labelKey: 'workflows.multiAngle', icon: Camera },
+  { id: 'upscale', labelKey: 'workflows.upscale', icon: Maximize },
+  { id: 'img-to-cad', labelKey: 'workflows.imgToCad', icon: PenTool },
+  { id: 'img-to-3d', labelKey: 'workflows.imgTo3d', icon: Cuboid },
+  { id: 'video', labelKey: 'workflows.video', icon: Video },
 ];
 
 const GenerateTextPanel = () => null;
 
 export const LeftSidebar: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const { leftSidebarOpen } = state;
   const isGenerateTextMode = state.mode === 'generate-text';
   const showPanel = !isGenerateTextMode;
@@ -68,7 +70,7 @@ export const LeftSidebar: React.FC = () => {
     }
   };
 
-  const activeWorkflowLabel = WORKFLOWS.find(w => w.id === state.mode)?.label;
+  const activeWorkflowLabel = t(WORKFLOWS.find(w => w.id === state.mode)?.labelKey || 'workflows.render3d');
 
   return (
     <div className="flex shrink-0 h-full">
@@ -87,13 +89,13 @@ export const LeftSidebar: React.FC = () => {
                   ? "bg-surface-sunken text-foreground" 
                   : "text-foreground-muted hover:bg-background-secondary hover:text-foreground"
               )}
-              title={workflow.label}
+              title={t(workflow.labelKey)}
             >
               <div className="min-w-[24px] flex items-center justify-center">
                 <Icon size={20} strokeWidth={1.5} />
               </div>
               <span className="text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 ml-3 transition-opacity duration-200 delay-75">
-                {workflow.label}
+                {t(workflow.labelKey)}
               </span>
               
               {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent rounded-r-full" />}
@@ -114,7 +116,7 @@ export const LeftSidebar: React.FC = () => {
               <button 
                 onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
                 className="text-foreground-muted hover:text-foreground hover:bg-surface-sunken p-1 rounded-md transition-colors"
-                title="Collapse Sidebar"
+                title={t('leftSidebar.collapse')}
               >
                 <ChevronsLeft size={16} />
               </button>
@@ -130,7 +132,7 @@ export const LeftSidebar: React.FC = () => {
            <button 
              onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
              className="mt-4 p-1 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-md transition-all z-30"
-             title="Expand Sidebar"
+             title={t('leftSidebar.expand')}
            >
              <ChevronsRight size={16} />
            </button>

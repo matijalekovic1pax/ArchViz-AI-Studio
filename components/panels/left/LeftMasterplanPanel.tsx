@@ -8,44 +8,46 @@ import { Building2, Blocks, Map, LayoutGrid, MapPin, Compass, MoreHorizontal, X 
 import { ZoneItem } from '../../../types';
 import { nanoid } from 'nanoid';
 import { LocationPickerModal } from '../../modals/LocationPickerModal';
+import { useTranslation } from 'react-i18next';
 
 const planTypes = [
-  { id: 'site', label: 'Site Plan', icon: Building2 },
-  { id: 'urban', label: 'Urban', icon: Map },
-  { id: 'zoning', label: 'Zoning', icon: LayoutGrid },
-  { id: 'massing', label: 'Massing', icon: Blocks },
+  { id: 'site', labelKey: 'masterplan.planTypes.site', icon: Building2 },
+  { id: 'urban', labelKey: 'masterplan.planTypes.urban', icon: Map },
+  { id: 'zoning', labelKey: 'masterplan.planTypes.zoning', icon: LayoutGrid },
+  { id: 'massing', labelKey: 'masterplan.planTypes.massing', icon: Blocks },
 ];
 
 const scaleOptions = [
-  { value: '1:200', label: '1:200 (Architectural Detail)' },
-  { value: '1:500', label: '1:500 (Site Detail)' },
-  { value: '1:1000', label: '1:1000 (Standard Site)' },
-  { value: '1:2500', label: '1:2500 (District)' },
-  { value: '1:5000', label: '1:5000 (City)' },
-  { value: '1:10000', label: '1:10000 (Metropolitan)' },
-  { value: 'custom', label: 'Custom...' },
+  { value: '1:200', labelKey: 'masterplan.scale.1_200' },
+  { value: '1:500', labelKey: 'masterplan.scale.1_500' },
+  { value: '1:1000', labelKey: 'masterplan.scale.1_1000' },
+  { value: '1:2500', labelKey: 'masterplan.scale.1_2500' },
+  { value: '1:5000', labelKey: 'masterplan.scale.1_5000' },
+  { value: '1:10000', labelKey: 'masterplan.scale.1_10000' },
+  { value: 'custom', labelKey: 'masterplan.scale.custom' },
 ];
 
 const zoneTypeOptions = [
-  { type: 'residential-low', label: 'Residential - Low Density', color: '#8BC34A' },
-  { type: 'residential-medium', label: 'Residential - Medium', color: '#4CAF50' },
-  { type: 'residential-high', label: 'Residential - High Density', color: '#2E7D32' },
-  { type: 'commercial', label: 'Commercial', color: '#2196F3' },
-  { type: 'retail', label: 'Retail', color: '#03A9F4' },
-  { type: 'office', label: 'Office', color: '#3F51B5' },
-  { type: 'industrial', label: 'Industrial', color: '#795548' },
-  { type: 'mixed', label: 'Mixed Use', color: '#9C27B0' },
-  { type: 'green', label: 'Green Space / Park', color: '#66BB6A' },
-  { type: 'water', label: 'Water', color: '#00BCD4' },
-  { type: 'infra', label: 'Infrastructure / Roads', color: '#607D8B' },
-  { type: 'institutional', label: 'Institutional', color: '#FF9800' },
-  { type: 'civic', label: 'Civic / Public', color: '#F44336' },
-  { type: 'parking', label: 'Parking', color: '#424242' },
-  { type: 'future', label: 'Reserved / Future', color: '#FFEB3B' },
+  { type: 'residential-low', labelKey: 'masterplan.zoneTypes.residentialLow', color: '#8BC34A' },
+  { type: 'residential-medium', labelKey: 'masterplan.zoneTypes.residentialMedium', color: '#4CAF50' },
+  { type: 'residential-high', labelKey: 'masterplan.zoneTypes.residentialHigh', color: '#2E7D32' },
+  { type: 'commercial', labelKey: 'masterplan.zoneTypes.commercial', color: '#2196F3' },
+  { type: 'retail', labelKey: 'masterplan.zoneTypes.retail', color: '#03A9F4' },
+  { type: 'office', labelKey: 'masterplan.zoneTypes.office', color: '#3F51B5' },
+  { type: 'industrial', labelKey: 'masterplan.zoneTypes.industrial', color: '#795548' },
+  { type: 'mixed', labelKey: 'masterplan.zoneTypes.mixed', color: '#9C27B0' },
+  { type: 'green', labelKey: 'masterplan.zoneTypes.green', color: '#66BB6A' },
+  { type: 'water', labelKey: 'masterplan.zoneTypes.water', color: '#00BCD4' },
+  { type: 'infra', labelKey: 'masterplan.zoneTypes.infra', color: '#607D8B' },
+  { type: 'institutional', labelKey: 'masterplan.zoneTypes.institutional', color: '#FF9800' },
+  { type: 'civic', labelKey: 'masterplan.zoneTypes.civic', color: '#F44336' },
+  { type: 'parking', labelKey: 'masterplan.zoneTypes.parking', color: '#424242' },
+  { type: 'future', labelKey: 'masterplan.zoneTypes.future', color: '#FFEB3B' },
 ];
 
 export const LeftMasterplanPanel = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const wf = state.workflow;
   const [isAdding, setIsAdding] = useState(false);
   const [newZoneName, setNewZoneName] = useState('');
@@ -109,7 +111,7 @@ export const LeftMasterplanPanel = () => {
     if (isDetectingZones) return;
     const sourceImage = wf.mpInputImage || state.sourceImage || state.uploadedImage;
     if (!sourceImage) {
-      setZoneDetectError('Upload an image first to auto-detect zones.');
+      setZoneDetectError(t('masterplan.zones.errors.uploadFirst'));
       return;
     }
     setZoneDetectError(null);
@@ -130,7 +132,7 @@ export const LeftMasterplanPanel = () => {
         const fallbackType = zoneTypeOptions[index % zoneTypeOptions.length];
         return {
           id: zone.id || nanoid(),
-          name: zone.name || `Zone ${index + 1}`,
+          name: zone.name || t('masterplan.zones.defaultName', { index: index + 1 }),
           type: zone.type || fallbackType.type,
           color: zone.color || fallbackType.color,
           selected: zone.selected ?? true,
@@ -140,10 +142,10 @@ export const LeftMasterplanPanel = () => {
       if (normalized.length > 0) {
         dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZones: normalized } });
       } else {
-        setZoneDetectError('No zones detected. Try again or refine the image.');
+        setZoneDetectError(t('masterplan.zones.errors.noneDetected'));
       }
     } catch (err) {
-      setZoneDetectError('Auto-detect failed. Please try again.');
+      setZoneDetectError(t('masterplan.zones.errors.failed'));
     } finally {
       setIsDetectingZones(false);
     }
@@ -152,7 +154,7 @@ export const LeftMasterplanPanel = () => {
   return (
     <div className="space-y-6">
       <div>
-        <SectionHeader title="Plan Type" />
+        <SectionHeader title={t('masterplan.planType.title')} />
         <div className="grid grid-cols-2 gap-2">
           {planTypes.map((type) => {
             const Icon = type.icon;
@@ -168,20 +170,20 @@ export const LeftMasterplanPanel = () => {
                     ? 'bg-foreground text-background border-foreground shadow-sm'
                     : 'bg-surface-elevated border-border hover:bg-surface-sunken'
                 )}
-              >
-                <Icon size={20} />
-                <span className="font-medium">{type.label}</span>
-              </button>
-            );
+                >
+                  <Icon size={20} />
+                  <span className="font-medium">{t(type.labelKey)}</span>
+                </button>
+              );
           })}
         </div>
       </div>
 
       <div>
-        <SectionHeader title="Scale & Orientation" />
+        <SectionHeader title={t('masterplan.scaleOrientation.title')} />
         <div className="space-y-3">
           <div>
-            <label className="text-[10px] text-foreground-muted mb-1 block">Scale</label>
+            <label className="text-[10px] text-foreground-muted mb-1 block">{t('masterplan.scaleOrientation.scale')}</label>
             <select
               value={wf.mpScale}
               onChange={(e) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpScale: e.target.value as any } })}
@@ -189,14 +191,14 @@ export const LeftMasterplanPanel = () => {
             >
               {scaleOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </option>
               ))}
             </select>
           </div>
           {wf.mpScale === 'custom' && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-foreground-muted">Custom Scale: 1:</span>
+              <span className="text-xs text-foreground-muted">{t('masterplan.scaleOrientation.customScale')}</span>
               <input
                 type="number"
                 min={100}
@@ -214,11 +216,11 @@ export const LeftMasterplanPanel = () => {
                   <Compass size={16} className="text-foreground-muted" />
                 </div>
                 <div>
-                  <div className="text-[10px] text-foreground-muted uppercase tracking-wide">North Rotation</div>
+                  <div className="text-[10px] text-foreground-muted uppercase tracking-wide">{t('masterplan.scaleOrientation.northRotation')}</div>
                   <div className="text-[11px] font-mono text-foreground">{Math.round(wf.mpNorthRotation)} deg</div>
                 </div>
               </div>
-              <span className="text-[10px] font-semibold text-foreground-muted">N</span>
+              <span className="text-[10px] font-semibold text-foreground-muted">{t('masterplan.scaleOrientation.north')}</span>
             </div>
             <div className="mt-2">
               <Slider
@@ -227,7 +229,7 @@ export const LeftMasterplanPanel = () => {
                 max={359}
                 step={1}
                 onChange={(value) => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpNorthRotation: value } })}
-                label="North Rotation"
+                label={t('masterplan.scaleOrientation.northRotation')}
                 showLabel={false}
                 showValue={false}
                 className="mt-1"
@@ -238,7 +240,7 @@ export const LeftMasterplanPanel = () => {
       </div>
 
       <div>
-        <SectionHeader title="Zone Definition" />
+        <SectionHeader title={t('masterplan.zones.title')} />
         <div className="space-y-3">
           <button
             type="button"
@@ -251,7 +253,7 @@ export const LeftMasterplanPanel = () => {
                 : "bg-foreground text-background border-foreground hover:opacity-90"
             )}
           >
-            {isDetectingZones ? 'Detecting Zones...' : 'Auto Detect Zones'}
+            {isDetectingZones ? t('masterplan.zones.detecting') : t('masterplan.zones.autoDetect')}
           </button>
           {zoneDetectError && (
             <div className="text-[10px] text-red-600 font-medium">
@@ -284,7 +286,7 @@ export const LeftMasterplanPanel = () => {
                         onClick={() => deleteZone(zone.id)}
                         className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                     </div>
                   )}
@@ -307,7 +309,7 @@ export const LeftMasterplanPanel = () => {
                   type="text"
                   value={newZoneName}
                   onChange={(e) => setNewZoneName(e.target.value)}
-                  placeholder="New zone name"
+                  placeholder={t('masterplan.zones.newZonePlaceholder')}
                   className="flex-1 text-xs bg-surface-sunken border border-border rounded px-2 h-7"
                 />
               </div>
@@ -318,16 +320,16 @@ export const LeftMasterplanPanel = () => {
               >
                 {zoneTypeOptions.map((opt) => (
                   <option key={opt.type} value={opt.type}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </option>
                 ))}
               </select>
               <div className="flex gap-2">
                 <button onClick={handleAddZone} className="flex-1 py-1 bg-foreground text-background text-[10px] rounded">
-                  Add Zone
+                  {t('masterplan.zones.add')}
                 </button>
                 <button onClick={() => setIsAdding(false)} className="flex-1 py-1 bg-surface-sunken text-foreground-secondary text-[10px] rounded">
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -337,7 +339,7 @@ export const LeftMasterplanPanel = () => {
                 onClick={() => setIsAdding(true)}
                 className="flex-1 py-2 border border-dashed border-border text-xs text-foreground-muted rounded hover:bg-surface-elevated transition-colors"
               >
-                + Add Zone
+                {t('masterplan.zones.addCta')}
               </button>
             </div>
           )}
@@ -345,7 +347,7 @@ export const LeftMasterplanPanel = () => {
       </div>
 
       <div>
-        <SectionHeader title="Site Boundary" />
+        <SectionHeader title={t('masterplan.boundary.title')} />
         <div className="space-y-3 bg-surface-sunken p-3 rounded-lg border border-border-subtle">
           <button
             type="button"
@@ -362,18 +364,20 @@ export const LeftMasterplanPanel = () => {
                 : "bg-surface-elevated text-foreground-secondary border-border hover:bg-surface-sunken"
             )}
           >
-            {wf.mpBoundary.mode === 'custom' ? 'Lasso On (Click to Disable)' : 'Lasso Boundary'}
+            {wf.mpBoundary.mode === 'custom'
+              ? t('masterplan.boundary.lassoOn')
+              : t('masterplan.boundary.lassoOff')}
           </button>
           {wf.mpBoundary.mode === 'custom' && (
             <div className="text-[10px] text-emerald-600 font-semibold">
-              Draw a green lasso directly on the canvas to set the site boundary.
+              {t('masterplan.boundary.instructions')}
             </div>
           )}
         </div>
       </div>
 
       <div>
-        <SectionHeader title="Context" />
+        <SectionHeader title={t('masterplan.context.title')} />
         <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
           {wf.mpContext.loadedData ? (
             <div className="space-y-2">
@@ -390,7 +394,7 @@ export const LeftMasterplanPanel = () => {
                 <button
                   onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, location: '', coordinates: null, loadedData: null } } })}
                   className="p-1 rounded hover:bg-surface-elevated text-foreground-muted hover:text-foreground transition-colors shrink-0"
-                  title="Clear context"
+                  title={t('masterplan.context.clear')}
                 >
                   <X size={14} />
                 </button>
@@ -400,7 +404,7 @@ export const LeftMasterplanPanel = () => {
                   onClick={() => setIsLocationModalOpen(true)}
                   className="flex-1 py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated transition-colors"
                 >
-                  Change
+                  {t('common.edit')}
                 </button>
               </div>
             </div>
@@ -409,7 +413,7 @@ export const LeftMasterplanPanel = () => {
               onClick={() => setIsLocationModalOpen(true)}
               className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors"
             >
-              <MapPin size={14} /> Load from Location
+              <MapPin size={14} /> {t('masterplan.context.load')}
             </button>
           )}
           

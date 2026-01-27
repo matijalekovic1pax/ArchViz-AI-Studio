@@ -1,6 +1,7 @@
 
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
 import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Slider } from '../../ui/Slider';
 
 export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
+  const { t } = useTranslation();
   const prompt = generatePrompt(state);
 
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
@@ -27,7 +29,7 @@ export const BottomPanel: React.FC = () => {
           {prompt}
           <button 
             className="absolute top-4 right-4 p-2 bg-surface-elevated border border-border rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-sunken"
-            title="Copy Prompt"
+            title={t('bottomPanel.copyPrompt')}
             onClick={() => navigator.clipboard.writeText(prompt)}
           >
             <Copy size={14} />
@@ -76,7 +78,7 @@ export const BottomPanel: React.FC = () => {
                    {/* Video Track */}
                    <div className="h-16 relative bg-[#2a2a2a] rounded border border-white/5 flex items-center">
                       <div className="absolute left-0 top-0 bottom-0 bg-blue-500/20 border-l-2 border-r-2 border-blue-500/50 w-full">
-                         <div className="p-2 text-[10px] text-blue-200 font-medium truncate">Main Sequence</div>
+                         <div className="p-2 text-[10px] text-blue-200 font-medium truncate">{t('bottomPanel.timeline.mainSequence')}</div>
                          <div className="flex h-full w-full absolute top-0 left-0 opacity-20 gap-px">
                             {[...Array(10)].map((_, i) => <div key={i} className="flex-1 bg-white/10" />)}
                          </div>
@@ -87,9 +89,9 @@ export const BottomPanel: React.FC = () => {
                    <div className="h-8 relative bg-[#2a2a2a] rounded border border-white/5 flex items-center">
                       <div className="absolute left-0 w-full h-full flex items-center px-4">
                          <div className="w-full h-0.5 bg-white/10 relative">
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500 hover:scale-125 transition-transform cursor-pointer" title="Start" />
-                            <div className="absolute left-[30%] top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500/50 hover:bg-yellow-500 hover:scale-125 transition-all cursor-pointer" title="Keyframe" />
-                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500 hover:scale-125 transition-transform cursor-pointer" title="End" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500 hover:scale-125 transition-transform cursor-pointer" title={t('bottomPanel.timeline.start')} />
+                            <div className="absolute left-[30%] top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500/50 hover:bg-yellow-500 hover:scale-125 transition-all cursor-pointer" title={t('bottomPanel.timeline.keyframe')} />
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 bg-yellow-500 hover:scale-125 transition-transform cursor-pointer" title={t('bottomPanel.timeline.end')} />
                          </div>
                       </div>
                    </div>
@@ -122,8 +124,8 @@ export const BottomPanel: React.FC = () => {
             {state.history.length === 0 ? (
                <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
                   <Clock size={24} className="opacity-20" />
-                  <span className="text-xs">No history in this session.</span>
-               </div>
+                  <span className="text-xs">{t('bottomPanel.history.empty')}</span>
+                </div>
             ) : (
                state.history.map((item) => (
                  <button 
@@ -187,7 +189,7 @@ export const BottomPanel: React.FC = () => {
                {tab === 'legend' && <Layers size={14} />}
                {tab === 'edit-stack' && <List size={14} />}
                {tab === 'cleanup' && <Wand2 size={14} />}
-               {tab.charAt(0).toUpperCase() + tab.slice(1)}
+               {t(`bottomPanel.tabs.${tab}`)}
              </button>
            ))}
         </div>

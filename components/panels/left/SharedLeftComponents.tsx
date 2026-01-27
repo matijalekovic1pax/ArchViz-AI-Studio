@@ -1,5 +1,6 @@
 
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, Grid } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
@@ -10,6 +11,7 @@ export const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
 );
 
 export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => void; onBrowse: () => void; styles?: StyleConfiguration[] }> = ({ activeId, onSelect, onBrowse, styles }) => {
+  const { t } = useTranslation();
   const availableStyles = styles && styles.length > 0 ? styles : BUILT_IN_STYLES;
   const displayStyles = useMemo(() => {
     const defaultStyles = availableStyles.slice(0, 4);
@@ -34,6 +36,8 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
       e.currentTarget.src = fallbackPreview;
     }
   };
+  const getStyleName = (style: StyleConfiguration) =>
+    t(`styles.names.${style.id}`, { defaultValue: style.name });
 
   return (
     <div className="space-y-2">
@@ -51,7 +55,7 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
           >
             <img
               src={resolvePreviewUrl(style.previewUrl)}
-              alt={style.name}
+              alt={getStyleName(style)}
               onError={handlePreviewError}
               data-fallback={fallbackPhoto}
               className="absolute inset-0 z-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -59,7 +63,7 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
             <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent z-0" />
             
             <div className="relative z-10 px-2 py-1 w-full">
-              <p className="text-white text-[10px] font-bold leading-tight truncate w-full shadow-sm group-hover:text-accent-muted transition-colors">{style.name}</p>
+              <p className="text-white text-[10px] font-bold leading-tight truncate w-full shadow-sm group-hover:text-accent-muted transition-colors">{getStyleName(style)}</p>
               <p className="text-white/80 text-[8px] truncate shadow-sm font-medium">{style.category}</p>
             </div>
             
@@ -76,7 +80,7 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
         className="w-full h-8 flex items-center justify-center gap-2 rounded border border-dashed border-border text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted hover:bg-surface-elevated transition-all"
       >
         <Grid size={12} />
-        <span>Browse All Styles</span>
+        <span>{t('styles.browseAll')}</span>
       </button>
     </div>
   );

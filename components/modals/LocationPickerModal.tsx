@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Search, MapPin, Loader2, Building2, Route, Droplets, Mountain, Train } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Slider } from '../ui/Slider';
@@ -35,6 +36,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   onLoad,
   initialData,
 }) => {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -149,7 +151,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface-elevated">
           <div className="flex items-center gap-2">
             <MapPin size={18} className="text-accent" />
-            <h2 className="text-sm font-semibold">Load Context from Location</h2>
+            <h2 className="text-sm font-semibold">{t('locationModal.title')}</h2>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-surface-elevated transition-colors">
             <X size={18} />
@@ -166,12 +168,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                     key={`${selectedLocation.lat}-${selectedLocation.lng}-${radius}`}
                     src={getMapPreviewUrl() || ''}
                     className="w-full h-full border-0"
-                    title="Map Preview"
+                    title={t('locationModal.mapPreview')}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-foreground-muted">
                     <MapPin size={24} className="mb-2 opacity-50" />
-                    <span className="text-xs">Search for a location on the right</span>
+                    <span className="text-xs">{t('locationModal.empty')}</span>
                   </div>
                 )}
                 {selectedLocation && (
@@ -193,7 +195,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => handleQueryChange(e.target.value)}
-                  placeholder="Search address or coordinates..."
+                  placeholder={t('locationModal.searchPlaceholder')}
                   className="w-full h-10 pl-9 pr-4 bg-surface-elevated border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
                 />
                 {isSearching && (
@@ -219,7 +221,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               {/* Radius */}
               <div>
                 <Slider
-                  label="Radius"
+                  label={t('locationModal.radius')}
                   value={radius}
                   min={100}
                   max={2000}
@@ -227,45 +229,45 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                   onChange={setRadius}
                 />
                 <br></br>
-                <div className="text-[10px] text-foreground-muted -mt-2">{radius}m around center point</div>
+                <div className="text-[10px] text-foreground-muted -mt-2">{t('locationModal.radiusHint', { radius })}</div>
               </div>
 
               {/* Data */}
               <div className="border-t border-border pt-3">
-                <div className="text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Data to Load</div>
+                <div className="text-[10px] text-foreground-muted uppercase tracking-wider mb-2">{t('locationModal.dataToLoad')}</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Building2 size={14} className="text-foreground-muted" />
-                      <span>Buildings</span>
+                      <span>{t('locationModal.data.buildings')}</span>
                     </div>
                     <Toggle label="" checked={loadBuildings} onChange={setLoadBuildings} />
                   </div>
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Route size={14} className="text-foreground-muted" />
-                      <span>Roads</span>
+                      <span>{t('locationModal.data.roads')}</span>
                     </div>
                     <Toggle label="" checked={loadRoads} onChange={setLoadRoads} />
                   </div>
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Droplets size={14} className="text-foreground-muted" />
-                      <span>Water</span>
+                      <span>{t('locationModal.data.water')}</span>
                     </div>
                     <Toggle label="" checked={loadWater} onChange={setLoadWater} />
                   </div>
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Mountain size={14} className="text-foreground-muted" />
-                      <span>Terrain</span>
+                      <span>{t('locationModal.data.terrain')}</span>
                     </div>
                     <Toggle label="" checked={loadTerrain} onChange={setLoadTerrain} />
                   </div>
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border col-span-2">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Train size={14} className="text-foreground-muted" />
-                      <span>Transit Lines</span>
+                      <span>{t('locationModal.data.transit')}</span>
                     </div>
                     <Toggle label="" checked={loadTransit} onChange={setLoadTransit} />
                   </div>
@@ -281,7 +283,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             onClick={onClose}
             className="flex-1 py-2 text-xs font-medium rounded-lg border border-border hover:bg-surface-elevated transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleLoadContext}
@@ -296,10 +298,10 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             {isLoading ? (
               <>
                 <Loader2 size={14} className="animate-spin" />
-                Loading...
+                {t('locationModal.loading')}
               </>
             ) : (
-              'Load Context'
+              t('locationModal.loadContext')
             )}
           </button>
         </div>
