@@ -347,6 +347,7 @@ export interface WorkflowSettings {
   visualSelectionViewScale: number | null;
   visualSelectionComposite: string | null;
   visualSelectionCompositeSize: { width: number; height: number } | null;
+  visualAutoSelecting: boolean;
   visualMaterial: {
     surfaceType: 'auto' | 'manual';
     category: 'Flooring' | 'Wall' | 'Facade' | 'Roof' | 'Metal' | 'Glass' | 'Stone' | 'Fabric';

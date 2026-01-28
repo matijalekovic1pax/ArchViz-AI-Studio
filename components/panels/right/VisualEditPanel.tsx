@@ -1,8 +1,11 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store';
+import type { VisualSelectionShape } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './SharedRightComponents';
+import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized } from '../../../services/geminiService';
+import { nanoid } from 'nanoid';
 import {
   Image as ImageIcon,
   Move,
@@ -52,10 +55,42 @@ import {
   Laptop,
   BookOpen,
   Upload,
+  Eraser,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
-const selectionTargets = ['Facade', 'Windows', 'Sky', 'Ground', 'Vegetation', 'People', 'Vehicles', 'Building'];
+const selectionTargets = [
+  'Building',
+  'Facade',
+  'Windows',
+  'Doors',
+  'Roof',
+  'Walls',
+  'Floors',
+  'Ceilings',
+  'Columns',
+  'Structure',
+  'Glass',
+  'Signage',
+  'Lighting',
+  'Seating',
+  'Furniture',
+  'Counters',
+  'People',
+  'Vehicles',
+  'Aircraft',
+  'Trains',
+  'Buses',
+  'Jet Bridges',
+  'Luggage Carts',
+  'Platforms',
+  'Roads',
+  'Parking',
+  'Ground',
+  'Water',
+  'Vegetation',
+  'Sky',
+];
 const selectionExamples = [
   'Replace with modern glass facade',
   'Add greenery and climbing plants',
@@ -1328,8 +1363,11 @@ export const VisualEditPanel = () => {
   const [isMaterialBrowserOpen, setIsMaterialBrowserOpen] = useState(false);
   const [materialFilterCategory, setMaterialFilterCategory] = useState('All');
   const [extendBaseSize, setExtendBaseSize] = useState<{ width: number; height: number } | null>(null);
+  const [autoSelectStatus, setAutoSelectStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [autoSelectMessage, setAutoSelectMessage] = useState('');
 
   const backgroundInputRef = useRef<HTMLInputElement>(null);
+  const autoSelectRequestIdRef = useRef(0);
 
   const updateWf = (payload: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
 
@@ -1361,6 +1399,279 @@ export const VisualEditPanel = () => {
     updateWf({ visualExtend: { ...wf.visualExtend, ...updates } });
   const updateBackground = (updates: Partial<typeof wf.visualBackground>) =>
     updateWf({ visualBackground: { ...wf.visualBackground, ...updates } });
+
+  const getApiKey = useCallback((): string | null => {
+    // @ts-ignore - Vite injects this
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_GEMINI_API_KEY;
+    }
+    return localStorage.getItem('gemini_api_key');
+  }, []);
+
+  const ensureAutoSelectService = useCallback(() => {
+    if (isGeminiServiceInitialized()) {
+      return true;
+    }
+    const apiKey = getApiKey();
+    if (apiKey) {
+      initGeminiService({ apiKey });
+      return true;
+    }
+    return false;
+  }, [getApiKey]);
+
+  const loadImageSize = useCallback((dataUrl: string) => {
+    return new Promise<{ width: number; height: number } | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        if (!width || !height) {
+          resolve(null);
+          return;
+        }
+        resolve({ width, height });
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }, []);
+
+  const extractJsonPayload = useCallback((text: string) => {
+    if (!text) return '';
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = (fenced ? fenced[1] : text).trim();
+    const start = candidate.search(/[\[{]/);
+    if (start === -1) return candidate;
+    const end = Math.max(candidate.lastIndexOf('}'), candidate.lastIndexOf(']'));
+    if (end <= start) return candidate.slice(start);
+    return candidate.slice(start, end + 1);
+  }, []);
+
+  const buildSelectionShapes = useCallback((
+    payloadText: string,
+    width: number,
+    height: number
+  ): VisualSelectionShape[] => {
+    const jsonText = extractJsonPayload(payloadText);
+    if (!jsonText) return [];
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      return [];
+    }
+
+    const rawItems: any[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.polygons)
+        ? parsed.polygons
+        : Array.isArray(parsed?.selections)
+          ? parsed.selections
+          : Array.isArray(parsed?.objects)
+            ? parsed.objects
+            : [];
+
+    if (!rawItems.length) return [];
+
+    const toNumber = (value: unknown) => {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string') return Number.parseFloat(value);
+      return NaN;
+    };
+
+    const normalizePoints = (points: Array<{ x: number; y: number }> | Array<[number, number]>) => {
+      const normalizedPoints: Array<{ x: number; y: number }> = points
+        .map((point: any) => {
+          if (Array.isArray(point)) {
+            return { x: toNumber(point[0]), y: toNumber(point[1]) };
+          }
+          return { x: toNumber(point.x), y: toNumber(point.y) };
+        })
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+      if (!normalizedPoints.length) return [];
+      const maxCoord = Math.max(...normalizedPoints.map((point) => Math.max(point.x, point.y)));
+      const isNormalized = maxCoord <= 2;
+      return normalizedPoints.map((point) => ({
+        x: Math.min(Math.max(isNormalized ? point.x * width : point.x, 0), width),
+        y: Math.min(Math.max(isNormalized ? point.y * height : point.y, 0), height),
+      }));
+    };
+
+    const shapes: VisualSelectionShape[] = [];
+
+    rawItems.forEach((item) => {
+      let points: Array<{ x: number; y: number }> | Array<[number, number]> | null = null;
+      const pointSource =
+        item?.points ||
+        item?.polygon ||
+        item?.contour ||
+        item?.outline;
+
+      if (Array.isArray(pointSource)) {
+        points = pointSource;
+      } else if (item?.bbox || item?.box) {
+        const box = item.bbox || item.box;
+        let x = 0;
+        let y = 0;
+        let w = 0;
+        let h = 0;
+        if (Array.isArray(box) && box.length >= 4) {
+          const x1 = toNumber(box[0]);
+          const y1 = toNumber(box[1]);
+          const x2 = toNumber(box[2]);
+          const y2 = toNumber(box[3]);
+          if (x2 > x1 && y2 > y1) {
+            x = x1;
+            y = y1;
+            w = x2 - x1;
+            h = y2 - y1;
+          } else {
+            x = x1;
+            y = y1;
+            w = x2;
+            h = y2;
+          }
+        } else if (box && typeof box === 'object') {
+          x = toNumber(box.x ?? box.x1 ?? 0);
+          y = toNumber(box.y ?? box.y1 ?? 0);
+          const x2 = toNumber(box.x2 ?? NaN);
+          const y2 = toNumber(box.y2 ?? NaN);
+          if (Number.isFinite(x2) && Number.isFinite(y2)) {
+            w = x2 - x;
+            h = y2 - y;
+          } else {
+            w = toNumber(box.width ?? box.w ?? 0);
+            h = toNumber(box.height ?? box.h ?? 0);
+          }
+        }
+
+        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)) {
+          points = [
+            [x, y],
+            [x + w, y],
+            [x + w, y + h],
+            [x, y + h],
+          ];
+        }
+      }
+
+      if (!points) return;
+      const mapped = normalizePoints(points);
+      if (mapped.length < 3) return;
+      shapes.push({
+        id: nanoid(),
+        type: 'lasso',
+        points: mapped,
+      });
+    });
+
+    return shapes;
+  }, [extractJsonPayload]);
+
+  const runAutoSelection = useCallback(async (targets: string[]) => {
+    if (!targets.length) return;
+    if (!state.uploadedImage) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: 'Upload an image before running auto selection.'
+        }
+      });
+      return;
+    }
+    if (!ensureAutoSelectService()) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: 'Gemini API key not configured. Add it in .env or settings.'
+        }
+      });
+      return;
+    }
+
+    const requestId = autoSelectRequestIdRef.current + 1;
+    autoSelectRequestIdRef.current = requestId;
+    setAutoSelectStatus('loading');
+    setAutoSelectMessage(`Auto-selecting ${targets.join(', ')}...`);
+    updateWf({ visualAutoSelecting: true });
+
+    try {
+      const imageData = ImageUtils.dataUrlToImageData(state.uploadedImage);
+      if (!imageData) {
+        throw new Error('Failed to prepare image data.');
+      }
+      const imageSize = await loadImageSize(state.uploadedImage);
+      if (!imageSize) {
+        throw new Error('Failed to read image dimensions.');
+      }
+
+      const prompt = [
+        'You are a precise segmentation assistant for architectural renders.',
+        `Target objects: ${targets.join(', ')}.`,
+        'Return ONLY valid JSON.',
+        'Output schema:',
+        '{ "polygons": [ { "label": string, "points": [ { "x": number, "y": number } ] } ] }',
+        'Coordinates must be normalized in the 0..1 range relative to image width/height.',
+        'Each polygon should tightly trace the object outline with enough points to match a selection lasso.',
+        'Do not include any commentary, markdown, or code fences.'
+      ].join(' ');
+
+      const responseText = await getGeminiService().generateText({
+        prompt,
+        images: [imageData]
+      });
+
+      if (autoSelectRequestIdRef.current !== requestId) return;
+
+      const shapes = buildSelectionShapes(responseText, imageSize.width, imageSize.height);
+      if (!shapes.length) {
+        throw new Error('No selection polygons returned.');
+      }
+
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualSelections: shapes,
+          visualSelectionUndoStack: [...state.workflow.visualSelectionUndoStack, state.workflow.visualSelections],
+          visualSelectionRedoStack: [],
+        }
+      });
+
+      setAutoSelectStatus('idle');
+      setAutoSelectMessage('');
+      updateWf({ visualAutoSelecting: false });
+    } catch (error) {
+      if (autoSelectRequestIdRef.current !== requestId) return;
+      setAutoSelectStatus('error');
+      const message = error instanceof Error ? error.message : 'Auto selection failed.';
+      setAutoSelectMessage(message);
+      updateWf({ visualAutoSelecting: false });
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: `Auto selection failed: ${message}`
+        }
+      });
+    }
+  }, [
+    buildSelectionShapes,
+    dispatch,
+    ensureAutoSelectService,
+    loadImageSize,
+    state.uploadedImage,
+    state.workflow.visualSelectionUndoStack,
+    state.workflow.visualSelections,
+    updateWf
+  ]);
 
   const handleBackgroundUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1441,6 +1752,14 @@ export const VisualEditPanel = () => {
       canceled = true;
     };
   }, [state.uploadedImage]);
+
+  useEffect(() => {
+    if (wf.visualSelection.mode !== 'ai' || wf.visualSelection.autoTargets.length === 0) {
+      setAutoSelectStatus('idle');
+      setAutoSelectMessage('');
+      updateWf({ visualAutoSelecting: false });
+    }
+  }, [updateWf, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
 
   const filteredMaterials = useMemo(() => {
     const query = materialQuery.trim().toLowerCase();
@@ -1603,6 +1922,21 @@ export const VisualEditPanel = () => {
       ? wf.visualSelection.autoTargets.filter((item) => item !== target)
       : [...wf.visualSelection.autoTargets, target];
     updateSelection({ autoTargets: next });
+    if (wf.visualSelection.mode === 'ai') {
+      if (next.length === 0) {
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload: {
+            visualSelections: [],
+            visualSelectionUndoStack: [...wf.visualSelectionUndoStack, wf.visualSelections],
+            visualSelectionRedoStack: [],
+            visualAutoSelecting: false,
+          }
+        });
+        return;
+      }
+      runAutoSelection(next);
+    }
   };
 
   const handleQuickRemove = (label: string) => {
@@ -1717,12 +2051,24 @@ export const VisualEditPanel = () => {
               options={[
                 { label: 'Rect', value: 'rect' },
                 { label: 'Brush', value: 'brush' },
-                { label: 'Erase', value: 'erase' },
                 { label: 'Lasso', value: 'lasso' },
                 { label: 'Auto', value: 'ai' },
               ]}
               onChange={(value) => updateSelection({ mode: value })}
             />
+            <button
+              type="button"
+              onClick={() => updateSelection({ mode: 'erase' })}
+              className={cn(
+                'w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-colors',
+                wf.visualSelection.mode === 'erase'
+                  ? 'bg-foreground text-background border-foreground shadow-sm'
+                  : 'bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+              )}
+            >
+              <Eraser size={14} />
+              Erase Traces
+            </button>
 
             {(wf.visualSelection.mode === 'brush' || wf.visualSelection.mode === 'erase') && (
               <div className="space-y-2">
@@ -1739,24 +2085,38 @@ export const VisualEditPanel = () => {
             )}
 
             {wf.visualSelection.mode === 'ai' && (
-              <div className="grid grid-cols-3 gap-2">
-                {selectionTargets.map((target) => {
-                  const active = wf.visualSelection.autoTargets.includes(target);
-                  return (
-                    <button
-                      key={target}
-                      className={cn(
-                        'text-[10px] border rounded px-2 py-2 transition-colors',
-                        active
-                          ? 'bg-foreground text-background border-foreground'
-                          : 'border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground'
-                      )}
-                      onClick={() => handleToggleTarget(target)}
-                    >
-                      {target}
-                    </button>
-                  );
-                })}
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {selectionTargets.map((target) => {
+                    const active = wf.visualSelection.autoTargets.includes(target);
+                    return (
+                      <button
+                        key={target}
+                        className={cn(
+                          'text-[10px] border rounded px-2 py-2 transition-colors',
+                          active
+                            ? 'bg-foreground text-background border-foreground'
+                            : 'border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground'
+                        )}
+                        onClick={() => handleToggleTarget(target)}
+                      >
+                        {target}
+                      </button>
+                    );
+                  })}
+                </div>
+                {autoSelectStatus !== 'idle' && (
+                  <div
+                    className={cn(
+                      'text-[10px] rounded-md px-2 py-1 border',
+                      autoSelectStatus === 'loading'
+                        ? 'border-border text-foreground-muted bg-surface-sunken/60'
+                        : 'border-red-200 text-red-500 bg-red-50/80'
+                    )}
+                  >
+                    {autoSelectMessage || (autoSelectStatus === 'loading' ? 'Auto-selecting...' : 'Auto selection failed.')}
+                  </div>
+                )}
               </div>
             )}
 

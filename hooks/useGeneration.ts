@@ -596,6 +596,7 @@ export function useGeneration(): UseGenerationReturn {
     };
 
     dispatch({ type: 'SET_GENERATING', payload: true });
+    let multiAngleHistoryHandled = false;
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
     updateProgress(2);
 
@@ -725,6 +726,53 @@ export function useGeneration(): UseGenerationReturn {
           : `Generate an image: ${prompt}`
       );
 
+      const DEFAULT_MAX_RETRIES = 3;
+      const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
+
+      const runWithRetry = async <T>(
+        label: string,
+        fn: () => Promise<T>,
+        options?: { timeoutMs?: number; maxRetries?: number }
+      ): Promise<T> => {
+        const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
+        const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          if (abortSignal.aborted) {
+            throw new DOMException('Request aborted', 'AbortError');
+          }
+
+          try {
+            if (attempt > 0) {
+              console.log(`Retrying ${label}, attempt ${attempt + 1}/${maxRetries + 1}`);
+            }
+            const result = await Promise.race([
+              fn(),
+              new Promise<never>((_, reject) => {
+                setTimeout(() => {
+                  reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
+                }, timeoutMs);
+              })
+            ]);
+            return result;
+          } catch (error) {
+            lastError = error as Error;
+            if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
+              throw error;
+            }
+            const isTimeout = lastError.message?.includes('timed out');
+            console.error(`${label} attempt ${attempt + 1} failed${isTimeout ? ' (timeout)' : ''}:`, error);
+            if (attempt < maxRetries) {
+              const delay = isTimeout ? 1000 : Math.min(1000 * Math.pow(2, attempt), 8000);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
+
+        throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
+      };
+
       const runStreamedImageGeneration = async (request: {
         prompt: string;
         images?: ImageData[];
@@ -789,7 +837,7 @@ export function useGeneration(): UseGenerationReturn {
             type: 'UPDATE_MATERIAL_VALIDATION',
             payload: { isRunning: true, aiSummary: null, lastRunAt: Date.now(), error: null }
           });
-          await runBatchMaterialValidation();
+          await runWithRetry('material validation', () => runBatchMaterialValidation(), { timeoutMs: 5 * 60 * 1000 });
           result = { text: null, images: [] };
         } else if (state.mode === 'document-translate') {
           // Document translation mode
@@ -837,23 +885,27 @@ export function useGeneration(): UseGenerationReturn {
           });
 
           try {
-            const translatedUrl = await translateDocument({
-              sourceDocument: docTranslate.sourceDocument,
-              sourceLanguage: docTranslate.sourceLanguage,
-              targetLanguage: docTranslate.targetLanguage,
-              onProgress: (progress: TranslationProgress) => {
-                dispatch({
-                  type: 'UPDATE_DOCUMENT_TRANSLATE',
-                  payload: { progress }
-                });
-                // Update global progress based on translation progress
-                const percent = progress.totalSegments > 0
-                  ? Math.round((progress.currentSegment / progress.totalSegments) * 100)
-                  : 0;
-                dispatch({ type: 'SET_PROGRESS', payload: percent });
-              },
-              abortSignal,
-            });
+            const translatedUrl = await runWithRetry(
+              'document translation',
+              () => translateDocument({
+                sourceDocument: docTranslate.sourceDocument,
+                sourceLanguage: docTranslate.sourceLanguage,
+                targetLanguage: docTranslate.targetLanguage,
+                onProgress: (progress: TranslationProgress) => {
+                  dispatch({
+                    type: 'UPDATE_DOCUMENT_TRANSLATE',
+                    payload: { progress }
+                  });
+                  // Update global progress based on translation progress
+                  const percent = progress.totalSegments > 0
+                    ? Math.round((progress.currentSegment / progress.totalSegments) * 100)
+                    : 0;
+                  dispatch({ type: 'SET_PROGRESS', payload: percent });
+                },
+                abortSignal,
+              }),
+              { timeoutMs: 8 * 60 * 1000 }
+            );
 
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
@@ -892,12 +944,12 @@ export function useGeneration(): UseGenerationReturn {
           updateProgress(10);
           const textGenerationConfig = generationConfig;
           // Text-only generation (analysis modes)
-          const text = await service.generateText({
+          const text = await runWithRetry('text generation', () => service.generateText({
             prompt: fullPrompt || 'Analyze the provided materials and return a concise validation summary.',
             images,
             attachments,
             generationConfig: generationConfigWithAbort
-          });
+          }));
           if (!text.trim()) {
             throw new Error('No text returned from Gemini. Ensure the model supports document analysis.');
           }
@@ -927,28 +979,102 @@ export function useGeneration(): UseGenerationReturn {
 
         const outputs: Array<{ id: string; name: string; url: string }> = [];
         const imagesOut: GeneratedImage[] = [];
+        const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
+        const hasSourceEntry = sourceForHistory
+          ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
+          : false;
+        if (sourceForHistory && !hasSourceEntry) {
+          dispatch({
+            type: 'ADD_HISTORY',
+            payload: {
+              id: nanoid(),
+              timestamp: Date.now(),
+              thumbnail: sourceForHistory,
+              prompt: basePrompt,
+              attachments: attachmentUrls,
+              mode: state.mode,
+              settings: { kind: 'source' }
+            }
+          });
+        }
+        const normalizeAzimuth = (value: number) => ((value % 360) + 360) % 360;
+        const compassLabel = (azimuth: number) => {
+          const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+          const index = Math.round(normalizeAzimuth(azimuth) / 45) % directions.length;
+          return directions[index];
+        };
+        const facadeDescriptor = (azimuth: number) => {
+          const normalized = normalizeAzimuth(azimuth);
+          if (normalized < 22.5 || normalized >= 337.5) return 'front';
+          if (normalized < 67.5) return 'front-right';
+          if (normalized < 112.5) return 'right';
+          if (normalized < 157.5) return 'back-right';
+          if (normalized < 202.5) return 'back';
+          if (normalized < 247.5) return 'back-left';
+          if (normalized < 292.5) return 'left';
+          return 'front-left';
+        };
 
         for (let i = 0; i < angleViews.length; i++) {
           if (abortSignal.aborted) {
             throw new DOMException('Request aborted', 'AbortError');
           }
           const view = angleViews[i];
-          const anglePrompt = `${fullPrompt} Angle ${i + 1}: azimuth ${view.azimuth} deg, elevation ${view.elevation} deg.`;
-          const angleResult = await service.generateImages({
-            prompt: anglePrompt,
-            images: images.length > 0 ? images : undefined,
-            generationConfig: generationConfigWithAbort
-          });
+          const azimuth = normalizeAzimuth(view.azimuth);
+          const elevation = view.elevation;
+          const direction = compassLabel(azimuth);
+          const facadeView = facadeDescriptor(azimuth);
+          const anglePrompt = [
+            'ANGLE-SPECIFIC INSTRUCTIONS (non-negotiable):',
+            `View ${i + 1}/${angleViews.length}.`,
+            `Rotate the camera ${azimuth} deg clockwise around the building relative to the INPUT IMAGE (treat input view as 0 deg).`,
+            `Camera azimuth: ${azimuth} deg (0 deg=front, 90 deg=right, 180 deg=back, 270 deg=left).`,
+            `Camera elevation: ${elevation} deg above the horizon.`,
+            'Keep a fixed orbit radius, centered on the building, and look directly at the building center.',
+            `Primary facade view MUST be: ${facadeView}. The ${facadeView} facades must dominate the frame.`,
+            `Visible facade orientation must match the ${direction} (${azimuth} deg) orbit position.`,
+            'This output MUST be visibly different from the other angles. Do NOT reuse the input viewpoint.',
+            'If there is any conflict, prioritize the specified angle over the input viewpoint.',
+            'Keep lens, exposure, and framing consistent; only the camera position changes.',
+            fullPrompt,
+          ].join(' ');
+          const angleResult = await runWithRetry(
+            `multi-angle view ${i + 1}`,
+            () => service.generateImages({
+              prompt: anglePrompt,
+              images: images.length > 0 ? images : undefined,
+              generationConfig: generationConfigWithAbort
+            })
+          );
           if (angleResult.images?.[0]) {
+            const generated = angleResult.images[0];
             outputs.push({
               id: nanoid(),
-              name: `Angle ${i + 1} (${view.azimuth} deg / ${view.elevation} deg)`,
-              url: angleResult.images[0].dataUrl
+              name: `Angle ${i + 1} (${azimuth} deg ${direction} / ${elevation} deg)`,
+              url: generated.dataUrl
             });
             imagesOut.push({
-              base64: angleResult.images[0].base64,
-              mimeType: angleResult.images[0].mimeType,
-              dataUrl: angleResult.images[0].dataUrl
+              base64: generated.base64,
+              mimeType: generated.mimeType,
+              dataUrl: generated.dataUrl
+            });
+            dispatch({
+              type: 'ADD_HISTORY',
+              payload: {
+                id: nanoid(),
+                timestamp: Date.now(),
+                thumbnail: generated.dataUrl,
+                prompt: anglePrompt,
+                attachments: attachmentUrls,
+                mode: state.mode,
+                settings: {
+                  kind: 'multi-angle',
+                  azimuth,
+                  elevation,
+                  direction,
+                  index: i + 1
+                }
+              }
             });
           }
           const progress = Math.round(((i + 1) / angleViews.length) * 90);
@@ -957,6 +1083,7 @@ export function useGeneration(): UseGenerationReturn {
 
         dispatch({ type: 'UPDATE_WORKFLOW', payload: { multiAngleOutputs: outputs } });
         result = { text: null, images: imagesOut };
+        multiAngleHistoryHandled = true;
       } else if (isUpscaleMode) {
         updateProgress(10);
         const wf = state.workflow;
@@ -1169,13 +1296,13 @@ export function useGeneration(): UseGenerationReturn {
         };
         const editType = editTypeMap[state.workflow.activeTool] || 'replace';
 
-        result = await service.editImage({
+        result = await runWithRetry('image edit', () => service.editImage({
           sourceImage,
           maskImage: maskImage || undefined,
           prompt: basePrompt,
           editType,
           generationConfig: generationConfigWithAbort
-        });
+        }));
       } else if (isVideoMode) {
         console.log('🎬 [VIDEO MODE] Starting video generation...');
         console.log('🎬 Video state:', state.workflow.videoState);
@@ -1229,24 +1356,28 @@ export function useGeneration(): UseGenerationReturn {
         });
 
         try {
-          const videoResult = await videoService.generateVideo({
-            model: videoState.model,
-            prompt: fullPrompt,
-            inputImage,
-            keyframes,
-            duration: videoState.duration,
-            resolution: videoState.resolution,
-            fps: videoState.fps,
-            aspectRatio: videoState.aspectRatio,
-            motionAmount: videoState.motionAmount,
-            camera: videoState.camera,
-            quality: videoState.quality,
-            transitionEffect: videoState.transitionEffect,
-            seed: videoState.seedLocked ? videoState.seed : undefined,
-            klingProvider: videoState.klingProvider,
-            onProgress: onVideoProgress,
-            abortSignal
-          });
+          const videoResult = await runWithRetry(
+            'video generation',
+            () => videoService.generateVideo({
+              model: videoState.model,
+              prompt: fullPrompt,
+              inputImage,
+              keyframes,
+              duration: videoState.duration,
+              resolution: videoState.resolution,
+              fps: videoState.fps,
+              aspectRatio: videoState.aspectRatio,
+              motionAmount: videoState.motionAmount,
+              camera: videoState.camera,
+              quality: videoState.quality,
+              transitionEffect: videoState.transitionEffect,
+              seed: videoState.seedLocked ? videoState.seed : undefined,
+              klingProvider: videoState.klingProvider,
+              onProgress: onVideoProgress,
+              abortSignal
+            }),
+            { timeoutMs: 10 * 60 * 1000 }
+          );
           console.log('🎬 Video generation successful!', videoResult);
 
           // Store result in video state
@@ -1308,21 +1439,21 @@ export function useGeneration(): UseGenerationReturn {
       } else if (options.numberOfImages && options.numberOfImages > 1) {
         updateProgress(10);
         // Batch image generation
-        const batchResult = await service.generateBatchImages({
+        const batchResult = await runWithRetry('batch image generation', () => service.generateBatchImages({
           prompt: fullPrompt,
           referenceImages: images.length > 0 ? images : undefined,
           numberOfImages: options.numberOfImages,
           imageConfig: generationConfig.imageConfig,
           abortSignal
-        });
+        }));
         result = { text: batchResult.text, images: batchResult.images };
       } else {
         // Standard image generation
-        result = await runStreamedImageGeneration({
+        result = await runWithRetry('image generation', () => runStreamedImageGeneration({
           prompt: fullPrompt,
           images: images.length > 0 ? images : undefined,
           generationConfig: generationConfigWithAbort
-        });
+        }));
       }
       updateProgress(95);
 
@@ -1332,7 +1463,7 @@ export function useGeneration(): UseGenerationReturn {
       console.log('Text:', result.text);
 
       // Process result
-      if (result.images && result.images.length > 0 && !isUpscaleMode) {
+      if (result.images && result.images.length > 0 && !isUpscaleMode && !multiAngleHistoryHandled) {
         const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
         const hasSourceEntry = sourceForHistory
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')

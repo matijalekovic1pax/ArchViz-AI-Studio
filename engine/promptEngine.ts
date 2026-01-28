@@ -2993,38 +2993,21 @@ function generateMultiAnglePrompt(state: AppState): string {
   const isNoStyle = style?.id === 'no-style';
   const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
 
-  // Evocative opening
+  // Evocative opening (single view)
   if (state.prompt?.trim()) {
     parts.push(state.prompt.trim());
   } else {
-    parts.push(`Generate ${workflow.multiAngleViewCount} perfectly consistent views of this architectural subject, each from a different angle while maintaining absolute visual coherence across the entire series.`);
+    parts.push('Generate a single photorealistic architectural view of the subject at the specified camera angle.');
   }
 
-  // Preset descriptions
+  // Preset descriptions (single view guidance)
   const presetDescriptions: Record<string, string> = {
-    turntable: 'Create a smooth turntable rotation around the building, orbiting at a fixed distance and steady eye level as if the camera were mounted on a rotating platform.',
-    architectural: 'Capture the building from professional architectural photography angles at eye level, keeping vertical lines perfectly straight in each view.',
-    'birds-eye': 'View the building from elevated angles that reveal the roof forms, site relationships, and overall massing.',
-    custom: 'Follow the precisely specified camera positions and angles.',
+    turntable: 'Use a turntable-style viewpoint around the building, orbiting at a fixed distance and steady eye level.',
+    architectural: 'Capture the building from a professional architectural photography angle at eye level, keeping vertical lines perfectly straight.',
+    'birds-eye': 'View the building from an elevated angle that reveals the roof forms, site relationships, and overall massing.',
+    custom: 'Follow the precisely specified camera position and angle.',
   };
   parts.push(presetDescriptions[workflow.multiAnglePreset] || '');
-
-  // Angle coverage description
-  const azRange = workflow.multiAngleAzimuthRange;
-  const elRange = workflow.multiAngleElevationRange;
-  const azSpan = Math.abs(azRange[1] - azRange[0]);
-  const azCoverage = azSpan >= 270 ? 'nearly complete' : azSpan >= 180 ? 'half' : azSpan >= 90 ? 'quarter' : 'limited';
-
-  parts.push(`The camera should orbit through a ${azCoverage} rotation around the building, with viewing heights ranging from ${elRange[0] < 15 ? 'low, ground-level angles' : elRange[0] < 30 ? 'comfortable eye-level' : 'elevated vantage points'} to ${elRange[1] > 60 ? 'steep overhead views' : elRange[1] > 30 ? 'moderately elevated angles' : 'near eye-level perspectives'}.`);
-
-  // Distribution
-  const distributionDesc: Record<string, string> = {
-    'even': 'Space the viewpoints evenly across the specified range for uniform coverage.',
-    'clustered': 'Cluster viewpoints around key angles while still covering the range.',
-    'manual': 'Use the exact camera positions specified.',
-    'random': 'Distribute viewpoints naturally across the range.',
-  };
-  parts.push(distributionDesc[workflow.multiAngleDistribution] || '');
 
   // Style
   if (!isNoStyle && style) {
@@ -3062,7 +3045,7 @@ function generateMultiAnglePrompt(state: AppState): string {
     'overcast': 'under soft overcast conditions',
     'stormy': 'with dramatic storm clouds',
   };
-  parts.push(`Illuminate all views with ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}, with ${lighting.cloudType} cloud formations.`);
+  parts.push(`Illuminate this view with ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}, with ${lighting.cloudType} cloud formations.`);
 
   // Context
   if (context.vegetation) {
@@ -3081,10 +3064,10 @@ function generateMultiAnglePrompt(state: AppState): string {
     parts.push('The reference image establishes the exact subject, scale, and material appearance that must be maintained across all views.');
   }
 
-  parts.push('Critical consistency requirements: The building must be identical in every view - same geometry, same proportions, same materials, same colors. Only the camera angle changes. Maintain consistent focal length, lens characteristics, and relative scale so the building appears the same size regardless of angle.');
+  parts.push('Critical consistency requirements: The building must be identical across the multi-angle set - same geometry, same proportions, same materials, same colors. Only the camera angle changes. Maintain consistent focal length, lens characteristics, and relative scale so the building appears the same size regardless of angle.');
 
   if (workflow.multiAngleLockConsistency) {
-    parts.push('Lock all environmental factors across the series: same lighting direction, same exposure level, same weather, same time of day, same color grading, same background and sky. The only difference between views should be the camera position.');
+    parts.push('Lock all environmental factors across the multi-angle set: same lighting direction, same exposure level, same weather, same time of day, same color grading, same background and sky. The only difference between views should be the camera position.');
   } else {
     parts.push('Maintain consistent materials and overall style. Allow only the natural, subtle lighting variations that would occur from viewing the same scene at different angles (different shadows, slightly different sky appearance).');
   }

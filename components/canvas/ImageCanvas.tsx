@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
@@ -293,6 +293,7 @@ const StandardCanvas: React.FC = () => {
   const eraseSelectionIdsRef = useRef<Set<string>>(new Set());
   const eraseUndoSnapshotRef = useRef<SelectionShape[] | null>(null);
   const eraseUndoAppliedRef = useRef(false);
+  const eraseUndoStackRef = useRef<SelectionShape[][] | null>(null);
   const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
   const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
   const boundaryRafRef = useRef<number | null>(null);
@@ -313,8 +314,26 @@ const StandardCanvas: React.FC = () => {
   const isMasterplan = state.mode === 'masterplan';
   const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
   const selectionMode = state.workflow.visualSelection.mode;
-  const showCompare = state.workflow.videoState?.compareMode || state.mode === 'upscale';
-  const showSplit = state.workflow.canvasSync && !isVideo && !showCompare;
+  const showCompare = state.workflow.videoState?.compareMode || (state.mode === 'upscale' && !state.workflow.canvasSync);
+  const splitEligibleModes = [
+    'render-3d',
+    'render-cad',
+    'masterplan',
+    'visual-edit',
+    'exploded',
+    'section',
+    'render-sketch',
+    'upscale',
+  ];
+  const showSplit = state.workflow.canvasSync && !isVideo && !showCompare && splitEligibleModes.includes(state.mode);
+  const latestHistoryItem = useMemo(() => {
+    const candidates = state.history.filter(
+      (item) => item.mode === state.mode && item.thumbnail && item.settings?.kind !== 'source'
+    );
+    return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+  }, [state.history, state.mode]);
+  const splitOriginal = state.sourceImage || state.uploadedImage;
+  const splitPreview = latestHistoryItem?.thumbnail || state.uploadedImage;
 
   // --- Handlers ---
 
@@ -532,6 +551,7 @@ const StandardCanvas: React.FC = () => {
     eraseSelectionIdsRef.current.clear();
     eraseUndoSnapshotRef.current = null;
     eraseUndoAppliedRef.current = false;
+    eraseUndoStackRef.current = null;
   }, []);
 
   const applySelectionEraseAtPoint = useCallback((point: CanvasPoint) => {
@@ -550,9 +570,11 @@ const StandardCanvas: React.FC = () => {
 
     hitIds.forEach((id) => removedIds.add(id));
     const remaining = selections.filter((shape) => !removedIds.has(shape.id));
-    const nextUndo = eraseUndoAppliedRef.current
-      ? state.workflow.visualSelectionUndoStack
-      : [...state.workflow.visualSelectionUndoStack, eraseUndoSnapshotRef.current];
+    const snapshot = eraseUndoSnapshotRef.current || selections;
+    if (!eraseUndoAppliedRef.current) {
+      eraseUndoStackRef.current = [...state.workflow.visualSelectionUndoStack, snapshot];
+    }
+    const nextUndo = eraseUndoStackRef.current || state.workflow.visualSelectionUndoStack;
 
     dispatch({
       type: 'UPDATE_WORKFLOW',
@@ -1602,7 +1624,7 @@ const StandardCanvas: React.FC = () => {
                          <div className="relative bg-surface-sunken flex-1 overflow-hidden">
                             <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-foreground-muted bg-white px-2 py-1 rounded shadow-sm z-10">{t('canvas.compare.original')}</span>
                             <img 
-                               src={state.uploadedImage} 
+                               src={splitOriginal || state.uploadedImage} 
                                className="w-full h-full object-contain block select-none" 
                                ref={imageRef}
                                onLoad={() => setImageVersion((prev) => prev + 1)}
@@ -1613,8 +1635,8 @@ const StandardCanvas: React.FC = () => {
                          <div className="relative bg-surface-elevated flex-1 overflow-hidden">
                             <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-accent bg-white px-2 py-1 rounded shadow-sm border border-accent/20 z-10">{t('canvas.compare.preview')}</span>
                             <img 
-                               src={state.uploadedImage} 
-                               className="w-full h-full object-contain block opacity-50 grayscale blur-sm select-none"
+                               src={splitPreview || state.uploadedImage} 
+                               className="w-full h-full object-contain block select-none"
                                draggable={false}
                             />
                          </div>
@@ -1891,7 +1913,7 @@ const StandardCanvas: React.FC = () => {
             </div>
          )}
 
-         {state.isGenerating && (
+         {(state.isGenerating || state.workflow.visualAutoSelecting) && (
              <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/30 backdrop-blur-sm animate-fade-in pointer-events-none">
                  <div className="bg-white/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-white/50">
                      <div className="relative w-16 h-16">
@@ -1900,8 +1922,12 @@ const StandardCanvas: React.FC = () => {
                          <Sparkles size={24} className="absolute inset-0 m-auto text-accent animate-pulse" />
                      </div>
                      <div className="text-center">
-                         <h4 className="text-sm font-bold text-foreground">{t('generation.generating')}</h4>
-                         <p className="text-xs text-foreground-muted mt-1">{t('canvas.generating.subtitle')}</p>
+                         <h4 className="text-sm font-bold text-foreground">
+                           {state.workflow.visualAutoSelecting ? 'Auto-selecting...' : t('generation.generating')}
+                         </h4>
+                         <p className="text-xs text-foreground-muted mt-1">
+                           {state.workflow.visualAutoSelecting ? 'Detecting selection areas on the image.' : t('canvas.generating.subtitle')}
+                         </p>
                      </div>
                  </div>
              </div>

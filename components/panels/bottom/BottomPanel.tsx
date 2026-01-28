@@ -23,17 +23,19 @@ export const BottomPanel: React.FC = () => {
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
   const isUpscaleMode = state.mode === 'upscale';
+  const isMultiAngleMode = state.mode === 'multi-angle';
+  const isSelectableHistoryMode = isUpscaleMode || isMultiAngleMode;
   const isVideoLocked = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
   const resolvedBottomTab = isGenerateTextMode
     ? 'history'
     : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
 
   useEffect(() => {
-    if (!isUpscaleMode || resolvedBottomTab !== 'history') {
+    if (!isSelectableHistoryMode || resolvedBottomTab !== 'history') {
       setHistorySelectMode(false);
       setSelectedHistoryIds(new Set());
     }
-  }, [isUpscaleMode, resolvedBottomTab]);
+  }, [isSelectableHistoryMode, resolvedBottomTab]);
 
   const toggleHistorySelection = useCallback((id: string) => {
     setSelectedHistoryIds((prev) => {
@@ -133,7 +135,10 @@ export const BottomPanel: React.FC = () => {
     });
   }, [downloadHistoryItem]);
 
-  const historyItems = state.history;
+  const historyItems = useMemo(() => {
+    if (!isMultiAngleMode) return state.history;
+    return state.history.filter((item) => item.mode === 'multi-angle');
+  }, [isMultiAngleMode, state.history]);
   const selectedHistoryItems = useMemo(
     () => historyItems.filter((item) => selectedHistoryIds.has(item.id)),
     [historyItems, selectedHistoryIds]
@@ -244,7 +249,7 @@ export const BottomPanel: React.FC = () => {
     
     // ... (Keep existing handlers for legend, edit-stack, cleanup, history)
     if (resolvedBottomTab === 'history') {
-        if (!isUpscaleMode) {
+        if (!isSelectableHistoryMode) {
           return (
             <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
               {historyItems.length === 0 ? (

@@ -312,6 +312,7 @@ const initialWorkflow: WorkflowSettings = {
   visualSelectionViewScale: null,
   visualSelectionComposite: null,
   visualSelectionCompositeSize: null,
+  visualAutoSelecting: false,
   visualMaterial: {
     surfaceType: 'auto',
     category: 'Flooring',

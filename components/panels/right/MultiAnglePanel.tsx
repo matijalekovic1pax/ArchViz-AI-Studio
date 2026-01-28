@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { useAppStore } from '../../../store';
 import { RangeSlider } from '../../ui/RangeSlider';
@@ -61,15 +61,27 @@ const AnglePreview: React.FC<{ points: { azimuth: number; elevation: number }[] 
 export const MultiAnglePanel = () => {
   const { state, dispatch } = useAppStore();
   const wf = state.workflow;
+  const [customCount, setCustomCount] = useState(String(wf.multiAngleViewCount));
+
+  React.useEffect(() => {
+    setCustomCount(String(wf.multiAngleViewCount));
+  }, [wf.multiAngleViewCount]);
 
   const updateWf = useCallback(
     (payload: Partial<typeof wf>) => dispatch({ type: 'UPDATE_WORKFLOW', payload }),
     [dispatch, wf]
   );
 
-  const handleViewCount = (value: number) => {
+  const handleViewCount = (value: number, force = false) => {
+    if (!Number.isFinite(value)) {
+      if (force) {
+        setCustomCount(String(wf.multiAngleViewCount));
+      }
+      return;
+    }
     const nextValue = clamp(value, 1, 36);
     updateWf({ multiAngleViewCount: nextValue });
+    setCustomCount(String(nextValue));
     if (wf.multiAngleDistribution === 'even') {
       updateWf({
         multiAngleAngles: buildEvenAngles(nextValue, wf.multiAngleAzimuthRange, wf.multiAngleElevationRange),
@@ -159,7 +171,7 @@ export const MultiAnglePanel = () => {
               { label: '8', value: '8' },
               { label: '12', value: '12' },
             ]}
-            onChange={(value) => handleViewCount(Number(value))}
+            onChange={(value) => handleViewCount(Number(value), true)}
           />
           <div>
             <label className="text-xs text-foreground-muted mb-2 block">Custom Count</label>
@@ -167,8 +179,25 @@ export const MultiAnglePanel = () => {
               type="number"
               min={1}
               max={36}
-              value={wf.multiAngleViewCount}
-              onChange={(event) => handleViewCount(Number(event.target.value))}
+              value={customCount}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setCustomCount(nextValue);
+                if (nextValue === '') {
+                  return;
+                }
+                const parsed = Number(nextValue);
+                if (Number.isFinite(parsed)) {
+                  handleViewCount(parsed);
+                }
+              }}
+              onBlur={() => {
+                if (customCount.trim() === '') {
+                  setCustomCount(String(wf.multiAngleViewCount));
+                } else {
+                  handleViewCount(Number(customCount), true);
+                }
+              }}
               className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
             />
           </div>
