@@ -1,11 +1,22 @@
 /**
  * Document Translation Service
  * Orchestrates document parsing, translation via Gemini, and rebuilding
+ * For PDFs: Uses custom PDF Converter API (free) or CloudConvert (paid) to convert PDF→DOCX→Translate→PDF
  */
 
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
 import { parseDocx, rebuildDocx, TextSegment as DocxTextSegment } from './docxParser';
-import { parsePdf, rebuildPdf, TextSegment as PdfTextSegment } from './pdfParser';
+import {
+  convertPdfToDocx as convertPdfToDocxCustom,
+  convertDocxToPdf as convertDocxToPdfCustom,
+  isPdfConverterInitialized,
+  type ConversionProgress
+} from './pdfConverterService';
+import {
+  convertPdfToDocx as convertPdfToDocxCloudConvert,
+  convertDocxToPdf as convertDocxToPdfCloudConvert,
+  isCloudConvertInitialized
+} from './cloudConvertService';
 import type { DocumentTranslateDocument, TranslationProgress } from '../types';
 
 // Translation settings
@@ -14,7 +25,7 @@ const BATCH_SIZE = 20; // Max segments per batch (reduced for paragraph-level tr
 const MAX_CHARS_PER_BATCH = 12000; // Max characters per batch
 const MAX_CONCURRENT_BATCHES = 3;
 
-export type TextSegment = DocxTextSegment | PdfTextSegment;
+export type TextSegment = DocxTextSegment;
 
 export interface TranslationOptions {
   sourceDocument: DocumentTranslateDocument;
@@ -40,8 +51,54 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   }
 
   const service = getGeminiService();
+  const isPdf = sourceDocument.mimeType.includes('pdf');
 
-  // Phase 0: Parse document first (to extract text for context analysis)
+  // Phase 0: Convert PDF to DOCX if needed
+  let docxDataUrl = sourceDocument.dataUrl;
+
+  if (isPdf) {
+    // Check which converter is available (prefer custom API for free usage)
+    const useCustomApi = isPdfConverterInitialized();
+    const useCloudConvert = !useCustomApi && isCloudConvertInitialized();
+
+    if (!useCustomApi && !useCloudConvert) {
+      throw new Error('No PDF converter configured. Please set up either:\n1. Custom PDF Converter API (free - deploy pdf-converter-api to Vercel), or\n2. CloudConvert API key (paid)');
+    }
+
+    onProgress({
+      phase: 'parsing',
+      currentSegment: 0,
+      totalSegments: 0,
+      currentBatch: 0,
+      totalBatches: 0,
+      message: 'Converting PDF to Word...',
+    });
+
+    if (abortSignal?.aborted) {
+      throw new DOMException('Translation cancelled', 'AbortError');
+    }
+
+    if (useCustomApi) {
+      console.log('📄 Converting PDF to DOCX via custom API...');
+      docxDataUrl = await convertPdfToDocxCustom(sourceDocument.dataUrl, {
+        onProgress: (convProgress) => {
+          console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
+        },
+        abortSignal
+      });
+    } else {
+      console.log('📄 Converting PDF to DOCX via CloudConvert...');
+      docxDataUrl = await convertPdfToDocxCloudConvert(sourceDocument.dataUrl, {
+        onProgress: (convProgress) => {
+          console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
+        },
+        abortSignal
+      });
+    }
+    console.log('✅ PDF converted to DOCX successfully');
+  }
+
+  // Phase 1: Parse DOCX document (to extract text for context analysis)
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
@@ -57,21 +114,16 @@ export async function translateDocument(options: TranslationOptions): Promise<st
 
   let segments: TextSegment[];
   let parseResult: any;
-  const isPdf = sourceDocument.mimeType.includes('pdf');
 
-  if (isPdf) {
-    parseResult = await parsePdf(sourceDocument.dataUrl);
-    segments = parseResult.segments;
-  } else {
-    parseResult = await parseDocx(sourceDocument.dataUrl);
-    segments = parseResult.segments;
-  }
+  console.log('📝 Parsing DOCX document...');
+  parseResult = await parseDocx(docxDataUrl);
+  segments = parseResult.segments;
 
   if (segments.length === 0) {
     throw new Error('No translatable text found in document.');
   }
 
-  // Phase 1: Analyze document context
+  // Phase 2: Analyze document context
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
@@ -95,7 +147,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
 
   console.log('📋 Document context:', documentContext);
 
-  // Phase 2: Create batches
+  // Phase 3: Create batches
   const batches = createBatches(segments);
   const totalBatches = batches.length;
   const translations = new Map<string, string>();
@@ -109,7 +161,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     message: `Translating ${segments.length} text segments...`,
   });
 
-  // Phase 3: Translate batches
+  // Phase 4: Translate batches
   let processedSegments = 0;
 
   // Process batches with limited concurrency
@@ -163,7 +215,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     });
   }
 
-  // Phase 4: Rebuild document
+  // Phase 5: Rebuild DOCX document
   onProgress({
     phase: 'rebuilding',
     currentSegment: segments.length,
@@ -177,26 +229,59 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     throw new DOMException('Translation cancelled', 'AbortError');
   }
 
-  console.log('📝 Starting document rebuild, isPdf:', isPdf);
+  console.log('📝 Rebuilding DOCX document...');
   console.log('📝 Translations map size:', translations.size);
-  let outputDataUrl: string;
+  let translatedDocxDataUrl: string;
 
   try {
-    if (isPdf) {
-      console.log('📄 Rebuilding PDF...');
-      outputDataUrl = await rebuildPdf(parseResult, translations);
-      console.log('📄 PDF rebuild complete, dataUrl length:', outputDataUrl.length);
-    } else {
-      console.log('📝 Rebuilding DOCX...');
-      outputDataUrl = await rebuildDocx(parseResult, translations);
-      console.log('📝 DOCX rebuild complete, dataUrl length:', outputDataUrl.length);
-    }
+    translatedDocxDataUrl = await rebuildDocx(parseResult, translations);
+    console.log('✅ DOCX rebuild complete, dataUrl length:', translatedDocxDataUrl.length);
   } catch (error) {
     console.error('❌ Document rebuild failed:', error);
     throw error;
   }
 
-  // Phase 5: Complete
+  // Phase 6: Convert DOCX back to PDF if original was PDF
+  let outputDataUrl = translatedDocxDataUrl;
+
+  if (isPdf) {
+    onProgress({
+      phase: 'rebuilding',
+      currentSegment: segments.length,
+      totalSegments: segments.length,
+      currentBatch: totalBatches,
+      totalBatches,
+      message: 'Converting Word back to PDF...',
+    });
+
+    if (abortSignal?.aborted) {
+      throw new DOMException('Translation cancelled', 'AbortError');
+    }
+
+    // Use same converter that was used for PDF→DOCX
+    const useCustomApi = isPdfConverterInitialized();
+
+    if (useCustomApi) {
+      console.log('📄 Converting DOCX back to PDF via custom API...');
+      outputDataUrl = await convertDocxToPdfCustom(translatedDocxDataUrl, {
+        onProgress: (convProgress) => {
+          console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
+        },
+        abortSignal
+      });
+    } else {
+      console.log('📄 Converting DOCX back to PDF via CloudConvert...');
+      outputDataUrl = await convertDocxToPdfCloudConvert(translatedDocxDataUrl, {
+        onProgress: (convProgress) => {
+          console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
+        },
+        abortSignal
+      });
+    }
+    console.log('✅ DOCX converted back to PDF successfully');
+  }
+
+  // Phase 7: Complete
   onProgress({
     phase: 'complete',
     currentSegment: segments.length,

@@ -1843,6 +1843,112 @@ const generateVisualEditPrompt = (state: AppState): string => {
     return parts.filter(Boolean).join(' ');
   }
 
+  if (tool === 'people') {
+    const people = workflow.visualPeople;
+    parts.push('Focus exclusively on 3D people in this architectural render. Preserve all architecture, materials, landscaping, vehicles, and background elements exactly.');
+    parts.push(...selectionParts);
+    parts.push(describeUserIntent(userPrompt));
+
+    if (selectionCount === 0) {
+      parts.push('No selection is provided; auto-detect all people across the frame and target them only.');
+    }
+
+    if (people.mode === 'enhance') {
+      parts.push('Enhance existing people without changing the overall count unless absolutely necessary for realism.');
+    } else if (people.mode === 'repopulate') {
+      parts.push('Repopulate the scene with better-quality people, adjusting the count to match the desired density.');
+    } else {
+      parts.push('Clean up the people: remove artifacts, fix distortions, and eliminate unrealistic silhouettes.');
+    }
+
+    const densityDesc = people.density > 75
+      ? 'high occupancy with lively activity'
+      : people.density > 45
+        ? 'balanced occupancy with a realistic crowd level'
+        : people.density > 15
+          ? 'lightly populated with a few intentional figures'
+          : 'minimal people presence';
+    parts.push(`Population density: ${densityDesc}.`);
+
+    const realismDesc = people.realism > 75
+      ? 'ultra-realistic, cinematic-quality people'
+      : people.realism > 45
+        ? 'natural, believable people'
+        : 'subtle cleanup with minimal stylization';
+    parts.push(`Realism goal: ${realismDesc}.`);
+
+    const sharpnessDesc = people.sharpness > 75
+      ? 'crisp edges and readable micro-details in clothing and faces'
+      : people.sharpness > 45
+        ? 'clean, moderately sharp people'
+        : 'softer detail with minimal sharpening';
+    parts.push(`Detail sharpness: ${sharpnessDesc}.`);
+
+    const varietyDesc = people.variety > 75
+      ? 'wide variety of ages, postures, and wardrobe'
+      : people.variety > 45
+        ? 'some variation while keeping cohesion'
+        : 'consistent, cohesive set of people';
+    parts.push(`Variety level: ${varietyDesc}.`);
+
+    const scaleDesc = people.scaleAccuracy > 75
+      ? 'strict scale accuracy relative to the architecture'
+      : people.scaleAccuracy > 45
+        ? 'balanced scale accuracy'
+        : 'gentle scale adjustments, never oversized';
+    parts.push(`Scale accuracy: ${scaleDesc}.`);
+
+    const placementDesc = people.placementDiscipline > 75
+      ? 'strict placement on walkable surfaces with proper spacing'
+      : people.placementDiscipline > 45
+        ? 'realistic placement and spacing'
+        : 'looser placement while still believable';
+    parts.push(`Placement discipline: ${placementDesc}.`);
+
+    const luggageDesc = people.luggage > 70
+      ? 'visible luggage, bags, or props where appropriate'
+      : people.luggage > 40
+        ? 'some accessories and light props'
+        : 'minimal props and accessories';
+    parts.push(`Accessories: ${luggageDesc}.`);
+
+    const motionDesc = people.motionBlur > 70
+      ? 'pronounced motion blur for moving figures'
+      : people.motionBlur > 40
+        ? 'subtle motion blur where needed'
+        : 'mostly sharp, frozen motion';
+    parts.push(`Motion treatment: ${motionDesc}.`);
+
+    const wardrobeMap: Record<string, string> = {
+      business: 'business and professional attire',
+      casual: 'casual everyday clothing',
+      travel: 'travel-ready outfits with backpacks or luggage',
+      mixed: 'a balanced mix of business, casual, and travel attire',
+    };
+    parts.push(`Wardrobe direction: ${wardrobeMap[people.wardrobeStyle] || people.wardrobeStyle}.`);
+
+    if (people.preserveExisting) {
+      parts.push('Preserve existing people where possible, refining instead of replacing.');
+    } else {
+      parts.push('Allow replacing or removing existing people to achieve the desired result.');
+    }
+    if (people.matchLighting) {
+      parts.push('Match scene lighting precisely on all people: intensity, direction, and color temperature.');
+    }
+    if (people.matchPerspective) {
+      parts.push('Match camera perspective and lens distortion so people sit naturally in the scene.');
+    }
+    if (people.groundContact) {
+      parts.push('Ensure perfect ground contact with correct shadows and no floating.');
+    }
+    if (people.removeArtifacts) {
+      parts.push('Remove AI artifacts: extra limbs, warped faces, smeared textures, or inconsistent silhouettes.');
+    }
+
+    parts.push('Critical constraints: ONLY modify people. Do not change the building, landscape, vehicles, sky, or materials. Keep camera, perspective, and composition locked. Any edits must integrate seamlessly with the original render.');
+    return parts.filter(Boolean).join(' ');
+  }
+
   if (tool === 'sky') {
     parts.push('Replace the sky to transform the entire atmosphere and mood of this architectural scene.');
     parts.push(...selectionParts);
@@ -1925,6 +2031,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
     parts.push(describeUserIntent(userPrompt));
 
     const adjust = workflow.visualAdjust;
+    if (adjust.aspectRatio && adjust.aspectRatio !== 'same') {
+      parts.push(`Target aspect ratio: ${adjust.aspectRatio}.`);
+      parts.push('Preserve composition and perspective. Prefer extending canvas with content-aware fill rather than cropping; if cropping is unavoidable, crop minimally without stretching.');
+    }
 
     // Describe tonal adjustments naturally
     const toneChanges: string[] = [];
@@ -1967,7 +2077,11 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push(`Apply effects: ${effects.join(', ')}.`);
     }
 
-    parts.push('Constraints: only adjust color, tone, and these specified parameters. Do not add, remove, or replace any objects. Do not alter geometry, perspective, or crop the image. If a selection is active, limit all adjustments to that region only.');
+    parts.push(
+      adjust.aspectRatio && adjust.aspectRatio !== 'same'
+        ? 'Constraints: only adjust color, tone, and these specified parameters. Do not add, remove, or replace any objects. Do not alter geometry or perspective. If a selection is active, limit all adjustments to that region only.'
+        : 'Constraints: only adjust color, tone, and these specified parameters. Do not add, remove, or replace any objects. Do not alter geometry, perspective, or crop the image. If a selection is active, limit all adjustments to that region only.'
+    );
     return parts.filter(Boolean).join(' ');
   }
 

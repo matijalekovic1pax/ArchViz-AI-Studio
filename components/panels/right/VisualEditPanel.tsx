@@ -1355,6 +1355,8 @@ export const VisualEditPanel = () => {
     updateWf({ visualReplace: { ...wf.visualReplace, ...updates } });
   const updateAdjust = (updates: Partial<typeof wf.visualAdjust>) =>
     updateWf({ visualAdjust: { ...wf.visualAdjust, ...updates } });
+  const updatePeople = (updates: Partial<typeof wf.visualPeople>) =>
+    updateWf({ visualPeople: { ...wf.visualPeople, ...updates } });
   const updateExtend = (updates: Partial<typeof wf.visualExtend>) =>
     updateWf({ visualExtend: { ...wf.visualExtend, ...updates } });
   const updateBackground = (updates: Partial<typeof wf.visualBackground>) =>
@@ -2144,6 +2146,166 @@ export const VisualEditPanel = () => {
             )}
           </div>
         );
+      case 'people':
+        return (
+          <div className="space-y-4 animate-fade-in">
+            <SectionDesc>Refine 3D people realism, placement, and density without touching the architecture.</SectionDesc>
+            <div className="rounded-lg border border-border bg-surface-sunken/60 p-3">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
+                <span>Target Scope</span>
+                <span className={selectionCount > 0 ? 'text-foreground' : 'text-foreground-muted'}>Selection</span>
+              </div>
+              <div className="text-[11px] text-foreground-muted mt-1">
+                {selectionCount > 0
+                  ? `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will be prioritized.`
+                  : 'No selection active - auto-detect and refine all people in the frame.'}
+              </div>
+            </div>
+
+            <SegmentedControl
+              value={wf.visualPeople.mode}
+              options={[
+                { label: 'Enhance', value: 'enhance' },
+                { label: 'Repopulate', value: 'repopulate' },
+                { label: 'Cleanup', value: 'cleanup' },
+              ]}
+              onChange={(value) => updatePeople({ mode: value })}
+            />
+            <div className="text-[11px] text-foreground-muted">
+              {wf.visualPeople.mode === 'enhance'
+                ? 'Improve existing people without changing the overall count.'
+                : wf.visualPeople.mode === 'repopulate'
+                  ? 'Add or replace people to reach the desired density.'
+                  : 'Remove artifacts and fix problematic people or silhouettes.'}
+            </div>
+
+            <div className="pt-2 border-t border-border-subtle space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Population & Quality</div>
+              <SliderControl
+                label="Density"
+                value={wf.visualPeople.density}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ density: value })}
+              />
+              <SliderControl
+                label="Realism"
+                value={wf.visualPeople.realism}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ realism: value })}
+              />
+              <SliderControl
+                label="Sharpness"
+                value={wf.visualPeople.sharpness}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ sharpness: value })}
+              />
+              <SliderControl
+                label="Variety"
+                value={wf.visualPeople.variety}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ variety: value })}
+              />
+            </div>
+
+            <div className="pt-2 border-t border-border-subtle space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Placement & Scale</div>
+              <SliderControl
+                label="Scale Accuracy"
+                value={wf.visualPeople.scaleAccuracy}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ scaleAccuracy: value })}
+              />
+              <SliderControl
+                label="Placement Discipline"
+                value={wf.visualPeople.placementDiscipline}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ placementDiscipline: value })}
+              />
+            </div>
+
+            <div className="pt-2 border-t border-border-subtle space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Accessories & Motion</div>
+              <SliderControl
+                label="Luggage & Props"
+                value={wf.visualPeople.luggage}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ luggage: value })}
+              />
+              <SliderControl
+                label="Motion Blur"
+                value={wf.visualPeople.motionBlur}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ motionBlur: value })}
+              />
+            </div>
+
+            <div className="pt-2 border-t border-border-subtle space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Wardrobe</div>
+              <SegmentedControl
+                value={wf.visualPeople.wardrobeStyle}
+                options={[
+                  { label: 'Business', value: 'business' },
+                  { label: 'Casual', value: 'casual' },
+                  { label: 'Travel', value: 'travel' },
+                  { label: 'Mixed', value: 'mixed' },
+                ]}
+                onChange={(value) => updatePeople({ wardrobeStyle: value })}
+              />
+            </div>
+
+            <div className="pt-2 border-t border-border-subtle space-y-2">
+              <Toggle
+                label="Preserve Existing People"
+                checked={wf.visualPeople.preserveExisting}
+                onChange={(value) => updatePeople({ preserveExisting: value })}
+              />
+              <Toggle
+                label="Match Scene Lighting"
+                checked={wf.visualPeople.matchLighting}
+                onChange={(value) => updatePeople({ matchLighting: value })}
+              />
+              <Toggle
+                label="Match Perspective"
+                checked={wf.visualPeople.matchPerspective}
+                onChange={(value) => updatePeople({ matchPerspective: value })}
+              />
+              <Toggle
+                label="Ground Contact"
+                checked={wf.visualPeople.groundContact}
+                onChange={(value) => updatePeople({ groundContact: value })}
+              />
+              <Toggle
+                label="Remove AI Artifacts"
+                checked={wf.visualPeople.removeArtifacts}
+                onChange={(value) => updatePeople({ removeArtifacts: value })}
+              />
+            </div>
+          </div>
+        );
       case 'sky':
         return (
           <div className="space-y-4 animate-fade-in">
@@ -2279,6 +2441,26 @@ export const VisualEditPanel = () => {
       case 'adjust':
         return (
           <div className="space-y-4 animate-fade-in">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Aspect Ratio</label>
+              <div className="grid grid-cols-5 gap-2">
+                {(['same', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const).map((ratio) => (
+                  <button
+                    key={ratio}
+                    type="button"
+                    onClick={() => updateAdjust({ aspectRatio: ratio })}
+                    className={cn(
+                      "text-[10px] border rounded py-2 transition-colors",
+                      wf.visualAdjust.aspectRatio === ratio
+                        ? "bg-foreground text-background border-foreground"
+                        : "border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground"
+                    )}
+                  >
+                    {ratio === 'same' ? 'Same' : ratio}
+                  </button>
+                ))}
+              </div>
+            </div>
             <SectionDesc>Global image adjustments and presets.</SectionDesc>
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Tone</label>
@@ -3175,6 +3357,8 @@ export const VisualEditPanel = () => {
         return 'Lighting';
       case 'object':
         return 'Object';
+      case 'people':
+        return 'People';
       case 'sky':
         return 'Sky';
       case 'remove':

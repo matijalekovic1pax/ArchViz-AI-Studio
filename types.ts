@@ -329,7 +329,7 @@ export interface WorkflowSettings {
   };
 
   // 4. Visual Edit
-  activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend' | 'background';
+  activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend' | 'background' | 'people';
   visualPrompt: string; // The specific prompt for the active operation
   visualSelection: {
     mode: 'rect' | 'brush' | 'lasso' | 'ai';
@@ -411,6 +411,7 @@ export interface WorkflowSettings {
     preserveShadows: boolean;
   };
   visualAdjust: {
+    aspectRatio: 'same' | '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
     exposure: number;
     contrast: number;
     highlights: number;
@@ -480,6 +481,23 @@ export interface WorkflowSettings {
     transformDistortion: number;
     transformPerspective: number;
     styleStrength: number;
+  };
+  visualPeople: {
+    mode: 'enhance' | 'repopulate' | 'cleanup';
+    density: number;
+    realism: number;
+    sharpness: number;
+    variety: number;
+    scaleAccuracy: number;
+    placementDiscipline: number;
+    luggage: number;
+    motionBlur: number;
+    wardrobeStyle: 'business' | 'casual' | 'travel' | 'mixed';
+    preserveExisting: boolean;
+    matchLighting: boolean;
+    matchPerspective: boolean;
+    groundContact: boolean;
+    removeArtifacts: boolean;
   };
   visualExtend: {
     direction: 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'none';

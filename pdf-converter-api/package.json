@@ -1,0 +1,13 @@
+{
+  "name": "pdf-converter-api",
+  "version": "1.0.0",
+  "description": "Free PDF/DOCX conversion API for Vercel",
+  "scripts": {
+    "deploy": "vercel --prod",
+    "dev": "vercel dev",
+    "deploy-preview": "vercel"
+  },
+  "keywords": ["pdf", "docx", "converter", "vercel", "serverless"],
+  "author": "",
+  "license": "MIT"
+}

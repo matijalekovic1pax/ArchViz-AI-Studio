@@ -3,7 +3,7 @@
  * Wires Gemini API service with app state for all generation features
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { generatePrompt } from '../engine/promptEngine';
@@ -18,19 +18,22 @@ import {
   ImageEditRequest,
   GeneratedImage,
   AttachmentData,
-  GenerationConfig
+  GenerationConfig,
+  ImageConfig
 } from '../services/geminiService';
 import { getVideoGenerationService } from '../services/videoGenerationService';
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
+import { initCloudConvertService, isCloudConvertInitialized } from '../services/cloudConvertService';
+import { initPdfConverterService, isPdfConverterInitialized } from '../services/pdfConverterService';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
-// Get API key from environment or localStorage
+// Get Gemini API key from environment or localStorage
 const getApiKey = (): string | null => {
   // Check environment variable first (for Vite)
   // @ts-ignore - Vite injects this
@@ -42,7 +45,29 @@ const getApiKey = (): string | null => {
   return localStorage.getItem('gemini_api_key');
 };
 
-// Initialize service if API key is available
+// Get PDF Converter API URL from environment
+const getPdfConverterApiUrl = (): string | null => {
+  // Check environment variable (for Vite)
+  // @ts-ignore - Vite injects this
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PDF_CONVERTER_API_URL) {
+    // @ts-ignore
+    return import.meta.env.VITE_PDF_CONVERTER_API_URL;
+  }
+  return null;
+};
+
+// Get CloudConvert API key from environment only
+const getCloudConvertApiKey = (): string | null => {
+  // Check environment variable (for Vite)
+  // @ts-ignore - Vite injects this
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDCONVERT_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_CLOUDCONVERT_API_KEY;
+  }
+  return null;
+};
+
+// Initialize Gemini service if API key is available
 const ensureServiceInitialized = (): boolean => {
   if (isGeminiServiceInitialized()) {
     return true;
@@ -51,6 +76,36 @@ const ensureServiceInitialized = (): boolean => {
   const apiKey = getApiKey();
   if (apiKey) {
     initGeminiService({ apiKey });
+    return true;
+  }
+
+  return false;
+};
+
+// Initialize PDF Converter service if API URL is available
+const ensurePdfConverterInitialized = (): boolean => {
+  if (isPdfConverterInitialized()) {
+    return true;
+  }
+
+  const apiUrl = getPdfConverterApiUrl();
+  if (apiUrl) {
+    initPdfConverterService(apiUrl);
+    return true;
+  }
+
+  return false;
+};
+
+// Initialize CloudConvert service if API key is available
+const ensureCloudConvertInitialized = (): boolean => {
+  if (isCloudConvertInitialized()) {
+    return true;
+  }
+
+  const apiKey = getCloudConvertApiKey();
+  if (apiKey) {
+    initCloudConvertService(apiKey);
     return true;
   }
 
@@ -81,6 +136,12 @@ export function useGeneration(): UseGenerationReturn {
 
   const isReady = ensureServiceInitialized();
 
+  // Auto-initialize PDF converter services if configured in .env
+  useEffect(() => {
+    ensurePdfConverterInitialized(); // Try custom API first (free)
+    ensureCloudConvertInitialized(); // Fall back to CloudConvert (paid)
+  }, []);
+
   const setApiKey = useCallback((key: string) => {
     localStorage.setItem('gemini_api_key', key);
     if (!isGeminiServiceInitialized()) {
@@ -103,6 +164,47 @@ export function useGeneration(): UseGenerationReturn {
     const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) return null;
     return { mimeType: matches[1], base64: matches[2] };
+  }, []);
+
+  const resolveClosestAspectRatio = useCallback(async (dataUrl?: string | null): Promise<ImageConfig['aspectRatio'] | null> => {
+    if (!dataUrl) return null;
+    const supportedRatios: Array<{ label: ImageConfig['aspectRatio']; value: number }> = [
+      { label: '1:1', value: 1 },
+      { label: '2:3', value: 2 / 3 },
+      { label: '3:2', value: 3 / 2 },
+      { label: '3:4', value: 3 / 4 },
+      { label: '4:3', value: 4 / 3 },
+      { label: '4:5', value: 4 / 5 },
+      { label: '5:4', value: 5 / 4 },
+      { label: '9:16', value: 9 / 16 },
+      { label: '16:9', value: 16 / 9 },
+      { label: '21:9', value: 21 / 9 },
+    ];
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        if (!width || !height) {
+          resolve(null);
+          return;
+        }
+        const ratio = width / height;
+        let closest = supportedRatios[0];
+        let minDelta = Math.abs(ratio - closest.value);
+        supportedRatios.forEach((candidate) => {
+          const delta = Math.abs(ratio - candidate.value);
+          if (delta < minDelta) {
+            minDelta = delta;
+            closest = candidate;
+          }
+        });
+        resolve(closest.label);
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
   }, []);
 
   const buildMaterialValidationPrompt = useCallback((userPrompt?: string) => {
@@ -390,18 +492,21 @@ export function useGeneration(): UseGenerationReturn {
   /**
    * Build generation config based on current mode and state
    */
-  const buildGenerationConfig = useCallback((state: AppState) => {
+  const buildGenerationConfig = useCallback((state: AppState, aspectRatioOverride?: ImageConfig['aspectRatio']) => {
     const { output } = state;
 
     // Map output settings to image config
-    const aspectRatioMap: Record<string, '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '2:3' | '3:2'> = {
+    const aspectRatioMap: Record<string, ImageConfig['aspectRatio']> = {
       '1:1': '1:1',
+      '2:3': '2:3',
+      '3:2': '3:2',
+      '3:4': '3:4',
       '16:9': '16:9',
       '9:16': '9:16',
       '4:3': '4:3',
-      '3:4': '3:4',
-      '2:3': '2:3',
-      '3:2': '3:2',
+      '4:5': '4:5',
+      '5:4': '5:4',
+      '21:9': '21:9',
     };
 
     const resolutionMap: Record<string, '1K' | '2K' | '4K'> = {
@@ -415,7 +520,7 @@ export function useGeneration(): UseGenerationReturn {
 
     return {
       imageConfig: {
-        aspectRatio: aspectRatioMap[output.aspectRatio] || '16:9',
+        aspectRatio: aspectRatioOverride || aspectRatioMap[output.aspectRatio] || '16:9',
         imageSize: resolutionMap[output.resolution] || '2K',
       }
     };
@@ -538,6 +643,14 @@ export function useGeneration(): UseGenerationReturn {
       const isSourceLockedMode = sourceLockedModes.includes(state.mode);
       const sourceImage = state.sourceImage || state.uploadedImage;
       const baseImage = isSourceLockedMode ? sourceImage : state.uploadedImage;
+      const primaryRatioSource = baseImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
+      const inputAspectRatio = await resolveClosestAspectRatio(primaryRatioSource);
+      const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'
+        ? state.workflow.visualAdjust.aspectRatio
+        : 'same';
+      const aspectRatioOverride = adjustAspectRatio && adjustAspectRatio !== 'same'
+        ? adjustAspectRatio
+        : inputAspectRatio || undefined;
 
       if (isSourceLockedMode && !state.sourceImage && state.uploadedImage) {
         dispatch({ type: 'SET_SOURCE_IMAGE', payload: state.uploadedImage });
@@ -660,7 +773,7 @@ export function useGeneration(): UseGenerationReturn {
       };
 
       // Build generation config
-      const generationConfig = buildGenerationConfig(state);
+      const generationConfig = buildGenerationConfig(state, aspectRatioOverride);
       const generationConfigWithAbort: GenerationConfig = {
         ...generationConfig,
         abortSignal
@@ -689,6 +802,22 @@ export function useGeneration(): UseGenerationReturn {
             });
             dispatch({ type: 'SET_GENERATING', payload: false });
             return;
+          }
+
+          // Check if PDF converter is needed for PDF documents
+          const isPdf = docTranslate.sourceDocument.mimeType.includes('pdf');
+          if (isPdf) {
+            const hasCustomApi = ensurePdfConverterInitialized();
+            const hasCloudConvert = ensureCloudConvertInitialized();
+
+            if (!hasCustomApi && !hasCloudConvert) {
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: { error: 'No PDF converter configured. Please set up either VITE_PDF_CONVERTER_API_URL (free) or VITE_CLOUDCONVERT_API_KEY (paid) in your .env file.' }
+              });
+              dispatch({ type: 'SET_GENERATING', payload: false });
+              return;
+            }
           }
 
           // Reset state
@@ -886,6 +1015,8 @@ export function useGeneration(): UseGenerationReturn {
             continue;
           }
 
+          const itemAspectRatio = await resolveClosestAspectRatio(item.url);
+
           // Retry logic: up to 3 retries per image
           const MAX_RETRIES = 3;
           const REQUEST_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes timeout
@@ -910,7 +1041,10 @@ export function useGeneration(): UseGenerationReturn {
                 service.generateImages({
                   prompt: fullPrompt,
                   images: [source],
-                  generationConfig: generationConfigWithAbort
+                  generationConfig: {
+                    ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
+                    abortSignal
+                  }
                 }),
                 new Promise<never>((_, reject) => {
                   setTimeout(() => {
@@ -1026,6 +1160,7 @@ export function useGeneration(): UseGenerationReturn {
           material: 'style-transfer',
           lighting: 'enhance',
           object: 'replace',
+          people: 'replace',
           sky: 'replace',
           remove: 'remove',
           replace: 'replace',

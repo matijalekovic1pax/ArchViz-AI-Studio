@@ -1,14 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
-import { Download, AlertTriangle, CheckCircle2, FileText } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-react';
 import { Toggle } from '../../ui/Toggle';
+import { isPdfConverterInitialized } from '../../../services/pdfConverterService';
+import { isCloudConvertInitialized } from '../../../services/cloudConvertService';
 
 export const DocumentTranslatePanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
   const docTranslate = state.workflow.documentTranslate;
   const { progress } = docTranslate;
+
+  const [converterConfigured, setConverterConfigured] = useState(false);
+  const [converterType, setConverterType] = useState<'custom' | 'cloudconvert' | null>(null);
+
+  useEffect(() => {
+    // Check if either converter is configured via .env (prefer custom API)
+    const hasCustomApi = isPdfConverterInitialized();
+    const hasCloudConvert = isCloudConvertInitialized();
+
+    setConverterConfigured(hasCustomApi || hasCloudConvert);
+    setConverterType(hasCustomApi ? 'custom' : hasCloudConvert ? 'cloudconvert' : null);
+  }, []);
 
   const handleDownload = () => {
     if (!docTranslate.translatedDocumentUrl || !docTranslate.sourceDocument) return;
@@ -112,6 +126,66 @@ export const DocumentTranslatePanel: React.FC = () => {
         </div>
       )}
 
+      {/* PDF Converter Configuration Warning (for PDFs) */}
+      {docTranslate.sourceDocument?.mimeType.includes('pdf') && !converterConfigured && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <Key size={16} className="text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-900 mb-1">
+                PDF Converter Required
+              </h4>
+              <p className="text-xs text-amber-700 mb-3">
+                PDF translation requires a document converter. Choose one of the following:
+              </p>
+
+              <div className="space-y-3">
+                {/* Option 1: Custom API (FREE) */}
+                <div className="bg-white border border-amber-300 rounded p-2">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">
+                    ✅ Option 1: Custom API (FREE, Recommended)
+                  </p>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Deploy the <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">pdf-converter-api</code> folder to Vercel (100% free, unlimited usage).
+                  </p>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Then add to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>:
+                  </p>
+                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
+                    VITE_PDF_CONVERTER_API_URL="https://your-project.vercel.app"
+                  </code>
+                  <p className="text-xs text-amber-600 mt-1">
+                    See <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">pdf-converter-api/README.md</code> for deployment instructions.
+                  </p>
+                </div>
+
+                {/* Option 2: CloudConvert (PAID) */}
+                <div className="bg-white border border-amber-300 rounded p-2">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">
+                    💳 Option 2: CloudConvert (Paid Alternative)
+                  </p>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Get API key from{' '}
+                    <a
+                      href="https://cloudconvert.com/api/v2"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-amber-900 font-semibold"
+                    >
+                      cloudconvert.com/api/v2
+                    </a>{' '}
+                    (500 free minutes/month)
+                  </p>
+                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
+                    VITE_CLOUDCONVERT_API_KEY="your_key"
+                  </code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings */}
       <div>
         <h3 className="text-xs font-semibold text-foreground-muted uppercase tracking-wider mb-3">
@@ -131,14 +205,30 @@ export const DocumentTranslatePanel: React.FC = () => {
           <p className="text-[10px] text-foreground-muted leading-relaxed">
             {t('documentTranslate.preserveFormattingDesc')}
           </p>
+
+          {/* Converter Status (if configured) */}
+          {converterConfigured && (
+            <div className="flex items-center gap-2 pt-2">
+              <CheckCircle2 size={14} className="text-accent" />
+              <span className="text-[10px] text-foreground-muted">
+                {converterType === 'custom'
+                  ? 'Custom PDF Converter configured (free)'
+                  : 'CloudConvert configured for PDF translation'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* PDF Warning */}
-      {docTranslate.sourceDocument?.mimeType.includes('pdf') && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-          <strong>{t('documentTranslate.pdfWarningTitle')}</strong>{' '}
-          {t('documentTranslate.pdfWarningMessage')}
+      {/* PDF Info */}
+      {docTranslate.sourceDocument?.mimeType.includes('pdf') && converterConfigured && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+          <strong>PDF Translation:</strong> Your PDF will be converted to Word, translated, then converted back to PDF for perfect formatting preservation.
+          {converterType === 'custom' && (
+            <span className="block mt-1 text-green-700">
+              ✨ Using free custom converter
+            </span>
+          )}
         </div>
       )}
     </div>
