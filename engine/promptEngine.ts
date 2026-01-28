@@ -2026,61 +2026,212 @@ const generateVisualEditPrompt = (state: AppState): string => {
   }
 
   if (tool === 'adjust') {
-    parts.push('Apply color and tonal adjustments to enhance this architectural image.');
+    parts.push('Apply precise color grading and tonal adjustments to this architectural image. Follow these exact numerical specifications (values range from -100 to +100 where 0 is neutral):');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
     const adjust = workflow.visualAdjust;
+
+    // Helper to describe intensity with number
+    const describeValue = (val: number, posDesc: string, negDesc: string) => {
+      const sign = val > 0 ? '+' : '';
+      return `${sign}${val} (${val > 0 ? posDesc : negDesc})`;
+    };
+
+    // Aspect ratio change
     if (adjust.aspectRatio && adjust.aspectRatio !== 'same') {
-      parts.push(`Target aspect ratio: ${adjust.aspectRatio}.`);
-      parts.push('Preserve composition and perspective. Prefer extending canvas with content-aware fill rather than cropping; if cropping is unavoidable, crop minimally without stretching.');
+      parts.push(`[ASPECT RATIO] Change to ${adjust.aspectRatio}. Preserve composition and perspective. Prefer extending canvas with content-aware fill rather than cropping; if cropping is unavoidable, crop minimally without stretching.`);
     }
 
-    // Describe tonal adjustments naturally
+    // === BASIC TONE CURVE ===
     const toneChanges: string[] = [];
-    if (adjust.exposure !== 0) toneChanges.push(adjust.exposure > 0 ? 'brightened exposure' : 'reduced exposure');
-    if (adjust.contrast !== 0) toneChanges.push(adjust.contrast > 0 ? 'increased contrast for more punch' : 'softened contrast');
-    if (adjust.highlights !== 0) toneChanges.push(adjust.highlights > 0 ? 'lifted highlights' : 'recovered highlights');
-    if (adjust.shadows !== 0) toneChanges.push(adjust.shadows > 0 ? 'opened up shadows' : 'deepened shadows');
-
+    if (adjust.exposure !== 0) {
+      toneChanges.push(`Exposure: ${describeValue(adjust.exposure, 'brighter', 'darker')}`);
+    }
+    if (adjust.contrast !== 0) {
+      toneChanges.push(`Contrast: ${describeValue(adjust.contrast, 'more punch/separation', 'flatter/softer')}`);
+    }
+    if (adjust.highlights !== 0) {
+      toneChanges.push(`Highlights: ${describeValue(adjust.highlights, 'lift bright areas', 'recover/pull down bright areas')}`);
+    }
+    if (adjust.shadows !== 0) {
+      toneChanges.push(`Shadows: ${describeValue(adjust.shadows, 'open up dark areas', 'deepen/crush dark areas')}`);
+    }
+    if (adjust.whites !== 0) {
+      toneChanges.push(`Whites: ${describeValue(adjust.whites, 'expand white point', 'compress white point')}`);
+    }
+    if (adjust.blacks !== 0) {
+      toneChanges.push(`Blacks: ${describeValue(adjust.blacks, 'lift blacks', 'crush to true black')}`);
+    }
+    if (adjust.gamma !== 0) {
+      toneChanges.push(`Gamma: ${describeValue(adjust.gamma, 'brighten midtones', 'darken midtones')}`);
+    }
     if (toneChanges.length > 0) {
-      parts.push(`Apply tonal adjustments: ${toneChanges.join(', ')}.`);
+      parts.push(`[TONE CURVE] ${toneChanges.join('; ')}.`);
     }
 
-    // Describe color adjustments
+    // === COLOR ADJUSTMENTS ===
     const colorChanges: string[] = [];
-    if (adjust.saturation !== 0) colorChanges.push(adjust.saturation > 0 ? 'more vibrant colors' : 'desaturated, muted tones');
-    if (adjust.temperature !== 0) colorChanges.push(adjust.temperature > 0 ? 'warmer color temperature' : 'cooler color temperature');
-    if (adjust.vibrance !== 0) colorChanges.push(adjust.vibrance > 0 ? 'enhanced color vibrance' : 'reduced vibrance');
-
+    if (adjust.saturation !== 0) {
+      colorChanges.push(`Saturation: ${describeValue(adjust.saturation, 'more vivid colors', 'toward monochrome')}`);
+    }
+    if (adjust.vibrance !== 0) {
+      colorChanges.push(`Vibrance: ${describeValue(adjust.vibrance, 'boost muted colors', 'reduce muted colors')}`);
+    }
+    if (adjust.temperature !== 0) {
+      colorChanges.push(`Temperature: ${describeValue(adjust.temperature, 'warmer/orange', 'cooler/blue')}`);
+    }
+    if (adjust.tint !== 0) {
+      colorChanges.push(`Tint: ${describeValue(adjust.tint, 'toward magenta', 'toward green')}`);
+    }
+    if (adjust.hueShift !== 0) {
+      const degrees = Math.round(adjust.hueShift * 1.8);
+      colorChanges.push(`Hue Shift: ${degrees}° rotation on color wheel`);
+    }
     if (colorChanges.length > 0) {
-      parts.push(`Color adjustments: ${colorChanges.join(', ')}.`);
+      parts.push(`[COLOR] ${colorChanges.join('; ')}.`);
     }
 
-    // Describe presence/detail
-    const presenceChanges: string[] = [];
-    if (adjust.clarity !== 0) presenceChanges.push(adjust.clarity > 0 ? 'enhanced midtone contrast for more definition' : 'softened clarity');
-    if (adjust.dehaze !== 0) presenceChanges.push(adjust.dehaze > 0 ? 'reduced haze for clearer atmosphere' : 'added atmospheric haze');
-    if (adjust.sharpness !== 0) presenceChanges.push(adjust.sharpness > 0 ? 'sharpened details' : 'softened details');
-
-    if (presenceChanges.length > 0) {
-      parts.push(`Detail and presence: ${presenceChanges.join(', ')}.`);
+    // === DETAIL & PRESENCE ===
+    const detailChanges: string[] = [];
+    if (adjust.clarity !== 0) {
+      detailChanges.push(`Clarity: ${describeValue(adjust.clarity, 'enhance local midtone contrast', 'soften local contrast')}`);
+    }
+    if (adjust.texture !== 0) {
+      detailChanges.push(`Texture: ${describeValue(adjust.texture, 'enhance surface detail', 'smooth surfaces')}`);
+    }
+    if (adjust.dehaze !== 0) {
+      detailChanges.push(`Dehaze: ${describeValue(adjust.dehaze, 'reduce atmospheric haze', 'add atmospheric haze')}`);
+    }
+    if (adjust.sharpness !== 0) {
+      detailChanges.push(`Sharpness: ${describeValue(adjust.sharpness, 'sharpen edges', 'soften/blur')}`);
+      if (adjust.sharpnessRadius !== 0) {
+        detailChanges.push(`Sharpness Radius: ${adjust.sharpnessRadius} (${adjust.sharpnessRadius > 50 ? 'wide/large structures' : 'tight/fine details'})`);
+      }
+      if (adjust.sharpnessDetail !== 0) {
+        detailChanges.push(`Sharpness Detail: ${adjust.sharpnessDetail} (${adjust.sharpnessDetail > 50 ? 'emphasize high-freq' : 'suppress noise'})`);
+      }
+      if (adjust.sharpnessMasking !== 0) {
+        detailChanges.push(`Sharpness Masking: ${adjust.sharpnessMasking} (${adjust.sharpnessMasking > 50 ? 'edges only' : 'uniform'})`);
+      }
+    }
+    if (detailChanges.length > 0) {
+      parts.push(`[DETAIL/PRESENCE] ${detailChanges.join('; ')}.`);
     }
 
-    // Effects
+    // === NOISE REDUCTION ===
+    const noiseChanges: string[] = [];
+    if (adjust.noiseReduction !== 0) {
+      noiseChanges.push(`Luminance NR: ${adjust.noiseReduction}%`);
+    }
+    if (adjust.noiseReductionColor !== 0) {
+      noiseChanges.push(`Color NR: ${adjust.noiseReductionColor}%`);
+    }
+    if (adjust.noiseReductionDetail !== 0) {
+      noiseChanges.push(`NR Detail Preservation: ${adjust.noiseReductionDetail}%`);
+    }
+    if (noiseChanges.length > 0) {
+      parts.push(`[NOISE REDUCTION] ${noiseChanges.join('; ')}.`);
+    }
+
+    // === HSL PER-CHANNEL ADJUSTMENTS ===
+    const hslChanges: string[] = [];
+    const hslChannels = [
+      { name: 'Reds', hue: adjust.hslRedsHue, sat: adjust.hslRedsSaturation, lum: adjust.hslRedsLuminance },
+      { name: 'Oranges', hue: adjust.hslOrangesHue, sat: adjust.hslOrangesSaturation, lum: adjust.hslOrangesLuminance },
+      { name: 'Yellows', hue: adjust.hslYellowsHue, sat: adjust.hslYellowsSaturation, lum: adjust.hslYellowsLuminance },
+      { name: 'Greens', hue: adjust.hslGreensHue, sat: adjust.hslGreensSaturation, lum: adjust.hslGreensLuminance },
+      { name: 'Aquas', hue: adjust.hslAquasHue, sat: adjust.hslAquasSaturation, lum: adjust.hslAquasLuminance },
+      { name: 'Blues', hue: adjust.hslBluesHue, sat: adjust.hslBluesSaturation, lum: adjust.hslBluesLuminance },
+      { name: 'Purples', hue: adjust.hslPurplesHue, sat: adjust.hslPurplesSaturation, lum: adjust.hslPurplesLuminance },
+      { name: 'Magentas', hue: adjust.hslMagentasHue, sat: adjust.hslMagentasSaturation, lum: adjust.hslMagentasLuminance },
+    ];
+    for (const ch of hslChannels) {
+      const changes: string[] = [];
+      if (ch.hue !== 0) changes.push(`H:${ch.hue > 0 ? '+' : ''}${ch.hue}`);
+      if (ch.sat !== 0) changes.push(`S:${ch.sat > 0 ? '+' : ''}${ch.sat}`);
+      if (ch.lum !== 0) changes.push(`L:${ch.lum > 0 ? '+' : ''}${ch.lum}`);
+      if (changes.length > 0) {
+        hslChanges.push(`${ch.name}[${changes.join(',')}]`);
+      }
+    }
+    if (hslChanges.length > 0) {
+      parts.push(`[HSL COLOR TARGETING] Per-channel adjustments: ${hslChanges.join('; ')}.`);
+    }
+
+    // === COLOR GRADING (SPLIT TONING) ===
+    const gradeChanges: string[] = [];
+    if (adjust.colorGradeShadowsHue !== 0 || adjust.colorGradeShadowsSaturation !== 0) {
+      gradeChanges.push(`Shadows: Hue=${adjust.colorGradeShadowsHue}°, Sat=${adjust.colorGradeShadowsSaturation}%`);
+    }
+    if (adjust.colorGradeMidtonesHue !== 0 || adjust.colorGradeMidtonesSaturation !== 0) {
+      gradeChanges.push(`Midtones: Hue=${adjust.colorGradeMidtonesHue}°, Sat=${adjust.colorGradeMidtonesSaturation}%`);
+    }
+    if (adjust.colorGradeHighlightsHue !== 0 || adjust.colorGradeHighlightsSaturation !== 0) {
+      gradeChanges.push(`Highlights: Hue=${adjust.colorGradeHighlightsHue}°, Sat=${adjust.colorGradeHighlightsSaturation}%`);
+    }
+    if (adjust.colorGradeBalance !== 0) {
+      gradeChanges.push(`Balance: ${adjust.colorGradeBalance > 0 ? '+' : ''}${adjust.colorGradeBalance} (${adjust.colorGradeBalance > 0 ? 'bias highlights' : 'bias shadows'})`);
+    }
+    if (gradeChanges.length > 0) {
+      parts.push(`[COLOR GRADING/SPLIT TONING] ${gradeChanges.join('; ')}.`);
+    }
+
+    // === EFFECTS ===
     const effects: string[] = [];
-    if (adjust.vignette !== 0) effects.push(adjust.vignette > 0 ? 'subtle vignette drawing focus inward' : 'brightened corners');
-    if (adjust.grain !== 0) effects.push('tasteful film grain for texture');
-    if (adjust.bloom !== 0) effects.push('gentle bloom on highlights');
-
+    if (adjust.vignette !== 0) {
+      effects.push(`Vignette: ${adjust.vignette > 0 ? '+' : ''}${adjust.vignette} (${adjust.vignette > 0 ? 'darken corners' : 'brighten corners'}), Midpoint=${adjust.vignetteMidpoint}%, Roundness=${adjust.vignetteRoundness}, Feather=${adjust.vignetteFeather}%`);
+    }
+    if (adjust.grain !== 0) {
+      effects.push(`Film Grain: Amount=${adjust.grain}%, Size=${adjust.grainSize}, Roughness=${adjust.grainRoughness}%`);
+    }
+    if (adjust.bloom !== 0) {
+      effects.push(`Bloom/Glow: ${adjust.bloom}%`);
+    }
+    if (adjust.chromaticAberration !== 0) {
+      effects.push(`Chromatic Aberration: ${adjust.chromaticAberration}%`);
+    }
     if (effects.length > 0) {
-      parts.push(`Apply effects: ${effects.join(', ')}.`);
+      parts.push(`[EFFECTS] ${effects.join('; ')}.`);
     }
 
+    // === TRANSFORM ===
+    const transforms: string[] = [];
+    if (adjust.transformRotate !== 0) {
+      transforms.push(`Rotation: ${adjust.transformRotate.toFixed(1)}° (${adjust.transformRotate > 0 ? 'clockwise' : 'counter-clockwise'})`);
+    }
+    if (adjust.transformHorizontal !== 0) {
+      transforms.push(`Horizontal Perspective: ${adjust.transformHorizontal > 0 ? '+' : ''}${adjust.transformHorizontal} (${adjust.transformHorizontal > 0 ? 'keystone right' : 'keystone left'})`);
+    }
+    if (adjust.transformVertical !== 0) {
+      transforms.push(`Vertical Perspective: ${adjust.transformVertical > 0 ? '+' : ''}${adjust.transformVertical} (${adjust.transformVertical > 0 ? 'correct converging verticals upward' : 'keystone downward'})`);
+    }
+    if (adjust.transformDistortion !== 0) {
+      transforms.push(`Lens Distortion: ${adjust.transformDistortion > 0 ? '+' : ''}${adjust.transformDistortion} (${adjust.transformDistortion > 0 ? 'barrel correction' : 'pincushion correction'})`);
+    }
+    if (adjust.transformPerspective !== 0) {
+      transforms.push(`Perspective Depth: ${adjust.transformPerspective > 0 ? '+' : ''}${adjust.transformPerspective} (${adjust.transformPerspective > 0 ? 'increase depth' : 'flatten'})`);
+    }
+    if (transforms.length > 0) {
+      parts.push(`[TRANSFORM/GEOMETRY] ${transforms.join('; ')}.`);
+    }
+
+    // === STYLE STRENGTH / GLOBAL INTENSITY ===
+    const intensityPercent = Math.round(adjust.styleStrength);
+    if (adjust.styleStrength !== 50) {
+      parts.push(`[GLOBAL INTENSITY] Apply all above adjustments at ${intensityPercent}% strength (100%=full effect, 50%=normal, 0%=no effect). ${
+        intensityPercent > 75 ? 'Bold, dramatic result expected.' :
+        intensityPercent > 50 ? 'Slightly stronger than normal.' :
+        intensityPercent > 25 ? 'Subtle, natural-looking adjustments.' :
+        'Very subtle, barely perceptible changes.'
+      }`);
+    }
+
+    // Final constraints
     parts.push(
       adjust.aspectRatio && adjust.aspectRatio !== 'same'
-        ? 'Constraints: only adjust color, tone, and these specified parameters. Do not add, remove, or replace any objects. Do not alter geometry or perspective. If a selection is active, limit all adjustments to that region only.'
-        : 'Constraints: only adjust color, tone, and these specified parameters. Do not add, remove, or replace any objects. Do not alter geometry, perspective, or crop the image. If a selection is active, limit all adjustments to that region only.'
+        ? '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, or perspective beyond specified transform corrections. If a selection mask is active, limit ALL adjustments strictly to that masked region only, with smooth natural blending at edges.'
+        : '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, perspective, or crop/resize the image in any way. If a selection mask is active, limit ALL adjustments strictly to that masked region only, with smooth natural blending at edges.'
     );
     return parts.filter(Boolean).join(' ');
   }

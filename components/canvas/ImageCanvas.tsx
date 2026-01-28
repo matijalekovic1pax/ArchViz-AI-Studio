@@ -290,6 +290,9 @@ const StandardCanvas: React.FC = () => {
   const selectionPreviewMinPointDistanceRef = useRef<number>(4);
   const selectionPreviewLastPointRef = useRef<CanvasPoint | null>(null);
   const selectionFullPointsRef = useRef<CanvasPoint[]>([]);
+  const eraseSelectionIdsRef = useRef<Set<string>>(new Set());
+  const eraseUndoSnapshotRef = useRef<SelectionShape[] | null>(null);
+  const eraseUndoAppliedRef = useRef(false);
   const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
   const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
   const boundaryRafRef = useRef<number | null>(null);
@@ -462,6 +465,111 @@ const StandardCanvas: React.FC = () => {
     if (scale <= 0) return state.workflow.visualSelection.brushSize;
     return state.workflow.visualSelection.brushSize / (scale * state.canvas.zoom);
   }, [getImageLayout, state.canvas.zoom, state.workflow.visualSelection.brushSize]);
+
+  const getEraserRadius = useCallback(() => Math.max(1, getImageBrushSize() / 2), [getImageBrushSize]);
+
+  const distanceToSegment = useCallback((point: CanvasPoint, start: CanvasPoint, end: CanvasPoint) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) {
+      return Math.hypot(point.x - start.x, point.y - start.y);
+    }
+    const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+    const clamped = Math.max(0, Math.min(1, t));
+    const projX = start.x + clamped * dx;
+    const projY = start.y + clamped * dy;
+    return Math.hypot(point.x - projX, point.y - projY);
+  }, []);
+
+  const isPointInPolygon = useCallback((point: CanvasPoint, points: CanvasPoint[]) => {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const xi = points[i].x;
+      const yi = points[i].y;
+      const xj = points[j].x;
+      const yj = points[j].y;
+      const intersect =
+        yi > point.y !== yj > point.y &&
+        point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }, []);
+
+  const isPointOverSelection = useCallback((
+    point: CanvasPoint,
+    shape: SelectionShape,
+    eraserRadius: number
+  ) => {
+    if (shape.type === 'rect') {
+      const minX = Math.min(shape.start.x, shape.end.x) - eraserRadius;
+      const maxX = Math.max(shape.start.x, shape.end.x) + eraserRadius;
+      const minY = Math.min(shape.start.y, shape.end.y) - eraserRadius;
+      const maxY = Math.max(shape.start.y, shape.end.y) + eraserRadius;
+      return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+    }
+
+    if (shape.type === 'lasso') {
+      if (shape.points.length < 3) return false;
+      return isPointInPolygon(point, shape.points);
+    }
+
+    if (shape.type === 'brush') {
+      if (shape.points.length < 2) return false;
+      const strokeRadius = (shape.brushSize || getImageBrushSize()) / 2;
+      const threshold = strokeRadius + eraserRadius;
+      for (let i = 0; i < shape.points.length - 1; i += 1) {
+        const dist = distanceToSegment(point, shape.points[i], shape.points[i + 1]);
+        if (dist <= threshold) return true;
+      }
+      return false;
+    }
+
+    return false;
+  }, [distanceToSegment, getImageBrushSize, isPointInPolygon]);
+
+  const resetEraseState = useCallback(() => {
+    eraseSelectionIdsRef.current.clear();
+    eraseUndoSnapshotRef.current = null;
+    eraseUndoAppliedRef.current = false;
+  }, []);
+
+  const applySelectionEraseAtPoint = useCallback((point: CanvasPoint) => {
+    const selections = state.workflow.visualSelections;
+    if (!selections.length) return;
+    const eraserRadius = getEraserRadius();
+    const removedIds = eraseSelectionIdsRef.current;
+    const hitIds = selections
+      .filter((shape) => !removedIds.has(shape.id) && isPointOverSelection(point, shape, eraserRadius))
+      .map((shape) => shape.id);
+    if (hitIds.length === 0) return;
+
+    if (!eraseUndoSnapshotRef.current) {
+      eraseUndoSnapshotRef.current = selections;
+    }
+
+    hitIds.forEach((id) => removedIds.add(id));
+    const remaining = selections.filter((shape) => !removedIds.has(shape.id));
+    const nextUndo = eraseUndoAppliedRef.current
+      ? state.workflow.visualSelectionUndoStack
+      : [...state.workflow.visualSelectionUndoStack, eraseUndoSnapshotRef.current];
+
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualSelections: remaining,
+        visualSelectionUndoStack: nextUndo,
+        visualSelectionRedoStack: [],
+      },
+    });
+    eraseUndoAppliedRef.current = true;
+  }, [
+    dispatch,
+    getEraserRadius,
+    isPointOverSelection,
+    state.workflow.visualSelectionUndoStack,
+    state.workflow.visualSelections
+  ]);
 
   const getMinPointDistance = useCallback(() => {
     const layout = getImageLayout();
@@ -748,6 +856,12 @@ const StandardCanvas: React.FC = () => {
     lastPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
+    if (selectionMode === 'erase') {
+      resetEraseState();
+      setIsSelecting(true);
+      applySelectionEraseAtPoint(point);
+      return;
+    }
     const drawMode = selectionMode === 'ai' ? 'rect' : selectionMode;
 
     setIsSelecting(true);
@@ -776,7 +890,17 @@ const StandardCanvas: React.FC = () => {
     } else {
       updateActiveSelection({ id: 'active', type, points: [point] });
     }
-  }, [getImageLayout, getSelectionPoint, selectionMode, state.canvas.zoom, state.uploadedImage, state.workflow.visualSelection.brushSize, updateActiveSelection]);
+  }, [
+    applySelectionEraseAtPoint,
+    getImageLayout,
+    getSelectionPoint,
+    resetEraseState,
+    selectionMode,
+    state.canvas.zoom,
+    state.uploadedImage,
+    state.workflow.visualSelection.brushSize,
+    updateActiveSelection
+  ]);
 
   const startBoundarySelection = useCallback((e: React.MouseEvent) => {
     if (!state.uploadedImage || e.button !== 0) return;
@@ -804,6 +928,11 @@ const StandardCanvas: React.FC = () => {
       const latestPoint = pendingPointRef.current;
       pendingPointRef.current = null;
       if (!latestPoint) return;
+
+      if (selectionMode === 'erase') {
+        applySelectionEraseAtPoint(latestPoint);
+        return;
+      }
 
       const current = activeSelectionRef.current;
       if (!current) return;
@@ -833,7 +962,7 @@ const StandardCanvas: React.FC = () => {
         });
       }
     });
-  }, [getSelectionPoint, updateActiveSelection]);
+  }, [applySelectionEraseAtPoint, getSelectionPoint, selectionMode, updateActiveSelection]);
 
   const updateBoundaryPath = useCallback((e: React.MouseEvent) => {
     const point = getSelectionPoint(e, true);
@@ -874,6 +1003,13 @@ const StandardCanvas: React.FC = () => {
     pendingPointRef.current = null;
     lastPointRef.current = null;
     selectionPreviewLastPointRef.current = null;
+    if (selectionMode === 'erase') {
+      resetEraseState();
+      updateActiveSelection(null);
+      selectionFullPointsRef.current = [];
+      return;
+    }
+
     const finalSelection = activeSelectionRef.current;
     if (finalSelection) {
       if (finalSelection.type === 'rect') {
@@ -898,7 +1034,7 @@ const StandardCanvas: React.FC = () => {
     }
     selectionFullPointsRef.current = [];
     updateActiveSelection(null);
-  }, [commitSelection, getImageBrushSize, updateActiveSelection]);
+  }, [commitSelection, getImageBrushSize, resetEraseState, selectionMode, updateActiveSelection]);
 
   const finishBoundarySelection = useCallback(() => {
     setIsBoundarySelecting(false);

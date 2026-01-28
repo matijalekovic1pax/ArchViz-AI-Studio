@@ -1717,13 +1717,14 @@ export const VisualEditPanel = () => {
               options={[
                 { label: 'Rect', value: 'rect' },
                 { label: 'Brush', value: 'brush' },
+                { label: 'Erase', value: 'erase' },
                 { label: 'Lasso', value: 'lasso' },
                 { label: 'Auto', value: 'ai' },
               ]}
               onChange={(value) => updateSelection({ mode: value })}
             />
 
-            {wf.visualSelection.mode === 'brush' && (
+            {(wf.visualSelection.mode === 'brush' || wf.visualSelection.mode === 'erase') && (
               <div className="space-y-2">
                 <SliderControl
                   label="Brush Size"

@@ -332,7 +332,7 @@ export interface WorkflowSettings {
   activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend' | 'background' | 'people';
   visualPrompt: string; // The specific prompt for the active operation
   visualSelection: {
-    mode: 'rect' | 'brush' | 'lasso' | 'ai';
+    mode: 'rect' | 'brush' | 'lasso' | 'ai' | 'erase';
     brushSize: number;
     featherEnabled: boolean;
     featherAmount: number;
