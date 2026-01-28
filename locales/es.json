@@ -46,6 +46,8 @@
     "canBeRestored": "Se puede restaurar usando el botón \"Cargar Proyecto\"",
     "privacyNotice": "Aviso de Privacidad",
     "privacyMessage": "No se almacenan datos en nuestros servidores. Este archivo se guarda localmente en su dispositivo.",
+    "projectNameLabel": "Nombre del proyecto",
+    "projectNamePlaceholder": "Introduce un nombre de proyecto",
     "confirmSave": "Guardar Proyecto",
     "language": "Idioma"
   },
@@ -572,7 +574,202 @@
     },
     "video": {
       "title": "Estudio de Video",
-      "description": "Define duración, movimiento de cámara y transiciones para generación de video."
+      "description": "Define duración, movimiento de cámara y transiciones para generación de video.",
+      "presets": {
+        "title": "Presets de Redes Sociales",
+        "linkedin": {
+          "name": "LinkedIn",
+          "description": "Video horizontal profesional para publicaciones"
+        },
+        "instagramStory": {
+          "name": "Historia de Instagram",
+          "description": "Formato vertical para historias"
+        },
+        "instagramPost": {
+          "name": "Publicación de Instagram",
+          "description": "Formato cuadrado para el feed"
+        },
+        "tiktok": {
+          "name": "TikTok",
+          "description": "Video vertical de formato corto"
+        },
+        "youtubeShorts": {
+          "name": "YouTube Shorts",
+          "description": "Shorts verticales de YouTube"
+        },
+        "websiteHero": {
+          "name": "Hero de Sitio Web",
+          "description": "Video de banner cinemático"
+        }
+      },
+      "motionStyles": {
+        "title": "Estilo de Movimiento",
+        "smooth": {
+          "label": "Suave",
+          "description": "Movimiento fluido y gentil"
+        },
+        "dynamic": {
+          "label": "Dinámico",
+          "description": "Movimiento rápido y atractivo"
+        },
+        "energetic": {
+          "label": "Energético",
+          "description": "Movimiento rápido de alta energía"
+        },
+        "elegant": {
+          "label": "Elegante",
+          "description": "Movimiento refinado y gracioso"
+        },
+        "cinematic": {
+          "label": "Cinemático",
+          "description": "Movimiento tipo película"
+        },
+        "subtle": {
+          "label": "Sutil",
+          "description": "Movimiento mínimo y gentil"
+        },
+        "dramatic": {
+          "label": "Dramático",
+          "description": "Movimiento audaz e impactante"
+        },
+        "gentle": {
+          "label": "Gentil",
+          "description": "Movimiento suave y delicado"
+        }
+      },
+      "model": {
+        "title": "Modelo de Video",
+        "veo": {
+          "name": "Veo 2",
+          "description": "Último modelo de video de Google - máx 8s, hasta 4K"
+        },
+        "kling": {
+          "name": "Kling 2.6",
+          "description": "Modelo avanzado con controles de cámara - máx 10s, hasta 1080p"
+        },
+        "providers": {
+          "piapi": "Proveedor PiAPI",
+          "ulazai": "Proveedor UlazAI",
+          "wavespeedai": "Proveedor WaveSpeedAI"
+        }
+      },
+      "duration": {
+        "label": "Duraci�n"
+      },
+      "aspectRatio": {
+        "label": "Relaci�n de aspecto"
+      },
+      "resolution": {
+        "label": "Resoluci�n"
+      },
+      "frameRate": {
+        "label": "Frecuencia de fotogramas"
+      },
+      "motionAmount": {
+        "label": "Cantidad de movimiento"
+      },
+      "advanced": {
+        "title": "Configuraci�n avanzada"
+      },
+      "seed": {
+        "label": "Semilla"
+      },
+      "inputSequence": {
+        "title": "Secuencia de entrada"
+      },
+      "camera": {
+        "type": {
+          "label": "Movimiento de Cámara",
+          "static": "Estático",
+          "pan": "Panorámica",
+          "orbit": "Órbita",
+          "dolly": "Dolly",
+          "crane": "Grúa",
+          "drone": "Dron",
+          "rotate": "Rotar",
+          "pushIn": "Acercar",
+          "pullOut": "Alejar",
+          "custom": "Personalizado"
+        },
+        "direction": "Dirección",
+        "directionValue": "Direcci�n: {{value}}�",
+        "speed": {
+          "label": "Velocidad",
+          "slow": "Lento",
+          "normal": "Normal",
+          "fast": "Rápido"
+        },
+        "smoothness": "Suavidad"
+      },
+      "quality": {
+        "label": "Calidad",
+        "draft": "Borrador",
+        "standard": "Estándar",
+        "high": "Alta",
+        "ultra": "Ultra"
+      },
+      "transition": {
+        "label": "Efecto de transici�n",
+        "cut": "Corte",
+        "fade": "Desvanecimiento",
+        "dissolve": "Disolver",
+        "wipe": "Barrido",
+        "none": "Ninguno"
+      },
+      "progress": {
+        "initializing": "Inicializando...",
+        "processing": "Procesando video...",
+        "rendering": "Renderizando...",
+        "complete": "¡Generación de video completa!",
+        "error": "Error en la generación de video",
+        "eta": "ETA: {{seconds}}s"
+      },
+      "inputMode": {
+        "title": "Modo de Video",
+        "imageAnimate": "Animar Imagen",
+        "cameraPath": "Trayectoria de Cámara",
+        "imageMorph": "Secuencia de Transformación",
+        "multiShot": "Múltiples Tomas",
+        "descriptions": {
+          "imageAnimate": "Agregar movimiento a imagen fija",
+          "cameraPath": "Recorrido desde 3D o imagen",
+          "imageMorph": "Transici�n entre vistas",
+          "multiShot": "Ensamblaje de clips"
+        }
+      },
+      "quickSettings": {
+        "title": "Ajustes Rápidos",
+        "compareMode": "Modo Comparar",
+        "lockSeed": "Bloquear Semilla",
+        "on": "ACTIVADO",
+        "off": "DESACTIVADO",
+        "locked": "BLOQUEADO",
+        "random": "ALEATORIO"
+      },
+      "lock": {
+        "title": "Estudio de video bloqueado",
+        "message": "Esta funcion esta en desarrollo y temporalmente no esta disponible para usuarios.",
+        "passwordLabel": "Contrasena",
+        "placeholder": "Ingrese la contrasena",
+        "unlock": "Desbloquear",
+        "error": "Contrasena incorrecta.",
+        "notice": "Solo uso interno."
+      },
+      "timeline": {
+        "addKeyframe": "Agregar Fotograma Clave",
+        "removeKeyframe": "Eliminar Fotograma Clave",
+        "keyframeLabel": "Fotograma clave {{index}}"
+      },
+      "output": {
+        "title": "Video Generado",
+        "download": "Descargar Video",
+        "recentGenerations": "Generaciones Recientes",
+        "load": "Cargar",
+        "noVideo": "Aún no se ha generado video",
+        "configure": "Configurar ajustes y generar",
+        "frameAlt": "Fotograma de video",
+        "originalImage": "Imagen original"
+      }
     },
     "materialValidation": {
       "title": "Validación",
@@ -613,6 +810,10 @@
     "promptBar": {
       "placeholder": "Describe tu visión arquitectónica...",
       "pressEnter": "Presiona Enter para generar"
+    },
+    "compare": {
+      "original": "Original",
+      "preview": "Vista previa"
     },
     "upload": {
       "title": "Subir Imagen Fuente",

@@ -41,7 +41,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
 
   const service = getGeminiService();
 
-  // Phase 1: Parse document
+  // Phase 0: Parse document first (to extract text for context analysis)
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
@@ -70,6 +70,30 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   if (segments.length === 0) {
     throw new Error('No translatable text found in document.');
   }
+
+  // Phase 1: Analyze document context
+  onProgress({
+    phase: 'parsing',
+    currentSegment: 0,
+    totalSegments: segments.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Analyzing document context...',
+  });
+
+  if (abortSignal?.aborted) {
+    throw new DOMException('Translation cancelled', 'AbortError');
+  }
+
+  const documentContext = await analyzeDocumentContext(
+    service,
+    segments,
+    sourceLanguage,
+    targetLanguage,
+    abortSignal
+  );
+
+  console.log('📋 Document context:', documentContext);
 
   // Phase 2: Create batches
   const batches = createBatches(segments);
@@ -105,6 +129,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
           batch.segments,
           sourceLanguage,
           targetLanguage,
+          documentContext,
           abortSignal
         );
 
@@ -117,7 +142,6 @@ export async function translateDocument(options: TranslationOptions): Promise<st
 
         return batch.segments.length;
       } catch (error) {
-        console.error(`Batch ${batchIndex + 1} failed:`, error);
         // On error, keep original text
         batch.segments.forEach((segment) => {
           translations.set(segment.id, segment.text);
@@ -153,12 +177,23 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     throw new DOMException('Translation cancelled', 'AbortError');
   }
 
+  console.log('📝 Starting document rebuild, isPdf:', isPdf);
+  console.log('📝 Translations map size:', translations.size);
   let outputDataUrl: string;
 
-  if (isPdf) {
-    outputDataUrl = await rebuildPdf(parseResult, translations);
-  } else {
-    outputDataUrl = await rebuildDocx(parseResult, translations);
+  try {
+    if (isPdf) {
+      console.log('📄 Rebuilding PDF...');
+      outputDataUrl = await rebuildPdf(parseResult, translations);
+      console.log('📄 PDF rebuild complete, dataUrl length:', outputDataUrl.length);
+    } else {
+      console.log('📝 Rebuilding DOCX...');
+      outputDataUrl = await rebuildDocx(parseResult, translations);
+      console.log('📝 DOCX rebuild complete, dataUrl length:', outputDataUrl.length);
+    }
+  } catch (error) {
+    console.error('❌ Document rebuild failed:', error);
+    throw error;
   }
 
   // Phase 5: Complete
@@ -211,6 +246,56 @@ function createBatches(segments: TextSegment[]): TranslationBatch[] {
 }
 
 /**
+ * Analyze document context to improve translation accuracy
+ */
+async function analyzeDocumentContext(
+  service: ReturnType<typeof getGeminiService>,
+  segments: TextSegment[],
+  sourceLanguage: string,
+  targetLanguage: string,
+  abortSignal?: AbortSignal
+): Promise<string> {
+  // Get full text from first ~500 segments or ~8000 chars for context analysis
+  const sampleSegments = segments.slice(0, 500);
+  const fullText = sampleSegments.map(s => s.text).join('\n');
+  const textSample = fullText.substring(0, 8000); // Limit to ~8k chars for analysis
+
+  const sourceLangDisplay = sourceLanguage === 'auto' ? 'the source language' : getLanguageName(sourceLanguage);
+
+  const prompt = `Analyze this document excerpt and provide a brief context description that will help with translation accuracy.
+
+DOCUMENT EXCERPT:
+${textSample}
+
+Provide a concise 2-3 sentence context description covering:
+1. Document type (e.g., technical manual, architectural specifications, legal contract, marketing materials, etc.)
+2. Subject matter/domain (e.g., construction, medicine, finance, technology, etc.)
+3. Tone/style (e.g., formal, technical, conversational, etc.)
+
+Focus on information that would help a translator understand specialized terminology and context.
+
+Context description:`;
+
+  try {
+    const response = await service.generateText({
+      prompt,
+      model: TRANSLATION_MODEL,
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 300,
+        abortSignal,
+      },
+    });
+
+    return response.trim();
+  } catch (error) {
+    console.warn('Failed to analyze document context:', error);
+    // Return generic context on failure
+    return `Professional document in ${sourceLangDisplay}.`;
+  }
+}
+
+/**
  * Translate a batch of text segments using Gemini
  */
 async function translateBatch(
@@ -218,6 +303,7 @@ async function translateBatch(
   segments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
+  documentContext: string,
   abortSignal?: AbortSignal
 ): Promise<string[]> {
   const texts = segments.map((s) => s.text);
@@ -226,6 +312,11 @@ async function translateBatch(
   const targetLangDisplay = getLanguageName(targetLanguage);
 
   const prompt = `You are translating a professional document from ${sourceLangDisplay} to ${targetLangDisplay}.
+
+DOCUMENT CONTEXT:
+${documentContext}
+
+Use this context to ensure accurate translation of specialized terms and domain-specific vocabulary.
 
 CRITICAL INSTRUCTIONS:
 1. You MUST return EXACTLY ${texts.length} translations in a JSON array
@@ -272,7 +363,6 @@ Return the JSON now:`;
     // Try to extract JSON from the response
     const jsonMatch = cleanResponse.match(/\{[\s\S]*"translations"[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('No valid JSON found in response. Response:', response.substring(0, 500));
       throw new Error('No valid JSON found in response');
     }
 
@@ -284,16 +374,9 @@ Return the JSON now:`;
 
     // Ensure we have the right number of translations
     if (parsed.translations.length !== texts.length) {
-      console.warn(
-        `Translation count mismatch: expected ${texts.length}, got ${parsed.translations.length}`
-      );
-      console.warn('Sample input texts:', texts.slice(0, 3));
-      console.warn('Sample output translations:', parsed.translations.slice(0, 3));
-
       // Pad with original text if we're missing translations
       while (parsed.translations.length < texts.length) {
         const missingIndex = parsed.translations.length;
-        console.warn(`Missing translation at index ${missingIndex}, using original: "${texts[missingIndex].substring(0, 50)}..."`);
         parsed.translations.push(texts[missingIndex]);
       }
 
@@ -305,8 +388,6 @@ Return the JSON now:`;
 
     return parsed.translations;
   } catch (error) {
-    console.error('Failed to parse translation response:', error);
-    console.error('Raw response (first 1000 chars):', response.substring(0, 1000));
     // Return original texts on parse failure
     return texts;
   }

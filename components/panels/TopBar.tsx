@@ -179,6 +179,7 @@ export const TopBar: React.FC = () => {
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [projectName, setProjectName] = useState('');
   const { generate, cancelGeneration } = useGeneration();
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
@@ -258,18 +259,39 @@ export const TopBar: React.FC = () => {
   const isVideoMode = state.mode === 'video';
   const isUpscaleMode = state.mode === 'upscale';
   const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
+  const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
+
+  // Video mode validation
+  const videoReady = isVideoMode
+    ? (state.workflow.videoState.inputMode === 'image-animate'
+        ? !!state.uploadedImage
+        : state.workflow.videoState.keyframes.length > 0)
+    : true;
+
   const isDisabled = state.mode === 'material-validation'
     ? false
     : state.mode === 'document-translate'
       ? !state.workflow.documentTranslate.sourceDocument
       : isUpscaleMode
         ? !upscaleQueueReady
-        : !state.uploadedImage;
+        : isVideoMode
+          ? !videoReady || !videoUnlocked
+          : !state.uploadedImage;
   const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
     { value: '8k', label: '8K', title: '8K (API capped at 4K)' },
   ];
+
+  const getSafeProjectName = (value: string) =>
+    value
+      .trim()
+      .replace(/[^a-z0-9-_ ]/gi, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  const safeProjectName = getSafeProjectName(projectName);
+  const canSaveProject = safeProjectName.length > 0;
 
   const handleResolutionChange = (resolution: '2k' | '4k' | '8k') => {
     if (resolution === state.output.resolution) return;
@@ -298,7 +320,16 @@ export const TopBar: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (state.isGenerating) return;
+    console.log('🚀 Generate button clicked!');
+    console.log('🚀 Mode:', state.mode);
+    console.log('🚀 isVideoMode:', isVideoMode);
+    console.log('🚀 videoReady:', videoReady);
+    console.log('🚀 isGenerating:', state.isGenerating);
+
+    if (state.isGenerating) {
+      console.log('⚠️ Already generating, exiting...');
+      return;
+    }
     if (state.mode === 'material-validation') {
       await generate();
       return;
@@ -313,6 +344,18 @@ export const TopBar: React.FC = () => {
       await generate();
       return;
     }
+    if (isVideoMode && !videoUnlocked) {
+      return;
+    }
+    if (isVideoMode) {
+      console.log('🎬 Video mode detected, calling generate...');
+      if (!videoReady) {
+        console.log('⚠️ Video not ready');
+        return;
+      }
+      await generate();
+      return;
+    }
     if (!state.uploadedImage) return;
     await generate();
   };
@@ -322,10 +365,11 @@ export const TopBar: React.FC = () => {
   };
 
   const confirmExportProject = () => {
+    if (!canSaveProject) return;
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `archviz-project-${Date.now()}.json`);
+    downloadAnchorNode.setAttribute("download", `${safeProjectName}.json`);
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
@@ -1209,6 +1253,22 @@ export const TopBar: React.FC = () => {
                      {t('topBar.privacyMessage')}
                   </p>
                </div>
+               <div className="mb-6">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">
+                    {t('topBar.projectNameLabel')}
+                  </label>
+                  <input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && canSaveProject) {
+                        confirmExportProject();
+                      }
+                    }}
+                    placeholder={t('topBar.projectNamePlaceholder')}
+                    className="w-full h-9 px-3 text-xs bg-surface-elevated border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-accent transition-colors"
+                  />
+               </div>
                <div className="flex gap-3">
                   <button
                      onClick={() => setShowSaveInfo(false)}
@@ -1218,7 +1278,13 @@ export const TopBar: React.FC = () => {
                   </button>
                   <button
                      onClick={confirmExportProject}
-                     className="flex-1 py-2.5 text-xs font-bold text-white bg-foreground rounded-lg hover:bg-foreground/90 transition-colors shadow-sm"
+                     disabled={!canSaveProject}
+                     className={cn(
+                       "flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors shadow-sm",
+                       canSaveProject
+                         ? "text-white bg-foreground hover:bg-foreground/90"
+                         : "text-foreground-muted bg-surface-sunken cursor-not-allowed"
+                     )}
                   >
                      {t('topBar.confirmSave')}
                   </button>

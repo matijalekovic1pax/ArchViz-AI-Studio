@@ -21,23 +21,26 @@ export const DocumentTranslateView: React.FC = () => {
       return;
     }
 
-    console.log('Document loaded:', sourceDocument.name, 'Type:', sourceDocument.type);
+    const previewDataUrl =
+      progress.phase === 'complete' && translatedDocumentUrl
+        ? translatedDocumentUrl
+        : sourceDocument.dataUrl;
 
     if (sourceDocument.type === 'pdf') {
-      console.log('Setting PDF preview');
-      setDocumentPreviewUrl(sourceDocument.dataUrl);
+      setDocumentPreviewUrl(previewDataUrl);
       setDocxHtmlContent(null);
-    } else if (sourceDocument.type === 'docx') {
-      console.log('Starting DOCX conversion');
+      return;
+    }
+
+    if (sourceDocument.type === 'docx') {
       setDocumentPreviewUrl(null);
       setIsConverting(true);
 
       // Convert DOCX to HTML for preview
       const convertDocx = async () => {
         try {
-          console.log('Converting DOCX to HTML...');
           // Convert dataUrl to ArrayBuffer
-          const base64Match = sourceDocument.dataUrl.match(/^data:[^;]+;base64,(.+)$/);
+          const base64Match = previewDataUrl.match(/^data:[^;]+;base64,(.+)$/);
           if (!base64Match) {
             throw new Error('Invalid data URL');
           }
@@ -51,11 +54,9 @@ export const DocumentTranslateView: React.FC = () => {
 
           // Convert to HTML using mammoth
           const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-          console.log('DOCX converted successfully, HTML length:', result.value.length);
           setDocxHtmlContent(result.value);
         } catch (error) {
-          console.error('Failed to convert DOCX:', error);
-          setDocxHtmlContent('<p style="color: red;">Failed to load document preview. Error: ' + error + '</p>');
+          setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
         } finally {
           setIsConverting(false);
         }
@@ -63,21 +64,11 @@ export const DocumentTranslateView: React.FC = () => {
 
       convertDocx();
     }
-  }, [sourceDocument]);
+  }, [sourceDocument, translatedDocumentUrl, progress.phase]);
 
   const renderDocumentPreview = () => {
-    console.log('renderDocumentPreview called', {
-      hasSourceDoc: !!sourceDocument,
-      fileType: sourceDocument?.type,
-      isConverting,
-      hasDocxHtml: !!docxHtmlContent,
-      docxHtmlLength: docxHtmlContent?.length,
-      hasPdfUrl: !!documentPreviewUrl
-    });
-
     // No document uploaded
     if (!sourceDocument) {
-      console.log('No source document, showing empty state');
       return (
         <div className="absolute inset-0 flex items-center justify-center text-foreground-muted">
           <div className="text-center max-w-md px-6">
@@ -92,7 +83,6 @@ export const DocumentTranslateView: React.FC = () => {
     }
 
     const fileType = sourceDocument.type;
-    console.log('File type:', fileType);
 
     // PDF Preview
     if (fileType === 'pdf' && documentPreviewUrl) {
@@ -123,7 +113,6 @@ export const DocumentTranslateView: React.FC = () => {
 
       // Converted and ready to display
       if (docxHtmlContent) {
-        console.log('RENDERING DOCX HTML NOW', 'Length:', docxHtmlContent.length);
         return (
           <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-8">
             <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg mb-8">
@@ -185,7 +174,7 @@ export const DocumentTranslateView: React.FC = () => {
   };
 
   const renderProgressOverlay = () => {
-    if (progress.phase === 'idle') return null;
+    if (progress.phase === 'idle' || progress.phase === 'complete') return null;
 
     return (
       <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex items-center justify-center z-10">

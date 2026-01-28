@@ -2,13 +2,12 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store';
 import { 
-  FileText, FileSpreadsheet, Plus, Play, Download, Search, ChevronDown, 
+  FileText, FileSpreadsheet, Plus, Download, Search, ChevronDown, 
   Check, XCircle, AlertTriangle, CheckCircle2, Info, ArrowRight, Loader2,
   Filter, LayoutList
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ParsedMaterial, ValidationIssue } from '../types';
-import { useGeneration } from '../hooks/useGeneration';
 
 // --- ENHANCED MOCK DATA ---
 
@@ -366,8 +365,7 @@ const BoQRow: React.FC<BoQRowProps> = ({ material, item, issues, expanded, onExp
 // --- MAIN VIEW ---
 
 export const MaterialValidationView: React.FC = () => {
-  const { state, dispatch } = useAppStore();
-  const { generate, isReady } = useGeneration();
+  const { state } = useAppStore();
   const [activeTab, setActiveTab] = useState<'technical' | 'boq'>('technical');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
@@ -376,7 +374,7 @@ export const MaterialValidationView: React.FC = () => {
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { documents, materials, issues, boqItems, error } = state.materialValidation;
+  const { materials, issues, boqItems, error } = state.materialValidation;
   const technicalIssueTypes = new Set<ValidationIssue['type']>(['technical', 'drawing', 'documentation']);
   const issuesByCode = new Map<string, ValidationIssue[]>();
 
@@ -466,32 +464,21 @@ export const MaterialValidationView: React.FC = () => {
 
   const boqData = getBoQData();
 
-  const handleRunValidation = async () => {
-     if (documents.length === 0) {
-        dispatch({
-           type: 'UPDATE_MATERIAL_VALIDATION',
-           payload: { error: 'Upload material schedule and BoQ documents to run validation.' }
-        });
-        return;
-     }
-     await generate();
-  };
-
   return (
     <div className="flex-1 bg-background flex flex-col h-full overflow-hidden">
       
       {/* 1. COMPACT HEADER (Cleaned Up) */}
       <div className="bg-surface-elevated border-b border-border shadow-sm z-20">
-         <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-6">
+         <div className="flex flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                <h2 className="text-lg font-bold tracking-tight text-foreground">Material Validation</h2>
-               <div className="h-8 w-px bg-border-subtle" />
+               <div className="hidden h-8 w-px bg-border-subtle sm:block" />
 
                {/* Stats Widget */}
-               <div className="flex flex-col justify-center gap-1.5 min-w-[280px]">
+               <div className="flex flex-col justify-center gap-1.5 min-w-0 sm:min-w-[240px]">
                   <div className="flex items-center justify-between text-xs mb-0.5">
                      <span className="font-bold text-foreground">{score}% <span className="font-normal text-foreground-muted">Score</span></span>
-                     <div className="flex gap-3 text-[10px] font-medium text-foreground-secondary">
+                     <div className="flex flex-wrap gap-3 text-[10px] font-medium text-foreground-secondary">
                         <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> {errors} Errors</span>
                         <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500" /> {warnings} Warn</span>
                         <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> {passed} OK</span>
@@ -506,27 +493,6 @@ export const MaterialValidationView: React.FC = () => {
             <div className="flex gap-2">
                <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold border border-border rounded-lg hover:bg-surface-sunken transition-colors">
                   <Download size={14} /> Export Report
-               </button>
-               <button
-                  onClick={handleRunValidation}
-                  disabled={!isReady || state.materialValidation.isRunning || documents.length === 0}
-                  className={cn(
-                     "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-colors shadow-md",
-                     !isReady || state.materialValidation.isRunning || documents.length === 0
-                        ? "bg-surface-sunken text-foreground-muted cursor-not-allowed"
-                        : "bg-foreground text-background hover:bg-foreground/90"
-                  )}
-               >
-                  {state.materialValidation.isRunning ? (
-                     <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Running...
-                     </>
-                  ) : (
-                     <>
-                        <Play size={14} fill="currentColor" /> Run Validation
-                     </>
-                  )}
                </button>
             </div>
          </div>

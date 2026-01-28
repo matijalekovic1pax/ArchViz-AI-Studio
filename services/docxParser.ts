@@ -48,17 +48,17 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
   const xmlDocuments = new Map<string, Document>();
 
   // Files to parse for text content
-  const filesToParse = [
-    { path: 'word/document.xml', context: 'paragraph' as const },
+  const filesToParse: Array<{ path: string; context: TextSegment['context'] }> = [
+    { path: 'word/document.xml', context: 'paragraph' },
   ];
 
   // Find headers and footers
   for (const filename of Object.keys(zip.files)) {
     if (filename.match(/^word\/header\d*\.xml$/)) {
-      filesToParse.push({ path: filename, context: 'header' as const });
+      filesToParse.push({ path: filename, context: 'header' });
     }
     if (filename.match(/^word\/footer\d*\.xml$/)) {
-      filesToParse.push({ path: filename, context: 'footer' as const });
+      filesToParse.push({ path: filename, context: 'footer' });
     }
   }
 
@@ -85,8 +85,6 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
     // Extract paragraphs
     extractParagraphSegments(doc, path, context, segments);
   }
-
-  console.log(`Extracted ${segments.length} paragraph segments from DOCX`);
 
   return { segments, zip, xmlDocuments };
 }

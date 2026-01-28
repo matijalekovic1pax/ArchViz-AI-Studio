@@ -16,6 +16,7 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "clsx": "2.1.1",
+    "fontkit": "^2.0.4",
     "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "jszip": "^3.10.1",
@@ -32,6 +33,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/fontkit": "^2.0.8",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",

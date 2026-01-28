@@ -6,6 +6,7 @@ import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Pla
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
+import { VideoLockBanner } from '../video/VideoLockBanner';
 
 type CanvasPoint = { x: number; y: number };
 type ImageLayout = {
@@ -264,7 +265,8 @@ const StandardCanvas: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -302,6 +304,7 @@ const StandardCanvas: React.FC = () => {
   // Mode helpers
   const isGenerateText = state.mode === 'generate-text';
   const isVideo = state.mode === 'video';
+  const isVideoLocked = isVideo && !state.workflow.videoState.accessUnlocked;
   const isVisualEdit = state.mode === 'visual-edit';
   const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
   const isMasterplan = state.mode === 'masterplan';
@@ -1045,6 +1048,60 @@ const StandardCanvas: React.FC = () => {
     endPan();
   };
 
+  // Video control helpers
+  const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleVideoPlayPause = useCallback(() => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  }, [isPlaying]);
+
+  const handleVideoTimeUpdate = useCallback(() => {
+    if (!videoRef.current) return;
+    dispatch({
+      type: 'UPDATE_VIDEO_TIMELINE',
+      payload: { currentTime: videoRef.current.currentTime }
+    });
+  }, [dispatch]);
+
+  const handleVideoLoadedMetadata = useCallback(() => {
+    if (!videoRef.current) return;
+    dispatch({
+      type: 'UPDATE_VIDEO_TIMELINE',
+      payload: { duration: videoRef.current.duration }
+    });
+  }, [dispatch]);
+
+  const handleTimelineSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+    }
+    dispatch({
+      type: 'UPDATE_VIDEO_TIMELINE',
+      payload: { currentTime: time }
+    });
+  }, [dispatch]);
+
+  const handleVideoDownload = useCallback(() => {
+    const videoUrl = state.workflow.videoState.generatedVideoUrl;
+    if (!videoUrl) return;
+    const a = document.createElement('a');
+    a.href = videoUrl;
+    a.download = `video-${Date.now()}.mp4`;
+    a.click();
+  }, [state.workflow.videoState.generatedVideoUrl]);
+
   useEffect(() => {
     if (!state.uploadedImage) {
       updateActiveSelection(null);
@@ -1407,7 +1464,7 @@ const StandardCanvas: React.FC = () => {
                    {showSplit ? (
                       <div className="inline-flex gap-1 bg-white border border-border p-2 shadow-2xl rounded-sm items-stretch w-[95%] h-[95%]">
                          <div className="relative bg-surface-sunken flex-1 overflow-hidden">
-                            <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-foreground-muted bg-white px-2 py-1 rounded shadow-sm z-10">Original</span>
+                            <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-foreground-muted bg-white px-2 py-1 rounded shadow-sm z-10">{t('canvas.compare.original')}</span>
                             <img 
                                src={state.uploadedImage} 
                                className="w-full h-full object-contain block select-none" 
@@ -1418,7 +1475,7 @@ const StandardCanvas: React.FC = () => {
                          </div>
                          <div className="w-px bg-border-strong" />
                          <div className="relative bg-surface-elevated flex-1 overflow-hidden">
-                            <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-accent bg-white px-2 py-1 rounded shadow-sm border border-accent/20 z-10">Preview</span>
+                            <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider text-accent bg-white px-2 py-1 rounded shadow-sm border border-accent/20 z-10">{t('canvas.compare.preview')}</span>
                             <img 
                                src={state.uploadedImage} 
                                className="w-full h-full object-contain block opacity-50 grayscale blur-sm select-none"
@@ -1431,20 +1488,140 @@ const StandardCanvas: React.FC = () => {
                          {isVideo ? (
                             <div className="relative w-full h-full flex items-center justify-center">
                                <div className="relative border-2 border-black/10 rounded-xl overflow-hidden bg-black shadow-2xl w-full h-full">
-                                   <img 
-                                      src={state.uploadedImage} 
-                                      alt="Video Frame" 
-                                      className="w-full h-full object-contain block select-none opacity-80"
-                                      draggable={false}
-                                   />
-                                   <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); setIsPlaying(!isPlaying); }}
-                                        className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-all text-white border border-white/30 shadow-xl hover:scale-110"
-                                      >
-                                        {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
-                                      </button>
-                                   </div>
+                                   {isVideoLocked ? (
+                                      <div className="absolute inset-0 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
+                                         <div className="w-full max-w-md pointer-events-auto">
+                                            <VideoLockBanner compact />
+                                         </div>
+                                      </div>
+                                   ) : state.workflow.videoState.generatedVideoUrl ? (
+                                      <>
+                                         <video
+                                            ref={videoRef}
+                                            src={state.workflow.videoState.generatedVideoUrl}
+                                            className="w-full h-full object-contain block select-none"
+                                            onTimeUpdate={handleVideoTimeUpdate}
+                                            onLoadedMetadata={handleVideoLoadedMetadata}
+                                            onPlay={() => setIsPlaying(true)}
+                                            onPause={() => setIsPlaying(false)}
+                                            onEnded={() => setIsPlaying(false)}
+                                            loop
+                                         />
+
+                                         {/* Playback Controls Overlay */}
+                                         <div
+                                            className="absolute inset-0 flex items-center justify-center pointer-events-auto opacity-0 hover:opacity-100 transition-opacity bg-black/10 group"
+                                            onClick={(e) => { e.stopPropagation(); handleVideoPlayPause(); }}
+                                         >
+                                            <button
+                                              className="w-20 h-20 bg-white/15 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/25 transition-all text-white border-2 border-white/40 shadow-2xl group-hover:scale-110"
+                                            >
+                                              {isPlaying ? <Pause size={40} fill="currentColor" /> : <Play size={40} fill="currentColor" className="ml-1" />}
+                                            </button>
+                                         </div>
+
+                                         {/* Timeline Controls */}
+                                         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-auto">
+                                            <div className="flex items-center gap-3 mb-2">
+                                               <button
+                                                  onClick={(e) => { e.stopPropagation(); handleVideoPlayPause(); }}
+                                                  className="p-2 text-white hover:bg-white/20 rounded-full transition-all"
+                                               >
+                                                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                                               </button>
+
+                                               <div className="flex-1 relative group/timeline">
+                                                  <input
+                                                     type="range"
+                                                     min={0}
+                                                     max={state.workflow.videoState.timeline.duration || 100}
+                                                     value={state.workflow.videoState.timeline.currentTime}
+                                                     onChange={handleTimelineSeek}
+                                                     className="w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer hover:h-2 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-lg hover:[&::-webkit-slider-thumb]:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                                     style={{
+                                                        background: `linear-gradient(to right, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.2) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.2) 100%)`
+                                                     }}
+                                                  />
+
+                                                  {/* Keyframe Markers for multi-frame modes */}
+                                                  {state.workflow.videoState.inputMode !== 'image-animate' && state.workflow.videoState.keyframes.length > 0 && (
+                                                     <div className="absolute inset-0 pointer-events-none">
+                                                        {state.workflow.videoState.keyframes.map((keyframe, i) => {
+                                                           const totalDuration = state.workflow.videoState.keyframes.reduce((sum, kf) => sum + kf.duration, 0);
+                                                           const previousDuration = state.workflow.videoState.keyframes.slice(0, i).reduce((sum, kf) => sum + kf.duration, 0);
+                                                           const position = (previousDuration / totalDuration) * 100;
+                                                           return (
+                                                              <div
+                                                                 key={keyframe.id}
+                                                                 className="absolute top-1/2 -translate-y-1/2 w-1 h-3 bg-accent rounded-full shadow-md"
+                                                                 style={{ left: `${position}%` }}
+                                                                 title={t('rightPanel.video.timeline.keyframeLabel', { index: i + 1 })}
+                                                              />
+                                                           );
+                                                        })}
+                                                     </div>
+                                                  )}
+                                               </div>
+
+                                               <div className="text-white text-xs font-mono flex items-center gap-1.5 min-w-[80px]">
+                                                  <span>{formatTime(state.workflow.videoState.timeline.currentTime)}</span>
+                                                  <span className="text-white/50">/</span>
+                                                  <span className="text-white/70">{formatTime(state.workflow.videoState.timeline.duration)}</span>
+                                               </div>
+
+                                               <button
+                                                  onClick={(e) => { e.stopPropagation(); handleVideoDownload(); }}
+                                                  className="p-2 text-white hover:bg-white/20 rounded-full transition-all"
+                                                  title={t('rightPanel.video.output.download')}
+                                               >
+                                                  <Download size={18} />
+                                               </button>
+                                            </div>
+                                         </div>
+
+                                         {/* Compare Mode Picture-in-Picture */}
+                                         {showCompare && state.uploadedImage && (
+                                            <div className="absolute top-4 right-4 w-48 h-32 border-2 border-white/70 rounded-lg overflow-hidden shadow-xl bg-black/40 backdrop-blur-sm pointer-events-auto group/compare">
+                                               <img
+                                                  src={state.uploadedImage}
+                                                  className="w-full h-full object-cover opacity-90"
+                                                  alt={t('canvas.compare.original')}
+                                               />
+                                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                                               <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 text-center">
+                                                  {t('rightPanel.video.output.originalImage')}
+                                               </div>
+                                               <button
+                                                  onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { compareMode: false } });
+                                                  }}
+                                                  className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover/compare:opacity-100 transition-opacity hover:bg-black/70"
+                                               >
+                                                  <X size={12} />
+                                               </button>
+                                            </div>
+                                         )}
+                                      </>
+                                   ) : (
+                                      <>
+                                         <img
+                                            src={state.uploadedImage}
+                                            alt={t('rightPanel.video.output.frameAlt')}
+                                            className="w-full h-full object-contain block select-none opacity-80"
+                                            draggable={false}
+                                         />
+                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                            <div className="bg-black/60 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 shadow-xl">
+                                                  <div className="text-white text-center">
+                                                     <Sparkles size={32} className="mx-auto mb-2 animate-pulse" />
+                                                     <div className="text-sm font-semibold">{t('rightPanel.video.output.noVideo')}</div>
+                                                     <div className="text-xs text-white/70 mt-1">{t('rightPanel.video.output.configure')}</div>
+                                                  </div>
+                                               </div>
+                                            </div>
+                                         </>
+                                   )}
                                </div>
                             </div>
                          ) : (

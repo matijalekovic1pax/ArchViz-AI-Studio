@@ -8,6 +8,7 @@ import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipF
 import { cn } from '../../../lib/utils';
 import { Slider } from '../../ui/Slider';
 import type { HistoryItem } from '../../../types';
+import { VideoLockBanner } from '../../video/VideoLockBanner';
 
 export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -22,6 +23,7 @@ export const BottomPanel: React.FC = () => {
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
   const isUpscaleMode = state.mode === 'upscale';
+  const isVideoLocked = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
   const resolvedBottomTab = isGenerateTextMode
     ? 'history'
     : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
@@ -138,6 +140,14 @@ export const BottomPanel: React.FC = () => {
   );
 
   const renderContent = () => {
+    if (isVideoLocked) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <VideoLockBanner compact className="max-w-md w-full" />
+        </div>
+      );
+    }
+
     if (!isGenerateTextMode && resolvedBottomTab === 'prompt') {
       return (
         <div className="absolute inset-0 p-4 overflow-y-auto font-mono text-sm leading-relaxed text-foreground-secondary group">

@@ -8,10 +8,11 @@ const initialVideoState: VideoState = {
   model: 'veo-2',
   scenario: '',
   compareMode: false,
-  
+  accessUnlocked: false,
+
   duration: 10,
   resolution: '1080p',
-  fps: 24,
+  fps: 30,
   aspectRatio: '16:9',
   motionAmount: 5,
   seed: 123456,
@@ -33,6 +34,19 @@ const initialVideoState: VideoState = {
 
   keyframes: [],
   generatedVideoUrl: null,
+
+  // NEW: Social Media & Motion Presets
+  socialMediaPreset: null,
+  motionStyle: 'smooth',
+
+  // NEW: API & Quality Settings
+  klingProvider: 'piapi',
+  quality: 'standard',
+  transitionEffect: 'fade',
+
+  // NEW: Generation Progress & History
+  generationProgress: null,
+  generationHistory: [],
 };
 
 const initialRender3D: Render3DSettings = {
@@ -851,6 +865,7 @@ const initialState: AppState = {
   output: initialOutput,
   canvas: initialCanvas,
   history: [],
+  appAlert: null,
   
   leftSidebarWidth: 280,
   rightPanelWidth: 320,
@@ -912,9 +927,11 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'TOGGLE_RIGHT_PANEL': return { ...state, rightPanelOpen: !state.rightPanelOpen };
 
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
+    case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
     case 'LOAD_PROJECT': return { 
       ...action.payload,
-      sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null
+      sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
+      appAlert: action.payload?.appAlert ?? null
     };
     case 'RESET_PROJECT': return { ...initialState };
     default: return state;

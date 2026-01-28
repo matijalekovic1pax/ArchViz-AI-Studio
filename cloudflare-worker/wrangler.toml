@@ -1,0 +1,9 @@
+name = "veo-proxy"
+main = "veo-proxy.js"
+compatibility_date = "2024-01-01"
+
+# Account ID - get this from your Cloudflare dashboard
+# account_id = "your-account-id-here"
+
+[env.production]
+name = "veo-proxy-prod"

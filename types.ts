@@ -659,7 +659,7 @@ export interface WorkflowSettings {
   upscaleFineDetail: number;
   upscaleFormat: 'png' | 'jpg' | 'tiff';
   upscalePreserveMetadata: boolean;
-  upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing'; url?: string }[];
+  upscaleBatch: { id: string; name: string; status: 'queued' | 'done' | 'processing' | 'failed'; url?: string; retryCount?: number; error?: string }[];
 
   // 9. Multi-Angle
   multiAnglePreset: 'turntable' | 'architectural' | 'birds-eye' | 'custom';
@@ -691,16 +691,59 @@ export interface WorkflowSettings {
   documentTranslate: DocumentTranslateState;
 }
 
-export type VideoModel = 'veo-2' | 'kling-1.6';
+// Video Studio Types
+export type VideoModel = 'veo-2' | 'kling-2.6';
 export type VideoInputMode = 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
 export type CameraMotionType = 'static' | 'pan' | 'orbit' | 'dolly' | 'crane' | 'drone' | 'rotate' | 'push-in' | 'pull-out' | 'custom';
+
+// Social Media Presets
+export type SocialMediaPlatform =
+  | 'linkedin'
+  | 'instagram-story'
+  | 'instagram-post'
+  | 'tiktok'
+  | 'youtube-shorts'
+  | 'website-hero';
+
+export interface SocialMediaPreset {
+  platform: SocialMediaPlatform;
+  aspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '21:9';
+  duration: number; // seconds
+  resolution: '720p' | '1080p' | '4k';
+  fps: 24 | 30 | 60;
+  description: string;
+}
+
+// Motion Style Presets
+export type MotionStyle =
+  | 'smooth'
+  | 'dynamic'
+  | 'energetic'
+  | 'elegant'
+  | 'cinematic'
+  | 'subtle'
+  | 'dramatic'
+  | 'gentle';
+
+// API Provider Types
+export type KlingProvider = 'piapi' | 'ulazai' | 'wavespeedai';
+
+// Video Generation Progress
+export interface VideoGenerationProgress {
+  phase: 'initializing' | 'processing' | 'rendering' | 'complete' | 'error';
+  progress: number; // 0-100
+  message?: string;
+  estimatedTimeRemaining?: number;
+  videoUrl?: string;
+}
 
 export interface VideoState {
   inputMode: VideoInputMode;
   model: VideoModel;
   scenario: string;
   compareMode: boolean;
-  
+  accessUnlocked: boolean;
+
   // Generation Params
   duration: number; // seconds
   resolution: '720p' | '1080p' | '4k';
@@ -725,9 +768,28 @@ export interface VideoState {
     duration: number;
     zoom: number;
   };
-  
+
   keyframes: { id: string; url: string; duration: number }[];
   generatedVideoUrl: string | null;
+
+  // NEW: Social Media & Motion Presets
+  socialMediaPreset: SocialMediaPlatform | null;
+  motionStyle: MotionStyle;
+
+  // NEW: API & Quality Settings
+  klingProvider: KlingProvider;
+  quality: 'draft' | 'standard' | 'high' | 'ultra';
+  transitionEffect: 'cut' | 'fade' | 'dissolve' | 'wipe' | 'none';
+
+  // NEW: Generation Progress & History
+  generationProgress: VideoGenerationProgress | null;
+  generationHistory: Array<{
+    id: string;
+    url: string;
+    thumbnail: string;
+    timestamp: number;
+    settings: Partial<VideoState>;
+  }>;
 }
 
 // --- Material Validation Types ---
@@ -1037,6 +1099,12 @@ export interface HistoryItem {
   settings?: any;
 }
 
+export interface AppAlert {
+  id: string;
+  message: string;
+  tone: 'info' | 'warning' | 'error';
+}
+
 export interface AppState {
   mode: GenerationMode;
   activeStyleId: string;
@@ -1061,6 +1129,7 @@ export interface AppState {
   canvas: CanvasState;
   
   history: HistoryItem[];
+  appAlert: AppAlert | null;
 
   leftSidebarWidth: number;
   rightPanelWidth: number;
@@ -1105,6 +1174,7 @@ export type Action =
   | { type: 'TOGGLE_LEFT_SIDEBAR' }
   | { type: 'TOGGLE_RIGHT_PANEL' }
   | { type: 'ADD_HISTORY'; payload: HistoryItem }
+  | { type: 'SET_APP_ALERT'; payload: AppAlert | null }
   | { type: 'LOAD_PROJECT'; payload: AppState }
   | { type: 'RESET_PROJECT' }
   // Document Translation

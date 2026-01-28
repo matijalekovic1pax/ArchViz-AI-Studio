@@ -20,12 +20,13 @@ import {
   AttachmentData,
   GenerationConfig
 } from '../services/geminiService';
+import { getVideoGenerationService } from '../services/videoGenerationService';
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
 import { nanoid } from 'nanoid';
-import type { AppState, GenerationMode, TranslationProgress } from '../types';
+import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
@@ -76,6 +77,7 @@ export function useGeneration(): UseGenerationReturn {
   const { state, dispatch } = useAppStore();
   const { i18n } = useTranslation();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const upscaleBatchSnapshotRef = useRef<AppState['workflow']['upscaleBatch'] | null>(null);
 
   const isReady = ensureServiceInitialized();
 
@@ -830,6 +832,11 @@ export function useGeneration(): UseGenerationReturn {
         updateProgress(10);
         const wf = state.workflow;
         const queued = wf.upscaleBatch.map((item) => ({ ...item }));
+        const syncUpscaleBatch = (nextBatch: typeof queued) => {
+          upscaleBatchSnapshotRef.current = nextBatch.map((item) => ({ ...item }));
+          dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...nextBatch] } });
+        };
+        syncUpscaleBatch(queued);
         const completedIds = new Set(queued.filter((item) => item.status === 'done').map((item) => item.id));
         const imagesOut: GeneratedImage[] = [];
 
@@ -854,7 +861,7 @@ export function useGeneration(): UseGenerationReturn {
             processedCount += 1;
             const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
             updateProgress(progress);
-            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
+            syncUpscaleBatch(queued);
             continue;
           }
           if (!item.url) {
@@ -862,11 +869,12 @@ export function useGeneration(): UseGenerationReturn {
             processedCount += 1;
             const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
             updateProgress(progress);
-            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
+            syncUpscaleBatch(queued);
             continue;
           }
-          queued[0] = { ...item, status: 'processing' };
-          dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
+          const currentRetryCount = item.retryCount || 0;
+          queued[0] = { ...item, status: 'processing', retryCount: currentRetryCount };
+          syncUpscaleBatch(queued);
 
           const source = dataUrlToImageData(item.url);
           if (!source) {
@@ -874,54 +882,131 @@ export function useGeneration(): UseGenerationReturn {
             processedCount += 1;
             const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
             updateProgress(progress);
-            dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
+            syncUpscaleBatch(queued);
             continue;
           }
 
-          const upscaleResult = await service.generateImages({
-            prompt: fullPrompt,
-            images: [source],
-            generationConfig: generationConfigWithAbort
-          });
+          // Retry logic: up to 3 retries per image
+          const MAX_RETRIES = 3;
+          const REQUEST_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes timeout
+          let upscaleSuccess = false;
+          let lastError: Error | null = null;
 
-          if (upscaleResult.images?.[0]) {
-            const outputUrl = upscaleResult.images[0].dataUrl;
-            queued[0] = { ...item, status: 'done', url: outputUrl };
-            imagesOut.push({
-              base64: upscaleResult.images[0].base64,
-              mimeType: upscaleResult.images[0].mimeType,
-              dataUrl: outputUrl
-            });
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              if (abortSignal.aborted) {
+                throw new DOMException('Request aborted', 'AbortError');
+              }
 
-            dispatch({ type: 'SET_IMAGE', payload: outputUrl });
-            dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
-            dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+              // Update retry count in UI
+              if (attempt > 0) {
+                queued[0] = { ...item, status: 'processing', retryCount: attempt };
+                syncUpscaleBatch(queued);
+                console.log(`Retrying upscale for ${item.name}, attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
+              }
 
-            if (!completedIds.has(item.id)) {
-              dispatch({
-                type: 'ADD_HISTORY',
-                payload: {
-                  id: nanoid(),
-                  timestamp: Date.now(),
-                  thumbnail: outputUrl,
-                  prompt: basePrompt,
-                  attachments: attachmentUrls,
-                  mode: state.mode
+              // Create a timeout-aware generation call
+              const upscaleResult = await Promise.race([
+                service.generateImages({
+                  prompt: fullPrompt,
+                  images: [source],
+                  generationConfig: generationConfigWithAbort
+                }),
+                new Promise<never>((_, reject) => {
+                  setTimeout(() => {
+                    reject(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`));
+                  }, REQUEST_TIMEOUT_MS);
+                })
+              ]);
+
+              if (upscaleResult.images?.[0]) {
+                const outputUrl = upscaleResult.images[0].dataUrl;
+                queued[0] = { ...item, status: 'done', url: outputUrl, retryCount: attempt };
+                imagesOut.push({
+                  base64: upscaleResult.images[0].base64,
+                  mimeType: upscaleResult.images[0].mimeType,
+                  dataUrl: outputUrl
+                });
+
+                dispatch({ type: 'SET_IMAGE', payload: outputUrl });
+                dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+                dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+
+                if (!completedIds.has(item.id)) {
+                  dispatch({
+                    type: 'ADD_HISTORY',
+                    payload: {
+                      id: nanoid(),
+                      timestamp: Date.now(),
+                      thumbnail: outputUrl,
+                      prompt: basePrompt,
+                      attachments: attachmentUrls,
+                      mode: state.mode
+                    }
+                  });
+                  completedIds.add(item.id);
                 }
-              });
-              completedIds.add(item.id);
+                upscaleSuccess = true;
+                break; // Success, exit retry loop
+              } else {
+                // No image returned but no error - treat as success with no output
+                queued[0] = { ...item, status: 'done', retryCount: attempt };
+                upscaleSuccess = true;
+                break;
+              }
+            } catch (error) {
+              lastError = error as Error;
+
+              // Don't retry user-initiated abort errors
+              if ((error as DOMException)?.name === 'AbortError') {
+                throw error;
+              }
+
+              const isTimeout = lastError.message?.includes('timed out');
+              console.error(
+                `Upscale attempt ${attempt + 1} failed for ${item.name}${isTimeout ? ' (timeout)' : ''}:`,
+                error
+              );
+
+              // If we have more retries left, wait before retrying
+              // Shorter delay for timeouts since we already waited
+              if (attempt < MAX_RETRIES) {
+                const delay = isTimeout ? 1000 : Math.min(1000 * Math.pow(2, attempt), 8000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
             }
-          } else {
-            queued[0] = { ...item, status: 'done' };
+          }
+
+          // If all retries failed, mark as failed and continue to next image
+          if (!upscaleSuccess) {
+            const errorMessage = lastError?.message || 'Upscale failed after multiple attempts';
+            console.error(`All ${MAX_RETRIES + 1} attempts failed for ${item.name}: ${errorMessage}`);
+            queued[0] = {
+              ...item,
+              status: 'failed',
+              retryCount: MAX_RETRIES + 1,
+              error: errorMessage
+            };
+
+            // Show alert for the failed image but continue processing
+            dispatch({
+              type: 'SET_APP_ALERT',
+              payload: {
+                id: nanoid(),
+                tone: 'warning',
+                message: `Failed to upscale "${item.name}" after ${MAX_RETRIES + 1} attempts. Continuing with remaining images.`
+              }
+            });
           }
 
           queued.shift();
           processedCount += 1;
           const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
           updateProgress(progress);
-          dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...queued] } });
+          syncUpscaleBatch(queued);
         }
 
+        upscaleBatchSnapshotRef.current = null;
         result = { text: null, images: imagesOut };
       } else if (isVisualEditMode) {
         updateProgress(10);
@@ -957,11 +1042,134 @@ export function useGeneration(): UseGenerationReturn {
           generationConfig: generationConfigWithAbort
         });
       } else if (isVideoMode) {
-        result = await runStreamedImageGeneration({
+        console.log('🎬 [VIDEO MODE] Starting video generation...');
+        console.log('🎬 Video state:', state.workflow.videoState);
+        updateProgress(10);
+        const videoState = state.workflow.videoState;
+        const videoService = getVideoGenerationService();
+        console.log('🎬 Video service initialized');
+
+        // Prepare input image for image-animate mode
+        let inputImage: ImageData | undefined;
+        if (videoState.inputMode === 'image-animate' && state.uploadedImage) {
+          const converted = dataUrlToImageData(state.uploadedImage);
+          if (converted) {
+            // Ensure dataUrl is preserved
+            inputImage = {
+              ...converted,
+              dataUrl: state.uploadedImage
+            };
+          }
+          console.log('🎬 Input image prepared:', {
+            hasImage: !!inputImage,
+            hasDataUrl: !!inputImage?.dataUrl,
+            dataUrlLength: inputImage?.dataUrl?.length || 0
+          });
+        }
+
+        // Prepare keyframes for multi-frame modes
+        let keyframes: ImageData[] | undefined;
+        if (videoState.inputMode !== 'image-animate' && videoState.keyframes.length > 0) {
+          keyframes = videoState.keyframes
+            .map((kf) => dataUrlToImageData(kf.url))
+            .filter((img): img is ImageData => img !== null);
+        }
+
+        // Progress callback for video generation
+        const onVideoProgress = (progress: VideoGenerationProgress) => {
+          dispatch({
+            type: 'UPDATE_VIDEO_STATE',
+            payload: { generationProgress: progress }
+          });
+          updateProgress(progress.progress);
+        };
+
+        console.log('🎬 Calling videoService.generateVideo with options:', {
+          model: videoState.model,
           prompt: fullPrompt,
-          images: images.length > 0 ? images : undefined,
-          generationConfig: generationConfigWithAbort
+          hasInputImage: !!inputImage,
+          keyframesCount: keyframes?.length || 0,
+          duration: videoState.duration,
+          resolution: videoState.resolution
         });
+
+        try {
+          const videoResult = await videoService.generateVideo({
+            model: videoState.model,
+            prompt: fullPrompt,
+            inputImage,
+            keyframes,
+            duration: videoState.duration,
+            resolution: videoState.resolution,
+            fps: videoState.fps,
+            aspectRatio: videoState.aspectRatio,
+            motionAmount: videoState.motionAmount,
+            camera: videoState.camera,
+            quality: videoState.quality,
+            transitionEffect: videoState.transitionEffect,
+            seed: videoState.seedLocked ? videoState.seed : undefined,
+            klingProvider: videoState.klingProvider,
+            onProgress: onVideoProgress,
+            abortSignal
+          });
+          console.log('🎬 Video generation successful!', videoResult);
+
+          // Store result in video state
+          dispatch({
+            type: 'UPDATE_VIDEO_STATE',
+            payload: {
+              generatedVideoUrl: videoResult.videoUrl,
+              generationProgress: {
+                phase: 'complete',
+                progress: 100,
+                message: 'Video generation complete!',
+                videoUrl: videoResult.videoUrl
+              },
+              generationHistory: [
+                ...videoState.generationHistory,
+                {
+                  id: nanoid(),
+                  url: videoResult.videoUrl,
+                  thumbnail: videoResult.thumbnailUrl || videoResult.videoUrl,
+                  timestamp: Date.now(),
+                  settings: { ...videoState }
+                }
+              ].slice(-10) // Keep last 10
+            }
+          });
+
+          // Also set as uploaded image for canvas display compatibility
+          dispatch({ type: 'SET_IMAGE', payload: videoResult.videoUrl });
+
+          // Return empty result to skip normal image handling
+          result = { text: null, images: [] };
+        } catch (videoError) {
+          // Handle video generation errors
+          console.error('❌ Video generation error:', videoError);
+          const errorMessage = videoError instanceof Error ? videoError.message : 'Video generation failed';
+
+          // Show user-friendly error notification
+          dispatch({
+            type: 'SET_APP_ALERT',
+            payload: {
+              id: nanoid(),
+              tone: 'error',
+              message: errorMessage
+            }
+          });
+
+          dispatch({
+            type: 'UPDATE_VIDEO_STATE',
+            payload: {
+              generationProgress: {
+                phase: 'error',
+                progress: 0,
+                message: errorMessage
+              }
+            }
+          });
+          throw videoError;
+        }
       } else if (options.numberOfImages && options.numberOfImages > 1) {
         updateProgress(10);
         // Batch image generation
@@ -1016,12 +1224,6 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
         dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
 
-        if (isVideoMode) {
-          dispatch({
-            type: 'UPDATE_VIDEO_STATE',
-            payload: { generatedVideoUrl: generatedImageUrl }
-          });
-        }
         if (isVisualEditMode) {
           dispatch({
             type: 'UPDATE_WORKFLOW',
@@ -1132,7 +1334,19 @@ export function useGeneration(): UseGenerationReturn {
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
 
     } catch (error) {
+      const resetUpscaleProcessing = () => {
+        if (state.mode !== 'upscale') return;
+        const snapshot = upscaleBatchSnapshotRef.current ?? state.workflow.upscaleBatch;
+        if (!snapshot || snapshot.length === 0) return;
+        const resetBatch = snapshot.map((item) =>
+          item.status === 'processing' ? { ...item, status: 'queued' } : item
+        );
+        upscaleBatchSnapshotRef.current = resetBatch.map((item) => ({ ...item }));
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: resetBatch } });
+      };
+
       if ((error as DOMException)?.name === 'AbortError') {
+        resetUpscaleProcessing();
         if (state.mode === 'material-validation') {
           dispatch({
             type: 'UPDATE_MATERIAL_VALIDATION',
@@ -1144,6 +1358,24 @@ export function useGeneration(): UseGenerationReturn {
         return;
       }
       console.error('Generation failed:', error);
+      resetUpscaleProcessing();
+      const errorMessage = error instanceof Error ? error.message : '';
+      const lowerMessage = errorMessage.toLowerCase();
+      const isServiceUnavailable =
+        lowerMessage.includes('503') ||
+        lowerMessage.includes('service unavailable') ||
+        lowerMessage.includes('overloaded');
+      const isImageMode = !TEXT_ONLY_MODES.includes(state.mode);
+      if (isImageMode && isServiceUnavailable) {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: nanoid(),
+            tone: 'warning',
+            message: 'Gemini image service is temporarily unavailable (503). Please retry in a moment.'
+          }
+        });
+      }
       if (state.mode === 'material-validation') {
         dispatch({
           type: 'UPDATE_MATERIAL_VALIDATION',

@@ -46,6 +46,8 @@
     "canBeRestored": "Peut être restauré à l'aide du bouton \"Charger le Projet\"",
     "privacyNotice": "Avis de Confidentialité",
     "privacyMessage": "Aucune donnée n'est stockée sur nos serveurs. Ce fichier est enregistré localement sur votre appareil.",
+    "projectNameLabel": "Nom du projet",
+    "projectNamePlaceholder": "Entrez un nom de projet",
     "confirmSave": "Enregistrer le Projet",
     "language": "Langue"
   },
@@ -571,8 +573,203 @@
       "description": "Previsualisez et exportez des modeles 3D generes depuis vos images."
     },
     "video": {
-      "title": "Studio Video",
-      "description": "Definissez la duree, le mouvement de camera et les transitions pour la generation video."
+      "title": "Studio Vidéo",
+      "description": "Définissez la durée, le mouvement de caméra et les transitions pour la génération vidéo.",
+      "presets": {
+        "title": "Préréglages Réseaux Sociaux",
+        "linkedin": {
+          "name": "LinkedIn",
+          "description": "Vidéo horizontale professionnelle pour les publications"
+        },
+        "instagramStory": {
+          "name": "Story Instagram",
+          "description": "Format vertical pour les stories"
+        },
+        "instagramPost": {
+          "name": "Publication Instagram",
+          "description": "Format carré pour le fil"
+        },
+        "tiktok": {
+          "name": "TikTok",
+          "description": "Vidéo verticale de format court"
+        },
+        "youtubeShorts": {
+          "name": "YouTube Shorts",
+          "description": "Shorts verticaux YouTube"
+        },
+        "websiteHero": {
+          "name": "Hero de Site Web",
+          "description": "Vidéo de bannière cinématique"
+        }
+      },
+      "motionStyles": {
+        "title": "Style de Mouvement",
+        "smooth": {
+          "label": "Lisse",
+          "description": "Mouvement fluide et doux"
+        },
+        "dynamic": {
+          "label": "Dynamique",
+          "description": "Mouvement rapide et engageant"
+        },
+        "energetic": {
+          "label": "Énergique",
+          "description": "Mouvement rapide à haute énergie"
+        },
+        "elegant": {
+          "label": "Élégant",
+          "description": "Mouvement raffiné et gracieux"
+        },
+        "cinematic": {
+          "label": "Cinématique",
+          "description": "Mouvement de type film"
+        },
+        "subtle": {
+          "label": "Subtil",
+          "description": "Mouvement minimal et doux"
+        },
+        "dramatic": {
+          "label": "Dramatique",
+          "description": "Mouvement audacieux et percutant"
+        },
+        "gentle": {
+          "label": "Doux",
+          "description": "Mouvement délicat et lisse"
+        }
+      },
+      "model": {
+        "title": "Modele Video",
+        "veo": {
+          "name": "Veo 2",
+          "description": "Dernier modele video de Google - max 8s, jusqua 4K"
+        },
+        "kling": {
+          "name": "Kling 2.6",
+          "description": "Modele avance avec controles de camera - max 10s, jusqua 1080p"
+        },
+        "providers": {
+          "piapi": "Fournisseur PiAPI",
+          "ulazai": "Fournisseur UlazAI",
+          "wavespeedai": "Fournisseur WaveSpeedAI"
+        }
+      },
+      "duration": {
+        "label": "Duree"
+      },
+      "aspectRatio": {
+        "label": "Rapport aspect"
+      },
+      "resolution": {
+        "label": "Resolution"
+      },
+      "frameRate": {
+        "label": "Frequence d images"
+      },
+      "motionAmount": {
+        "label": "Quantite de mouvement"
+      },
+      "advanced": {
+        "title": "Reglages avances"
+      },
+      "seed": {
+        "label": "Graine"
+      },
+      "inputSequence": {
+        "title": "Sequence entree"
+      },
+      "camera": {
+        "type": {
+          "label": "Mouvement de Caméra",
+          "static": "Statique",
+          "pan": "Panoramique",
+          "orbit": "Orbite",
+          "dolly": "Dolly",
+          "crane": "Grue",
+          "drone": "Drone",
+          "rotate": "Rotation",
+          "pushIn": "Rapprochement",
+          "pullOut": "Éloignement",
+          "custom": "Personnalisé"
+        },
+        "direction": "Direction",
+        "directionValue": "Direction: {{value}} deg",
+        "speed": {
+          "label": "Vitesse",
+          "slow": "Lent",
+          "normal": "Normal",
+          "fast": "Rapide"
+        },
+        "smoothness": "Fluidité"
+      },
+      "quality": {
+        "label": "Qualite",
+        "draft": "Brouillon",
+        "standard": "Standard",
+        "high": "Élevée",
+        "ultra": "Ultra"
+      },
+      "transition": {
+        "label": "Effet de transition",
+        "cut": "Coupe",
+        "fade": "Fondu",
+        "dissolve": "Dissolution",
+        "wipe": "Balayage",
+        "none": "Aucun"
+      },
+      "progress": {
+        "initializing": "Initialisation...",
+        "processing": "Traitement vidéo...",
+        "rendering": "Rendu...",
+        "complete": "Génération vidéo terminée !",
+        "error": "Échec de la génération vidéo",
+        "eta": "ETA: {{seconds}}s"
+      },
+      "inputMode": {
+        "title": "Mode Vidéo",
+        "imageAnimate": "Animer l'Image",
+        "cameraPath": "Trajectoire de Caméra",
+        "imageMorph": "Séquence de Transformation",
+        "multiShot": "Prises Multiples",
+        "descriptions": {
+          "imageAnimate": "Ajouter du mouvement a une image fixe",
+          "cameraPath": "Survol depuis 3D ou image",
+          "imageMorph": "Transition entre vues",
+          "multiShot": "Assemblage de clips"
+        }
+      },
+      "quickSettings": {
+        "title": "Réglages Rapides",
+        "compareMode": "Mode Comparaison",
+        "lockSeed": "Verrouiller la Graine",
+        "on": "ACTIVÉ",
+        "off": "DÉSACTIVÉ",
+        "locked": "VERROUILLÉ",
+        "random": "ALÉATOIRE"
+      },
+      "lock": {
+        "title": "Studio video verrouille",
+        "message": "Cette fonction est en developpement et temporairement indisponible aux utilisateurs.",
+        "passwordLabel": "Mot de passe",
+        "placeholder": "Entrez le mot de passe",
+        "unlock": "Debloquer",
+        "error": "Mot de passe incorrect.",
+        "notice": "Usage interne uniquement."
+      },
+      "timeline": {
+        "addKeyframe": "Ajouter Image-Clé",
+        "removeKeyframe": "Supprimer Image-Clé",
+        "keyframeLabel": "Image-cle {{index}}"
+      },
+      "output": {
+        "title": "Vidéo Générée",
+        "download": "Télécharger la Vidéo",
+        "recentGenerations": "Générations Récentes",
+        "load": "Charger",
+        "noVideo": "Aucune vidéo générée",
+        "configure": "Configurer les paramètres et générer",
+        "frameAlt": "Image video",
+        "originalImage": "Image originale"
+      }
     },
     "materialValidation": {
       "title": "Validation",
@@ -613,6 +810,10 @@
     "promptBar": {
       "placeholder": "Decrivez votre vision architecturale...",
       "pressEnter": "Appuyez sur Entree pour generer"
+    },
+    "compare": {
+      "original": "Original",
+      "preview": "Apercu"
     },
     "upload": {
       "title": "Telecharger l'image source",

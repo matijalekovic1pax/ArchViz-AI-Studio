@@ -2557,10 +2557,24 @@ function generateUpscalePrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
   const userPrompt = state.prompt?.trim();
+  const outputResolution = state.output?.resolution?.toUpperCase?.() || '4K';
+  const describeSlider = (value: number, low: string, high: string) => {
+    if (value <= 20) return `${low} (very low)`;
+    if (value <= 40) return `${low} (low)`;
+    if (value <= 60) return 'balanced';
+    if (value <= 80) return `${high} (high)`;
+    return `${high} (very high)`;
+  };
 
   parts.push('Ultra-premium cinematic enhancement and extreme-resolution upscaling with absolute content preservation.');
   parts.push('The input image is the single, immutable source of truth.');
   parts.push(`Target upscale factor: ${workflow.upscaleFactor}.`);
+  parts.push('Upscaler control settings (must be reflected in the result):');
+  parts.push(`Output resolution target: ${outputResolution}.`);
+  parts.push(`Sharpness: ${workflow.upscaleSharpness}/100 (${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}).`);
+  parts.push(`Clarity: ${workflow.upscaleClarity}/100 (${describeSlider(workflow.upscaleClarity, 'low', 'high')}).`);
+  parts.push(`Edge definition: ${workflow.upscaleEdgeDefinition}/100 (${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}).`);
+  parts.push(`Fine detail: ${workflow.upscaleFineDetail}/100 (${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}).`);
 
   if (userPrompt) {
     parts.push(`User notes: ${userPrompt}.`);

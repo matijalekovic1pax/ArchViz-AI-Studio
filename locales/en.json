@@ -46,6 +46,8 @@
     "canBeRestored": "Can be restored using the \"Load Project\" button",
     "privacyNotice": "Privacy Notice",
     "privacyMessage": "No data is stored on our servers. This file is saved locally to your device.",
+    "projectNameLabel": "Project Name",
+    "projectNamePlaceholder": "Enter a project name",
     "confirmSave": "Save Project",
     "language": "Language"
   },
@@ -572,7 +574,202 @@
     },
     "video": {
       "title": "Video Studio",
-      "description": "Set duration, camera motion, and transition effects for AI video generation."
+      "description": "Set duration, camera motion, and transition effects for AI video generation.",
+      "presets": {
+        "title": "Social Media Presets",
+        "linkedin": {
+          "name": "LinkedIn",
+          "description": "Professional horizontal video for posts"
+        },
+        "instagramStory": {
+          "name": "Instagram Story",
+          "description": "Vertical format for stories"
+        },
+        "instagramPost": {
+          "name": "Instagram Post",
+          "description": "Square format for feed"
+        },
+        "tiktok": {
+          "name": "TikTok",
+          "description": "Short-form vertical video"
+        },
+        "youtubeShorts": {
+          "name": "YouTube Shorts",
+          "description": "YouTube vertical shorts"
+        },
+        "websiteHero": {
+          "name": "Website Hero",
+          "description": "Cinematic banner video"
+        }
+      },
+      "motionStyles": {
+        "title": "Motion Style",
+        "smooth": {
+          "label": "Smooth",
+          "description": "Gentle flowing motion"
+        },
+        "dynamic": {
+          "label": "Dynamic",
+          "description": "Fast-paced engaging movement"
+        },
+        "energetic": {
+          "label": "Energetic",
+          "description": "High-energy rapid motion"
+        },
+        "elegant": {
+          "label": "Elegant",
+          "description": "Graceful refined movement"
+        },
+        "cinematic": {
+          "label": "Cinematic",
+          "description": "Film-like motion"
+        },
+        "subtle": {
+          "label": "Subtle",
+          "description": "Minimal gentle motion"
+        },
+        "dramatic": {
+          "label": "Dramatic",
+          "description": "Bold impactful movement"
+        },
+        "gentle": {
+          "label": "Gentle",
+          "description": "Soft smooth motion"
+        }
+      },
+      "model": {
+        "title": "Video Model",
+        "veo": {
+          "name": "Veo 2",
+          "description": "Google's latest video model - max 8s, up to 4K"
+        },
+        "kling": {
+          "name": "Kling 2.6",
+          "description": "Advanced model with camera controls - max 10s, up to 1080p"
+        },
+        "providers": {
+          "piapi": "PiAPI Provider",
+          "ulazai": "UlazAI Provider",
+          "wavespeedai": "WaveSpeedAI Provider"
+        }
+      },
+      "duration": {
+        "label": "Duration"
+      },
+      "aspectRatio": {
+        "label": "Aspect Ratio"
+      },
+      "resolution": {
+        "label": "Resolution"
+      },
+      "frameRate": {
+        "label": "Frame Rate"
+      },
+      "motionAmount": {
+        "label": "Motion Amount"
+      },
+      "advanced": {
+        "title": "Advanced Settings"
+      },
+      "seed": {
+        "label": "Seed"
+      },
+      "inputSequence": {
+        "title": "Input Sequence"
+      },
+      "camera": {
+        "type": {
+          "label": "Camera Motion",
+          "static": "Static",
+          "pan": "Pan",
+          "orbit": "Orbit",
+          "dolly": "Dolly",
+          "crane": "Crane",
+          "drone": "Drone",
+          "rotate": "Rotate",
+          "pushIn": "Push In",
+          "pullOut": "Pull Out",
+          "custom": "Custom"
+        },
+        "direction": "Direction",
+        "directionValue": "Direction: {{value}}°",
+        "speed": {
+          "label": "Speed",
+          "slow": "Slow",
+          "normal": "Normal",
+          "fast": "Fast"
+        },
+        "smoothness": "Smoothness"
+      },
+      "quality": {
+        "label": "Quality",
+        "draft": "Draft",
+        "standard": "Standard",
+        "high": "High",
+        "ultra": "Ultra"
+      },
+      "transition": {
+        "label": "Transition Effect",
+        "cut": "Cut",
+        "fade": "Fade",
+        "dissolve": "Dissolve",
+        "wipe": "Wipe",
+        "none": "None"
+      },
+      "progress": {
+        "initializing": "Initializing...",
+        "processing": "Processing video...",
+        "rendering": "Rendering...",
+        "complete": "Video generation complete!",
+        "error": "Video generation failed",
+        "eta": "ETA: {{seconds}}s"
+      },
+      "inputMode": {
+        "title": "Video Mode",
+        "imageAnimate": "Image Animate",
+        "cameraPath": "Camera Path",
+        "imageMorph": "Morph Sequence",
+        "multiShot": "Multi-Shot",
+        "descriptions": {
+          "imageAnimate": "Add motion to still image",
+          "cameraPath": "Flythrough from 3D or image",
+          "imageMorph": "Transition between views",
+          "multiShot": "Assembly of clips"
+        }
+      },
+      "quickSettings": {
+        "title": "Quick Settings",
+        "compareMode": "Compare Mode",
+        "lockSeed": "Lock Seed",
+        "on": "ON",
+        "off": "OFF",
+        "locked": "LOCKED",
+        "random": "RANDOM"
+      },
+      "lock": {
+        "title": "Video Studio Locked",
+        "message": "This feature is in development and temporarily unavailable to users.",
+        "passwordLabel": "Password",
+        "placeholder": "Enter password",
+        "unlock": "Unlock",
+        "error": "Incorrect password.",
+        "notice": "Internal use only."
+      },
+      "timeline": {
+        "addKeyframe": "Add Keyframe",
+        "removeKeyframe": "Remove Keyframe",
+        "keyframeLabel": "Keyframe {{index}}"
+      },
+      "output": {
+        "title": "Generated Video",
+        "download": "Download Video",
+        "recentGenerations": "Recent Generations",
+        "load": "Load",
+        "noVideo": "No video generated yet",
+        "configure": "Configure settings and generate",
+        "frameAlt": "Video Frame",
+        "originalImage": "Original Image"
+      }
     },
     "materialValidation": {
       "title": "Validation",
@@ -613,6 +810,10 @@
     "promptBar": {
       "placeholder": "Describe your architectural vision...",
       "pressEnter": "Press Enter to Generate"
+    },
+    "compare": {
+      "original": "Original",
+      "preview": "Preview"
     },
     "upload": {
       "title": "Upload Source Image",

@@ -2,7 +2,7 @@
 import React, { useCallback, useRef } from 'react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
-import { Image as ImageIcon, Check, RefreshCw, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, Check, RefreshCw, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { cn } from '../../../lib/utils';
 
@@ -65,9 +65,19 @@ export const LeftUpscalePanel = () => {
       dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
    }, [dispatch]);
 
+   const handleRetryFailed = useCallback((id: string) => {
+      // Reset the failed item to queued status so it will be retried
+      updateWf({
+         upscaleBatch: wf.upscaleBatch.map((item) =>
+            item.id === id ? { ...item, status: 'queued' as const, retryCount: 0, error: undefined } : item
+         )
+      });
+   }, [updateWf, wf.upscaleBatch]);
+
    const total = wf.upscaleBatch.length;
    const remainingSlots = Math.max(0, maxBatchSize - total);
    const completed = wf.upscaleBatch.filter((item) => item.status === 'done').length;
+   const failed = wf.upscaleBatch.filter((item) => item.status === 'failed').length;
 
    return (
       <div className="space-y-6">
@@ -103,10 +113,31 @@ export const LeftUpscalePanel = () => {
                         <div className="text-[10px] text-foreground-muted capitalize flex items-center gap-1">
                            {item.status === 'done' && <Check size={10} className="text-green-500" />}
                            {item.status === 'processing' && <RefreshCw size={10} className="animate-spin text-blue-500" />}
-                           {item.status}
+                           {item.status === 'failed' && <AlertTriangle size={10} className="text-red-500" />}
+                           {item.status === 'processing' && item.retryCount && item.retryCount > 0
+                              ? `retry ${item.retryCount}/3`
+                              : item.status}
                         </div>
+                        {item.status === 'failed' && item.error && (
+                           <div className="text-[9px] text-red-400 truncate" title={item.error}>
+                              {item.error.length > 40 ? item.error.slice(0, 40) + '...' : item.error}
+                           </div>
+                        )}
                      </div>
-                     {item.status === 'queued' && (
+                     {item.status === 'failed' && (
+                        <button
+                           type="button"
+                           className="text-foreground-muted hover:text-blue-500"
+                           title="Retry this image"
+                           onClick={(event) => {
+                              event.stopPropagation();
+                              handleRetryFailed(item.id);
+                           }}
+                        >
+                           <RotateCcw size={14} />
+                        </button>
+                     )}
+                     {(item.status === 'queued' || item.status === 'failed') && (
                         <button
                            type="button"
                            className="text-foreground-muted hover:text-red-500"
@@ -147,16 +178,31 @@ export const LeftUpscalePanel = () => {
          {total > 0 && (
             <div className="bg-surface-elevated border border-border p-3 rounded-lg">
                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium">{completed}/{total} completed</span>
-                  {completed === total && total > 0 && (
+                  <span className="text-xs font-medium">
+                     {completed}/{total} completed
+                     {failed > 0 && <span className="text-red-400 ml-1">({failed} failed)</span>}
+                  </span>
+                  {completed === total && total > 0 && failed === 0 && (
                      <Check size={14} className="text-green-500" />
                   )}
+                  {completed + failed === total && total > 0 && failed > 0 && (
+                     <AlertTriangle size={14} className="text-yellow-500" />
+                  )}
                </div>
-               <div className="w-full bg-surface-sunken rounded-full h-1.5">
+               <div className="w-full bg-surface-sunken rounded-full h-1.5 relative overflow-hidden">
                   <div
-                     className="bg-accent h-1.5 rounded-full transition-all duration-300"
+                     className="bg-accent h-1.5 rounded-full transition-all duration-300 absolute left-0"
                      style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
                   />
+                  {failed > 0 && (
+                     <div
+                        className="bg-red-500 h-1.5 rounded-full transition-all duration-300 absolute"
+                        style={{
+                           left: `${total > 0 ? (completed / total) * 100 : 0}%`,
+                           width: `${total > 0 ? (failed / total) * 100 : 0}%`
+                        }}
+                     />
+                  )}
                </div>
             </div>
          )}
