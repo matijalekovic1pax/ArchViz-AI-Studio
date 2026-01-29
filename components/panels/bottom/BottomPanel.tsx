@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
-import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Slider } from '../../ui/Slider';
 import type { HistoryItem } from '../../../types';
@@ -16,6 +16,8 @@ export const BottomPanel: React.FC = () => {
   const prompt = generatePrompt(state);
   const [historySelectMode, setHistorySelectMode] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(() => new Set());
+  const [editablePrompt, setEditablePrompt] = useState(prompt);
+  const [isPromptEdited, setIsPromptEdited] = useState(false);
 
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
@@ -36,6 +38,12 @@ export const BottomPanel: React.FC = () => {
       setSelectedHistoryIds(new Set());
     }
   }, [isSelectableHistoryMode, resolvedBottomTab]);
+
+  useEffect(() => {
+    if (!isPromptEdited) {
+      setEditablePrompt(prompt);
+    }
+  }, [isPromptEdited, prompt]);
 
   const toggleHistorySelection = useCallback((id: string) => {
     setSelectedHistoryIds((prev) => {
@@ -155,15 +163,36 @@ export const BottomPanel: React.FC = () => {
 
     if (!isGenerateTextMode && resolvedBottomTab === 'prompt') {
       return (
-        <div className="absolute inset-0 p-4 overflow-y-auto font-mono text-sm leading-relaxed text-foreground-secondary group">
-          {prompt}
-          <button 
-            className="absolute top-4 right-4 p-2 bg-surface-elevated border border-border rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-sunken"
-            title={t('bottomPanel.copyPrompt')}
-            onClick={() => navigator.clipboard.writeText(prompt)}
-          >
-            <Copy size={14} />
-          </button>
+        <div className="absolute inset-0 p-4 flex flex-col">
+          <div className="relative flex-1 group">
+            <textarea
+              value={editablePrompt}
+              onChange={(event) => {
+                setEditablePrompt(event.target.value);
+                setIsPromptEdited(true);
+              }}
+              className="w-full h-full resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground-secondary focus:outline-none"
+            />
+            <div className="absolute top-0 right-0 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                className="p-2 bg-surface-elevated border border-border rounded shadow-sm hover:bg-surface-sunken"
+                title={t('bottomPanel.copyPrompt')}
+                onClick={() => navigator.clipboard.writeText(editablePrompt)}
+              >
+                <Copy size={14} />
+              </button>
+              <button
+                className="p-2 bg-surface-elevated border border-border rounded shadow-sm hover:bg-surface-sunken"
+                title="Revert to generated prompt"
+                onClick={() => {
+                  setEditablePrompt(prompt);
+                  setIsPromptEdited(false);
+                }}
+              >
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       );
     }

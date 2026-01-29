@@ -4,7 +4,7 @@ import type { VisualSelectionShape } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './SharedRightComponents';
-import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized } from '../../../services/geminiService';
+import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized, IMAGE_MODEL } from '../../../services/geminiService';
 import { nanoid } from 'nanoid';
 import {
   Image as ImageIcon,
@@ -1574,6 +1574,7 @@ export const VisualEditPanel = () => {
   const runAutoSelection = useCallback(async (targets: string[]) => {
     if (!targets.length) return;
     if (!state.uploadedImage) {
+      updateWf({ visualAutoSelecting: false });
       dispatch({
         type: 'SET_APP_ALERT',
         payload: {
@@ -1585,6 +1586,7 @@ export const VisualEditPanel = () => {
       return;
     }
     if (!ensureAutoSelectService()) {
+      updateWf({ visualAutoSelecting: false });
       dispatch({
         type: 'SET_APP_ALERT',
         payload: {
@@ -1623,10 +1625,16 @@ export const VisualEditPanel = () => {
         'Do not include any commentary, markdown, or code fences.'
       ].join(' ');
 
-      const responseText = await getGeminiService().generateText({
+      const response = await getGeminiService().generate({
         prompt,
-        images: [imageData]
+        images: [imageData],
+        model: IMAGE_MODEL,
+        generationConfig: { responseModalities: ['TEXT'] }
       });
+      const responseText = response.text || '';
+      if (!responseText.trim()) {
+        throw new Error('No text returned from auto-selection request.');
+      }
 
       if (autoSelectRequestIdRef.current !== requestId) return;
 
@@ -1646,13 +1654,11 @@ export const VisualEditPanel = () => {
 
       setAutoSelectStatus('idle');
       setAutoSelectMessage('');
-      updateWf({ visualAutoSelecting: false });
     } catch (error) {
       if (autoSelectRequestIdRef.current !== requestId) return;
       setAutoSelectStatus('error');
       const message = error instanceof Error ? error.message : 'Auto selection failed.';
       setAutoSelectMessage(message);
-      updateWf({ visualAutoSelecting: false });
       dispatch({
         type: 'SET_APP_ALERT',
         payload: {
@@ -1661,6 +1667,10 @@ export const VisualEditPanel = () => {
           message: `Auto selection failed: ${message}`
         }
       });
+    } finally {
+      if (autoSelectRequestIdRef.current === requestId) {
+        updateWf({ visualAutoSelecting: false });
+      }
     }
   }, [
     buildSelectionShapes,
