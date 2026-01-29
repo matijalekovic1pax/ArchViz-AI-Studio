@@ -1,7 +1,7 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
-import { FileText, Trash2 } from 'lucide-react';
+import { FileText, Trash2, Loader2 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
@@ -21,10 +21,26 @@ export const LeftPdfCompressionPanel: React.FC = () => {
    const fileInputRef = useRef<HTMLInputElement>(null);
    const pdfState = state.workflow.pdfCompression;
    const maxBatchSize = 20;
+   const [isUploading, setIsUploading] = useState(false);
+   const [uploadProgress, setUploadProgress] = useState({ loaded: 0, total: 0 });
 
   const updatePdfState = useCallback((payload: Partial<typeof pdfState>) => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload: { pdfCompression: { ...pdfState, ...payload } } });
   }, [dispatch, pdfState]);
+
+   const readFileAsDataUrl = useCallback((file: File, onProgress: (loaded: number) => void) => (
+      new Promise<string>((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+         reader.onerror = () => reject(new Error('Failed to read PDF'));
+         reader.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+               onProgress(evt.loaded);
+            }
+         };
+         reader.readAsDataURL(file);
+      })
+   ), []);
 
    const handleUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
@@ -37,7 +53,12 @@ export const LeftPdfCompressionPanel: React.FC = () => {
         return;
       }
 
-      const newDocs = files.slice(0, remainingSlots).map((file) => ({
+      const nextFiles = files.slice(0, remainingSlots);
+      const totalBytes = nextFiles.reduce((sum, file) => sum + file.size, 0);
+      setIsUploading(true);
+      setUploadProgress({ loaded: 0, total: totalBytes });
+
+      const newDocs = nextFiles.map((file) => ({
          id: nanoid(),
          name: file.name,
          size: file.size,
@@ -45,18 +66,18 @@ export const LeftPdfCompressionPanel: React.FC = () => {
          uploadedAt: Date.now()
       }));
 
-      const readers = files.slice(0, remainingSlots).map((file, index) => {
-         return new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-            reader.onerror = () => reject(new Error('Failed to read PDF'));
-            reader.readAsDataURL(file);
-      }).then((dataUrl) => ({ index, dataUrl }));
-    });
+      const progressMap = new Map<number, number>();
+      const readers = nextFiles.map((file, index) => {
+         return readFileAsDataUrl(file, (loaded) => {
+            progressMap.set(index, loaded);
+            const totalLoaded = Array.from(progressMap.values()).reduce((sum, value) => sum + value, 0);
+            setUploadProgress({ loaded: totalLoaded, total: totalBytes });
+         }).then((dataUrl) => ({ index, dataUrl }));
+      });
 
-    Promise.all(readers)
-      .then((results) => {
-        const updatedDocs = [...newDocs];
+      Promise.all(readers)
+        .then((results) => {
+          const updatedDocs = [...newDocs];
         results.forEach(({ index, dataUrl }) => {
           updatedDocs[index] = { ...updatedDocs[index], dataUrl };
         });
@@ -66,16 +87,18 @@ export const LeftPdfCompressionPanel: React.FC = () => {
           queue: merged,
           selectedId: pdfState.selectedId ?? (updatedDocs[0]?.id || null)
         });
-      })
-      .catch((error) => {
-        console.error('Failed to load PDFs', error);
-      })
-      .finally(() => {
-        if (event.target) {
-          event.target.value = '';
-        }
-      });
-   }, [pdfState.queue.length, pdfState.selectedId, updatePdfState]);
+        })
+        .catch((error) => {
+          console.error('Failed to load PDFs', error);
+        })
+        .finally(() => {
+          setIsUploading(false);
+          setUploadProgress({ loaded: 0, total: 0 });
+          if (event.target) {
+            event.target.value = '';
+          }
+        });
+   }, [maxBatchSize, pdfState.queue.length, pdfState.selectedId, readFileAsDataUrl, updatePdfState]);
 
   const handleRemove = useCallback((id: string) => {
     const nextQueue = pdfState.queue.filter((doc) => doc.id !== id);
@@ -92,6 +115,29 @@ export const LeftPdfCompressionPanel: React.FC = () => {
       <div>
         <SectionHeader title={t('pdfCompression.queueTitle')} />
         <div className="space-y-2">
+          {isUploading && (
+            <div className="bg-surface-elevated border border-border rounded-lg p-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-foreground-secondary mb-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 size={12} className="animate-spin text-foreground-muted" />
+                  <span>{t('pdfCompression.uploading')}</span>
+                </div>
+                <span>{uploadProgress.total > 0 ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100) : 0}%</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-surface-sunken overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{
+                    width: `${uploadProgress.total > 0 ? (uploadProgress.loaded / uploadProgress.total) * 100 : 0}%`
+                  }}
+                />
+              </div>
+              <div className="mt-1 text-[10px] text-foreground-muted flex items-center justify-between">
+                <span>{t('pdfCompression.uploadHint')}</span>
+                <span>{formatFileSize(uploadProgress.loaded)} / {formatFileSize(uploadProgress.total)}</span>
+              </div>
+            </div>
+          )}
           {pdfState.queue.length === 0 && (
             <div className="text-[11px] text-foreground-muted bg-surface-sunken border border-border rounded-md p-3 text-center">
               {t('pdfCompression.emptyQueue')}
@@ -141,10 +187,10 @@ export const LeftPdfCompressionPanel: React.FC = () => {
           })}
           <button
             type="button"
-            disabled={pdfState.queue.length >= maxBatchSize}
+            disabled={isUploading || pdfState.queue.length >= maxBatchSize}
             className={cn(
               "w-full py-2 border border-dashed text-xs rounded transition-colors",
-              pdfState.queue.length >= maxBatchSize
+              isUploading || pdfState.queue.length >= maxBatchSize
                 ? "border-border text-foreground-muted/60 cursor-not-allowed"
                 : "border-border text-foreground-muted hover:bg-surface-elevated"
             )}

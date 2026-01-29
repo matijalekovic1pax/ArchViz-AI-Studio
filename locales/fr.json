@@ -823,7 +823,9 @@
       "failed": "?chec de la compression PDF : {{message}}. Veuillez r?essayer plus tard."
     },
     "addPdfsCount": "+ Ajouter des PDF ({{count}} restants)",
-    "queueFull": "File pleine ({{count}} max)"
+    "queueFull": "File pleine ({{count}} max)",
+    "uploading": "T?l?chargement des PDF?",
+    "uploadHint": "Les fichiers volumineux peuvent prendre un moment"
   },
   "bottomPanel": {
     "copyPrompt": "Copier le prompt",

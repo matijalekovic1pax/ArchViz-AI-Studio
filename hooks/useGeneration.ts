@@ -724,7 +724,7 @@ export function useGeneration(): UseGenerationReturn {
 
       if (isPdfCompressionMode) {
         console.log('[Generation] PDF Compression mode - starting real compression');
-        updateProgress(10);
+        updateProgress(5);
         const queue = state.workflow.pdfCompression.queue;
         if (queue.length === 0) {
           console.log('[Generation] No PDFs in queue');
@@ -733,6 +733,9 @@ export function useGeneration(): UseGenerationReturn {
           return;
         }
 
+        let progressTimer: ReturnType<typeof setInterval> | null = null;
+        let tickProgress = () => {};
+
         try {
           console.log(`[Generation] Compressing ${queue.length} PDFs with level: ${state.workflow.pdfCompression.compressionLevel || 'balanced'}`);
 
@@ -740,6 +743,18 @@ export function useGeneration(): UseGenerationReturn {
           const compressionLevel = (state.workflow.pdfCompression as any).compressionLevel || 'balanced';
           const imageQuality = ((state.workflow.pdfCompression as any).imageQuality || 70) / 100;
           const stripMetadata = (state.workflow.pdfCompression as any).stripMetadata ?? true;
+
+          let progressValue = 5;
+          let progressTarget = 5;
+          const clampTarget = (value: number) => Math.min(85, Math.max(progressTarget, value));
+          tickProgress = () => {
+            if (progressValue >= progressTarget) return;
+            const delta = progressTarget - progressValue;
+            const step = Math.max(1, Math.round(delta * 0.25));
+            progressValue = Math.min(progressTarget, progressValue + step);
+            updateProgress(progressValue);
+          };
+          progressTimer = setInterval(tickProgress, 250);
 
           // Perform REAL compression
           const results = await compressPdfBatch(
@@ -753,8 +768,8 @@ export function useGeneration(): UseGenerationReturn {
               preserveVectors: true,
             },
             (current, total) => {
-              const progress = 10 + Math.round((current / total) * 80);
-              updateProgress(progress);
+              const fraction = total > 0 ? (current - 0.5) / total : 0;
+              progressTarget = clampTarget(10 + Math.round(fraction * 70));
             }
           );
 
@@ -804,6 +819,12 @@ export function useGeneration(): UseGenerationReturn {
             }
           });
 
+          progressTarget = 90;
+          tickProgress();
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
           updateProgress(100);
 
           // Show success message
@@ -842,6 +863,9 @@ export function useGeneration(): UseGenerationReturn {
             });
           }
         } finally {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+          }
           dispatch({ type: 'SET_GENERATING', payload: false });
           dispatch({ type: 'SET_PROGRESS', payload: 0 });
         }

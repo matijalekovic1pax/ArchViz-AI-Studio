@@ -797,6 +797,8 @@
     "addPdfs": "+ Add PDFs",
     "addPdfsCount": "+ Add PDFs ({{count}} left)",
     "queueFull": "Queue Full ({{count}} max)",
+    "uploading": "Uploading PDFs...",
+    "uploadHint": "Large files may take a moment",
     "clearAll": "Clear All",
     "previewTitle": "PDF Preview",
     "settingsTitle": "Compression Settings",

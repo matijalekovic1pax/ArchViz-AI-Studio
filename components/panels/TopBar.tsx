@@ -742,171 +742,165 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
-        <div className="relative shrink-0 2xl:hidden">
+        {/* Mobile Controls - Compact Dropdown */}
+        <div className="2xl:hidden relative shrink-0">
           <button
             ref={controlsButtonRef}
-            onClick={() => setShowControlsMenu((prev) => !prev)}
-            className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-full border border-border-subtle bg-surface-elevated text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
-            title={t('topBar.controls')}
+            onClick={() => setShowControlsMenu(!showControlsMenu)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface-sunken rounded-lg border border-border-subtle hover:bg-surface-elevated transition-all"
           >
-            <SlidersHorizontal size={12} />
-            {t('topBar.controls')}
+            <SlidersHorizontal size={12} className="text-foreground-secondary" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-secondary whitespace-nowrap">
+              {t('topBar.controls')}
+            </span>
+            <ChevronDown size={10} className={cn("text-foreground-muted transition-transform", showControlsMenu && "rotate-180")} />
           </button>
 
+          {/* Dropdown Panel */}
           {showControlsMenu && (
             <div
               ref={controlsMenuRef}
-              className="absolute left-0 top-full mt-2 w-72 bg-surface-elevated rounded-2xl shadow-elevated border border-border p-3 z-50 animate-fade-in origin-top-left"
+              className="absolute left-0 top-full mt-2 w-56 bg-surface-elevated rounded-xl shadow-elevated border border-border z-50 animate-fade-in origin-top-left"
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
-                  {t('topBar.quickControls')}
-                </div>
-                <button
-                  onClick={() => setShowControlsMenu(false)}
-                  className="text-foreground-muted hover:text-foreground rounded-full p-1 hover:bg-surface-sunken transition-colors"
-                  title={t('topBar.close')}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
+              {/* Quick Actions Grid */}
+              <div className="p-2.5 border-b border-border-subtle">
+                <div className="grid grid-cols-5 gap-1">
                   <button
                     onClick={handleUndoSelection}
                     disabled={!canUndoSelection}
                     className={cn(
-                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
                       canUndoSelection
-                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        ? "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "text-foreground-muted/30 cursor-not-allowed"
                     )}
                     title={t('topBar.undo')}
                   >
-                    <Undo size={11} />
-                    {t('topBar.undo')}
+                    <Undo size={13} />
+                    <span className="text-[7.5px] font-medium uppercase tracking-wide">{t('topBar.undo')}</span>
                   </button>
                   <button
                     onClick={handleRedoSelection}
                     disabled={!canRedoSelection}
                     className={cn(
-                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
                       canRedoSelection
-                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        ? "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "text-foreground-muted/30 cursor-not-allowed"
                     )}
                     title={t('topBar.redo')}
                   >
-                    <Redo size={11} />
-                    {t('topBar.redo')}
+                    <Redo size={13} />
+                    <span className="text-[7.5px] font-medium uppercase tracking-wide">{t('topBar.redo')}</span>
                   </button>
                   <button
                     onClick={handleFitToScreen}
                     disabled={!state.uploadedImage}
                     className={cn(
-                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
                       !state.uploadedImage
-                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                        : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        ? "text-foreground-muted/30 cursor-not-allowed"
+                        : "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
                     )}
                     title={t('topBar.fitToScreen')}
                   >
-                    <Minimize2 size={11} />
-                    {t('topBar.fit')}
+                    <Minimize2 size={13} />
+                    <span className="text-[7.5px] font-medium uppercase tracking-wide">Fit</span>
                   </button>
                   {!isVideoMode && (
                     <button
                       onClick={handleToggleSplit}
                       disabled={!state.uploadedImage}
                       className={cn(
-                        "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                        "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
                         !state.uploadedImage
-                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                          ? "text-foreground-muted/30 cursor-not-allowed"
                           : state.workflow.canvasSync
-                            ? "border-foreground text-foreground bg-surface-sunken"
-                            : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                            ? "text-foreground bg-surface-sunken"
+                            : "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
                       )}
                       title={t('topBar.toggleSplitView')}
                     >
-                      <Columns size={11} />
-                      {t('topBar.split')}
+                      <Columns size={13} />
+                      <span className="text-[7.5px] font-medium uppercase tracking-wide">Split</span>
                     </button>
                   )}
                   <button
                     onClick={handleClearImage}
                     disabled={!state.uploadedImage}
-                    aria-label={t('topBar.clearImage')}
                     className={cn(
-                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
                       !state.uploadedImage
-                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                        : "border-red-200 text-red-600 hover:bg-red-50"
+                        ? "text-foreground-muted/30 cursor-not-allowed"
+                        : "text-foreground-secondary hover:text-red-600 hover:bg-red-50"
                     )}
                     title={t('topBar.clearImage')}
                   >
-                    <Trash2 size={11} />
-                    {t('topBar.clearImage')}
+                    <Trash2 size={13} />
+                    <span className="text-[7.5px] font-medium uppercase tracking-wide">Clear</span>
                   </button>
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between bg-surface-sunken rounded-2xl px-3 py-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
-                    {t('topBar.zoom')}
+              {/* Zoom Controls */}
+              <div className="p-2.5 border-b border-border-subtle">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">Zoom</span>
+                  <span className="text-[10px] font-mono text-foreground-muted">{Math.round(state.canvas.zoom * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleZoom(-0.25)}
+                    className="flex-1 p-1.5 bg-surface-sunken rounded-md hover:bg-surface-sunken/80 transition-all"
+                    title={t('topBar.zoomOut')}
+                  >
+                    <ZoomOut size={13} className="mx-auto text-foreground-secondary" />
+                  </button>
+                  <button
+                    onClick={() => handleZoom(0.25)}
+                    className="flex-1 p-1.5 bg-surface-sunken rounded-md hover:bg-surface-sunken/80 transition-all"
+                    title={t('topBar.zoomIn')}
+                  >
+                    <ZoomIn size={13} className="mx-auto text-foreground-secondary" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Resolution Selector */}
+              {!isVideoMode && (
+                <div className="p-2.5">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted block mb-1.5">
+                    {t('topBar.resolution')}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="flex items-center justify-center h-7 w-7 rounded-full border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
-                      onClick={() => handleZoom(-0.25)}
-                      title={t('topBar.zoomOut')}
-                    >
-                      <ZoomOut size={12} />
-                    </button>
-                    <span className="min-w-[42px] text-center text-[10px] font-mono text-foreground-muted select-none">
-                      {Math.round(state.canvas.zoom * 100)}%
-                    </span>
-                    <button
-                      className="flex items-center justify-center h-7 w-7 rounded-full border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
-                      onClick={() => handleZoom(0.25)}
-                      title={t('topBar.zoomIn')}
-                    >
-                      <ZoomIn size={12} />
-                    </button>
+                  <div className="grid grid-cols-3 gap-1">
+                    {resolutionOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleResolutionChange(option.value)}
+                        className={cn(
+                          "py-1.5 px-1 text-[10px] font-semibold rounded-md transition-all",
+                          state.output.resolution === option.value
+                            ? "bg-foreground text-background shadow-sm"
+                            : "bg-surface-sunken text-foreground-secondary hover:bg-surface-sunken/80"
+                        )}
+                        title={option.title || `Set ${option.label} output resolution`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-
-                {!isVideoMode && (
-                  <div className="flex items-center justify-between bg-surface-sunken rounded-2xl px-3 py-2">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
-                      {t('topBar.resolution')}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {resolutionOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => handleResolutionChange(option.value)}
-                          className={cn(
-                            "h-6 px-2 rounded-full text-[9px] font-semibold border transition-all",
-                            state.output.resolution === option.value
-                              ? "bg-foreground text-background border-foreground shadow-sm"
-                              : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
-                          )}
-                          title={option.title || `Set ${option.label} output resolution`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
       {/* Center: Generate Button (Hidden in generate-text mode) */}
-      <div className="flex items-center justify-center shrink-0 mx-4">
+      <div className={cn(
+        "flex items-center justify-center shrink-0 transition-all duration-500",
+        showControlsMenu ? "mx-2" : "mx-4"
+      )}>
         {state.mode !== 'generate-text' && (
           <div className="relative flex items-center">
             <div className="relative">

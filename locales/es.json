@@ -833,7 +833,9 @@
       "failed": "La compresi?n de PDF fall?: {{message}}. Por favor intenta nuevamente m?s tarde."
     },
     "addPdfsCount": "+ Agregar PDFs ({{count}} restantes)",
-    "queueFull": "Cola llena ({{count}} m?x)"
+    "queueFull": "Cola llena ({{count}} m?x)",
+    "uploading": "Cargando PDFs?",
+    "uploadHint": "Los archivos grandes pueden tardar un momento"
   },
   "bottomPanel": {
     "copyPrompt": "Copiar prompt",
