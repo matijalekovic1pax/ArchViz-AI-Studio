@@ -3449,6 +3449,8 @@ function generateSectionPrompt(state: AppState): string {
   // Cut description
   const cut = workflow.sectionCut;
   const cutTypeDesc: Record<string, string> = {
+    'vertical': 'Cut vertically through the building, revealing the stacked spatial sequence from foundation to roof',
+    'horizontal': 'Cut horizontally at the specified height to expose the plan-level organization',
     'longitudinal': 'Cut longitudinally through the building, revealing the sequence of spaces from front to back',
     'transverse': 'Cut transversely across the building, showing the cross-sectional organization',
     'diagonal': 'Cut diagonally to reveal unique spatial relationships',
@@ -3462,13 +3464,107 @@ function generateSectionPrompt(state: AppState): string {
 
   // Reveal style
   const reveal = workflow.sectionReveal;
-  const revealStyleDesc: Record<string, string> = {
-    'sharp': 'Make a clean, sharp cut with clearly defined edges',
-    'gradient': 'Fade the cut edges gradually into the revealed interior',
-    'outlined': 'Outline the cut surfaces with bold poché',
-    'ghosted': 'Ghost the cut material to suggest what has been removed',
+  const revealStyleDesc: Record<string, string[]> = {
+    'front-peel': [
+      'Reveal style: front peel.',
+      'Pull the front facade forward as a single, clean slab to expose the interior behind it.',
+      'Keep the peeled layer parallel to the original facade plane; do not tilt or warp it.',
+      'Show a clear gap between the peeled facade and the remaining building mass to emphasize depth.',
+      'Interior elements should be fully visible and undistorted, with the peeled face acting as a foreground layer.',
+      'Example: a townhouse where the street facade is peeled forward to reveal rooms and stairs inside.',
+    ],
+    'slice-lift': [
+      'Reveal style: slice + lift.',
+      'Extract a vertical slice of the building and lift it upward, keeping the slice thickness consistent.',
+      'The lifted slice should remain aligned with the original cut plane and stay orthographic, not skewed.',
+      'Expose the void left behind with clean cut faces and a readable interior cross-section.',
+      'Maintain the original stacking and spacing of floors within the lifted slice.',
+      'Example: an office tower with a central slice lifted to show floor plates and core alignment.',
+    ],
+    'stacked-floors': [
+      'Reveal style: stacked floors.',
+      'Separate each floor plate and its immediate program layer into clean, horizontal strata.',
+      'Stack the floors upward with equal spacing, keeping them perfectly aligned in plan.',
+      'Maintain consistent thickness for slabs, ceilings, and floor assemblies across all layers.',
+      'Expose the vertical voids (stairs, cores, atriums) by aligning them through the stack.',
+      'Use clear gaps between floors so the hierarchy of levels reads instantly.',
+      'Example: a residential block with four floor plates separated vertically, showing rooms, slabs, and the core aligned through all levels.',
+    ],
+    'core-focus': [
+      'Reveal style: core focus.',
+      'Emphasize the central core (stairs, elevators, shafts) as the primary element in the section.',
+      'De-emphasize perimeter rooms with lighter line weight or translucency.',
+      'Keep the core solid, high-contrast, and uninterrupted through all floors.',
+      'Show structural connections from the core to the floor plates clearly.',
+      'Example: a mid-rise where the core is bold and dark, with lighter surrounding rooms.',
+    ],
+    'program-color': [
+      'Reveal style: program blocks.',
+      'Divide the section into clear program zones and color each zone distinctly.',
+      'Use large, legible color blocks with minimal texture so program reads at a glance.',
+      'Keep cut faces and structure visible beneath or alongside color fields.',
+      'Maintain consistent program colors across all levels for coherence.',
+      'Example: a school section with classrooms, circulation, and services each in different colors.',
+    ],
+    circulation: [
+      'Reveal style: circulation.',
+      'Highlight circulation paths (stairs, corridors, ramps) with strong contrast or a single accent color.',
+      'Keep program spaces secondary so circulation reads as the dominant graphic.',
+      'Show vertical connections clearly through multiple levels, emphasizing continuity.',
+      'Use simplified, clean linework for circulation elements to avoid clutter.',
+      'Example: a museum section where stair and corridor paths are highlighted in dark gray.',
+    ],
+    services: [
+      'Reveal style: services.',
+      'Emphasize mechanical, electrical, and plumbing routes in the section.',
+      'Use distinct linework or color for ducts, risers, and service zones.',
+      'Keep architectural spaces visible but lighter than the service network.',
+      'Make service runs continuous and legible across floors.',
+      'Example: a hospital section showing bold service bands and vertical risers throughout.',
+    ],
+    sharp: [
+      'Reveal style: sharp cut.',
+      'Use crisp, hard edges at the cut plane with no feathering, blur, or glow.',
+      'Keep the cut line perfectly straight and planar, exposing material faces cleanly and uniformly.',
+      'Make the cut faces read like freshly sliced material, with tight edges and no softness.',
+      'Maintain strong contrast between cut surfaces and uncut context so the section reads instantly.',
+      'Use solid pochÃ© or firm hatching on cut faces; avoid gradients or translucency.',
+      'Keep interior linework lighter than the cut to preserve a clear hierarchy.',
+      'Example: a library section with bold black cut walls, sharp slab edges, and clear interior spaces visible beyond.',
+    ],
+    gradient: [
+      'Reveal style: gradient cut.',
+      'Let the cut edge transition smoothly into the interior with a clear depth falloff.',
+      'Fade foreground cut surfaces first, then soften secondary elements deeper in the section.',
+      'Use a controlled tonal ramp so the cut plane remains readable while depth cues build.',
+      'Avoid sudden drop-offs; the reveal should feel atmospheric and layered, not erased.',
+      'Keep a subtle but visible edge line at the cut plane to anchor the section.',
+      'Let glazing and thin elements remain legible as they fade, rather than disappearing abruptly.',
+      'Example: an office section where the cut edge is firm, then fades into lighter interior details and background structure.',
+    ],
+    outlined: [
+      'Reveal style: outlined cut.',
+      'Draw bold outlines around cut faces and sectional edges to emphasize the slice.',
+      'Use a strong graphic contour to separate cut materials from background geometry.',
+      'Keep outlines continuous and clean, with consistent line weight and no sketchiness.',
+      'Let the outline act as a visual boundary for the section plane, framing the interior.',
+      'Use minimal fill or flat, light fills so the outline carries the graphic weight.',
+      'Interior detail should be thinner and lighter than the outline to avoid clutter.',
+      'Example: a residential section where the cut plane is traced in a heavy line, with lighter interior lines and minimal fills.',
+    ],
+    ghosted: [
+      'Reveal style: ghosted cut.',
+      'Make the removed material semi-transparent so the void is implied rather than fully erased.',
+      'Leave a faint silhouette of the cut mass while keeping interior elements readable.',
+      'Use translucency to show both the removed volume and the revealed interior in balance.',
+      'Keep the cut plane visible but subtle, like a thin veil over the removed material.',
+      'Ghost the removed volume with low opacity and keep interior structure at higher opacity for clarity.',
+      'Avoid heavy pochÃ©; use light tonal overlays to suggest mass without blocking the interior.',
+      'Example: a factory section with the cut volume lightly ghosted while structure and spaces stay clear and readable.',
+    ],
   };
-  parts.push(`${revealStyleDesc[reveal.style] || `Use ${reveal.style} reveal style`}.`);
+  const revealStyleLines = revealStyleDesc[reveal.style] || [`Reveal style: ${reveal.style}.`];
+  parts.push(...revealStyleLines);
 
   const focusDesc: Record<string, string> = {
     'interior': 'Focus attention on the interior spaces and their qualities',

@@ -561,43 +561,7 @@ const initialWorkflow: WorkflowSettings = {
   // 6. Section
   sectionCut: { type: 'horizontal', plane: 50, depth: 50, direction: 'fwd' },
   sectionStyle: { poche: '#1b1b1b', hatch: 'solid', weight: 'medium', showBeyond: 50 },
-  sectionAreas: [
-    {
-      id: '1',
-      title: 'Residential Units',
-      description: '',
-      order: 0,
-      active: true,
-    },
-    {
-      id: '2',
-      title: 'Underground Parking',
-      description: '',
-      order: 1,
-      active: true,
-    },
-    {
-      id: '3',
-      title: 'Vertical Circulation',
-      description: '',
-      order: 2,
-      active: true,
-    },
-    {
-      id: '4',
-      title: 'MEP Services',
-      description: '',
-      order: 3,
-      active: true,
-    },
-    {
-      id: '5',
-      title: 'Ground Floor Lobby',
-      description: '',
-      order: 4,
-      active: true,
-    },
-  ],
+  sectionAreas: [],
   sectionAreaDetection: 'auto',
   sectionReveal: {
     style: 'front-peel',

@@ -7,6 +7,7 @@ import { Toggle } from '../../ui/Toggle';
 import { cn } from '../../../lib/utils';
 import { nanoid } from 'nanoid';
 import { ChevronDown } from 'lucide-react';
+import { getGeminiService, isGeminiServiceInitialized, ImageUtils } from '../../../services/geminiService';
 
 // (Reveal style UI lives on the right panel)
 
@@ -42,11 +43,31 @@ export const LeftSectionPanel = () => {
     [wf.sectionAreas]
   );
 
+  const extractJson = (raw: string) => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      const start = raw.indexOf('{');
+      const end = raw.lastIndexOf('}');
+      if (start === -1 || end === -1 || end <= start) return null;
+      try {
+        return JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+  };
+
   const handleAutoDetectAreas = async () => {
     if (isDetectingAreas) return;
-    const sourceImage = state.uploadedImage;
+    const sourceImage = state.sourceImage || state.uploadedImage;
     if (!sourceImage) {
       setAreaDetectError('Upload an image first to auto-detect areas.');
+      return;
+    }
+    if (!isGeminiServiceInitialized()) {
+      setAreaDetectError('Gemini service not initialized. Add your API key to enable detection.');
       return;
     }
 
@@ -55,15 +76,26 @@ export const LeftSectionPanel = () => {
     updateWf({ sectionAreaDetection: 'auto' });
 
     try {
-      const response = await fetch('/api/section/areas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: sourceImage }),
+      const service = getGeminiService();
+      const imageData = ImageUtils.dataUrlToImageData(sourceImage);
+      const prompt = [
+        'Analyze the architectural section image and list the major spatial zones or program areas visible in the cut.',
+        'Return ONLY valid JSON with this shape:',
+        '{ "areas": [ { "title": "...", "description": "...", "active": true } ] }',
+        'Keep descriptions short and concrete (e.g., function or program), and avoid extra keys or commentary.'
+      ].join(' ');
+
+      const responseText = await service.generateText({
+        prompt,
+        images: [imageData],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 900,
+          responseMimeType: 'application/json'
+        }
       });
-      if (!response.ok) {
-        throw new Error('Auto-detect failed');
-      }
-      const data = await response.json();
+
+      const data = extractJson(responseText || '');
       const rawAreas = Array.isArray(data?.areas) ? data.areas : [];
       if (rawAreas.length === 0) {
         setAreaDetectError('No areas detected. Try a different image.');
@@ -325,83 +357,89 @@ export const LeftSectionPanel = () => {
           )}
 
           <div ref={areaListRef} className="space-y-2">
-            {sortedAreas.map((area, index) => {
-              const isOpen = openAreaId === area.id;
-              const isDragging = draggingId === area.id;
-              let translateY = 0;
-              if (draggingId && dragIndex !== -1 && effectiveOverIndex !== -1 && !isDragging) {
-                if (dragIndex < effectiveOverIndex && index > dragIndex && index <= effectiveOverIndex) {
-                  translateY = -dragItemHeight;
-                } else if (dragIndex > effectiveOverIndex && index >= effectiveOverIndex && index < dragIndex) {
-                  translateY = dragItemHeight;
+            {sortedAreas.length === 0 ? (
+              <div className="border border-dashed border-border rounded p-3 text-[10px] text-foreground-muted">
+                No areas yet. Run auto-detect or add areas manually.
+              </div>
+            ) : (
+              sortedAreas.map((area, index) => {
+                const isOpen = openAreaId === area.id;
+                const isDragging = draggingId === area.id;
+                let translateY = 0;
+                if (draggingId && dragIndex !== -1 && effectiveOverIndex !== -1 && !isDragging) {
+                  if (dragIndex < effectiveOverIndex && index > dragIndex && index <= effectiveOverIndex) {
+                    translateY = -dragItemHeight;
+                  } else if (dragIndex > effectiveOverIndex && index >= effectiveOverIndex && index < dragIndex) {
+                    translateY = dragItemHeight;
+                  }
                 }
-              }
-              return (
-                <div
-                  key={area.id}
-                  ref={setAreaRef(area.id)}
-                  className={cn('space-y-2 relative transform-gpu', isDragging && 'z-10')}
-                  style={{
-                    transform: isDragging
-                      ? `translate3d(0, ${dragOffset}px, 0)`
-                      : translateY
-                        ? `translate3d(0, ${translateY}px, 0)`
-                        : undefined,
-                    transition: isDragging || isSettling ? 'none' : 'transform 160ms ease',
-                  }}
-                >
+                return (
                   <div
-                    className={cn(
-                      'flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded',
-                      isDragging && 'shadow-lg border-foreground/40'
-                    )}
+                    key={area.id}
+                    ref={setAreaRef(area.id)}
+                    className={cn('space-y-2 relative transform-gpu', isDragging && 'z-10')}
+                    style={{
+                      transform: isDragging
+                        ? `translate3d(0, ${dragOffset}px, 0)`
+                        : translateY
+                          ? `translate3d(0, ${translateY}px, 0)`
+                          : undefined,
+                      transition: isDragging || isSettling ? 'none' : 'transform 160ms ease',
+                    }}
                   >
                     <div
-                      className="flex flex-col gap-0.5 text-foreground-muted cursor-grab active:cursor-grabbing touch-none"
-                      onPointerDown={handlePointerDown(area.id)}
-                      title="Drag to reorder"
+                      className={cn(
+                        'flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded',
+                        isDragging && 'shadow-lg border-foreground/40'
+                      )}
                     >
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
+                      <div
+                        className="flex flex-col gap-0.5 text-foreground-muted cursor-grab active:cursor-grabbing touch-none"
+                        onPointerDown={handlePointerDown(area.id)}
+                        title="Drag to reorder"
+                      >
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                      </div>
+                      <span className="text-xs font-medium flex-1">{index + 1}. {area.title}</span>
+                      <Toggle label="" checked={area.active} onChange={(val) => toggleArea(area.id, val)} />
+                      <button
+                        type="button"
+                        onClick={() => setOpenAreaId(isOpen ? null : area.id)}
+                        className="p-1 rounded hover:bg-surface-sunken text-foreground-muted"
+                        title="Edit area"
+                      >
+                        <ChevronDown size={14} className={cn('transition-transform', isOpen && 'rotate-180')} />
+                      </button>
                     </div>
-                    <span className="text-xs font-medium flex-1">{index + 1}. {area.title}</span>
-                    <Toggle label="" checked={area.active} onChange={(val) => toggleArea(area.id, val)} />
-                    <button
-                      type="button"
-                      onClick={() => setOpenAreaId(isOpen ? null : area.id)}
-                      className="p-1 rounded hover:bg-surface-sunken text-foreground-muted"
-                      title="Edit area"
-                    >
-                      <ChevronDown size={14} className={cn('transition-transform', isOpen && 'rotate-180')} />
-                    </button>
+                    {isOpen && (
+                      <div className="ml-6 mr-2 space-y-2">
+                        <div>
+                          <label className="text-[10px] text-foreground-muted mb-1 block">Title</label>
+                          <input
+                            type="text"
+                            value={area.title}
+                            onChange={(e) => updateArea(area.id, { title: e.target.value })}
+                            className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
+                            placeholder="Display title"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-foreground-muted mb-1 block">Description</label>
+                          <textarea
+                            value={area.description || ''}
+                            onChange={(e) => updateArea(area.id, { description: e.target.value })}
+                            className="w-full bg-surface-elevated border border-border rounded text-xs px-2 py-1.5 min-h-[56px] resize-none"
+                            placeholder="Optional description"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {isOpen && (
-                    <div className="ml-6 mr-2 space-y-2">
-                      <div>
-                        <label className="text-[10px] text-foreground-muted mb-1 block">Title</label>
-                        <input
-                          type="text"
-                          value={area.title}
-                          onChange={(e) => updateArea(area.id, { title: e.target.value })}
-                          className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-                          placeholder="Display title"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-foreground-muted mb-1 block">Description</label>
-                        <textarea
-                          value={area.description || ''}
-                          onChange={(e) => updateArea(area.id, { description: e.target.value })}
-                          className="w-full bg-surface-elevated border border-border rounded text-xs px-2 py-1.5 min-h-[56px] resize-none"
-                          placeholder="Optional description"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           <button

@@ -85,7 +85,7 @@ export const LeftExplodedPanel = () => {
 
   const handleAutoDetectComponents = async () => {
     if (isDetectingComponents) return;
-    const sourceImage = state.uploadedImage;
+    const sourceImage = state.sourceImage || state.uploadedImage;
     if (!sourceImage) {
       setComponentsDetectError('Upload an image first to auto-detect components.');
       return;
@@ -335,11 +335,11 @@ export const LeftExplodedPanel = () => {
       <div>
         <SectionHeader title="Input" />
         <div className="space-y-3">
-          {state.uploadedImage ? (
+          {state.sourceImage || state.uploadedImage ? (
             <div className="border border-border rounded bg-surface-sunken p-3 text-xs">
               <div className="font-semibold">Canvas image ready</div>
               <div className="text-[10px] text-foreground-muted">
-                Use the current canvas image for component detection.
+                Using the original uploaded image for component detection.
               </div>
               <div className="text-[10px] text-foreground-muted mt-1">
                 {wf.explodedSource.componentCount || wf.explodedComponents.length} components detected
