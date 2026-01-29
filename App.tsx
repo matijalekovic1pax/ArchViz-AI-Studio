@@ -1,7 +1,7 @@
 
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Info, X } from 'lucide-react';
+import { AlertTriangle, Info, X, Layers, SlidersHorizontal } from 'lucide-react';
 import { AppProvider, useAppStore } from './store';
 import { AuthGate } from './components/auth/AuthGate';
 import { TopBar } from './components/panels/TopBar';
@@ -129,6 +129,36 @@ const Layout: React.FC = () => {
           <LeftSidebar />
         </div>
         <div className="flex-1 flex flex-col min-w-0 relative">
+          <div className="lg:hidden pointer-events-none">
+            <div className="fixed top-24 left-3 z-[70] pointer-events-auto">
+              <button
+                onClick={() => setMobilePanel((prev) => (prev === 'workflow' ? null : 'workflow'))}
+                className={cn(
+                  "h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all",
+                  mobilePanel === 'workflow'
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
+                )}
+                aria-label="Open workflow panel"
+              >
+                <Layers size={18} />
+              </button>
+            </div>
+            <div className="fixed top-24 right-3 z-[70] pointer-events-auto">
+              <button
+                onClick={() => setMobilePanel((prev) => (prev === 'settings' ? null : 'settings'))}
+                className={cn(
+                  "h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all",
+                  mobilePanel === 'settings'
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
+                )}
+                aria-label="Open settings panel"
+              >
+                <SlidersHorizontal size={18} />
+              </button>
+            </div>
+          </div>
           {state.mode === 'material-validation' ? (
             <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
