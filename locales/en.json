@@ -62,6 +62,7 @@
     "convertToCAD": "Convert to CAD",
     "generate3DModel": "Generate 3D Model",
     "generateVideo": "Generate Video",
+    "compressPdfs": "Compress PDFs",
     "applyEdits": "Apply Edits",
     "runValidation": "Run Validation",
     "renderSketch": "Render Sketch",
@@ -84,7 +85,8 @@
     "imgTo3D": "Image to 3D",
     "video": "Video",
     "materialValidation": "Material Validation",
-    "generateText": "Generate Text"
+    "generateText": "Generate Text",
+    "pdfCompression": "PDF Compression"
   },
   "auth": {
     "welcome": "Welcome to ArchViz Studio",
@@ -187,6 +189,7 @@
     "visualEdit": "Visual Editor",
     "materialValidation": "Material Validation",
     "documentTranslate": "Doc Translator",
+    "pdfCompression": "PDF Compressor",
     "exploded": "Exploded Views",
     "section": "Render to Section",
     "renderSketch": "Sketch to Render",
@@ -778,7 +781,59 @@
     "documentTranslate": {
       "title": "Translation",
       "description": "Configure translation settings and download translated documents."
+    },
+    "pdfCompression": {
+      "title": "PDF Compression",
+      "description": "Queue PDFs, preview pages, and download compressed outputs."
     }
+  },
+  "pdfCompression": {
+    "uploadDocument": "Documents",
+    "dropOrClick": "Drop or click to upload PDFs",
+    "supportedFormats": "PDF only",
+    "queueTitle": "PDF Queue",
+    "removeDocument": "Remove document",
+    "emptyQueue": "No PDFs added yet.",
+    "addPdfs": "+ Add PDFs",
+    "addPdfsCount": "+ Add PDFs ({{count}} left)",
+    "queueFull": "Queue Full ({{count}} max)",
+    "clearAll": "Clear All",
+    "previewTitle": "PDF Preview",
+    "settingsTitle": "Compression Settings",
+    "levelLabel": "Compression Level",
+    "levels": {
+      "light": "Light",
+      "balanced": "Balanced",
+      "aggressive": "Aggressive"
+    },
+    "preserveTextLabel": "Preserve text clarity",
+    "preserveVectorLabel": "Preserve vector graphics",
+    "stripMetadataLabel": "Strip metadata",
+    "imageQualityLabel": "Image quality",
+    "settingsHint": "Additional compression options will appear here once enabled.",
+    "remainingFiles": "{{count}} docs left",
+    "remainingCredits": "{{count}} credits left",
+    "alerts": {
+      "success": "Successfully compressed {{count}} PDF(s). Average compression: {{avg}}%",
+      "notConfigured": "iLovePDF API key not configured. Add VITE_ILOVEPDF_PUBLIC_KEY to your .env file. Get a free key at https://developer.ilovepdf.com/",
+      "failed": "PDF compression failed: {{message}}. Please try again later."
+    },
+    "processingOutputs": "Compressed PDFs",
+    "downloadAll": "Download All",
+    "downloadSelected": "Download Selected",
+    "downloadSingle": "Download",
+    "selectAll": "Select All",
+    "noOutputs": "No compressed PDFs yet.",
+    "noDocumentUploaded": "Upload PDFs on the left to preview.",
+    "compressAll": "Compress All PDFs",
+    "compressing": "Compressing",
+    "compressionSettings": "Compression Settings",
+    "imageQuality": "Image Quality",
+    "imageQualityDesc": "Lower quality = smaller file size. 70% recommended for best balance.",
+    "maxImageSize": "Max Image Dimension",
+    "maxImageSizeDesc": "Images larger than this will be downscaled to reduce file size.",
+    "compressImages": "Compress Images",
+    "removeMetadata": "Remove Metadata"
   },
   "bottomPanel": {
     "copyPrompt": "Copy Prompt",

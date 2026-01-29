@@ -12,6 +12,7 @@ import { ImageCanvas } from './components/canvas/ImageCanvas';
 import { FloatingGenerateButton } from './components/FloatingGenerateButton';
 import { MaterialValidationView } from './components/MaterialValidationView';
 import { DocumentTranslateView } from './components/DocumentTranslateView';
+import { PdfCompressionView } from './components/PdfCompressionView';
 import { GenerationMode } from './types';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
@@ -125,14 +126,16 @@ const Layout: React.FC = () => {
         <LeftSidebar />
         <div className="flex-1 flex flex-col min-w-0 relative">
           {state.mode === 'material-validation' ? (
-             <MaterialValidationView />
+            <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
-             <DocumentTranslateView />
+            <DocumentTranslateView />
+          ) : state.mode === 'pdf-compression' ? (
+            <PdfCompressionView />
           ) : (
-             <ImageCanvas />
+            <ImageCanvas />
           )}
           <FloatingGenerateButton />
-          {state.mode !== 'document-translate' && <BottomPanel />}
+          {state.mode !== 'document-translate' && state.mode !== 'pdf-compression' && <BottomPanel />}
         </div>
         <RightPanel />
       </div>

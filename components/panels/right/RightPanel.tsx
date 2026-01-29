@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings,
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -20,6 +20,7 @@ import { ImageTo3DPanel } from './ImageTo3DPanel';
 import { VideoPanel } from './VideoPanel';
 import { ValidationPanel } from './ValidationPanel';
 import { DocumentTranslatePanel } from './DocumentTranslatePanel';
+import { PdfCompressionPanel } from './PdfCompressionPanel';
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -55,6 +56,7 @@ export const RightPanel: React.FC = () => {
   let panelTitle = t('rightPanel.settings.title');
   let PanelIcon = Settings;
   let panelDescription = t('rightPanel.settings.description');
+  let panelMeta: string | null = null;
 
   switch (mode) {
       case 'generate-text': 
@@ -146,6 +148,24 @@ export const RightPanel: React.FC = () => {
         panelDescription = t('rightPanel.documentTranslate.description');
         panelContent = <DocumentTranslatePanel />;
         break;
+      case 'pdf-compression':
+        panelTitle = t('rightPanel.pdfCompression.title');
+        PanelIcon = FileDown;
+        panelDescription = t('rightPanel.pdfCompression.description');
+        panelContent = <PdfCompressionPanel />;
+        {
+          const remainingFiles = state.workflow.pdfCompression.remainingFiles;
+          const remainingCredits = state.workflow.pdfCompression.remainingCredits;
+          const parts: string[] = [];
+          if (typeof remainingFiles === 'number') {
+            parts.push(t('pdfCompression.remainingFiles', { count: remainingFiles }));
+          }
+          if (typeof remainingCredits === 'number') {
+            parts.push(t('pdfCompression.remainingCredits', { count: remainingCredits }));
+          }
+          panelMeta = parts.length > 0 ? parts.join(' / ') : null;
+        }
+        break;
       default: 
         panelTitle = t('rightPanel.settings.title'); 
         panelContent = <div className="p-4 text-center text-xs text-foreground-muted">{t('rightPanel.selectWorkflow')}</div>;
@@ -162,9 +182,16 @@ export const RightPanel: React.FC = () => {
       style={{ width: `${panelWidth}px` }}
     >
       <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle flex justify-between items-center relative">
-          <div className="flex items-center gap-2">
-              <PanelIcon size={16} className="text-foreground-secondary"/>
-              <h2 className="text-sm font-bold tracking-tight text-foreground">{panelTitle}</h2>
+          <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                  <PanelIcon size={16} className="text-foreground-secondary"/>
+                  <h2 className="text-sm font-bold tracking-tight text-foreground">{panelTitle}</h2>
+              </div>
+              {panelMeta && (
+                <div className="mt-1 text-[10px] text-foreground-muted">
+                  {panelMeta}
+                </div>
+              )}
           </div>
           <div className="flex items-center gap-1">
             <button 

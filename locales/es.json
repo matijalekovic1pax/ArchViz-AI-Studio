@@ -62,6 +62,7 @@
     "convertToCAD": "Convertir a CAD",
     "generate3DModel": "Generar Modelo 3D",
     "generateVideo": "Generar Video",
+    "compressPdfs": "Comprimir PDFs",
     "applyEdits": "Aplicar Ediciones",
     "runValidation": "Ejecutar Validación",
     "renderSketch": "Renderizar Boceto",
@@ -84,7 +85,8 @@
     "imgTo3D": "Imagen a 3D",
     "video": "Video",
     "materialValidation": "Validación de Materiales",
-    "generateText": "Generar Texto"
+    "generateText": "Generar Texto",
+    "pdfCompression": "PDF Compression"
   },
   "auth": {
     "welcome": "Bienvenido a ArchViz Studio",
@@ -187,6 +189,7 @@
     "visualEdit": "Editor Visual",
     "materialValidation": "Validación de Materiales",
     "documentTranslate": "Traductor de Docs",
+    "pdfCompression": "Compresi?n de PDF",
     "exploded": "Vistas Explosionadas",
     "section": "Render a Sección",
     "renderSketch": "Boceto a Render",
@@ -654,13 +657,13 @@
         }
       },
       "duration": {
-        "label": "Duraci�n"
+        "label": "Duraci�n"
       },
       "aspectRatio": {
-        "label": "Relaci�n de aspecto"
+        "label": "Relaci�n de aspecto"
       },
       "resolution": {
-        "label": "Resoluci�n"
+        "label": "Resoluci�n"
       },
       "frameRate": {
         "label": "Frecuencia de fotogramas"
@@ -669,7 +672,7 @@
         "label": "Cantidad de movimiento"
       },
       "advanced": {
-        "title": "Configuraci�n avanzada"
+        "title": "Configuraci�n avanzada"
       },
       "seed": {
         "label": "Semilla"
@@ -692,7 +695,7 @@
           "custom": "Personalizado"
         },
         "direction": "Dirección",
-        "directionValue": "Direcci�n: {{value}}�",
+        "directionValue": "Direcci�n: {{value}}�",
         "speed": {
           "label": "Velocidad",
           "slow": "Lento",
@@ -709,7 +712,7 @@
         "ultra": "Ultra"
       },
       "transition": {
-        "label": "Efecto de transici�n",
+        "label": "Efecto de transici�n",
         "cut": "Corte",
         "fade": "Desvanecimiento",
         "dissolve": "Disolver",
@@ -733,7 +736,7 @@
         "descriptions": {
           "imageAnimate": "Agregar movimiento a imagen fija",
           "cameraPath": "Recorrido desde 3D o imagen",
-          "imageMorph": "Transici�n entre vistas",
+          "imageMorph": "Transici�n entre vistas",
           "multiShot": "Ensamblaje de clips"
         }
       },
@@ -778,7 +781,59 @@
     "documentTranslate": {
       "title": "Traducción",
       "description": "Configura ajustes de traducción y descarga documentos traducidos."
+    },
+    "pdfCompression": {
+      "title": "Compresi?n de PDF",
+      "description": "Encola PDFs, previsualiza y descarga las versiones comprimidas."
     }
+  },
+  "pdfCompression": {
+    "uploadDocument": "Documentos",
+    "dropOrClick": "Arrastra o haz clic para subir PDFs",
+    "supportedFormats": "Solo PDF",
+    "queueTitle": "Cola de PDFs",
+    "removeDocument": "Eliminar documento",
+    "emptyQueue": "No se han agregado PDFs todav?a.",
+    "addPdfs": "+ Agregar PDFs",
+    "settingsTitle": "Configuraci?n de compresi?n",
+    "levelLabel": "Nivel de compresi?n",
+    "levels": {
+      "light": "Ligero",
+      "balanced": "Equilibrado",
+      "aggressive": "Agresivo"
+    },
+    "preserveTextLabel": "Conservar claridad del texto",
+    "preserveVectorLabel": "Conservar gr??ficos vectoriales",
+    "stripMetadataLabel": "Eliminar metadatos",
+    "imageQualityLabel": "Calidad de imagen",
+    "settingsHint": "Las opciones adicionales aparecer?n aqu? cuando est?n disponibles.",
+    "remainingFiles": "{{count}} documentos restantes",
+    "remainingCredits": "{{count}} cr?ditos restantes",
+    "processingOutputs": "PDFs comprimidos",
+    "downloadAll": "Descargar todo",
+    "downloadSelected": "Descargar seleccionados",
+    "downloadSingle": "Descargar",
+    "selectAll": "Seleccionar todo",
+    "noOutputs": "No hay PDFs comprimidos todav?a.",
+    "noDocumentUploaded": "Sube PDFs a la izquierda para previsualizarlos.",
+    "compressAll": "Comprimir Todos los PDFs",
+    "compressing": "Comprimiendo",
+    "compressionSettings": "Configuración de Compresión",
+    "imageQuality": "Calidad de Imagen",
+    "imageQualityDesc": "Menor calidad = archivo más pequeño. 70% recomendado para mejor balance.",
+    "maxImageSize": "Dimensión Máxima de Imagen",
+    "maxImageSizeDesc": "Las imágenes más grandes se reducirán para reducir el tamaño del archivo.",
+    "compressImages": "Comprimir Imágenes",
+    "removeMetadata": "Eliminar Metadatos",
+    "clearAll": "Borrar todo",
+    "previewTitle": "Vista previa PDF",
+    "alerts": {
+      "success": "Se comprimieron correctamente {{count}} PDF(s). Compresi?n media: {{avg}}%",
+      "notConfigured": "La clave API de iLovePDF no est? configurada. Agrega VITE_ILOVEPDF_PUBLIC_KEY en tu archivo .env. Obt?n una clave gratuita en https://developer.ilovepdf.com/",
+      "failed": "La compresi?n de PDF fall?: {{message}}. Por favor intenta nuevamente m?s tarde."
+    },
+    "addPdfsCount": "+ Agregar PDFs ({{count}} restantes)",
+    "queueFull": "Cola llena ({{count}} m?x)"
   },
   "bottomPanel": {
     "copyPrompt": "Copiar prompt",

@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
@@ -174,11 +174,15 @@ export const TopBar: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t, i18n } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const controlsMenuRef = useRef<HTMLDivElement>(null);
+  const controlsButtonRef = useRef<HTMLButtonElement>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showControlsMenu, setShowControlsMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
   const [projectName, setProjectName] = useState('');
   const { generate, cancelGeneration } = useGeneration();
 
@@ -258,7 +262,9 @@ export const TopBar: React.FC = () => {
   
   const isVideoMode = state.mode === 'video';
   const isUpscaleMode = state.mode === 'upscale';
+  const isPdfCompressionMode = state.mode === 'pdf-compression';
   const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
+  const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
 
   // Video mode validation
@@ -272,11 +278,13 @@ export const TopBar: React.FC = () => {
     ? false
     : state.mode === 'document-translate'
       ? !state.workflow.documentTranslate.sourceDocument
-      : isUpscaleMode
-        ? !upscaleQueueReady
-        : isVideoMode
-          ? !videoReady || !videoUnlocked
-          : !state.uploadedImage;
+      : isPdfCompressionMode
+        ? !pdfQueueReady
+        : isUpscaleMode
+          ? !upscaleQueueReady
+          : isVideoMode
+            ? !videoReady || !videoUnlocked
+            : !state.uploadedImage;
   const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
@@ -336,6 +344,10 @@ export const TopBar: React.FC = () => {
     }
     if (state.mode === 'document-translate') {
       if (!state.workflow.documentTranslate.sourceDocument) return;
+      await generate();
+      return;
+    }
+    if (isPdfCompressionMode) {
       await generate();
       return;
     }
@@ -532,6 +544,30 @@ export const TopBar: React.FC = () => {
     setShowLanguageMenu(false);
   };
 
+  useEffect(() => {
+    if (!showControlsMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (controlsMenuRef.current?.contains(target)) return;
+      if (controlsButtonRef.current?.contains(target)) return;
+      setShowControlsMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showControlsMenu]);
+
+  useEffect(() => {
+    if (!showLanguageMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (languageMenuRef.current?.contains(target)) return;
+      if (languageButtonRef.current?.contains(target)) return;
+      setShowLanguageMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLanguageMenu]);
+
   const getLanguageLabel = () => {
     const lang = (i18n.language || 'en').split('-')[0];
     switch (lang) {
@@ -551,6 +587,7 @@ export const TopBar: React.FC = () => {
       case 'img-to-cad': return t('generation.convertToCAD');
       case 'img-to-3d': return t('generation.generate3DModel');
       case 'video': return t('generation.generateVideo');
+      case 'pdf-compression': return t('generation.compressPdfs');
       case 'visual-edit': return t('generation.applyEdits');
       case 'material-validation': return t('generation.runValidation');
       case 'render-sketch': return t('generation.renderSketch');
@@ -707,6 +744,7 @@ export const TopBar: React.FC = () => {
 
         <div className="relative shrink-0 2xl:hidden">
           <button
+            ref={controlsButtonRef}
             onClick={() => setShowControlsMenu((prev) => !prev)}
             className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-full border border-border-subtle bg-surface-elevated text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
             title={t('topBar.controls')}
@@ -716,149 +754,139 @@ export const TopBar: React.FC = () => {
           </button>
 
           {showControlsMenu && (
-            <div className="absolute left-0 top-full mt-1 w-52 bg-surface-elevated rounded-md shadow-elevated border border-border p-1.5 z-50 animate-fade-in origin-top-left">
-              <div className="flex items-center justify-between mb-1 pb-1 border-b border-border-subtle">
-                <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-foreground-muted">
-                  <SlidersHorizontal size={11} />
+            <div
+              ref={controlsMenuRef}
+              className="absolute left-0 top-full mt-2 w-72 bg-surface-elevated rounded-2xl shadow-elevated border border-border p-3 z-50 animate-fade-in origin-top-left"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
                   {t('topBar.quickControls')}
                 </div>
                 <button
                   onClick={() => setShowControlsMenu(false)}
-                  className="text-foreground-muted hover:text-foreground"
+                  className="text-foreground-muted hover:text-foreground rounded-full p-1 hover:bg-surface-sunken transition-colors"
                   title={t('topBar.close')}
                 >
-                  <X size={11} />
+                  <X size={12} />
                 </button>
               </div>
 
-              <div className="grid gap-1">
-                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
-                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                    {t('topBar.history')}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={handleUndoSelection}
-                      disabled={!canUndoSelection}
-                      className={cn(
-                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
-                        canUndoSelection
-                          ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
-                          : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                      )}
-                      title={t('topBar.undo')}
-                    >
-                      <Undo size={10} />
-                      {t('topBar.undo')}
-                    </button>
-                    <button
-                      onClick={handleRedoSelection}
-                      disabled={!canRedoSelection}
-                      className={cn(
-                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
-                        canRedoSelection
-                          ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
-                          : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                      )}
-                      title={t('topBar.redo')}
-                    >
-                      <Redo size={10} />
-                      {t('topBar.redo')}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
-                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
-                    {t('topBar.canvas')}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={handleFitToScreen}
-                      disabled={!state.uploadedImage}
-                      className={cn(
-                        "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
-                        !state.uploadedImage
-                          ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                          : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
-                      )}
-                      title={t('topBar.fitToScreen')}
-                    >
-                      <Minimize2 size={10} />
-                      {t('topBar.fit')}
-                    </button>
-                    {!isVideoMode && (
-                      <button
-                        onClick={handleToggleSplit}
-                        disabled={!state.uploadedImage}
-                        className={cn(
-                          "flex items-center gap-1 h-6 px-1.5 rounded-md border text-[8px] font-semibold transition-colors",
-                          !state.uploadedImage
-                            ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                            : state.workflow.canvasSync
-                              ? "border-foreground text-foreground bg-surface-elevated"
-                              : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
-                        )}
-                        title={t('topBar.toggleSplitView')}
-                      >
-                        <Columns size={10} />
-                        {t('topBar.split')}
-                      </button>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleUndoSelection}
+                    disabled={!canUndoSelection}
+                    className={cn(
+                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      canUndoSelection
+                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
                     )}
+                    title={t('topBar.undo')}
+                  >
+                    <Undo size={11} />
+                    {t('topBar.undo')}
+                  </button>
+                  <button
+                    onClick={handleRedoSelection}
+                    disabled={!canRedoSelection}
+                    className={cn(
+                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      canRedoSelection
+                        ? "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                        : "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                    )}
+                    title={t('topBar.redo')}
+                  >
+                    <Redo size={11} />
+                    {t('topBar.redo')}
+                  </button>
+                  <button
+                    onClick={handleFitToScreen}
+                    disabled={!state.uploadedImage}
+                    className={cn(
+                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      !state.uploadedImage
+                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
+                    )}
+                    title={t('topBar.fitToScreen')}
+                  >
+                    <Minimize2 size={11} />
+                    {t('topBar.fit')}
+                  </button>
+                  {!isVideoMode && (
                     <button
-                      onClick={handleClearImage}
+                      onClick={handleToggleSplit}
                       disabled={!state.uploadedImage}
-                      aria-label={t('topBar.clearImage')}
                       className={cn(
-                        "flex items-center justify-center h-6 w-6 rounded-md border text-[8px] font-semibold transition-colors",
+                        "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
                         !state.uploadedImage
                           ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
-                          : "border-border text-red-600 hover:bg-red-50"
+                          : state.workflow.canvasSync
+                            ? "border-foreground text-foreground bg-surface-sunken"
+                            : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
                       )}
-                      title={t('topBar.clearImage')}
+                      title={t('topBar.toggleSplitView')}
                     >
-                      <Trash2 size={10} />
+                      <Columns size={11} />
+                      {t('topBar.split')}
                     </button>
-                  </div>
+                  )}
+                  <button
+                    onClick={handleClearImage}
+                    disabled={!state.uploadedImage}
+                    aria-label={t('topBar.clearImage')}
+                    className={cn(
+                      "flex items-center gap-1 h-7 px-3 rounded-full border text-[9px] font-semibold transition-colors",
+                      !state.uploadedImage
+                        ? "border-border-subtle text-foreground-muted/60 cursor-not-allowed"
+                        : "border-red-200 text-red-600 hover:bg-red-50"
+                    )}
+                    title={t('topBar.clearImage')}
+                  >
+                    <Trash2 size={11} />
+                    {t('topBar.clearImage')}
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
-                  <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
+                <div className="flex items-center justify-between bg-surface-sunken rounded-2xl px-3 py-2">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
                     {t('topBar.zoom')}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     <button
-                      className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      className="flex items-center justify-center h-7 w-7 rounded-full border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(-0.25)}
                       title={t('topBar.zoomOut')}
                     >
-                      <ZoomOut size={10} />
+                      <ZoomOut size={12} />
                     </button>
-                    <span className="min-w-[34px] text-center text-[7px] font-mono text-foreground-muted select-none">
+                    <span className="min-w-[42px] text-center text-[10px] font-mono text-foreground-muted select-none">
                       {Math.round(state.canvas.zoom * 100)}%
                     </span>
                     <button
-                      className="flex items-center justify-center h-6 w-6 rounded-md border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
+                      className="flex items-center justify-center h-7 w-7 rounded-full border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated transition-colors"
                       onClick={() => handleZoom(0.25)}
                       title={t('topBar.zoomIn')}
                     >
-                      <ZoomIn size={10} />
+                      <ZoomIn size={12} />
                     </button>
                   </div>
                 </div>
 
                 {!isVideoMode && (
-                  <div className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-sunken px-1.5 py-1">
-                    <span className="text-[7px] font-bold uppercase tracking-wider text-foreground-muted">
+                  <div className="flex items-center justify-between bg-surface-sunken rounded-2xl px-3 py-2">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">
                       {t('topBar.resolution')}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       {resolutionOptions.map((option) => (
                         <button
                           key={option.value}
                           onClick={() => handleResolutionChange(option.value)}
                           className={cn(
-                            "h-5 px-1.5 rounded-md text-[7px] font-semibold border transition-all",
+                            "h-6 px-2 rounded-full text-[9px] font-semibold border transition-all",
                             state.output.resolution === option.value
                               ? "bg-foreground text-background border-foreground shadow-sm"
                               : "border-border text-foreground-secondary hover:text-foreground hover:bg-surface-elevated"
@@ -941,6 +969,7 @@ export const TopBar: React.FC = () => {
         {/* Language Selector */}
         <div className="relative shrink-0">
           <button
+            ref={languageButtonRef}
             onClick={() => setShowLanguageMenu(!showLanguageMenu)}
             className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
             title={t('topBar.language')}
@@ -950,7 +979,10 @@ export const TopBar: React.FC = () => {
           </button>
 
           {showLanguageMenu && (
-            <div className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right">
+            <div
+              ref={languageMenuRef}
+              className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right"
+            >
               <button
                 onClick={() => handleLanguageChange('en')}
                 className={cn(

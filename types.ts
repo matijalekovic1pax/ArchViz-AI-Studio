@@ -14,7 +14,8 @@ export type GenerationMode =
   | 'img-to-3d'
   | 'video'
   | 'material-validation'
-  | 'document-translate';
+  | 'document-translate'
+  | 'pdf-compression';
 
 export interface StyleConfiguration {
   id: string;
@@ -708,6 +709,9 @@ export interface WorkflowSettings {
 
   // 13. Document Translation
   documentTranslate: DocumentTranslateState;
+
+  // 14. PDF Compression
+  pdfCompression: PdfCompressionState;
 }
 
 // Video Studio Types
@@ -974,6 +978,38 @@ export interface DocumentTranslateState {
   progress: TranslationProgress;
   translatedDocumentUrl: string | null;
   error: string | null;
+}
+
+// --- PDF Compression Types ---
+
+export interface PdfCompressionDocument {
+  id: string;
+  name: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: number;
+}
+
+export interface PdfCompressionOutput {
+  id: string;
+  name: string;
+  size: number;
+  dataUrl: string;
+  sourceId?: string;
+  compressedAt: number;
+}
+
+export interface PdfCompressionState {
+  queue: PdfCompressionDocument[];
+  selectedId: string | null;
+  outputs: PdfCompressionOutput[];
+  compressionLevel?: 'light' | 'balanced' | 'aggressive';
+  imageQuality?: number; // 0-100
+  stripMetadata?: boolean;
+  preserveText?: boolean;
+  preserveVectors?: boolean;
+  remainingFiles?: number;
+  remainingCredits?: number;
 }
 
 export interface GeometryState {

@@ -68,7 +68,8 @@
     "generateRender": "Générer le Rendu",
     "generateOutputFirst": "Générer la sortie d'abord",
     "translateDocument": "Traduire le Document",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "compressPdfs": "Compresser les PDF"
   },
   "modes": {
     "render3d": "Rendu 3D",
@@ -187,6 +188,7 @@
     "visualEdit": "Editeur Visuel",
     "materialValidation": "Validation des Materiaux",
     "documentTranslate": "Traducteur de Docs",
+    "pdfCompression": "Compression PDF",
     "exploded": "Vues Eclatees",
     "section": "Rendu en Section",
     "renderSketch": "Esquisse vers Rendu",
@@ -778,7 +780,50 @@
     "documentTranslate": {
       "title": "Traduction",
       "description": "Configurez les parametres de traduction et telechargez les documents traduits."
+    },
+    "pdfCompression": {
+      "title": "Compression PDF",
+      "description": "Mettez des PDF en file, pr?visualisez et t?l?chargez les versions compress?es."
     }
+  },
+  "pdfCompression": {
+    "uploadDocument": "Documents",
+    "dropOrClick": "D?poser ou cliquer pour ajouter des PDF",
+    "supportedFormats": "PDF uniquement",
+    "queueTitle": "File PDF",
+    "removeDocument": "Supprimer le document",
+    "emptyQueue": "Aucun PDF ajout?.",
+    "addPdfs": "+ Ajouter des PDF",
+    "settingsTitle": "Param?tres de compression",
+    "levelLabel": "Niveau de compression",
+    "levels": {
+      "light": "L?ger",
+      "balanced": "?quilibr?",
+      "aggressive": "Agressif"
+    },
+    "preserveTextLabel": "Preserve text clarity",
+    "preserveVectorLabel": "Preserve vector graphics",
+    "stripMetadataLabel": "Strip metadata",
+    "imageQualityLabel": "Image quality",
+    "settingsHint": "Des options suppl?mentaires appara?tront ici une fois activ?es.",
+    "remainingFiles": "{{count}} documents restants",
+    "remainingCredits": "{{count}} cr?dits restants",
+    "processingOutputs": "PDF compress?s",
+    "downloadAll": "Tout t?l?charger",
+    "downloadSelected": "T?l?charger la s?lection",
+    "downloadSingle": "T?l?charger",
+    "selectAll": "Tout s?lectionner",
+    "noOutputs": "Aucun PDF compress?.",
+    "noDocumentUploaded": "Ajoutez des PDF ? gauche pour pr?visualiser.",
+    "clearAll": "Tout effacer",
+    "previewTitle": "Aper?u PDF",
+    "alerts": {
+      "success": "Compression r?ussie de {{count}} PDF(s). Compression moyenne : {{avg}}%",
+      "notConfigured": "Cl? API iLovePDF non configur?e. Ajoutez VITE_ILOVEPDF_PUBLIC_KEY dans votre fichier .env. Obtenez une cl? gratuite sur https://developer.ilovepdf.com/",
+      "failed": "?chec de la compression PDF : {{message}}. Veuillez r?essayer plus tard."
+    },
+    "addPdfsCount": "+ Ajouter des PDF ({{count}} restants)",
+    "queueFull": "File pleine ({{count}} max)"
   },
   "bottomPanel": {
     "copyPrompt": "Copier le prompt",

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
@@ -143,6 +143,14 @@ const initialDocumentTranslate: DocumentTranslateState = {
   },
   translatedDocumentUrl: null,
   error: null,
+};
+
+const initialPdfCompression: PdfCompressionState = {
+  queue: [],
+  selectedId: null,
+  outputs: [],
+  remainingFiles: undefined,
+  remainingCredits: undefined
 };
 
 const initialWorkflow: WorkflowSettings = {
@@ -704,6 +712,9 @@ const initialWorkflow: WorkflowSettings = {
 
   // 13. Document Translation
   documentTranslate: initialDocumentTranslate,
+
+  // 14. PDF Compression
+  pdfCompression: initialPdfCompression,
 };
 
 const initialMaterialValidation: MaterialValidationState = {

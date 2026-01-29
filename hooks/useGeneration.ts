@@ -28,6 +28,7 @@ import { translateToEnglish, needsTranslation } from '../services/translationSer
 import { translateDocument } from '../services/documentTranslationService';
 import { initCloudConvertService, isCloudConvertInitialized } from '../services/cloudConvertService';
 import { initPdfConverterService, isPdfConverterInitialized } from '../services/pdfConverterService';
+import { compressPdfBatch } from '../lib/pdfCompression';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
@@ -719,6 +720,133 @@ export function useGeneration(): UseGenerationReturn {
       const isUpscaleMode = state.mode === 'upscale';
       const isVisualEditMode = state.mode === 'visual-edit';
       const isVideoMode = state.mode === 'video';
+      const isPdfCompressionMode = state.mode === 'pdf-compression';
+
+      if (isPdfCompressionMode) {
+        console.log('[Generation] PDF Compression mode - starting real compression');
+        updateProgress(10);
+        const queue = state.workflow.pdfCompression.queue;
+        if (queue.length === 0) {
+          console.log('[Generation] No PDFs in queue');
+          dispatch({ type: 'SET_GENERATING', payload: false });
+          dispatch({ type: 'SET_PROGRESS', payload: 0 });
+          return;
+        }
+
+        try {
+          console.log(`[Generation] Compressing ${queue.length} PDFs with level: ${state.workflow.pdfCompression.compressionLevel || 'balanced'}`);
+
+          // Get compression settings from right panel state
+          const compressionLevel = (state.workflow.pdfCompression as any).compressionLevel || 'balanced';
+          const imageQuality = ((state.workflow.pdfCompression as any).imageQuality || 70) / 100;
+          const stripMetadata = (state.workflow.pdfCompression as any).stripMetadata ?? true;
+
+          // Perform REAL compression
+          const results = await compressPdfBatch(
+            queue,
+            {
+              compressionLevel,
+              imageQuality,
+              removeMetadata: stripMetadata,
+              compressImages: true,
+              preserveText: true,
+              preserveVectors: true,
+            },
+            (current, total) => {
+              const progress = 10 + Math.round((current / total) * 80);
+              updateProgress(progress);
+            }
+          );
+
+          console.log(`[Generation] Compression complete: ${results.filter(r => r.success).length}/${results.length} successful`);
+
+          // Create outputs from successful compressions
+          const now = Date.now();
+          const outputs = results
+            .filter(result => result.success)
+            .map((result, index) => ({
+              id: nanoid(),
+              name: result.name.replace(/\.pdf$/i, '') + '-compressed.pdf',
+              size: result.compressedSize,
+              dataUrl: result.dataUrl, // Use the ACTUAL compressed dataUrl
+              sourceId: result.id,
+              compressedAt: now + index
+            }));
+
+          const latestQuota = results.reduce<{
+            remainingFiles?: number;
+            remainingCredits?: number;
+          }>((acc, result) => {
+            if (result.remainingFiles != null || result.remainingCredits != null) {
+              return {
+                remainingFiles: result.remainingFiles ?? acc.remainingFiles,
+                remainingCredits: result.remainingCredits ?? acc.remainingCredits
+              };
+            }
+            return acc;
+          }, {
+            remainingFiles: state.workflow.pdfCompression.remainingFiles,
+            remainingCredits: state.workflow.pdfCompression.remainingCredits
+          });
+
+          // Update state: CLEAR queue and add outputs
+          dispatch({
+            type: 'UPDATE_WORKFLOW',
+            payload: {
+              pdfCompression: {
+                ...state.workflow.pdfCompression,
+                queue: [], // Clear the queue
+                selectedId: outputs[0]?.id || null,
+                outputs: [...state.workflow.pdfCompression.outputs, ...outputs],
+                remainingFiles: latestQuota.remainingFiles,
+                remainingCredits: latestQuota.remainingCredits
+              }
+            }
+          });
+
+          updateProgress(100);
+
+          // Show success message
+          const avgCompression = results.reduce((sum, r) => sum + r.compressionRatio, 0) / results.length;
+          dispatch({
+            type: 'SET_APP_ALERT',
+            payload: {
+              type: 'success',
+              message: i18n.t('pdfCompression.alerts.success', {
+                count: outputs.length,
+                avg: Math.round(avgCompression)
+              })
+            }
+          });
+
+        } catch (error) {
+          console.error('[Generation] PDF compression error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'PDF compression failed';
+
+          // Check if it's an API configuration error
+          if (errorMessage.includes('not configured') || errorMessage.includes('API key')) {
+            dispatch({
+              type: 'SET_APP_ALERT',
+              payload: {
+                type: 'error',
+                message: i18n.t('pdfCompression.alerts.notConfigured')
+              }
+            });
+          } else {
+            dispatch({
+              type: 'SET_APP_ALERT',
+              payload: {
+                type: 'error',
+                message: i18n.t('pdfCompression.alerts.failed', { message: errorMessage })
+              }
+            });
+          }
+        } finally {
+          dispatch({ type: 'SET_GENERATING', payload: false });
+          dispatch({ type: 'SET_PROGRESS', payload: 0 });
+        }
+        return;
+      }
 
       const buildImagePrompt = (prompt: string) => (
         prompt.includes('generate') || prompt.includes('create')

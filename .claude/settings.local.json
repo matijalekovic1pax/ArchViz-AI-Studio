@@ -10,7 +10,8 @@
       "Bash(test:*)",
       "Bash(gcloud auth application-default print-access-token:*)",
       "Bash(curl:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "WebFetch(domain:www.iloveapi.com)"
     ]
   }
 }
