@@ -155,7 +155,7 @@ export const LeftMasterplanPanel = () => {
     <div className="space-y-6">
       <div>
         <SectionHeader title={t('masterplan.planType.title')} />
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {planTypes.map((type) => {
             const Icon = type.icon;
             const selected = wf.mpPlanType === type.id;

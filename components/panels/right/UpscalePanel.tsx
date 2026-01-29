@@ -30,7 +30,7 @@ export const UpscalePanel = () => {
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
           Resolution
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {resolutionOptions.map((option) => (
             <button
               key={option.value}

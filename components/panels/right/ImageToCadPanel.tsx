@@ -44,7 +44,7 @@ export const ImageToCadPanel = () => {
 
             <div>
                 <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Output Format</label>
-                <div className="grid grid-cols-4 gap-1 mb-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-2">
                     {['DXF', 'DWG', 'SVG', 'PDF'].map(f => <button key={f} className="text-[10px] border rounded py-1.5 hover:bg-surface-elevated">{f}</button>)}
                 </div>
             </div>

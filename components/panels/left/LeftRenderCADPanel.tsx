@@ -455,7 +455,7 @@ export const LeftRenderCADPanel = () => {
 
         <div>
           <SectionHeader title="Drawing Type" />
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
             {[
               { id: 'plan', label: 'Floor Plan', icon: LayoutIcon },
               { id: 'section', label: 'Section', icon: ScissorsIcon },

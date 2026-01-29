@@ -71,7 +71,7 @@ export const DocumentTranslateView: React.FC = () => {
     if (!sourceDocument) {
       return (
         <div className="absolute inset-0 flex items-center justify-center text-foreground-muted">
-          <div className="text-center max-w-md px-6">
+          <div className="text-center max-w-md px-4 sm:px-6">
             <FileText size={64} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-semibold mb-2 text-foreground">{t('documentTranslate.noDocumentUploaded')}</h3>
             <p className="text-sm text-foreground-muted">
@@ -114,10 +114,10 @@ export const DocumentTranslateView: React.FC = () => {
       // Converted and ready to display
       if (docxHtmlContent) {
         return (
-          <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-8">
-            <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg mb-8">
+          <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-4 sm:p-8">
+            <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg mb-6 sm:mb-8">
               {/* Document header with filename */}
-              <div className="bg-blue-50 px-6 py-3 border-b border-gray-200">
+              <div className="bg-blue-50 px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <FileText size={18} className="text-blue-600" />
                   <h3 className="text-sm font-medium text-gray-800">{sourceDocument.name}</h3>
@@ -125,7 +125,7 @@ export const DocumentTranslateView: React.FC = () => {
               </div>
 
               {/* Document content */}
-              <div className="p-8">
+              <div className="p-4 sm:p-8">
                 <style>{`
                   .document-content p { margin: 0.5em 0; }
                   .document-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -159,7 +159,7 @@ export const DocumentTranslateView: React.FC = () => {
       // Conversion failed
       return (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center max-w-md px-6">
+          <div className="text-center max-w-md px-4 sm:px-6">
             <FileText size={64} className="mx-auto mb-4 opacity-20 text-red-500" />
             <h3 className="text-lg font-semibold mb-2 text-foreground">Failed to load document</h3>
             <p className="text-sm text-foreground-muted">
@@ -178,7 +178,7 @@ export const DocumentTranslateView: React.FC = () => {
 
     return (
       <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex items-center justify-center z-10">
-        <div className="max-w-md w-full mx-auto px-6">
+        <div className="max-w-md w-full mx-auto px-4 sm:px-6">
           <div className={cn(
             "bg-surface-elevated border border-border rounded-lg p-6 shadow-lg",
             progress.phase === 'complete' && "text-center"

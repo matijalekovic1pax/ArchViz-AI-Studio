@@ -1849,7 +1849,7 @@ export const VisualEditPanel = () => {
         </select>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto custom-scrollbar p-1">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-52 overflow-y-auto custom-scrollbar p-1">
         {filteredAssets.map((asset) => {
           const active = wf.visualObject.assetId === asset.id;
           const Icon = objectIconMap[asset.icon] ?? ImageIcon;
@@ -2096,7 +2096,7 @@ export const VisualEditPanel = () => {
 
             {wf.visualSelection.mode === 'ai' && (
               <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {selectionTargets.map((target) => {
                     const active = wf.visualSelection.autoTargets.includes(target);
                     return (
@@ -2347,7 +2347,7 @@ export const VisualEditPanel = () => {
 
             {wf.visualLighting.mode === 'hdri' && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {hdriPresets.map((preset) => {
                     const active = wf.visualLighting.hdri.preset === preset;
                     return (
@@ -2681,7 +2681,7 @@ export const VisualEditPanel = () => {
         return (
           <div className="space-y-4 animate-fade-in">
             <SectionDesc>Replace sky and tune atmosphere.</SectionDesc>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {skyPresets.map((preset) => {
                 const active = wf.visualSky.preset === preset;
                 return (
@@ -2774,7 +2774,7 @@ export const VisualEditPanel = () => {
 
             <div className="space-y-2 pt-2 border-t border-border-subtle">
               <label className="text-xs font-medium text-foreground">Quick Remove</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {removeQuickOptions.map((option) => {
                   const active = wf.visualRemove.quickRemove.includes(option);
                   return (
@@ -3280,7 +3280,7 @@ export const VisualEditPanel = () => {
 
             <div className="pt-2 border-t border-border-subtle">
               <label className="text-xs font-medium text-foreground mb-2 block">Presets</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   className="text-[10px] py-2 border border-border rounded hover:border-foreground-muted hover:text-foreground transition-colors"
@@ -3459,7 +3459,7 @@ export const VisualEditPanel = () => {
               </div>
 
               {wf.visualExtend.targetAspectRatio === 'custom' && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="number"
                     min={1}

@@ -31,9 +31,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="h-screen flex flex-col items-center justify-center bg-background">
-      <div className="w-full max-w-md px-8">
+      <div className="w-full max-w-md px-4 sm:px-8">
         {/* Logo/Title */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8 sm:mb-12">
           <h1 className="text-2xl font-semibold text-foreground mb-2">
             {t('app.title')}
           </h1>
@@ -43,7 +43,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         {/* Sign-in Card */}
-        <div className="bg-surface-elevated border border-border rounded-xl p-8 shadow-subtle">
+        <div className="bg-surface-elevated border border-border rounded-xl p-6 sm:p-8 shadow-subtle">
           <div className="text-center mb-6">
             <p className="text-foreground-secondary text-sm">
               This application is restricted to

@@ -497,7 +497,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                           {settings.materials.weathering.enabled && (
                              <div className="space-y-3 animate-fade-in">
                                 <SliderControl label={t('render3dSettings.sections.materials.weathering.intensity')} value={settings.materials.weathering.intensity} min={0} max={100} step={1} unit="%" onChange={(v) => updateSection('materials', { weathering: { ...settings.materials.weathering, intensity: v } })} />
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                    {['dirt', 'moss', 'rust', 'cracks'].map(w => (
                                       <button key={w} className="px-2 py-1.5 border border-border rounded text-[10px] text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors">{t(`render3dSettings.sections.materials.weathering.options.${w}`)}</button>
                                    ))}
@@ -512,7 +512,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 { id: sectionId('atmosphere'), title: t('render3dSettings.sections.atmosphere.title'), content: (
                     <div>
                        
-                       <div className="grid grid-cols-3 gap-2 mb-4">
+                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                           {[
                              {id: 'natural', label: t('render3dSettings.sections.atmosphere.moods.natural')},
                              {id: 'warm', label: t('render3dSettings.sections.atmosphere.moods.warm')},

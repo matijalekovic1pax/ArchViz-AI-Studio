@@ -148,7 +148,7 @@ export const LeftVideoPanel = () => {
          {/* Social Media Presets */}
          <div>
             <SectionHeader title={t('rightPanel.video.presets.title')} />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                {SOCIAL_PRESETS.map(preset => {
                   const Icon = getPlatformIcon(preset.platform);
                   const isActive = video.socialMediaPreset === preset.platform;
@@ -220,7 +220,7 @@ export const LeftVideoPanel = () => {
          {/* Motion Style Presets */}
          <div>
             <SectionHeader title={t('rightPanel.video.motionStyles.title')} />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                {Object.entries(MOTION_STYLES).map(([style, config]) => {
                   const isActive = video.motionStyle === style;
                   const label = t(`rightPanel.video.motionStyles.${style as MotionStyle}.label`);
@@ -251,7 +251,7 @@ export const LeftVideoPanel = () => {
          {video.inputMode !== 'image-animate' && (
             <div>
                <SectionHeader title={t('rightPanel.video.inputSequence.title')} />
-               <div className="grid grid-cols-2 gap-2">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {video.keyframes.map((frame, i) => (
                      <div key={frame.id} className="relative group aspect-video bg-black rounded overflow-hidden border border-border">
                         <img src={frame.url} className="w-full h-full object-cover opacity-80" />

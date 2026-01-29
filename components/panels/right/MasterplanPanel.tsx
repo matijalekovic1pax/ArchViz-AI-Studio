@@ -180,7 +180,7 @@ export const MasterplanPanel = () => {
             id: 'output-style',
             title: t('masterplan.sections.outputStyle.title'),
             content: (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {outputStyles.map((style) => {
                   const selected = wf.mpOutputStyle === style.id;
                   return (
@@ -209,7 +209,7 @@ export const MasterplanPanel = () => {
             title: t('masterplan.sections.viewAngle.title'),
             content: (
               <div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {viewAngles.map((view) => {
                     const Icon = view.icon;
                     const selected = wf.mpViewAngle === view.id;

@@ -434,10 +434,10 @@ export const BottomPanel: React.FC = () => {
     <div 
       className={cn(
         "bg-background-secondary border-t border-border transition-all duration-300 flex flex-col z-30",
-        state.bottomPanelCollapsed ? "h-9" : "h-[220px]"
+        state.bottomPanelCollapsed ? "h-10" : "h-[55vh] sm:h-[220px]"
       )}
     >
-      <div className="h-9 flex items-center justify-between px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
+      <div className="h-10 sm:h-9 flex items-center justify-between px-2 sm:px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
         <div className="flex h-full overflow-x-auto no-scrollbar">
            {[
              ...(isGenerateTextMode ? [] : ['prompt']),
@@ -451,7 +451,7 @@ export const BottomPanel: React.FC = () => {
                key={tab}
                onClick={() => dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: tab })}
                className={cn(
-                 "flex items-center gap-2 px-4 h-full border-r border-border-subtle text-xs font-medium uppercase tracking-wider transition-colors",
+                 "flex items-center gap-2 px-3 sm:px-4 h-full border-r border-border-subtle text-[10px] sm:text-xs font-medium uppercase tracking-wider transition-colors",
                  resolvedBottomTab === tab ? "bg-background-secondary text-foreground" : "text-foreground-muted hover:text-foreground hover:bg-background-secondary"
                )}
              >
@@ -467,7 +467,7 @@ export const BottomPanel: React.FC = () => {
         </div>
         
         <div 
-          className="h-full flex items-center px-4 cursor-pointer hover:bg-surface-sunken border-l border-border-subtle"
+          className="h-full flex items-center px-2 sm:px-4 cursor-pointer hover:bg-surface-sunken border-l border-border-subtle"
           onClick={() => dispatch({ type: 'TOGGLE_BOTTOM_PANEL' })}
         >
           <ChevronDown 

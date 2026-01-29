@@ -200,7 +200,9 @@
   },
   "leftSidebar": {
     "collapse": "Reduire la barre",
-    "expand": "Etendre la barre"
+    "expand": "Etendre la barre",
+    "workflow": "Flux de travail",
+    "parameters": "Parametres"
   },
   "styles": {
     "browseAll": "Parcourir tous les styles",

@@ -1,6 +1,6 @@
 
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Info, X } from 'lucide-react';
 import { AppProvider, useAppStore } from './store';
 import { AuthGate } from './components/auth/AuthGate';
@@ -16,6 +16,7 @@ import { PdfCompressionView } from './components/PdfCompressionView';
 import { GenerationMode } from './types';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
+import { MobilePanels, MobilePanelType } from './components/panels/mobile/MobilePanels';
 
 const ShortcutsListener: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -71,6 +72,7 @@ const ShortcutsListener: React.FC = () => {
 const Layout: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const showVideoLockOverlay = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
+  const [mobilePanel, setMobilePanel] = useState<MobilePanelType>(null);
 
   useEffect(() => {
     if (!state.appAlert) return;
@@ -82,11 +84,11 @@ const Layout: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans selection:bg-accent selection:text-foreground">
-      <TopBar />
+      <TopBar onToggleMobilePanel={(panel) => setMobilePanel((prev) => (prev === panel ? null : panel))} />
+      <MobilePanels active={mobilePanel} onClose={() => setMobilePanel(null)} />
       {showVideoLockOverlay && (
         <div
-          className="fixed inset-y-0 right-0 z-[80] bg-black/60 backdrop-blur-md flex items-center justify-center"
-          style={{ left: 56, width: 'calc(100% - 56px)' }}
+          className="fixed inset-y-0 right-0 left-0 lg:left-14 z-[80] bg-black/60 backdrop-blur-md flex items-center justify-center"
         >
           <div className="w-[92vw] max-w-md pointer-events-auto">
             <VideoLockBanner />
@@ -123,7 +125,9 @@ const Layout: React.FC = () => {
       )}
       <ShortcutsListener />
       <div className="flex-1 flex overflow-hidden">
-        <LeftSidebar />
+        <div className="hidden lg:flex h-full">
+          <LeftSidebar />
+        </div>
         <div className="flex-1 flex flex-col min-w-0 relative">
           {state.mode === 'material-validation' ? (
             <MaterialValidationView />
@@ -137,7 +141,9 @@ const Layout: React.FC = () => {
           <FloatingGenerateButton />
           {state.mode !== 'document-translate' && state.mode !== 'pdf-compression' && <BottomPanel />}
         </div>
-        <RightPanel />
+        <div className="hidden lg:flex h-full">
+          <RightPanel />
+        </div>
       </div>
     </div>
   );

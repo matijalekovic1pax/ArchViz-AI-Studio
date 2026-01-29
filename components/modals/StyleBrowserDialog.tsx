@@ -219,7 +219,7 @@ export const StyleBrowserDialog: React.FC<StyleBrowserDialogProps> = ({
           {/* Grid Content */}
           <div className="flex-1 bg-surface-elevated p-3 overflow-y-auto custom-scrollbar">
             {filteredStyles.length > 0 ? (
-               <div className="grid grid-cols-3 gap-2">
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                {filteredStyles.map(style => {
                   const isNoStyle = style.id === 'no-style';
                   return (

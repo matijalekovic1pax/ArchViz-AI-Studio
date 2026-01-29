@@ -182,7 +182,7 @@ export const ExplodedPanel = () => {
             title: t('exploded.sections.dissectionStyle.title'),
             content: (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {dissectionStyles.map((style) => {
                     const selected = wf.explodedStyle.render === style.id;
                     return (

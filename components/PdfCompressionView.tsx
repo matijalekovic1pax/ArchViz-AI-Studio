@@ -16,7 +16,7 @@ export const PdfCompressionView: React.FC = () => {
     return (
       <div className="flex-1 bg-background h-full relative">
         <div className="absolute inset-0 flex items-center justify-center text-foreground-muted">
-          <div className="text-center max-w-md px-6">
+          <div className="text-center max-w-md px-4 sm:px-6">
             <FileText size={64} className="mx-auto mb-4 opacity-20" />
             <h3 className="text-lg font-semibold mb-2 text-foreground">
               {t('pdfCompression.noDocumentUploaded')}

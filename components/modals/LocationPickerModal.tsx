@@ -235,7 +235,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               {/* Data */}
               <div className="border-t border-border pt-3">
                 <div className="text-[10px] text-foreground-muted uppercase tracking-wider mb-2">{t('locationModal.dataToLoad')}</div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center justify-between gap-3 p-2 bg-surface-elevated rounded border border-border">
                     <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                       <Building2 size={14} className="text-foreground-muted" />

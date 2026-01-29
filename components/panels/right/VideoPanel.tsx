@@ -49,7 +49,7 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.model.title')}
             </label>
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                <button
                   onClick={() => updateVideo({ model: 'veo-2' })}
                   className={cn(
@@ -94,7 +94,7 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.duration.label')}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                {durationOptions.map(dur => (
                   <button
                      key={dur}
@@ -140,7 +140,7 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.resolution.label')}
             </label>
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                {(['720p', '1080p', '4k'] as const).map(res => (
                   <button
                      key={res}
@@ -163,7 +163,7 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.frameRate.label')}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                {[24, 30, 60].map(fps => (
                   <button
                      key={fps}
@@ -223,7 +223,7 @@ export const VideoPanel = () => {
                      <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
                         {t('rightPanel.video.camera.speed.label')}
                      </label>
-                     <div className="grid grid-cols-3 gap-2 mb-3">
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                         {(['slow', 'normal', 'fast'] as const).map(speed => (
                            <button
                               key={speed}
@@ -383,7 +383,7 @@ export const VideoPanel = () => {
                <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                   {t('rightPanel.video.output.recentGenerations')}
                </label>
-               <div className="grid grid-cols-3 gap-2">
+               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {video.generationHistory.slice(-6).reverse().map((item) => (
                      <div
                         key={item.id}

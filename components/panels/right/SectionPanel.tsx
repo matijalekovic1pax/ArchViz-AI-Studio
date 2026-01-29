@@ -116,7 +116,7 @@ export const SectionPanel = () => {
     <div className="space-y-6">
       <div>
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">Section Reveal</label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {revealStyles.map((style) => {
             const selected = wf.sectionReveal.style === style.id;
             return (

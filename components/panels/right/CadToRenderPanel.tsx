@@ -111,7 +111,7 @@ export const CadToRenderPanel = () => {
 
                 <div className="space-y-2">
                   <label className="text-xs text-foreground-muted block">{t('cadToRender.sections.camera.lookAt')}</label>
-                  <div className="grid grid-cols-4 gap-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                     {directionOptions.map((direction) => (
                       <button
                         key={direction.value}

@@ -184,7 +184,7 @@ const TechnicalRow: React.FC<TechnicalRowProps> = ({ material, issues, expanded,
                <td colSpan={5} className="p-6 pl-[152px]">
                   <div className="bg-background border border-border rounded-lg p-5 shadow-sm">
                      {/* Checks Grid */}
-                     <div className="grid grid-cols-3 gap-4 mb-6">
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                         <div className="p-3 bg-surface-sunken/50 rounded border border-border-subtle">
                            <div className="flex items-center justify-between mb-1">
                               <span className="text-[10px] uppercase font-bold text-foreground-muted">Typology</span>
@@ -325,7 +325,7 @@ const BoQRow: React.FC<BoQRowProps> = ({ material, item, issues, expanded, onExp
                   <div className="bg-background border border-border rounded-lg p-5 shadow-sm">
                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground-muted mb-3">Cross-Reference Detail</h4>
                      
-                     <div className="grid grid-cols-2 gap-px bg-border rounded border border-border overflow-hidden mb-4">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-border rounded border border-border overflow-hidden mb-4">
                         <div className="bg-surface-sunken p-2 text-[10px] font-bold text-foreground-secondary text-center">Material Spec</div>
                         <div className="bg-surface-sunken p-2 text-[10px] font-bold text-foreground-secondary text-center">BoQ Item {item?.code}</div>
                         
@@ -469,7 +469,7 @@ export const MaterialValidationView: React.FC = () => {
       
       {/* 1. COMPACT HEADER (Cleaned Up) */}
       <div className="bg-surface-elevated border-b border-border shadow-sm z-20">
-         <div className="flex flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+         <div className="flex flex-col gap-4 px-4 sm:px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                <h2 className="text-lg font-bold tracking-tight text-foreground">Material Validation</h2>
                <div className="hidden h-8 w-px bg-border-subtle sm:block" />
@@ -498,7 +498,7 @@ export const MaterialValidationView: React.FC = () => {
          </div>
 
          {(state.materialValidation.isRunning || state.materialValidation.aiSummary || error) && (
-            <div className="px-6 py-3 border-t border-border-subtle bg-background/60">
+            <div className="px-4 sm:px-6 py-3 border-t border-border-subtle bg-background/60">
                <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-1">
                   AI Summary
                </div>
@@ -520,12 +520,12 @@ export const MaterialValidationView: React.FC = () => {
          )}
 
          {/* 2. TOOLBAR & FILTERS */}
-         <div className="flex items-center justify-between px-6 h-12 bg-background/50 backdrop-blur-sm border-t border-border-subtle">
-            <div className="flex gap-1 h-full pt-1">
+         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3 sm:py-0 bg-background/50 backdrop-blur-sm border-t border-border-subtle">
+            <div className="flex gap-1">
                <button 
                   onClick={() => setActiveTab('technical')}
                   className={cn(
-                     "px-4 h-full border-b-2 text-xs font-bold uppercase tracking-wide transition-colors",
+                     "px-4 h-9 border-b-2 text-xs font-bold uppercase tracking-wide transition-colors",
                      activeTab === 'technical' ? "border-foreground text-foreground" : "border-transparent text-foreground-muted hover:text-foreground"
                   )}
                >
@@ -542,8 +542,8 @@ export const MaterialValidationView: React.FC = () => {
                </button>
             </div>
 
-            <div className="flex items-center gap-4 py-2">
-               <div className="flex items-center gap-3 pl-4 border-l border-border-subtle h-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+               <div className="flex items-center gap-3 sm:pl-4 sm:border-l border-border-subtle sm:h-6">
                   <div className="relative group">
                      <select 
                         className="appearance-none bg-transparent text-xs font-medium text-foreground pr-6 outline-none cursor-pointer"
@@ -570,12 +570,12 @@ export const MaterialValidationView: React.FC = () => {
                   </label>
                </div>
 
-               <div className="relative">
+               <div className="relative w-full sm:w-auto">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-muted" />
                   <input 
                      type="text" 
                      placeholder="Search materials..." 
-                     className="w-48 h-8 pl-8 pr-3 bg-surface-elevated border border-border rounded-lg text-xs focus:border-accent outline-none transition-all shadow-sm"
+                     className="w-full sm:w-48 h-8 pl-8 pr-3 bg-surface-elevated border border-border rounded-lg text-xs focus:border-accent outline-none transition-all shadow-sm"
                      value={searchQuery}
                      onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -586,9 +586,9 @@ export const MaterialValidationView: React.FC = () => {
 
       {/* 3. MAIN CONTENT (FULL WIDTH TABLE) */}
       <div className="flex-1 overflow-y-auto bg-background/50 custom-scrollbar">
-         <div className="min-w-full inline-block align-middle">
-            <div className="border-b border-border">
-               <table className="min-w-full">
+         <div className="min-w-full inline-block align-middle overflow-x-auto">
+            <div className="border-b border-border min-w-[900px]">
+               <table className="min-w-[900px]">
                   <thead className="bg-surface-sunken/50 sticky top-0 z-10 backdrop-blur-md">
                      <tr>
                         <th scope="col" className="py-3 px-6 text-left text-[10px] font-bold text-foreground-muted uppercase tracking-wider border-b border-border w-32">Code</th>

@@ -108,7 +108,7 @@ export const PdfCompressionPanel: React.FC = () => {
         <label className="text-[11px] text-foreground-secondary mb-2 block font-semibold uppercase tracking-wider">
           {t('pdfCompression.levelLabel')}
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {(['light', 'balanced', 'aggressive'] as const).map((level) => (
             <button
               key={level}

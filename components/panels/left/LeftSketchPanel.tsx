@@ -591,7 +591,7 @@ export const LeftSketchPanel = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {wf.sketchRefs.map((ref) => (
               <div key={ref.id} className="group relative rounded-lg border border-border overflow-hidden bg-surface-elevated aspect-[4/3]">
                 <img src={ref.url} alt="" className="h-full w-full object-cover" />
@@ -637,7 +637,7 @@ export const LeftSketchPanel = () => {
           {wf.sketchRefType === 'mood' && (
             <div className="space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Mood Preset</div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {moodPresets.map((preset) => {
                   const selected = wf.sketchMoodPreset === preset.id;
                   return (

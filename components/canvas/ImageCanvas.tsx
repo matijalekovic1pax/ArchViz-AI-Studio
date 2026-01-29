@@ -124,7 +124,7 @@ const PromptBar: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-[770px] pointer-events-auto transform transition-all duration-300 hover:scale-[1.005]">
+    <div className="w-full max-w-[770px] px-2 sm:px-0 pointer-events-auto transform transition-all duration-300 sm:hover:scale-[1.005]">
         <div className="relative flex items-center gap-3">
             <div className="relative shrink-0" ref={historyContainerRef}>
                 <button
