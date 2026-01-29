@@ -249,15 +249,6 @@ export const MobilePanels: React.FC<{ active: MobilePanelType; onClose: () => vo
                   );
                 })}
               </div>
-
-              {state.mode !== 'generate-text' && (
-                <div className="bg-surface-elevated border border-border rounded-xl p-4 shadow-subtle">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted mb-3">
-                    {t('leftSidebar.parameters')}
-                  </div>
-                  {renderLeftPanel(state.mode)}
-                </div>
-              )}
             </div>
           ) : (
             <div className="space-y-4">
