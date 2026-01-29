@@ -1,7 +1,8 @@
 /**
  * Document Translation Service
  * Orchestrates document parsing, translation via Gemini, and rebuilding
- * For PDFs: Uses custom PDF Converter API (free) or CloudConvert (paid) to convert PDF→DOCX→Translate→PDF
+ * For PDFs: Uses iLovePDF API (preferred) to convert PDF→DOCX→Translate→DOCX→PDF
+ * Falls back to custom PDF Converter API for DOCX→PDF to minimize iLove API usage
  */
 
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
@@ -17,6 +18,12 @@ import {
   convertDocxToPdf as convertDocxToPdfCloudConvert,
   isCloudConvertInitialized
 } from './cloudConvertService';
+import {
+  convertPdfToDocxWithILove,
+  convertDocxToPdfWithILove,
+  isILoveApiConfigured,
+  type ILoveConversionProgress
+} from './iLoveApiService';
 import type { DocumentTranslateDocument, TranslationProgress } from '../types';
 
 // Translation settings
@@ -57,12 +64,13 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   let docxDataUrl = sourceDocument.dataUrl;
 
   if (isPdf) {
-    // Check which converter is available (prefer custom API for free usage)
-    const useCustomApi = isPdfConverterInitialized();
-    const useCloudConvert = !useCustomApi && isCloudConvertInitialized();
+    // Check which converter is available (prefer iLove API for best quality)
+    const useILoveApi = isILoveApiConfigured();
+    const useCustomApi = !useILoveApi && isPdfConverterInitialized();
+    const useCloudConvert = !useILoveApi && !useCustomApi && isCloudConvertInitialized();
 
-    if (!useCustomApi && !useCloudConvert) {
-      throw new Error('No PDF converter configured. Please set up either:\n1. Custom PDF Converter API (free - deploy pdf-converter-api to Vercel), or\n2. CloudConvert API key (paid)');
+    if (!useILoveApi && !useCustomApi && !useCloudConvert) {
+      throw new Error('No PDF converter configured. Please set up one of:\n1. iLovePDF API (recommended - set VITE_ILOVEPDF_PUBLIC_KEY)\n2. Custom PDF Converter API (free - deploy pdf-converter-api to Vercel)\n3. CloudConvert API key (paid)');
     }
 
     onProgress({
@@ -78,7 +86,12 @@ export async function translateDocument(options: TranslationOptions): Promise<st
       throw new DOMException('Translation cancelled', 'AbortError');
     }
 
-    if (useCustomApi) {
+    if (useILoveApi) {
+      console.log('📄 Converting PDF to DOCX via iLovePDF API...');
+      docxDataUrl = await convertPdfToDocxWithILove(sourceDocument.dataUrl, (convProgress) => {
+        console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
+      });
+    } else if (useCustomApi) {
       console.log('📄 Converting PDF to DOCX via custom API...');
       docxDataUrl = await convertPdfToDocxCustom(sourceDocument.dataUrl, {
         onProgress: (convProgress) => {
@@ -258,18 +271,36 @@ export async function translateDocument(options: TranslationOptions): Promise<st
       throw new DOMException('Translation cancelled', 'AbortError');
     }
 
-    // Use same converter that was used for PDF→DOCX
+    // Priority: Custom API (free, no monthly limit) > iLove API (monthly limit) > CloudConvert (paid)
     const useCustomApi = isPdfConverterInitialized();
+    const useILoveApi = !useCustomApi && isILoveApiConfigured();
+    const useCloudConvert = !useCustomApi && !useILoveApi && isCloudConvertInitialized();
 
     if (useCustomApi) {
-      console.log('📄 Converting DOCX back to PDF via custom API...');
-      outputDataUrl = await convertDocxToPdfCustom(translatedDocxDataUrl, {
-        onProgress: (convProgress) => {
-          console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
-        },
-        abortSignal
+      console.log('📄 Converting DOCX back to PDF via custom API (free, unlimited)...');
+      try {
+        outputDataUrl = await convertDocxToPdfCustom(translatedDocxDataUrl, {
+          onProgress: (convProgress) => {
+            console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
+          },
+          abortSignal
+        });
+      } catch (error) {
+        console.warn('⚠️ Custom API conversion failed, trying iLove API...', error);
+        if (isILoveApiConfigured()) {
+          outputDataUrl = await convertDocxToPdfWithILove(translatedDocxDataUrl, (convProgress) => {
+            console.log(`📄 DOCX→PDF (iLove fallback): ${convProgress.phase} (${convProgress.progress}%)`);
+          });
+        } else {
+          throw error;
+        }
+      }
+    } else if (useILoveApi) {
+      console.log('📄 Converting DOCX back to PDF via iLovePDF API...');
+      outputDataUrl = await convertDocxToPdfWithILove(translatedDocxDataUrl, (convProgress) => {
+        console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
       });
-    } else {
+    } else if (useCloudConvert) {
       console.log('📄 Converting DOCX back to PDF via CloudConvert...');
       outputDataUrl = await convertDocxToPdfCloudConvert(translatedDocxDataUrl, {
         onProgress: (convProgress) => {

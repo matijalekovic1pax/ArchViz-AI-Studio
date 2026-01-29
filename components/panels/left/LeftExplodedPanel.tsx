@@ -7,22 +7,11 @@ import { Slider } from '../../ui/Slider';
 import { cn } from '../../../lib/utils';
 import { nanoid } from 'nanoid';
 import { ChevronDown } from 'lucide-react';
-
-const sourceTypes = [
-  { value: 'revit', label: 'Revit (PDF Export)' },
-  { value: 'rhino', label: 'Rhino (PDF Export)' },
-  { value: 'sketchup', label: 'SketchUp (PDF Export)' },
-  { value: 'archicad', label: 'ArchiCAD (PDF Export)' },
-  { value: 'ifc', label: 'IFC (PDF Export)' },
-  { value: 'other', label: 'Other PDF' },
-];
+import { getGeminiService, isGeminiServiceInitialized, ImageUtils } from '../../../services/geminiService';
 
 export const LeftExplodedPanel = () => {
   const { state, dispatch } = useAppStore();
   const wf = state.workflow;
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [keepAssemblies, setKeepAssemblies] = useState(false);
-  const [maintainFloors, setMaintainFloors] = useState(false);
   const [isDetectingComponents, setIsDetectingComponents] = useState(false);
   const [componentsDetectError, setComponentsDetectError] = useState<string | null>(null);
   const [openComponentId, setOpenComponentId] = useState<string | null>(null);
@@ -49,22 +38,6 @@ export const LeftExplodedPanel = () => {
     () => [...wf.explodedComponents].sort((a, b) => a.order - b.order),
     [wf.explodedComponents]
   );
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    updateWf({
-      explodedSource: {
-        ...wf.explodedSource,
-        fileName: file.name,
-        componentCount: wf.explodedComponents.length,
-      },
-    });
-  };
 
   const normalizeCategory = (value: unknown): 'structure' | 'envelope' | 'interior' | 'mep' | 'site' => {
     switch (value) {
@@ -94,11 +67,31 @@ export const LeftExplodedPanel = () => {
     return [];
   };
 
+  const extractJson = (raw: string) => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      const start = raw.indexOf('{');
+      const end = raw.lastIndexOf('}');
+      if (start === -1 || end === -1 || end <= start) return null;
+      try {
+        return JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+  };
+
   const handleAutoDetectComponents = async () => {
     if (isDetectingComponents) return;
     const sourceImage = state.uploadedImage;
     if (!sourceImage) {
       setComponentsDetectError('Upload an image first to auto-detect components.');
+      return;
+    }
+    if (!isGeminiServiceInitialized()) {
+      setComponentsDetectError('Gemini service not initialized. Add your API key to enable detection.');
       return;
     }
 
@@ -107,15 +100,26 @@ export const LeftExplodedPanel = () => {
     updateWf({ explodedDetection: 'auto' });
 
     try {
-      const response = await fetch('/api/exploded/components', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: sourceImage }),
+      const service = getGeminiService();
+      const imageData = ImageUtils.dataUrlToImageData(sourceImage);
+      const prompt = [
+        'Analyze the architectural model image and list the major components for an exploded axonometric view.',
+        'Return ONLY valid JSON with this shape:',
+        '{ "components": [ { "name": "...", "title": "...", "description": "...", "category": "structure|envelope|interior|mep|site", "attributes": ["..."], "active": true } ] }',
+        'Keep descriptions short and attributes as concise tags. Do not add any extra keys or commentary.'
+      ].join(' ');
+
+      const responseText = await service.generateText({
+        prompt,
+        images: [imageData],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1200,
+          responseMimeType: 'application/json'
+        }
       });
-      if (!response.ok) {
-        throw new Error('Auto-detect failed');
-      }
-      const data = await response.json();
+
+      const data = extractJson(responseText || '');
       const rawComponents = Array.isArray(data?.components) ? data.components : [];
       if (rawComponents.length === 0) {
         setComponentsDetectError('No components detected. Try a different image.');
@@ -145,19 +149,6 @@ export const LeftExplodedPanel = () => {
       setComponentsDetectError('Auto-detect failed. Please try again.');
     } finally {
       setIsDetectingComponents(false);
-    }
-  };
-
-  const handleClear = () => {
-    updateWf({
-      explodedSource: {
-        ...wf.explodedSource,
-        fileName: null,
-        componentCount: 0,
-      },
-    });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -342,68 +333,21 @@ export const LeftExplodedPanel = () => {
   return (
     <div className="space-y-6">
       <div>
-        <SectionHeader title="Source Model" />
+        <SectionHeader title="Input" />
         <div className="space-y-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={handleUploadClick}
-            className="w-full py-2 bg-surface-elevated border border-dashed border-border rounded text-xs text-foreground-muted hover:text-foreground transition-colors"
-          >
-            Upload PDF
-            <div className="text-[10px] text-foreground-muted mt-1">Model export + metadata (PDF)</div>
-          </button>
-
-          <div>
-            <label className="text-[10px] text-foreground-muted mb-1 block">Source Type</label>
-            <select
-              value={wf.explodedSource.type}
-              onChange={(e) =>
-                updateWf({
-                  explodedSource: {
-                    ...wf.explodedSource,
-                    type: e.target.value as typeof wf.explodedSource.type,
-                  },
-                })
-              }
-              className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-            >
-              {sourceTypes.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {wf.explodedSource.fileName && (
+          {state.uploadedImage ? (
             <div className="border border-border rounded bg-surface-sunken p-3 text-xs">
-              <div className="font-semibold">{wf.explodedSource.fileName}</div>
+              <div className="font-semibold">Canvas image ready</div>
               <div className="text-[10px] text-foreground-muted">
+                Use the current canvas image for component detection.
+              </div>
+              <div className="text-[10px] text-foreground-muted mt-1">
                 {wf.explodedSource.componentCount || wf.explodedComponents.length} components detected
               </div>
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={handleAutoDetectComponents}
-                  className="flex-1 py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated"
-                >
-                  Re-detect
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="flex-1 py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated"
-                >
-                  Clear
-                </button>
-              </div>
+            </div>
+          ) : (
+            <div className="border border-border rounded bg-surface-sunken p-3 text-xs text-foreground-muted">
+              Upload an image in the canvas to enable component detection.
             </div>
           )}
         </div>
@@ -432,94 +376,100 @@ export const LeftExplodedPanel = () => {
           )}
 
           <div ref={componentListRef} className="space-y-2">
-            {sortedComponents.map((comp, index) => {
-              const attributesValue = (comp.attributes || []).join(', ');
-              const isOpen = openComponentId === comp.id;
-              const isDragging = draggingId === comp.id;
-              let translateY = 0;
-              if (draggingId && dragIndex !== -1 && effectiveOverIndex !== -1 && !isDragging) {
-                if (dragIndex < effectiveOverIndex && index > dragIndex && index <= effectiveOverIndex) {
-                  translateY = -dragItemHeight;
-                } else if (dragIndex > effectiveOverIndex && index >= effectiveOverIndex && index < dragIndex) {
-                  translateY = dragItemHeight;
+            {sortedComponents.length === 0 ? (
+              <div className="border border-dashed border-border rounded p-3 text-[10px] text-foreground-muted">
+                No components yet. Run auto-detect or add components manually.
+              </div>
+            ) : (
+              sortedComponents.map((comp, index) => {
+                const attributesValue = (comp.attributes || []).join(', ');
+                const isOpen = openComponentId === comp.id;
+                const isDragging = draggingId === comp.id;
+                let translateY = 0;
+                if (draggingId && dragIndex !== -1 && effectiveOverIndex !== -1 && !isDragging) {
+                  if (dragIndex < effectiveOverIndex && index > dragIndex && index <= effectiveOverIndex) {
+                    translateY = -dragItemHeight;
+                  } else if (dragIndex > effectiveOverIndex && index >= effectiveOverIndex && index < dragIndex) {
+                    translateY = dragItemHeight;
+                  }
                 }
-              }
-              return (
-                <div
-                  key={comp.id}
-                  ref={setComponentRef(comp.id)}
-                  className={cn("space-y-2 relative transform-gpu", isDragging && "z-10")}
-                  style={{
-                    transform: isDragging
-                      ? `translate3d(0, ${dragOffset}px, 0)`
-                      : translateY
-                        ? `translate3d(0, ${translateY}px, 0)`
-                        : undefined,
-                    transition: isDragging || isSettling ? 'none' : 'transform 160ms ease',
-                  }}
-                >
+                return (
                   <div
-                    className={cn(
-                      "flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded",
-                      isDragging && "shadow-lg border-foreground/40"
-                    )}
+                    key={comp.id}
+                    ref={setComponentRef(comp.id)}
+                    className={cn("space-y-2 relative transform-gpu", isDragging && "z-10")}
+                    style={{
+                      transform: isDragging
+                        ? `translate3d(0, ${dragOffset}px, 0)`
+                        : translateY
+                          ? `translate3d(0, ${translateY}px, 0)`
+                          : undefined,
+                      transition: isDragging || isSettling ? 'none' : 'transform 160ms ease',
+                    }}
                   >
                     <div
-                      className="flex flex-col gap-0.5 text-foreground-muted cursor-grab active:cursor-grabbing touch-none"
-                      onPointerDown={handlePointerDown(comp.id)}
-                      title="Drag to reorder"
+                      className={cn(
+                        "flex items-center gap-2 p-2 bg-surface-elevated border border-border rounded",
+                        isDragging && "shadow-lg border-foreground/40"
+                      )}
                     >
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
-                      <div className="w-3 h-0.5 bg-current rounded-full" />
+                      <div
+                        className="flex flex-col gap-0.5 text-foreground-muted cursor-grab active:cursor-grabbing touch-none"
+                        onPointerDown={handlePointerDown(comp.id)}
+                        title="Drag to reorder"
+                      >
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                        <div className="w-3 h-0.5 bg-current rounded-full" />
+                      </div>
+                      <span className="text-xs font-medium flex-1">{index + 1}. {comp.name}</span>
+                      <Toggle label="" checked={comp.active} onChange={(val) => toggleComponent(comp.id, val)} />
+                      <button
+                        type="button"
+                        onClick={() => setOpenComponentId(isOpen ? null : comp.id)}
+                        className="p-1 rounded hover:bg-surface-sunken text-foreground-muted"
+                        title="Edit component"
+                      >
+                        <ChevronDown size={14} className={cn("transition-transform", isOpen && "rotate-180")} />
+                      </button>
                     </div>
-                    <span className="text-xs font-medium flex-1">{index + 1}. {comp.name}</span>
-                    <Toggle label="" checked={comp.active} onChange={(val) => toggleComponent(comp.id, val)} />
-                    <button
-                      type="button"
-                      onClick={() => setOpenComponentId(isOpen ? null : comp.id)}
-                      className="p-1 rounded hover:bg-surface-sunken text-foreground-muted"
-                      title="Edit component"
-                    >
-                      <ChevronDown size={14} className={cn("transition-transform", isOpen && "rotate-180")} />
-                    </button>
+                    {isOpen && (
+                      <div className="ml-6 mr-2 space-y-2">
+                        <div>
+                          <label className="text-[10px] text-foreground-muted mb-1 block">Title</label>
+                          <input
+                            type="text"
+                            value={comp.title || comp.name}
+                            onChange={(e) => updateComponent(comp.id, { title: e.target.value })}
+                            className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
+                            placeholder="Display title"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-foreground-muted mb-1 block">Description</label>
+                          <textarea
+                            value={comp.description || ''}
+                            onChange={(e) => updateComponent(comp.id, { description: e.target.value })}
+                            className="w-full bg-surface-elevated border border-border rounded text-xs px-2 py-1.5 min-h-[56px] resize-none"
+                            placeholder="Optional description"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-foreground-muted mb-1 block">Attributes (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={attributesValue}
+                            onChange={(e) => updateComponent(comp.id, { attributes: normalizeAttributes(e.target.value) })}
+                            className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
+                            placeholder="e.g. load-bearing, concrete, public"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {isOpen && (
-                    <div className="ml-6 mr-2 space-y-2">
-                      <div>
-                        <label className="text-[10px] text-foreground-muted mb-1 block">Title</label>
-                        <input
-                          type="text"
-                          value={comp.title || comp.name}
-                          onChange={(e) => updateComponent(comp.id, { title: e.target.value })}
-                          className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-                          placeholder="Display title"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-foreground-muted mb-1 block">Description</label>
-                        <textarea
-                          value={comp.description || ''}
-                          onChange={(e) => updateComponent(comp.id, { description: e.target.value })}
-                          className="w-full bg-surface-elevated border border-border rounded text-xs px-2 py-1.5 min-h-[56px] resize-none"
-                          placeholder="Optional description"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-foreground-muted mb-1 block">Attributes (comma-separated)</label>
-                        <input
-                          type="text"
-                          value={attributesValue}
-                          onChange={(e) => updateComponent(comp.id, { attributes: normalizeAttributes(e.target.value) })}
-                          className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-                          placeholder="e.g. load-bearing, concrete, public"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           <button
@@ -582,17 +532,8 @@ export const LeftExplodedPanel = () => {
             onChange={(value) => updateWf({ explodedView: { ...wf.explodedView, separation: value } })}
           />
 
-          <div className="space-y-2">
-            <Toggle
-              label="Keep assemblies together"
-              checked={keepAssemblies}
-              onChange={setKeepAssemblies}
-            />
-            <Toggle
-              label="Maintain floor relationships"
-              checked={maintainFloors}
-              onChange={setMaintainFloors}
-            />
+          <div className="text-[10px] text-foreground-muted">
+            Explosion settings apply to the generated view and do not modify the source geometry.
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-rea
 import { Toggle } from '../../ui/Toggle';
 import { isPdfConverterInitialized } from '../../../services/pdfConverterService';
 import { isCloudConvertInitialized } from '../../../services/cloudConvertService';
+import { isILoveApiConfigured } from '../../../services/iLoveApiService';
 
 export const DocumentTranslatePanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -13,15 +14,18 @@ export const DocumentTranslatePanel: React.FC = () => {
   const { progress } = docTranslate;
 
   const [converterConfigured, setConverterConfigured] = useState(false);
-  const [converterType, setConverterType] = useState<'custom' | 'cloudconvert' | null>(null);
+  const [converterType, setConverterType] = useState<'ilove' | 'custom' | 'cloudconvert' | null>(null);
 
   useEffect(() => {
-    // Check if either converter is configured via .env (prefer custom API)
+    // Check if any converter is configured via .env (prefer iLove API for best quality)
+    const hasILoveApi = isILoveApiConfigured();
     const hasCustomApi = isPdfConverterInitialized();
     const hasCloudConvert = isCloudConvertInitialized();
 
-    setConverterConfigured(hasCustomApi || hasCloudConvert);
-    setConverterType(hasCustomApi ? 'custom' : hasCloudConvert ? 'cloudconvert' : null);
+    setConverterConfigured(hasILoveApi || hasCustomApi || hasCloudConvert);
+    setConverterType(
+      hasILoveApi ? 'ilove' : hasCustomApi ? 'custom' : hasCloudConvert ? 'cloudconvert' : null
+    );
   }, []);
 
   const handleDownload = () => {
@@ -140,10 +144,34 @@ export const DocumentTranslatePanel: React.FC = () => {
               </p>
 
               <div className="space-y-3">
-                {/* Option 1: Custom API (FREE) */}
+                {/* Option 1: iLovePDF (RECOMMENDED) */}
                 <div className="bg-white border border-amber-300 rounded p-2">
                   <p className="text-xs font-semibold text-amber-900 mb-1">
-                    ✅ Option 1: Custom API (FREE, Recommended)
+                    ⭐ Option 1: iLovePDF API (Recommended)
+                  </p>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Best quality conversion. Get your public key from{' '}
+                    <a
+                      href="https://developer.ilovepdf.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-amber-900 font-semibold"
+                    >
+                      developer.ilovepdf.com
+                    </a>
+                  </p>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Then add to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>:
+                  </p>
+                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
+                    VITE_ILOVEPDF_PUBLIC_KEY="your_public_key"
+                  </code>
+                </div>
+
+                {/* Option 2: Custom API (FREE) */}
+                <div className="bg-white border border-amber-300 rounded p-2">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">
+                    ✅ Option 2: Custom API (FREE, Unlimited)
                   </p>
                   <p className="text-xs text-amber-700 mb-1">
                     Deploy the <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">pdf-converter-api</code> folder to Vercel (100% free, unlimited usage).
@@ -159,10 +187,10 @@ export const DocumentTranslatePanel: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Option 2: CloudConvert (PAID) */}
+                {/* Option 3: CloudConvert (PAID) */}
                 <div className="bg-white border border-amber-300 rounded p-2">
                   <p className="text-xs font-semibold text-amber-900 mb-1">
-                    💳 Option 2: CloudConvert (Paid Alternative)
+                    💳 Option 3: CloudConvert (Paid Alternative)
                   </p>
                   <p className="text-xs text-amber-700 mb-1">
                     Get API key from{' '}
@@ -211,8 +239,10 @@ export const DocumentTranslatePanel: React.FC = () => {
             <div className="flex items-center gap-2 pt-2">
               <CheckCircle2 size={14} className="text-accent" />
               <span className="text-[10px] text-foreground-muted">
-                {converterType === 'custom'
-                  ? 'Custom PDF Converter configured (free)'
+                {converterType === 'ilove'
+                  ? 'iLovePDF API configured (best quality)'
+                  : converterType === 'custom'
+                  ? 'Custom PDF Converter configured (free, unlimited)'
                   : 'CloudConvert configured for PDF translation'}
               </span>
             </div>
@@ -224,9 +254,14 @@ export const DocumentTranslatePanel: React.FC = () => {
       {docTranslate.sourceDocument?.mimeType.includes('pdf') && converterConfigured && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <strong>PDF Translation:</strong> Your PDF will be converted to Word, translated, then converted back to PDF for perfect formatting preservation.
+          {converterType === 'ilove' && (
+            <span className="block mt-1 text-purple-700">
+              ⭐ Using iLovePDF API (best quality)
+            </span>
+          )}
           {converterType === 'custom' && (
             <span className="block mt-1 text-green-700">
-              ✨ Using free custom converter
+              ✨ Using free custom converter (unlimited)
             </span>
           )}
         </div>

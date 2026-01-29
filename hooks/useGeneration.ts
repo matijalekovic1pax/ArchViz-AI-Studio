@@ -28,6 +28,7 @@ import { translateToEnglish, needsTranslation } from '../services/translationSer
 import { translateDocument } from '../services/documentTranslationService';
 import { initCloudConvertService, isCloudConvertInitialized } from '../services/cloudConvertService';
 import { initPdfConverterService, isPdfConverterInitialized } from '../services/pdfConverterService';
+import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
@@ -113,6 +114,14 @@ const ensureCloudConvertInitialized = (): boolean => {
   return false;
 };
 
+// Initialize iLovePDF API if public key is available
+const ensureILoveApiInitialized = async (): Promise<boolean> => {
+  if (isILoveApiConfigured()) {
+    return await initializeILoveApi();
+  }
+  return false;
+};
+
 export type GenerationAttachment = string | { dataUrl: string; name?: string };
 
 export interface GenerationOptions {
@@ -139,7 +148,8 @@ export function useGeneration(): UseGenerationReturn {
 
   // Auto-initialize PDF converter services if configured in .env
   useEffect(() => {
-    ensurePdfConverterInitialized(); // Try custom API first (free)
+    ensureILoveApiInitialized(); // Try iLove API first (best quality, monthly limit)
+    ensurePdfConverterInitialized(); // Fall back to custom API (free, unlimited)
     ensureCloudConvertInitialized(); // Fall back to CloudConvert (paid)
   }, []);
 

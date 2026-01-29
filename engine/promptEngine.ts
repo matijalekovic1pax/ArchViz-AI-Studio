@@ -3311,15 +3311,48 @@ function generateExplodedPrompt(state: AppState): string {
     parts.push(`View the exploded assembly from a ${heightDesc}, with a field of view that captures all components in context.`);
   }
 
-  // Rendering style
+  // Dissection style (make this highly specific to avoid similar results)
   const style = workflow.explodedStyle;
-  const renderDesc: Record<string, string> = {
-    'realistic': 'Render with realistic materials and lighting for photographic quality',
-    'illustrative': 'Use an illustrative style with clean graphics suitable for technical documentation',
-    'diagrammatic': 'Keep the rendering diagrammatic and clear, prioritizing information over atmosphere',
-    'wireframe': 'Show the structure as a wireframe revealing all edges and construction lines',
+  const dissectionDesc: Record<string, string[]> = {
+    'stacked': [
+      'Dissection style: stacked layers.',
+      'Split the building into clear horizontal strata (foundation/core, floor plates, roof, and major systems).',
+      'Keep every layer perfectly aligned on a single vertical axis with equal, consistent spacing.',
+      'No rotation or lateral drift; the stack should read as a clean vertical assembly diagram.'
+    ],
+    'radial': [
+      'Dissection style: radial burst.',
+      'Explode all components outward from the geometric center in 360° while keeping their original orientation.',
+      'Maintain a fixed core at the center and place components on concentric rings with increasing radius.',
+      'The layout should feel like a starburst diagram with clear radial gaps between parts.'
+    ],
+    'sequential': [
+      'Dissection style: sequential assembly.',
+      'Lay components along a single primary axis in a strict order of assembly (start → finish).',
+      'Use progressive spacing so the order is unambiguous, like frames in an assembly timeline.',
+      'Keep components aligned to the axis with no rotation; the sequence should read left-to-right or bottom-to-top.'
+    ],
+    'core-shell': [
+      'Dissection style: core-shell separation.',
+      'Keep the structural core fixed and separate the envelope and roof as distinct shells around it.',
+      'Pull the facade and roof outward evenly, preserving their alignment to the core.',
+      'The result should clearly show the relationship between core, interior, and envelope layers.'
+    ],
+    'slice': [
+      'Dissection style: slice-lift.',
+      'Cut the building into a small number of thick slices (3-6) perpendicular to the main axis.',
+      'Lift or offset each slice evenly while preserving perfect registration between slices.',
+      'The slices should read like clean cross-sections with visible cut faces.'
+    ],
+    'systems': [
+      'Dissection style: systems separation.',
+      'Group components by system (structure, envelope, MEP, interior) and separate each group into its own band.',
+      'Keep parts within each system tightly clustered and aligned, with clear gaps between systems.',
+      'The diagram should read as distinct system layers rather than individual parts scattered evenly.'
+    ],
   };
-  parts.push(`${renderDesc[style.render] || `Render in ${style.render} style`}.`);
+  const dissection = dissectionDesc[style.render] || [`Dissection style: ${style.render}.`];
+  parts.push(...dissection);
 
   // Color treatment
   const colorDesc: Record<string, string> = {

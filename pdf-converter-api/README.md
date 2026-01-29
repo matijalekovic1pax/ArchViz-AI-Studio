@@ -1,12 +1,22 @@
 # PDF Converter API
 
-Free, self-hosted PDF ↔ DOCX conversion API for Vercel deployment.
+Free, self-hosted PDF ↔ DOCX conversion API for Vercel deployment, with iLovePDF proxy support.
 
 ## Features
 
+### Free Custom Conversion (No API Keys)
 - **PDF → DOCX**: Text extraction using `PyPDF2` (lightweight, fits Vercel limits)
 - **DOCX → PDF**: Conversion using `python-docx` + `reportlab`
 - **Free**: No API keys or usage limits
+- **Unlimited**: No monthly caps
+
+### iLovePDF Proxy (High Quality)
+- **PDF → DOCX**: Professional-quality conversion via iLovePDF API
+- **DOCX → PDF**: Perfect formatting preservation via iLovePDF API
+- **CORS-bypass**: Server-side proxy avoids browser CORS issues
+- **Easy**: Just add your iLovePDF public key
+
+### Common Features
 - **CORS-enabled**: Works from browser applications
 - **Serverless**: Deploys to Vercel's serverless functions
 - **Lightweight**: Under 250MB to fit Vercel's size limit
@@ -48,9 +58,11 @@ VITE_PDF_CONVERTER_API_URL="https://your-project-name.vercel.app"
 
 ## API Endpoints
 
-### POST /api/pdf-to-docx
+### Free Custom Conversion
 
-Converts PDF to DOCX format.
+#### POST /api/pdf-to-docx
+
+Converts PDF to DOCX format (text extraction, lightweight).
 
 **Request:**
 ```json
@@ -68,9 +80,9 @@ Converts PDF to DOCX format.
 }
 ```
 
-### POST /api/docx-to-pdf
+#### POST /api/docx-to-pdf
 
-Converts DOCX to PDF format.
+Converts DOCX to PDF format (basic rendering).
 
 **Request:**
 ```json
@@ -87,6 +99,50 @@ Converts DOCX to PDF format.
   "message": "DOCX successfully converted to PDF"
 }
 ```
+
+### iLovePDF Proxy (High Quality)
+
+#### POST /api/ilove-pdf-to-docx
+
+Converts PDF to DOCX using iLovePDF API (professional quality).
+
+**Request:**
+```json
+{
+  "public_key": "your_ilovepdf_public_key",
+  "pdf_base64": "base64-encoded-pdf-content"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "docx_base64": "base64-encoded-docx-content (data URL)"
+}
+```
+
+#### POST /api/ilove-docx-to-pdf
+
+Converts DOCX to PDF using iLovePDF API (perfect formatting).
+
+**Request:**
+```json
+{
+  "public_key": "your_ilovepdf_public_key",
+  "docx_base64": "base64-encoded-docx-content"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "pdf_base64": "base64-encoded-pdf-content (data URL)"
+}
+```
+
+> **Note:** The iLovePDF proxy requires a public key from [developer.ilovepdf.com](https://developer.ilovepdf.com). Set it in your app's .env as `VITE_ILOVEPDF_PUBLIC_KEY`.
 
 ## Error Handling
 
@@ -148,16 +204,17 @@ curl -X POST http://localhost:3000/api/pdf-to-docx \
 
 ## Quality Comparison
 
-| Feature | Custom API (Free) | CloudConvert (Paid) |
-|---------|------------------|---------------------|
-| **Cost** | FREE | $0.01/minute |
-| **PDF → DOCX** | ⭐⭐ Text extraction | ⭐⭐⭐⭐⭐ Perfect layout |
-| **DOCX → PDF** | ⭐⭐⭐ Basic rendering | ⭐⭐⭐⭐⭐ Perfect output |
-| **Images** | ❌ Lost | ✅ Preserved |
-| **Tables** | ⚠️ Text only | ✅ Full formatting |
-| **Fonts/Colors** | ❌ Reset to default | ✅ Preserved |
-| **Best For** | Text translation | Professional docs |
-| **Limits** | None | 500 min/month free |
+| Feature | Custom API (Free) | iLovePDF Proxy | CloudConvert (Paid) |
+|---------|------------------|----------------|---------------------|
+| **Cost** | FREE | FREE tier available | $0.01/minute |
+| **PDF → DOCX** | ⭐⭐ Text extraction | ⭐⭐⭐⭐⭐ Perfect layout | ⭐⭐⭐⭐⭐ Perfect layout |
+| **DOCX → PDF** | ⭐⭐⭐ Basic rendering | ⭐⭐⭐⭐⭐ Perfect output | ⭐⭐⭐⭐⭐ Perfect output |
+| **Images** | ❌ Lost | ✅ Preserved | ✅ Preserved |
+| **Tables** | ⚠️ Text only | ✅ Full formatting | ✅ Full formatting |
+| **Fonts/Colors** | ❌ Reset to default | ✅ Preserved | ✅ Preserved |
+| **Best For** | Text translation | Professional docs | Professional docs |
+| **Limits** | None (unlimited) | Monthly quota | 500 min/month free |
+| **Setup** | Just deploy | API key + deploy | API key only |
 
 ## Updating Your Deployment
 
