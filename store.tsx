@@ -589,8 +589,8 @@ const initialWorkflow: WorkflowSettings = {
   sketchType: 'exterior',
   sketchAutoDetect: true,
   sketchDetectedPerspective: null,
-  sketchLineQuality: 70,
-  sketchCompleteness: 80,
+  sketchLineQuality: 0,
+  sketchCompleteness: 0,
 
   // Line Processing
   sketchCleanupIntensity: 50,

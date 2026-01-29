@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
 import * as Switch from '@radix-ui/react-switch';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
@@ -227,20 +227,33 @@ export const LeftSketchPanel = () => {
     }
   }, [ensureServiceInitialized, parseSketchAnalysis, updateWf]);
 
-  useEffect(() => {
-    if (!wf.sketchAutoDetect) {
-      lastScanRef.current = null;
-      setIsDetecting(false);
-      return;
-    }
-    if (!sourceImage) {
-      setIsDetecting(false);
-      return;
-    }
-    if (lastScanRef.current === sourceImage) return;
+  const handleAnalyzeSketch = useCallback(() => {
+    if (!sourceImage || isDetecting) return;
     lastScanRef.current = sourceImage;
     analyzeSketch(sourceImage);
-  }, [analyzeSketch, sourceImage, wf.sketchAutoDetect]);
+  }, [analyzeSketch, isDetecting, sourceImage]);
+
+  useEffect(() => {
+    if (!sourceImage) {
+      lastScanRef.current = null;
+      setIsDetecting(false);
+      updateWf({
+        sketchDetectedPerspective: null,
+        sketchLineQuality: 0,
+        sketchCompleteness: 0,
+        sketchVanishingPoints: []
+      });
+      return;
+    }
+    if (lastScanRef.current && lastScanRef.current !== sourceImage) {
+      updateWf({
+        sketchDetectedPerspective: null,
+        sketchLineQuality: 0,
+        sketchCompleteness: 0,
+        sketchVanishingPoints: []
+      });
+    }
+  }, [sourceImage, updateWf]);
 
   const handleAddReference = useCallback(() => {
     fileInputRef.current?.click();
@@ -266,6 +279,12 @@ export const LeftSketchPanel = () => {
   );
 
   const vanishingPoints = wf.sketchVanishingPoints || [];
+  const hasAnalysis = Boolean(
+    wf.sketchDetectedPerspective ||
+      wf.sketchLineQuality > 0 ||
+      wf.sketchCompleteness > 0 ||
+      vanishingPoints.length > 0
+  );
 
   return (
     <div className="space-y-6">
@@ -284,24 +303,19 @@ export const LeftSketchPanel = () => {
           <button
             type="button"
             className={cn(
-              'w-full h-9 rounded-md border text-xs font-medium transition-all',
-              wf.sketchAutoDetect
-                ? 'border-accent bg-accent/10 text-foreground shadow-sm'
-                : 'border-border text-foreground-muted hover:text-foreground hover:border-foreground/40'
+              "w-full py-2 text-xs font-semibold rounded border transition-colors",
+              isDetecting || !sourceImage
+                ? "bg-surface-sunken text-foreground-muted border-border"
+                : "bg-foreground text-background border-foreground hover:opacity-90"
             )}
-            onClick={() => updateWf({ sketchAutoDetect: !wf.sketchAutoDetect })}
+            onClick={handleAnalyzeSketch}
+            disabled={!sourceImage || isDetecting}
           >
-            Auto-detect Analysis {wf.sketchAutoDetect ? 'On' : 'Off'}
+            {isDetecting ? 'Analyzing Sketch...' : 'Analyze Sketch'}
           </button>
-          {wf.sketchAutoDetect && !sourceImage && (
+          {!sourceImage && (
             <div className="text-[10px] text-foreground-muted">
               Upload a sketch to analyze.
-            </div>
-          )}
-          {wf.sketchAutoDetect && isDetecting && (
-            <div className="flex items-center gap-2 text-[10px] text-foreground-muted">
-              <RefreshCw size={12} className="animate-spin" />
-              Analyzing sketch...
             </div>
           )}
           <div>
@@ -321,24 +335,36 @@ export const LeftSketchPanel = () => {
           <div className="rounded-lg border border-border bg-surface-elevated p-3 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-foreground-muted">Detected Perspective</span>
-              <span className="font-medium text-foreground">{formatPerspectiveLabel(wf.sketchDetectedPerspective)}</span>
+              <span className="font-medium text-foreground">
+                {hasAnalysis ? formatPerspectiveLabel(wf.sketchDetectedPerspective) : 'Not analyzed'}
+              </span>
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-foreground-muted">Line Quality</span>
-                <span className="font-medium text-foreground">{wf.sketchLineQuality}%</span>
+                <span className="font-medium text-foreground">
+                  {hasAnalysis ? `${wf.sketchLineQuality}%` : '—'}
+                </span>
               </div>
               <div className="h-1 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-accent" style={{ width: `${wf.sketchLineQuality}%` }} />
+                <div
+                  className="h-full bg-accent"
+                  style={{ width: `${hasAnalysis ? wf.sketchLineQuality : 0}%` }}
+                />
               </div>
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-foreground-muted">Completeness</span>
-                <span className="font-medium text-foreground">{wf.sketchCompleteness}%</span>
+                <span className="font-medium text-foreground">
+                  {hasAnalysis ? `${wf.sketchCompleteness}%` : '—'}
+                </span>
               </div>
               <div className="h-1 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: `${wf.sketchCompleteness}%` }} />
+                <div
+                  className="h-full bg-emerald-500"
+                  style={{ width: `${hasAnalysis ? wf.sketchCompleteness : 0}%` }}
+                />
               </div>
             </div>
           </div>
@@ -454,8 +480,10 @@ export const LeftSketchPanel = () => {
           </div>
           <div className="rounded-lg border border-border bg-surface-elevated p-3">
             <div className="text-[10px] text-foreground-muted mb-2">Vanishing Points</div>
-            {vanishingPoints.length === 0 ? (
-              <div className="text-xs text-foreground-muted">None detected yet.</div>
+            {!hasAnalysis ? (
+              <div className="text-xs text-foreground-muted">Not analyzed yet.</div>
+            ) : vanishingPoints.length === 0 ? (
+              <div className="text-xs text-foreground-muted">None detected.</div>
             ) : (
               <div className="flex flex-wrap gap-2 text-[10px]">
                 {vanishingPoints.map((point, index) => (
@@ -609,11 +637,15 @@ export const LeftSketchPanel = () => {
             ))}
             <button
               type="button"
-              className="aspect-[4/3] rounded-lg border border-dashed border-border flex flex-col items-center justify-center gap-1 text-foreground-muted hover:text-foreground hover:border-foreground-muted transition-colors"
+              className={cn(
+                "aspect-[4/3] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 text-foreground transition-colors",
+                "border-foreground/40 bg-surface-sunken hover:border-foreground hover:bg-foreground hover:text-background"
+              )}
               onClick={handleAddReference}
             >
-              <Plus size={16} />
-              <span className="text-[10px]">Add</span>
+              <Plus size={18} />
+              <div className="text-[11px] font-semibold uppercase tracking-wider">Add Reference</div>
+              <div className="text-[9px] text-foreground-muted/80">Style · Material · Mood</div>
             </button>
           </div>
 
