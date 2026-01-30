@@ -11,7 +11,8 @@
       "Bash(gcloud auth application-default print-access-token:*)",
       "Bash(curl:*)",
       "Bash(vercel:*)",
-      "WebFetch(domain:www.iloveapi.com)"
+      "WebFetch(domain:www.iloveapi.com)",
+      "WebFetch(domain:docs.cloud.google.com)"
     ]
   }
 }

@@ -697,6 +697,7 @@ export interface WorkflowSettings {
   imgToCadLine: { sensitivity: number; simplify: number; connect: boolean };
   imgToCadLayers: { walls: boolean; windows: boolean; details: boolean; hidden: boolean };
   imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
+  imgToCadPreprocess: { guidance: string; focus: string[] };
 
   // 11. Image to 3D
   img3dInputs: { id: string; view: string; isPrimary: boolean; url?: string }[];

@@ -2818,6 +2818,53 @@ function generateSketchPrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function generateImageToCadPrompt(state: AppState): string {
+  const { workflow } = state;
+  const parts: string[] = [];
+
+  if (state.prompt?.trim()) {
+    parts.push(state.prompt.trim());
+  } else {
+    parts.push('Convert this image into a clean, accurate CAD drawing.');
+  }
+
+  const typeDesc: Record<string, string> = {
+    photo: 'The source is a photograph, so infer true edges and geometry from perspective cues.',
+    render: 'The source is a render, so treat visible edges and material boundaries as authoritative.',
+  };
+  parts.push(typeDesc[workflow.imgToCadType] || `The source is a ${workflow.imgToCadType}.`);
+
+  const outputDesc: Record<string, string> = {
+    elevation: 'Produce an orthographic elevation with true proportions and no perspective distortion.',
+    plan: 'Produce a clean plan view with consistent line weights and legible wall thickness.',
+    detail: 'Produce a close-up detail drawing with accurate joints and edge conditions.',
+  };
+  parts.push(outputDesc[workflow.imgToCadOutput] || `Produce a ${workflow.imgToCadOutput} drawing.`);
+
+  const line = workflow.imgToCadLine;
+  parts.push(`Line sensitivity: ${line.sensitivity}/100, simplification: ${line.simplify}/100, connect gaps: ${line.connect ? 'yes' : 'no'}.`);
+
+  const layers: string[] = [];
+  if (workflow.imgToCadLayers.walls) layers.push('walls');
+  if (workflow.imgToCadLayers.windows) layers.push('windows');
+  if (workflow.imgToCadLayers.details) layers.push('details');
+  if (workflow.imgToCadLayers.hidden) layers.push('hidden lines');
+  if (layers.length > 0) {
+    parts.push(`Include CAD layers for ${layers.join(', ')}.`);
+  }
+
+  if (workflow.imgToCadPreprocess?.guidance) {
+    parts.push(`AI pre-processing guidance: ${workflow.imgToCadPreprocess.guidance}`);
+  }
+  if (workflow.imgToCadPreprocess?.focus?.length) {
+    parts.push(`Prioritize: ${workflow.imgToCadPreprocess.focus.join(', ')}.`);
+  }
+
+  parts.push(`Export as ${workflow.imgToCadFormat.toUpperCase()} with clean, continuous polylines and readable line hierarchy.`);
+
+  return parts.filter(Boolean).join(' ');
+}
+
 function generateUpscalePrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
@@ -3675,6 +3722,9 @@ export function generatePrompt(state: AppState): string {
 
   if (state.mode === 'render-sketch') {
     return generateSketchPrompt(state);
+  }
+  if (state.mode === 'img-to-cad') {
+    return generateImageToCadPrompt(state);
   }
   if (state.mode === 'upscale') {
     return generateUpscalePrompt(state);

@@ -655,6 +655,7 @@ const initialWorkflow: WorkflowSettings = {
   imgToCadLine: { sensitivity: 50, simplify: 20, connect: true },
   imgToCadLayers: { walls: true, windows: true, details: true, hidden: false },
   imgToCadFormat: 'dxf',
+  imgToCadPreprocess: { guidance: '', focus: [] },
 
   // 11. Image to 3D
   img3dInputs: [],

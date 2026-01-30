@@ -551,7 +551,7 @@ export function useGeneration(): UseGenerationReturn {
       'render-sketch': 'Transform this sketch into a photorealistic render: ',
       'multi-angle': 'Generate a photorealistic architectural view: ',
       'upscale': 'Enhance and upscale this architectural image: ',
-      'img-to-cad': 'Analyze this architectural image: ',
+      'img-to-cad': 'Convert this image into a CAD drawing: ',
       'img-to-3d': 'Generate 3D model visualization from this image: ',
       'video': 'Generate an architectural visualization video: ',
       'material-validation': 'Analyze materials in this architectural image: ',
@@ -650,7 +650,8 @@ export function useGeneration(): UseGenerationReturn {
         'masterplan',
         'exploded',
         'section',
-        'multi-angle'
+        'multi-angle',
+        'img-to-cad'
       ];
       const isSourceLockedMode = sourceLockedModes.includes(state.mode);
       const sourceImage = state.sourceImage || state.uploadedImage;
