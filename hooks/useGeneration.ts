@@ -1129,6 +1129,8 @@ export function useGeneration(): UseGenerationReturn {
         const span = azEnd - azStart;
         const fullCircle = Math.abs(span - 360) < 0.001;
         const step = count > 1 ? (fullCircle ? span / count : span / (count - 1)) : 0;
+
+        // Calculate angle views based on distribution mode
         const angleViews = wf.multiAngleDistribution === 'manual' && wf.multiAngleAngles.length > 0
           ? wf.multiAngleAngles.slice(0, count)
           : Array.from({ length: count }, (_, index) => {
@@ -1138,6 +1140,11 @@ export function useGeneration(): UseGenerationReturn {
                 elevation: Math.round((elStart + (elEnd - elStart) * t) * 10) / 10,
               };
             });
+
+        // Log the current resolution being used
+        const currentConfig = buildGenerationConfig(state, aspectRatioOverride);
+        const currentResolution = currentConfig.imageConfig?.imageSize || '2K';
+        console.log(`Multi-angle: Generating ${count} views at ${currentResolution} resolution`);
 
         const outputs: Array<{ id: string; name: string; url: string }> = [];
         const imagesOut: GeneratedImage[] = [];
@@ -1177,71 +1184,188 @@ export function useGeneration(): UseGenerationReturn {
           return 'front-left';
         };
 
+        // Build descriptions for each angle
+        const angleDescriptions: string[] = [];
         for (let i = 0; i < angleViews.length; i++) {
-          if (abortSignal.aborted) {
-            throw new DOMException('Request aborted', 'AbortError');
-          }
           const view = angleViews[i];
           const azimuth = normalizeAzimuth(view.azimuth);
           const elevation = view.elevation;
           const direction = compassLabel(azimuth);
-          const facadeView = facadeDescriptor(azimuth);
-          const anglePrompt = [
-            'ANGLE-SPECIFIC INSTRUCTIONS (non-negotiable):',
-            `View ${i + 1}/${angleViews.length}.`,
-            `Rotate the camera ${azimuth} deg clockwise around the building relative to the INPUT IMAGE (treat input view as 0 deg).`,
-            `Camera azimuth: ${azimuth} deg (0 deg=front, 90 deg=right, 180 deg=back, 270 deg=left).`,
-            `Camera elevation: ${elevation} deg above the horizon.`,
-            'Keep a fixed orbit radius, centered on the building, and look directly at the building center.',
-            `Primary facade view MUST be: ${facadeView}. The ${facadeView} facades must dominate the frame.`,
-            `Visible facade orientation must match the ${direction} (${azimuth} deg) orbit position.`,
-            'This output MUST be visibly different from the other angles. Do NOT reuse the input viewpoint.',
-            'If there is any conflict, prioritize the specified angle over the input viewpoint.',
-            'Keep lens, exposure, and framing consistent; only the camera position changes.',
-            fullPrompt,
-          ].join(' ');
-          const angleResult = await runWithRetry(
-            `multi-angle view ${i + 1}`,
-            () => service.generateImages({
-              prompt: anglePrompt,
-              images: images.length > 0 ? images : undefined,
-              generationConfig: generationConfigWithAbort
-            })
-          );
-          if (angleResult.images?.[0]) {
-            const generated = angleResult.images[0];
-            outputs.push({
-              id: nanoid(),
-              name: `Angle ${i + 1} (${azimuth} deg ${direction} / ${elevation} deg)`,
-              url: generated.dataUrl
-            });
-            imagesOut.push({
-              base64: generated.base64,
-              mimeType: generated.mimeType,
-              dataUrl: generated.dataUrl
-            });
-            dispatch({
-              type: 'ADD_HISTORY',
-              payload: {
-                id: nanoid(),
-                timestamp: Date.now(),
-                thumbnail: generated.dataUrl,
-                prompt: anglePrompt,
-                attachments: attachmentUrls,
-                mode: state.mode,
-                settings: {
-                  kind: 'multi-angle',
-                  azimuth,
-                  elevation,
-                  direction,
-                  index: i + 1
-                }
-              }
-            });
+
+          let viewName = '';
+          let cameraTransform = '';
+
+          if (azimuth === 0) {
+            viewName = 'Front';
+            cameraTransform = '0-degree rotation around the Y-axis (front view)';
+          } else if (azimuth === 90) {
+            viewName = 'Profile (Right)';
+            cameraTransform = '90-degree rotation around the Y-axis to show the right side';
+          } else if (azimuth === 180) {
+            viewName = 'Rear';
+            cameraTransform = '180-degree rotation around the Y-axis to show the back';
+          } else if (azimuth === 270) {
+            viewName = 'Profile (Left)';
+            cameraTransform = '270-degree rotation around the Y-axis to show the left side';
+          } else {
+            viewName = `Angle ${azimuth}°`;
+            cameraTransform = `${azimuth}-degree rotation around the Y-axis`;
           }
-          const progress = Math.round(((i + 1) / angleViews.length) * 90);
-          updateProgress(progress);
+
+          if (elevation !== 0) {
+            cameraTransform += ` and ${Math.abs(elevation)}-degree tilt ${elevation > 0 ? 'down' : 'up'} on the X-axis`;
+          }
+
+          angleDescriptions.push(`Panel ${i + 1} (${viewName}): ${cameraTransform}`);
         }
+
+        // Determine optimal grid layout for various view counts
+        let gridRows = 1;
+        let gridCols = count;
+
+        if (count === 1) {
+          gridRows = 1;
+          gridCols = 1;
+        } else if (count === 2) {
+          gridRows = 1;
+          gridCols = 2;
+        } else if (count === 3) {
+          gridRows = 1;
+          gridCols = 3;
+        } else if (count === 4) {
+          gridRows = 2;
+          gridCols = 2;
+        } else if (count === 5) {
+          gridRows = 2;
+          gridCols = 3; // 2x3 grid with one empty slot
+        } else if (count === 6) {
+          gridRows = 2;
+          gridCols = 3;
+        } else if (count === 7) {
+          gridRows = 2;
+          gridCols = 4; // 2x4 grid with one empty slot
+        } else if (count === 8) {
+          gridRows = 2;
+          gridCols = 4;
+        } else if (count === 9) {
+          gridRows = 3;
+          gridCols = 3;
+        } else if (count === 10) {
+          gridRows = 2;
+          gridCols = 5;
+        } else if (count === 12) {
+          gridRows = 3;
+          gridCols = 4;
+        } else {
+          // For other counts, create a 2-row layout
+          gridRows = 2;
+          gridCols = Math.ceil(count / 2);
+        }
+
+        console.log(`Multi-angle: Creating ${gridRows}x${gridCols} grid for ${count} views`);
+
+        // Map panel numbers to letters
+        const panelLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+
+        // Build frame descriptions with letters
+        const frameDescriptions: string[] = [];
+        for (let i = 0; i < angleViews.length; i++) {
+          const view = angleViews[i];
+          const azimuth = normalizeAzimuth(view.azimuth);
+          const elevation = view.elevation;
+          const letter = panelLetters[i] || `${i + 1}`;
+
+          let frameDesc = '';
+          if (azimuth === 0 && elevation === 0) {
+            frameDesc = `Frame ${letter} (Front): The original view for reference.`;
+          } else if (azimuth === 90 && elevation === 0) {
+            frameDesc = `Frame ${letter} (Profile): A 90-degree rotation around the Y-axis to show the right side.`;
+          } else if (azimuth === 180 && elevation === 0) {
+            frameDesc = `Frame ${letter} (Rear): A 180-degree rotation around the Y-axis to show the back.`;
+          } else if (azimuth === 270 && elevation === 0) {
+            frameDesc = `Frame ${letter} (Left Profile): A 270-degree rotation around the Y-axis to show the left side.`;
+          } else {
+            let rotationDesc = `A ${azimuth}-degree rotation around the Y-axis`;
+            if (elevation !== 0) {
+              rotationDesc += ` and a ${Math.abs(elevation)}-degree tilt ${elevation > 0 ? 'down' : 'up'} on the X-axis`;
+            }
+            frameDesc = `Frame ${letter}: ${rotationDesc}.`;
+          }
+          frameDescriptions.push(frameDesc);
+        }
+
+        // Build the grid prompt using the exact structure that works
+        const gridPrompt = [
+          `Act as a 3D camera operator. Using the attached image as the absolute geometric reference, generate a multi-angle orthographic study of this building. Keep the internal proportions, textures, and material properties 100% consistent.`,
+          ``,
+          `Render a ${gridRows}x${gridCols} grid showing the following specific camera transformations:`,
+          ``,
+          ...frameDescriptions,
+          ``,
+          `IMPORTANT: Do not add any text labels, letters, or markings (A, B, C, etc.) to the images. Generate clean panels without any annotations.`,
+          ``,
+          `Lighting Instruction: Maintain a fixed global light source so that shadows shift realistically as the camera moves around the building. No hallucinations or added features.`,
+          ``,
+          fullPrompt ? `Additional requirements: ${fullPrompt}` : '',
+        ].filter(p => p.trim()).join(' ');
+
+        updateProgress(10);
+
+        // Use the global generation config (respects user's resolution choice)
+        const gridGenerationConfig = {
+          ...generationConfig,
+          abortSignal
+        };
+
+        // Generate the grid image
+        const gridResult = await runWithRetry(
+          'multi-angle grid',
+          () => service.generateImages({
+            prompt: gridPrompt,
+            images: images.length > 0 ? images : undefined,
+            generationConfig: gridGenerationConfig
+          })
+        );
+
+        if (!gridResult.images?.[0]) {
+          throw new Error('No grid image generated');
+        }
+
+        updateProgress(70);
+
+        const gridImage = gridResult.images[0];
+
+        // TODO: Split the grid into individual panels
+        // For now, just store the full grid
+        outputs.push({
+          id: nanoid(),
+          name: `Multi-angle Grid (${count} views)`,
+          url: gridImage.dataUrl
+        });
+
+        imagesOut.push({
+          base64: gridImage.base64,
+          mimeType: gridImage.mimeType,
+          dataUrl: gridImage.dataUrl
+        });
+
+        dispatch({
+          type: 'ADD_HISTORY',
+          payload: {
+            id: nanoid(),
+            timestamp: Date.now(),
+            thumbnail: gridImage.dataUrl,
+            prompt: gridPrompt,
+            attachments: attachmentUrls,
+            mode: state.mode,
+            settings: {
+              kind: 'multi-angle',
+              gridLayout: `${gridRows}x${gridCols}`
+            }
+          }
+        });
+
+        updateProgress(90);
 
         dispatch({ type: 'UPDATE_WORKFLOW', payload: { multiAngleOutputs: outputs } });
         result = { text: null, images: imagesOut };

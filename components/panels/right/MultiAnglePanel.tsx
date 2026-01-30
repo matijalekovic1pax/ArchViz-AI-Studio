@@ -79,9 +79,26 @@ export const MultiAnglePanel = () => {
       }
       return;
     }
-    const nextValue = clamp(value, 1, 36);
+    const nextValue = clamp(value, 1, 12);
     updateWf({ multiAngleViewCount: nextValue });
     setCustomCount(String(nextValue));
+
+    // Auto-adjust resolution based on view count
+    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
+    if (nextValue >= 9) {
+      recommendedResolution = '8k';
+    } else if (nextValue >= 5) {
+      recommendedResolution = '4k';
+    } else {
+      recommendedResolution = '2k';
+    }
+
+    // Update global resolution setting
+    dispatch({
+      type: 'UPDATE_OUTPUT',
+      payload: { resolution: recommendedResolution }
+    });
+
     if (wf.multiAngleDistribution === 'even') {
       updateWf({
         multiAngleAngles: buildEvenAngles(nextValue, wf.multiAngleAzimuthRange, wf.multiAngleElevationRange),
@@ -145,11 +162,30 @@ export const MultiAnglePanel = () => {
       { id: nanoid(), azimuth: 0, elevation: wf.multiAngleElevationRange[0] },
     ];
     updateWf({ multiAngleAngles: next, multiAngleViewCount: next.length, multiAngleDistribution: 'manual' });
+
+    // Auto-adjust resolution based on new count
+    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
+    if (next.length >= 9) {
+      recommendedResolution = '8k';
+    } else if (next.length >= 5) {
+      recommendedResolution = '4k';
+    }
+    dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution: recommendedResolution } });
   };
 
   const handleRemovePoint = (id: string) => {
     const next = wf.multiAngleAngles.filter((point) => point.id !== id);
-    updateWf({ multiAngleAngles: next, multiAngleViewCount: Math.max(1, next.length) });
+    const newCount = Math.max(1, next.length);
+    updateWf({ multiAngleAngles: next, multiAngleViewCount: newCount });
+
+    // Auto-adjust resolution based on new count
+    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
+    if (newCount >= 9) {
+      recommendedResolution = '8k';
+    } else if (newCount >= 5) {
+      recommendedResolution = '4k';
+    }
+    dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution: recommendedResolution } });
   };
 
   const previewPoints = useMemo(() => {
@@ -178,7 +214,7 @@ export const MultiAnglePanel = () => {
             <input
               type="number"
               min={1}
-              max={36}
+              max={12}
               value={customCount}
               onChange={(event) => {
                 const nextValue = event.target.value;

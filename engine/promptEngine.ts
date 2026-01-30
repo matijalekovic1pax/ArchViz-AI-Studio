@@ -3022,46 +3022,69 @@ function generateImageTo3DPrompt(state: AppState): string {
 }
 
 function generateMultiAnglePrompt(state: AppState): string {
-  const { workflow, activeStyleId, customStyles, lighting, context, camera } = state;
+  const { workflow, activeStyleId, customStyles, lighting, context } = state;
   const parts: string[] = [];
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
   const isNoStyle = style?.id === 'no-style';
-  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
 
-  // Evocative opening (single view)
-  if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+  const count = Math.max(1, workflow.multiAngleViewCount);
+
+  // Determine optimal grid layout (matches useGeneration.ts logic)
+  let gridRows = 1;
+  let gridCols = count;
+
+  if (count === 1) {
+    gridRows = 1;
+    gridCols = 1;
+  } else if (count === 2) {
+    gridRows = 1;
+    gridCols = 2;
+  } else if (count === 3) {
+    gridRows = 1;
+    gridCols = 3;
+  } else if (count === 4) {
+    gridRows = 2;
+    gridCols = 2;
+  } else if (count === 5) {
+    gridRows = 2;
+    gridCols = 3;
+  } else if (count === 6) {
+    gridRows = 2;
+    gridCols = 3;
+  } else if (count === 7) {
+    gridRows = 2;
+    gridCols = 4;
+  } else if (count === 8) {
+    gridRows = 2;
+    gridCols = 4;
+  } else if (count === 9) {
+    gridRows = 3;
+    gridCols = 3;
+  } else if (count === 10) {
+    gridRows = 2;
+    gridCols = 5;
+  } else if (count === 12) {
+    gridRows = 3;
+    gridCols = 4;
   } else {
-    parts.push('Generate a single photorealistic architectural view of the subject at the specified camera angle.');
+    gridRows = 2;
+    gridCols = Math.ceil(count / 2);
   }
 
-  // Preset descriptions (single view guidance)
-  const presetDescriptions: Record<string, string> = {
-    turntable: 'Use a turntable-style viewpoint around the building, orbiting at a fixed distance and steady eye level.',
-    architectural: 'Capture the building from a professional architectural photography angle at eye level, keeping vertical lines perfectly straight.',
-    'birds-eye': 'View the building from an elevated angle that reveals the roof forms, site relationships, and overall massing.',
-    custom: 'Follow the precisely specified camera position and angle.',
-  };
-  parts.push(presetDescriptions[workflow.multiAnglePreset] || '');
+  // Core multi-angle instruction
+  parts.push(`Act as a 3D camera operator. Using the attached image as the absolute geometric reference, generate a multi-angle orthographic study of this building. Keep the internal proportions, textures, and material properties 100% consistent.`);
+  parts.push(`Render a ${gridRows}x${gridCols} grid showing ${count} different camera angles with Y-axis rotations (0°, 90°, 180°, 270°, etc.).`);
+  parts.push(`Lighting Instruction: Maintain a fixed global light source so that shadows shift realistically as the camera moves around the building. No hallucinations or added features.`);
 
-  // Style
-  if (!isNoStyle && style) {
-    parts.push(`Render all views in the ${style.name} style.`);
-    if (style.description) {
-      parts.push(style.description);
-    }
-    if (style.promptBundle) {
-      const vocab = style.promptBundle.architectureVocabulary || [];
-      const mats = style.promptBundle.materialBias || {};
-      if (vocab.length > 0) {
-        parts.push(`The architecture should express ${vocab.slice(0, 3).join(', ')}.`);
-      }
-      const primaryMats = mats.primary || [];
-      if (primaryMats.length > 0) {
-        parts.push(`Feature materials including ${primaryMats.join(', ')}.`);
-      }
-    }
+  // User's custom prompt/description
+  if (state.prompt?.trim()) {
+    parts.push(`Additional requirements: ${state.prompt.trim()}`);
+  }
+
+  // Style description
+  if (!isNoStyle && style && style.description) {
+    parts.push(`Style: ${style.description}`);
   }
 
   // Lighting description
@@ -3081,34 +3104,16 @@ function generateMultiAnglePrompt(state: AppState): string {
     'overcast': 'under soft overcast conditions',
     'stormy': 'with dramatic storm clouds',
   };
-  parts.push(`Illuminate this view with ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}, with ${lighting.cloudType} cloud formations.`);
+  parts.push(`Lighting: ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}.`);
 
-  // Context
+  // Context description
   if (context.vegetation) {
     const vegDesc = context.vegetationDensity > 50 ? 'lush, abundant' : 'tasteful, restrained';
-    parts.push(`Surround the building with ${vegDesc} ${context.season} landscaping.`);
+    parts.push(`Landscape: ${vegDesc} ${context.season} landscaping.`);
   }
   if (context.people) {
-    parts.push('Include people to provide human scale and life to the scenes.');
+    parts.push('Include people for scale.');
   }
-
-  // Camera
-  parts.push(`Use ${camera.viewType} framing with ${camera.projection} projection.`);
-
-  // Consistency constraints
-  if (hasSourceImage) {
-    parts.push('The reference image establishes the exact subject, scale, and material appearance that must be maintained across all views.');
-  }
-
-  parts.push('Critical consistency requirements: The building must be identical across the multi-angle set - same geometry, same proportions, same materials, same colors. Only the camera angle changes. Maintain consistent focal length, lens characteristics, and relative scale so the building appears the same size regardless of angle.');
-
-  if (workflow.multiAngleLockConsistency) {
-    parts.push('Lock all environmental factors across the multi-angle set: same lighting direction, same exposure level, same weather, same time of day, same color grading, same background and sky. The only difference between views should be the camera position.');
-  } else {
-    parts.push('Maintain consistent materials and overall style. Allow only the natural, subtle lighting variations that would occur from viewing the same scene at different angles (different shadows, slightly different sky appearance).');
-  }
-
-  parts.push('Do not add, remove, or swap any objects, vegetation, vehicles, or people between views. Every element that appears in one view must appear identically in all views, only seen from a different angle.');
 
   return parts.filter(p => p.trim()).join(' ');
 }
