@@ -1375,6 +1375,7 @@ export function useGeneration(): UseGenerationReturn {
         updateProgress(10);
         const wf = state.workflow;
         const queued = wf.upscaleBatch.map((item) => ({ ...item }));
+        const failedItems: typeof queued = []; // Track failed items to keep them in the batch
         const syncUpscaleBatch = (nextBatch: typeof queued) => {
           upscaleBatchSnapshotRef.current = nextBatch.map((item) => ({ ...item }));
           dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...nextBatch] } });
@@ -1391,6 +1392,18 @@ export function useGeneration(): UseGenerationReturn {
             throw new DOMException('Request aborted', 'AbortError');
           }
           const item = queued[0];
+
+          // Skip items that are already in failed status (from previous runs)
+          if (item.status === 'failed') {
+            failedItems.push(item);
+            queued.shift();
+            processedCount += 1;
+            const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
+            updateProgress(progress);
+            syncUpscaleBatch([...failedItems, ...queued]);
+            continue;
+          }
+
           if (item.status === 'done' && item.url) {
             const existing = dataUrlToImageData(item.url);
             if (existing) {
@@ -1404,7 +1417,7 @@ export function useGeneration(): UseGenerationReturn {
             processedCount += 1;
             const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
             updateProgress(progress);
-            syncUpscaleBatch(queued);
+            syncUpscaleBatch([...failedItems, ...queued]);
             continue;
           }
           if (!item.url) {
@@ -1412,7 +1425,7 @@ export function useGeneration(): UseGenerationReturn {
             processedCount += 1;
             const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
             updateProgress(progress);
-            syncUpscaleBatch(queued);
+            syncUpscaleBatch([...failedItems, ...queued]);
             continue;
           }
           const currentRetryCount = item.retryCount || 0;
@@ -1525,16 +1538,19 @@ export function useGeneration(): UseGenerationReturn {
             }
           }
 
-          // If all retries failed, mark as failed and continue to next image
+          // If all retries failed, mark as failed and keep in batch so user can retry
           if (!upscaleSuccess) {
             const errorMessage = lastError?.message || 'Upscale failed after multiple attempts';
             console.error(`All ${MAX_RETRIES + 1} attempts failed for ${item.name}: ${errorMessage}`);
-            queued[0] = {
+            const failedItem = {
               ...item,
-              status: 'failed',
+              status: 'failed' as const,
               retryCount: MAX_RETRIES + 1,
               error: errorMessage
             };
+
+            // Add to failed items to keep in batch
+            failedItems.push(failedItem);
 
             // Show alert for the failed image but continue processing
             dispatch({
@@ -1542,7 +1558,7 @@ export function useGeneration(): UseGenerationReturn {
               payload: {
                 id: nanoid(),
                 tone: 'warning',
-                message: `Failed to upscale "${item.name}" after ${MAX_RETRIES + 1} attempts. Continuing with remaining images.`
+                message: `Failed to upscale "${item.name}" after ${MAX_RETRIES + 1} attempts. Image kept in queue for retry.`
               }
             });
           }
@@ -1551,7 +1567,7 @@ export function useGeneration(): UseGenerationReturn {
           processedCount += 1;
           const progress = Math.round((processedCount / Math.max(totalCount, 1)) * 90);
           updateProgress(progress);
-          syncUpscaleBatch(queued);
+          syncUpscaleBatch([...failedItems, ...queued]);
         }
 
         upscaleBatchSnapshotRef.current = null;
@@ -1659,6 +1675,8 @@ export function useGeneration(): UseGenerationReturn {
               quality: videoState.quality,
               transitionEffect: videoState.transitionEffect,
               seed: videoState.seedLocked ? videoState.seed : undefined,
+              generateAudio: videoState.generateAudio,
+              personGeneration: videoState.personGeneration,
               klingProvider: videoState.klingProvider,
               onProgress: onVideoProgress,
               abortSignal

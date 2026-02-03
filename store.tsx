@@ -10,13 +10,15 @@ const initialVideoState: VideoState = {
   compareMode: false,
   accessUnlocked: false,
 
-  duration: 10,
+  duration: 8,
   resolution: '1080p',
   fps: 30,
   aspectRatio: '16:9',
   motionAmount: 5,
   seed: 123456,
   seedLocked: false,
+  generateAudio: false,
+  personGeneration: 'allow_adult',
 
   camera: {
     type: 'static',

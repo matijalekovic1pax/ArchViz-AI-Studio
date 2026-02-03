@@ -48,6 +48,8 @@ export interface VideoGenerationOptions {
   quality: 'draft' | 'standard' | 'high' | 'ultra';
   transitionEffect: 'cut' | 'fade' | 'dissolve' | 'wipe' | 'none';
   seed?: number;
+  generateAudio?: boolean;
+  personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
   klingProvider: KlingProvider;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
@@ -119,6 +121,8 @@ class VideoGenerationService {
       aspectRatio: options.aspectRatio,
       resolution: options.resolution,
       seed: options.seed,
+      generateAudio: options.generateAudio,
+      personGeneration: options.personGeneration,
       responseCount: 1,
       onProgress: options.onProgress,
       abortSignal: options.abortSignal
@@ -247,7 +251,7 @@ class VideoGenerationService {
         maxDuration: 8,
         maxResolution: '4k',
         supportsCameraControls: false,
-        supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '21:9'],
+        supportedAspectRatios: ['16:9', '9:16'],
         supportsMultipleKeyframes: false
       };
     } else {
@@ -299,6 +303,7 @@ class VideoGenerationService {
    */
   adjustOptionsForModel(options: VideoGenerationOptions): VideoGenerationOptions {
     const capabilities = this.getModelCapabilities(options.model);
+    const fallbackAspectRatio = capabilities.supportedAspectRatios[0];
 
     return {
       ...options,
@@ -306,6 +311,9 @@ class VideoGenerationService {
       resolution: options.resolution === '4k' && capabilities.maxResolution !== '4k'
         ? capabilities.maxResolution
         : options.resolution,
+      aspectRatio: capabilities.supportedAspectRatios.includes(options.aspectRatio)
+        ? options.aspectRatio
+        : fallbackAspectRatio,
       camera: !capabilities.supportsCameraControls
         ? { ...options.camera, type: 'static' }
         : options.camera

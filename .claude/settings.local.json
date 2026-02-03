@@ -12,7 +12,9 @@
       "Bash(curl:*)",
       "Bash(vercel:*)",
       "WebFetch(domain:www.iloveapi.com)",
-      "WebFetch(domain:docs.cloud.google.com)"
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:discuss.ai.google.dev)"
     ]
   }
 }

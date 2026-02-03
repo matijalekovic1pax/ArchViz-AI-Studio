@@ -777,6 +777,10 @@ export interface VideoState {
   seed: number;
   seedLocked: boolean;
 
+  // Veo 3.1 Specific Parameters
+  generateAudio?: boolean; // Whether to generate audio (default: false)
+  personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all'; // Person generation setting (default: allow_adult)
+
   // Camera Control
   camera: {
     type: CameraMotionType;

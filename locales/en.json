@@ -645,8 +645,8 @@
       "model": {
         "title": "Video Model",
         "veo": {
-          "name": "Veo 2",
-          "description": "Google's latest video model - max 8s, up to 4K"
+          "name": "Veo 3.1",
+          "description": "High-fidelity 8s videos • 720p/1080p/4K • Portrait & Landscape"
         },
         "kling": {
           "name": "Kling 2.6",

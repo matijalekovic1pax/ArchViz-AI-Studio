@@ -1,6 +1,9 @@
 /**
  * Cloudflare Worker for Veo Video Generation API Proxy
  *
+ * NOTE: This proxy is OPTIONAL and only needed for Vertex AI approach.
+ * For Gemini API (recommended), you DON'T need this proxy!
+ *
  * This worker handles:
  * 1. CORS preflight requests
  * 2. Initiating video generation requests to Vertex AI
@@ -238,11 +241,23 @@ async function handleInitiateGeneration(request) {
       image,
       durationSeconds = 8,
       aspectRatio = '16:9',
+      resolution = '1080p',
+      generateAudio = false,
+      personGeneration = 'allow_adult',
+      seed,
       projectId,
       accessToken
     } = body;
 
-    console.log('🎬 Init:', { duration: durationSeconds, aspectRatio, hasImage: !!image });
+    console.log('🎬 Init:', {
+      duration: durationSeconds,
+      aspectRatio,
+      resolution,
+      generateAudio,
+      personGeneration,
+      hasSeed: !!seed,
+      hasImage: !!image
+    });
 
     if (!projectId || !accessToken) {
       return new Response(
@@ -265,7 +280,11 @@ async function handleInitiateGeneration(request) {
       instances: [instance],
       parameters: {
         durationSeconds,
-        aspectRatio
+        aspectRatio,
+        resolution,
+        generateAudio,
+        personGeneration,
+        ...(seed !== undefined && { seed })
       }
     };
 

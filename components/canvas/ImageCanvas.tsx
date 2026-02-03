@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History } from 'lucide-react';
+import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
@@ -271,6 +271,9 @@ const StandardCanvas: React.FC = () => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -1238,7 +1241,10 @@ const StandardCanvas: React.FC = () => {
       type: 'UPDATE_VIDEO_TIMELINE',
       payload: { duration: videoRef.current.duration }
     });
-  }, [dispatch]);
+    // Initialize volume
+    videoRef.current.volume = volume;
+    videoRef.current.muted = isMuted;
+  }, [dispatch, volume, isMuted]);
 
   const handleTimelineSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
@@ -1250,6 +1256,31 @@ const StandardCanvas: React.FC = () => {
       payload: { currentTime: time }
     });
   }, [dispatch]);
+
+  const handleToggleMute = useCallback(() => {
+    if (!videoRef.current) return;
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    videoRef.current.muted = newMutedState;
+    if (newMutedState) {
+      videoRef.current.volume = 0;
+    } else {
+      videoRef.current.volume = volume;
+    }
+  }, [isMuted, volume]);
+
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    if (!videoRef.current) return;
+    setVolume(newVolume);
+    videoRef.current.volume = newVolume;
+    if (newVolume === 0) {
+      setIsMuted(true);
+      videoRef.current.muted = true;
+    } else if (isMuted) {
+      setIsMuted(false);
+      videoRef.current.muted = false;
+    }
+  }, [isMuted]);
 
   const handleVideoDownload = useCallback(() => {
     const videoUrl = state.workflow.videoState.generatedVideoUrl;
@@ -1644,8 +1675,8 @@ const StandardCanvas: React.FC = () => {
                    ) : (
                       <div className="relative w-full h-full flex items-center justify-center p-4">
                          {isVideo ? (
-                            <div className="relative w-full h-full flex items-center justify-center">
-                               <div className="relative border-2 border-black/10 rounded-xl overflow-hidden bg-black shadow-2xl w-full h-full">
+                            <div className="relative w-full h-full flex items-center justify-center max-w-full max-h-full">
+                               <div className="relative border-2 border-black/10 rounded-xl overflow-hidden bg-black shadow-2xl w-full h-full max-w-full max-h-full">
                                    {isVideoLocked ? (
                                       <div className="absolute inset-0 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
                                          <div className="w-full max-w-md pointer-events-auto">
@@ -1664,30 +1695,86 @@ const StandardCanvas: React.FC = () => {
                                             onPause={() => setIsPlaying(false)}
                                             onEnded={() => setIsPlaying(false)}
                                             loop
+                                            playsInline
                                          />
 
-                                         {/* Playback Controls Overlay */}
+                                         {/* Center Play/Pause Button Overlay */}
                                          <div
-                                            className="absolute inset-0 flex items-center justify-center pointer-events-auto opacity-0 hover:opacity-100 transition-opacity bg-black/10 group"
+                                            className="absolute inset-0 flex items-center justify-center pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-200 group/overlay"
                                             onClick={(e) => { e.stopPropagation(); handleVideoPlayPause(); }}
                                          >
                                             <button
-                                              className="w-20 h-20 bg-white/15 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/25 transition-all text-white border-2 border-white/40 shadow-2xl group-hover:scale-110"
+                                              className="w-24 h-24 bg-white/20 backdrop-blur-lg rounded-full flex items-center justify-center hover:bg-white/30 transition-all duration-300 text-white border-2 border-white/50 shadow-2xl transform group-hover/overlay:scale-110 hover:scale-125"
+                                              aria-label={isPlaying ? 'Pause' : 'Play'}
                                             >
-                                              {isPlaying ? <Pause size={40} fill="currentColor" /> : <Play size={40} fill="currentColor" className="ml-1" />}
+                                              {isPlaying ? (
+                                                <Pause size={48} fill="currentColor" strokeWidth={0} />
+                                              ) : (
+                                                <Play size={48} fill="currentColor" strokeWidth={0} className="ml-2" />
+                                              )}
                                             </button>
                                          </div>
 
                                          {/* Timeline Controls */}
-                                         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-auto">
-                                            <div className="flex items-center gap-3 mb-2">
+                                         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-auto backdrop-blur-sm">
+                                            <div className="flex items-center gap-3">
+                                               {/* Play/Pause Button */}
                                                <button
                                                   onClick={(e) => { e.stopPropagation(); handleVideoPlayPause(); }}
-                                                  className="p-2 text-white hover:bg-white/20 rounded-full transition-all"
+                                                  className="p-2.5 text-white hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-110"
+                                                  aria-label={isPlaying ? 'Pause' : 'Play'}
                                                >
-                                                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                                                  {isPlaying ? <Pause size={22} strokeWidth={2.5} /> : <Play size={22} strokeWidth={2.5} className="ml-0.5" />}
                                                </button>
 
+                                               {/* Volume Control */}
+                                               <div
+                                                  className="relative flex items-center gap-2 group/volume"
+                                                  onMouseEnter={() => setShowVolumeSlider(true)}
+                                                  onMouseLeave={() => setShowVolumeSlider(false)}
+                                               >
+                                                  <button
+                                                     onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
+                                                     className="p-2.5 text-white hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-110"
+                                                     aria-label={isMuted ? 'Unmute' : 'Mute'}
+                                                  >
+                                                     {isMuted || volume === 0 ? (
+                                                        <VolumeX size={22} strokeWidth={2.5} />
+                                                     ) : volume < 0.5 ? (
+                                                        <Volume1 size={22} strokeWidth={2.5} />
+                                                     ) : (
+                                                        <Volume2 size={22} strokeWidth={2.5} />
+                                                     )}
+                                                  </button>
+
+                                                  {/* Volume Slider */}
+                                                  <div
+                                                     className={cn(
+                                                        "absolute left-full ml-2 bottom-1/2 translate-y-1/2 transition-all duration-200",
+                                                        showVolumeSlider ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                                                     )}
+                                                  >
+                                                     <div className="bg-black/80 backdrop-blur-md rounded-full px-3 py-2 shadow-xl border border-white/20">
+                                                        <input
+                                                           type="range"
+                                                           min={0}
+                                                           max={1}
+                                                           step={0.01}
+                                                           value={volume}
+                                                           onChange={(e) => {
+                                                              e.stopPropagation();
+                                                              handleVolumeChange(parseFloat(e.target.value));
+                                                           }}
+                                                           className="w-20 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-lg hover:[&::-webkit-slider-thumb]:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                                           style={{
+                                                              background: `linear-gradient(to right, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) ${volume * 100}%, rgba(255,255,255,0.2) ${volume * 100}%, rgba(255,255,255,0.2) 100%)`
+                                                           }}
+                                                        />
+                                                     </div>
+                                                  </div>
+                                               </div>
+
+                                               {/* Timeline Scrubber */}
                                                <div className="flex-1 relative group/timeline">
                                                   <input
                                                      type="range"
@@ -1695,9 +1782,11 @@ const StandardCanvas: React.FC = () => {
                                                      max={state.workflow.videoState.timeline.duration || 100}
                                                      value={state.workflow.videoState.timeline.currentTime}
                                                      onChange={handleTimelineSeek}
-                                                     className="w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer hover:h-2 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-lg hover:[&::-webkit-slider-thumb]:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                                     onClick={(e) => e.stopPropagation()}
+                                                     className="w-full h-2 bg-transparent rounded-full appearance-none cursor-pointer group-hover/timeline:h-2.5 transition-all [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-xl group-hover/timeline:[&::-webkit-slider-thumb]:scale-125 [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-200 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/30"
                                                      style={{
-                                                        background: `linear-gradient(to right, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.2) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.2) 100%)`
+                                                        background: `linear-gradient(to right, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.95) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.25) ${(state.workflow.videoState.timeline.currentTime / (state.workflow.videoState.timeline.duration || 1)) * 100}%, rgba(255,255,255,0.25) 100%)`,
+                                                        borderRadius: '9999px'
                                                      }}
                                                   />
 
@@ -1721,18 +1810,21 @@ const StandardCanvas: React.FC = () => {
                                                   )}
                                                </div>
 
-                                               <div className="text-white text-xs font-mono flex items-center gap-1.5 min-w-[80px]">
-                                                  <span>{formatTime(state.workflow.videoState.timeline.currentTime)}</span>
-                                                  <span className="text-white/50">/</span>
-                                                  <span className="text-white/70">{formatTime(state.workflow.videoState.timeline.duration)}</span>
+                                               {/* Time Display */}
+                                               <div className="text-white text-xs font-mono flex items-center gap-1.5 min-w-[90px] bg-black/30 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                                                  <span className="font-semibold">{formatTime(state.workflow.videoState.timeline.currentTime)}</span>
+                                                  <span className="text-white/40">/</span>
+                                                  <span className="text-white/60">{formatTime(state.workflow.videoState.timeline.duration)}</span>
                                                </div>
 
+                                               {/* Download Button */}
                                                <button
                                                   onClick={(e) => { e.stopPropagation(); handleVideoDownload(); }}
-                                                  className="p-2 text-white hover:bg-white/20 rounded-full transition-all"
+                                                  className="p-2.5 text-white hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-110"
                                                   title={t('rightPanel.video.output.download')}
+                                                  aria-label="Download video"
                                                >
-                                                  <Download size={18} />
+                                                  <Download size={20} strokeWidth={2.5} />
                                                </button>
                                             </div>
                                          </div>

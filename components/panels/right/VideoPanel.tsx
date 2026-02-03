@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
@@ -30,13 +30,50 @@ export const VideoPanel = () => {
    const isVeo = video.model === 'veo-2';
    const isKling = video.model === 'kling-2.6';
    const maxDuration = isVeo ? 8 : 10;
-   const supports4K = isVeo;
    const supportsCameraControls = isKling;
 
-   // Duration options based on mode
-   // Veo image-to-video only supports 4, 6, or 8 seconds
-   const isImageAnimateMode = video.inputMode === 'image-animate';
-   const durationOptions = (isVeo && isImageAnimateMode) ? [4, 6, 8] : [5, 8, 10];
+   // Duration options based on model
+   // Veo 3.1: Supports 4, 6, or 8 seconds (8 seconds for high-fidelity 720p/1080p/4K)
+   // Kling: Supports 5, 8, or 10 seconds
+   const durationOptions = isVeo ? [4, 6, 8] : [5, 8, 10];
+   const aspectRatioOptions = isVeo ? (['16:9', '9:16'] as const) : (['16:9', '9:16', '1:1', '4:3', '21:9'] as const);
+   const resolutionOptions = isVeo ? (['720p', '1080p', '4k'] as const) : (['720p', '1080p'] as const);
+   const fpsOptions = isVeo ? ([24, 30] as const) : ([24, 30, 60] as const);
+
+   useEffect(() => {
+      if (!isVeo) return;
+      const next: Partial<typeof video> = {};
+      if (!aspectRatioOptions.includes(video.aspectRatio)) {
+         next.aspectRatio = '16:9';
+      }
+      if (!durationOptions.includes(video.duration)) {
+         next.duration = 8;
+      }
+      if (!resolutionOptions.includes(video.resolution)) {
+         next.resolution = '1080p';
+      }
+      if (!fpsOptions.includes(video.fps)) {
+         next.fps = 24;
+      }
+      if (video.camera.type !== 'static') {
+         updateCamera({ type: 'static' });
+      }
+      if (Object.keys(next).length > 0) {
+         updateVideo(next);
+      }
+   }, [
+      aspectRatioOptions,
+      durationOptions,
+      fpsOptions,
+      isVeo,
+      resolutionOptions,
+      updateCamera,
+      video.aspectRatio,
+      video.camera.type,
+      video.duration,
+      video.fps,
+      video.resolution
+   ]);
 
    if (isLocked) {
       return <VideoLockBanner compact />;
@@ -94,6 +131,11 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.duration.label')}
             </label>
+            {isVeo && (
+               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
+                  💡 Veo 3.1: 8s recommended for high-fidelity 720p/1080p/4K videos
+               </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                {durationOptions.map(dur => (
                   <button
@@ -120,8 +162,16 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.aspectRatio.label')}
             </label>
-            <div className="grid grid-cols-5 gap-1.5 mb-4">
-               {(['16:9', '9:16', '1:1', '4:3', '21:9'] as const).map(ratio => (
+            {isVeo && (
+               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
+                  📱 Veo 3.1: Supports portrait (9:16) for social media & landscape (16:9)
+               </div>
+            )}
+            <div className={cn(
+               "grid gap-1.5 mb-4",
+               isVeo ? "grid-cols-2" : "grid-cols-5"
+            )}>
+               {aspectRatioOptions.map(ratio => (
                   <button
                      key={ratio}
                      onClick={() => updateVideo({ aspectRatio: ratio })}
@@ -140,17 +190,22 @@ export const VideoPanel = () => {
             <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
                {t('rightPanel.video.resolution.label')}
             </label>
+            {isVeo && (
+               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
+                  ✨ Veo 3.1: Full support for 720p, 1080p & 4K (requires 8s duration)
+               </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-               {(['720p', '1080p', '4k'] as const).map(res => (
+               {resolutionOptions.map(res => (
                   <button
                      key={res}
                      onClick={() => updateVideo({ resolution: res })}
-                     disabled={res === '4k' && !supports4K}
+                     disabled={isVeo && res === '4k' && video.duration < 8}
                      className={cn(
                         "py-2.5 text-xs font-bold border rounded-lg transition-all",
                         video.resolution === res
                            ? "bg-foreground text-background border-foreground"
-                           : res === '4k' && !supports4K
+                           : isVeo && res === '4k' && video.duration < 8
                               ? "bg-surface-sunken text-foreground-muted border-border cursor-not-allowed opacity-40"
                               : "bg-surface-elevated border-border hover:border-foreground-muted"
                      )}
@@ -160,25 +215,29 @@ export const VideoPanel = () => {
                ))}
             </div>
 
-            <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-               {t('rightPanel.video.frameRate.label')}
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-               {[24, 30, 60].map(fps => (
-                  <button
-                     key={fps}
-                     onClick={() => updateVideo({ fps: fps as 24 | 30 | 60 })}
-                     className={cn(
-                        "py-2.5 text-xs font-bold border rounded-lg transition-all",
-                        video.fps === fps
-                           ? "bg-foreground text-background border-foreground"
-                           : "bg-surface-elevated border-border hover:border-foreground-muted"
-                     )}
-                  >
-                     {fps} FPS
-                  </button>
-               ))}
-            </div>
+            {!isVeo && (
+               <>
+                  <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+                     {t('rightPanel.video.frameRate.label')}
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                     {fpsOptions.map(fps => (
+                        <button
+                           key={fps}
+                           onClick={() => updateVideo({ fps: fps as 24 | 30 | 60 })}
+                           className={cn(
+                              "py-2.5 text-xs font-bold border rounded-lg transition-all",
+                              video.fps === fps
+                                 ? "bg-foreground text-background border-foreground"
+                                 : "bg-surface-elevated border-border hover:border-foreground-muted"
+                           )}
+                        >
+                           {fps} FPS
+                        </button>
+                     ))}
+                  </div>
+               </>
+            )}
          </div>
 
          {/* 4. Camera Motion (Kling only) */}
@@ -288,23 +347,61 @@ export const VideoPanel = () => {
                      />
                   </div>
 
-                  <div>
-                     <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                        {t('rightPanel.video.quality.label')}
-                     </label>
-                     <select
-                        value={video.quality}
-                        onChange={(e) => updateVideo({ quality: e.target.value as any })}
-                        className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-                     >
-                        <option value="draft">{t('rightPanel.video.quality.draft')}</option>
-                        <option value="standard">{t('rightPanel.video.quality.standard')}</option>
-                        <option value="high">{t('rightPanel.video.quality.high')}</option>
-                        <option value="ultra">{t('rightPanel.video.quality.ultra')}</option>
-                     </select>
-                  </div>
+                  {isKling && (
+                     <div>
+                        <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
+                           {t('rightPanel.video.quality.label')}
+                        </label>
+                        <select
+                           value={video.quality}
+                           onChange={(e) => updateVideo({ quality: e.target.value as any })}
+                           className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
+                        >
+                           <option value="draft">{t('rightPanel.video.quality.draft')}</option>
+                           <option value="standard">{t('rightPanel.video.quality.standard')}</option>
+                           <option value="high">{t('rightPanel.video.quality.high')}</option>
+                           <option value="ultra">{t('rightPanel.video.quality.ultra')}</option>
+                        </select>
+                     </div>
+                  )}
 
-                  {video.inputMode !== 'image-animate' && (
+                  {isVeo && (
+                     <>
+                        <div className="flex items-center justify-between rounded border border-border bg-surface-elevated px-3 py-2">
+                           <span className="text-[10px] font-medium text-foreground-muted">
+                              Generate Audio (Veo)
+                           </span>
+                           <button
+                              type="button"
+                              className={cn(
+                                 "px-2 py-1 rounded text-[10px] font-semibold border transition-colors",
+                                 video.generateAudio
+                                    ? "bg-foreground text-background border-foreground"
+                                    : "bg-surface-sunken text-foreground-muted border-border"
+                              )}
+                              onClick={() => updateVideo({ generateAudio: !video.generateAudio })}
+                           >
+                              {video.generateAudio ? 'On' : 'Off'}
+                           </button>
+                        </div>
+                        <div>
+                           <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
+                              People in Scene
+                           </label>
+                           <select
+                              value={video.personGeneration || 'allow_adult'}
+                              onChange={(e) => updateVideo({ personGeneration: e.target.value as any })}
+                              className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
+                           >
+                              <option value="allow_adult">Allow Adults</option>
+                              <option value="dont_allow">No People</option>
+                              <option value="allow_all">Allow All</option>
+                           </select>
+                        </div>
+                     </>
+                  )}
+
+                  {isKling && video.inputMode !== 'image-animate' && (
                      <div>
                         <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
                            {t('rightPanel.video.transition.label')}
