@@ -528,36 +528,6 @@ export class GeminiService {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    const processLine = (line: string) => {
-      if (!line.startsWith('data: ')) return;
-      const jsonStr = line.slice(6).trim();
-      if (!jsonStr || jsonStr === '[DONE]') return;
-      try {
-        const chunk = JSON.parse(jsonStr);
-        const parts = chunk.candidates?.[0]?.content?.parts || [];
-
-        for (const part of parts) {
-          if ('text' in part && part.text) {
-            accumulatedText += part.text;
-          }
-          const imageData = part.inlineData || part.inline_data;
-          if (imageData) {
-            const mimeType = imageData.mimeType as ImageMimeType;
-            const base64 = imageData.data as string;
-            if (base64) {
-              accumulatedImages.push({
-                base64,
-                mimeType,
-                dataUrl: `data:${mimeType};base64,${base64}`
-              });
-            }
-          }
-        }
-      } catch {
-        // Skip malformed SSE chunks
-      }
-    };
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -567,20 +537,74 @@ export class GeminiService {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        processLine(line);
-        if (accumulatedText || accumulatedImages.length > 0) {
-          yield { text: accumulatedText || null, images: accumulatedImages };
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr || jsonStr === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(jsonStr);
+            const parts = chunk.candidates?.[0]?.content?.parts || [];
+
+            for (const part of parts) {
+              if ('text' in part && part.text) {
+                accumulatedText += part.text;
+              }
+              const imageData = part.inlineData || part.inline_data;
+              if (imageData) {
+                const mimeType = imageData.mimeType as ImageMimeType;
+                const base64 = imageData.data as string;
+                if (base64) {
+                  accumulatedImages.push({
+                    base64,
+                    mimeType,
+                    dataUrl: `data:${mimeType};base64,${base64}`
+                  });
+                }
+              }
+            }
+
+            yield {
+              text: accumulatedText || null,
+              images: accumulatedImages
+            };
+          } catch {
+            // Skip malformed SSE chunks
+          }
         }
       }
     }
 
-    // Flush any remaining data in the buffer
-    if (buffer.trim()) {
-      processLine(buffer);
-    }
-
-    if (accumulatedText || accumulatedImages.length > 0) {
-      yield { text: accumulatedText || null, images: accumulatedImages };
+    // Flush any remaining data left in the buffer after stream ends
+    if (buffer.trim() && buffer.startsWith('data: ')) {
+      const jsonStr = buffer.slice(6).trim();
+      if (jsonStr && jsonStr !== '[DONE]') {
+        try {
+          const chunk = JSON.parse(jsonStr);
+          const parts = chunk.candidates?.[0]?.content?.parts || [];
+          for (const part of parts) {
+            if ('text' in part && part.text) {
+              accumulatedText += part.text;
+            }
+            const imageData = part.inlineData || part.inline_data;
+            if (imageData) {
+              const mimeType = imageData.mimeType as ImageMimeType;
+              const base64 = imageData.data as string;
+              if (base64) {
+                accumulatedImages.push({
+                  base64,
+                  mimeType,
+                  dataUrl: `data:${mimeType};base64,${base64}`
+                });
+              }
+            }
+          }
+          yield {
+            text: accumulatedText || null,
+            images: accumulatedImages
+          };
+        } catch {
+          // Skip malformed final chunk
+        }
+      }
     }
   }
 
