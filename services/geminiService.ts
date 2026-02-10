@@ -511,6 +511,16 @@ export class GeminiService {
       generationConfig,
     }, { signal: request.generationConfig?.abortSignal });
 
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.body || contentType.includes('application/json')) {
+      const json = await response.json();
+      const parsed = this.parseResponse(json);
+      if (parsed.text || parsed.images.length > 0) {
+        yield parsed;
+      }
+      return;
+    }
+
     let accumulatedText = '';
     const accumulatedImages: GeneratedImage[] = [];
 
