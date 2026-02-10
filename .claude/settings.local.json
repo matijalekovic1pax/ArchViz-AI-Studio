@@ -22,7 +22,9 @@
       "Bash(git -C \"c:\\\\Users\\\\1Pax Mateja\\\\Documents\\\\ArchViz\\\\ArchViz-AI-Studio\" log --oneline -20)",
       "Bash(wrangler:*)",
       "Bash(node -e:*)",
-      "Bash(npx wrangler dev:*)"
+      "Bash(npx wrangler dev:*)",
+      "Bash(del \"services\\\\docxParser.ts\")",
+      "Bash(npx vite build:*)"
     ]
   }
 }

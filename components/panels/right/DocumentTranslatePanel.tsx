@@ -218,6 +218,34 @@ export const DocumentTranslatePanel: React.FC = () => {
             {t('documentTranslate.preserveFormattingDesc')}
           </p>
 
+          <Toggle
+            label="Translate Headers & Footers"
+            checked={docTranslate.translateHeaders}
+            onChange={(checked) =>
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: { translateHeaders: checked },
+              })
+            }
+          />
+          <p className="text-[10px] text-foreground-muted leading-relaxed">
+            Include document headers and footers in translation.
+          </p>
+
+          <Toggle
+            label="Translate Footnotes"
+            checked={docTranslate.translateFootnotes}
+            onChange={(checked) =>
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: { translateFootnotes: checked },
+              })
+            }
+          />
+          <p className="text-[10px] text-foreground-muted leading-relaxed">
+            Include footnotes and endnotes in translation.
+          </p>
+
           {/* ConvertAPI Status */}
           {convertApiConfigured && (
             <div className="flex items-center gap-2 pt-2">

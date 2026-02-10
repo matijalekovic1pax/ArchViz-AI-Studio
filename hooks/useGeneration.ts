@@ -989,6 +989,8 @@ export function useGeneration(): UseGenerationReturn {
                 sourceLanguage: docTranslate.sourceLanguage,
                 targetLanguage: docTranslate.targetLanguage,
                 translationQuality: docTranslate.translationQuality,
+                translateHeaders: docTranslate.translateHeaders,
+                translateFootnotes: docTranslate.translateFootnotes,
                 onProgress: (progress: TranslationProgress) => {
                   dispatch({
                     type: 'UPDATE_DOCUMENT_TRANSLATE',

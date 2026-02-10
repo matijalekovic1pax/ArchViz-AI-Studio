@@ -1018,6 +1018,69 @@ export interface DocumentTranslateDocument {
   uploadedAt: number;
 }
 
+export interface SegmentContext {
+  location: 'body' | 'header' | 'footer' | 'footnote' | 'table-cell';
+  styleInfo?: string;
+}
+
+export interface TextSegment {
+  id: string;
+  text: string;
+  translatedText?: string;
+  xmlPath: string;
+  paragraphIndex: number;
+  context: SegmentContext;
+  status: 'pending' | 'completed' | 'error';
+  error?: string;
+}
+
+export interface DocumentMetadata {
+  totalParagraphs: number;
+  totalCharacters: number;
+  estimatedBatches: number;
+}
+
+export interface ParsedDocx {
+  zipInstance: any; // JSZip instance
+  xmlDocuments: Map<string, Document>;
+  segments: TextSegment[];
+  metadata: DocumentMetadata;
+}
+
+export interface LegalSection {
+  title: string;
+  startIndex: number;
+  endIndex: number;
+  level: number;
+}
+
+export interface ParsedLegalDocx extends ParsedDocx {
+  sections: LegalSection[];
+}
+
+export interface TranslationConfig {
+  batchSize: number;
+  maxCharsPerBatch: number;
+  maxConcurrentBatches: number;
+  sourceLanguage: string;
+  targetLanguage: string;
+  excludedTerms?: string[];
+  translateHeaders: boolean;
+  translateFooters: boolean;
+  translateFootnotes: boolean;
+  modelTemperature: number;
+  model?: string;
+}
+
+export interface TranslationBatch {
+  id: string;
+  segments: TextSegment[];
+  startIndex: number;
+  totalCharacters: number;
+  status: 'pending' | 'translating' | 'completed' | 'error';
+  retryCount: number;
+}
+
 export interface TranslationProgress {
   phase: 'idle' | 'parsing' | 'translating' | 'rebuilding' | 'complete' | 'error';
   currentSegment: number;
@@ -1034,6 +1097,8 @@ export interface DocumentTranslateState {
   sourceLanguage: string;
   targetLanguage: string;
   preserveFormatting: boolean;
+  translateHeaders: boolean;
+  translateFootnotes: boolean;
   translationQuality: DocumentTranslationQuality;
   progress: TranslationProgress;
   translatedDocumentUrl: string | null;

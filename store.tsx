@@ -136,6 +136,8 @@ const initialDocumentTranslate: DocumentTranslateState = {
   sourceLanguage: 'auto',
   targetLanguage: 'en',
   preserveFormatting: true,
+  translateHeaders: true,
+  translateFootnotes: true,
   translationQuality: 'fast',
   progress: {
     phase: 'idle',

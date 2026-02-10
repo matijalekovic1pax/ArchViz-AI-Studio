@@ -1,47 +1,67 @@
 /**
  * Document Translation Service
- * Orchestrates document parsing, translation via Gemini, and rebuilding
- * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX
- * Output is always a translated Word document (.docx)
+ * Orchestrates document parsing, translation via Gemini, and rebuilding.
+ * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX.
+ * Output is always a translated Word document (.docx).
+ *
+ * Pipeline: parse → filter → analyze context → batch → translate → map → rebuild
  */
 
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
-import { parseDocx, rebuildDocx, TextSegment as DocxTextSegment } from './docxParser';
+import { parseDocx } from './docxParserService';
+import { rebuildDocx } from './docxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
-import type { DocumentTranslateDocument, DocumentTranslationQuality, TranslationProgress } from '../types';
+import type {
+  DocumentTranslateDocument,
+  DocumentTranslationQuality,
+  TranslationProgress,
+  TextSegment,
+  ParsedLegalDocx,
+} from '../types';
 
 // Translation settings
 const FAST_TRANSLATION_MODEL = 'gemini-2.5-flash';
 const PROFESSIONAL_TRANSLATION_MODEL = 'gemini-3-flash-preview';
-const BATCH_SIZE = 20; // Max segments per batch (reduced for paragraph-level translation)
-const MAX_CHARS_PER_BATCH = 12000; // Max characters per batch
+const BATCH_SIZE = 20;
+const MAX_CHARS_PER_BATCH = 12000;
 const MAX_CONCURRENT_BATCHES = 3;
 
-const getTranslationModel = (quality?: DocumentTranslationQuality) => (
-  quality === 'pro' ? PROFESSIONAL_TRANSLATION_MODEL : FAST_TRANSLATION_MODEL
-);
+const getTranslationModel = (quality?: DocumentTranslationQuality) =>
+  quality === 'pro' ? PROFESSIONAL_TRANSLATION_MODEL : FAST_TRANSLATION_MODEL;
 
-export type TextSegment = DocxTextSegment;
+export type { TextSegment };
 
 export interface TranslationOptions {
   sourceDocument: DocumentTranslateDocument;
   sourceLanguage: string;
   targetLanguage: string;
   translationQuality?: DocumentTranslationQuality;
+  translateHeaders?: boolean;
+  translateFootnotes?: boolean;
   onProgress: (progress: TranslationProgress) => void;
   abortSignal?: AbortSignal;
 }
 
-interface TranslationBatch {
+interface InternalBatch {
   segments: TextSegment[];
   startIndex: number;
 }
 
-/**
- * Translate a document
- */
+// ============================================================================
+// Main Pipeline
+// ============================================================================
+
 export async function translateDocument(options: TranslationOptions): Promise<string> {
-  const { sourceDocument, sourceLanguage, targetLanguage, onProgress, abortSignal, translationQuality } = options;
+  const {
+    sourceDocument,
+    sourceLanguage,
+    targetLanguage,
+    onProgress,
+    abortSignal,
+    translationQuality,
+    translateHeaders = true,
+    translateFootnotes = true,
+  } = options;
 
   if (!isGeminiServiceInitialized()) {
     throw new Error('Gemini API not initialized. Please set your API key.');
@@ -51,12 +71,14 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   const translationModel = getTranslationModel(translationQuality);
   const isPdf = sourceDocument.mimeType.includes('pdf');
 
-  // Phase 0: Convert PDF to DOCX if needed (using ConvertAPI)
+  // Phase 0: Convert PDF to DOCX if needed
   let docxDataUrl = sourceDocument.dataUrl;
 
   if (isPdf) {
     if (!isConvertApiConfigured()) {
-      throw new Error('ConvertAPI not configured. Please set VITE_CONVERTAPI_SECRET in .env\n\nGet your API secret from https://www.convertapi.com/ (250 free conversions)');
+      throw new Error(
+        'ConvertAPI not configured. Please set VITE_CONVERTAPI_SECRET in .env\n\nGet your API secret from https://www.convertapi.com/ (250 free conversions)'
+      );
     }
 
     onProgress({
@@ -68,9 +90,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
       message: 'Converting PDF to Word...',
     });
 
-    if (abortSignal?.aborted) {
-      throw new DOMException('Translation cancelled', 'AbortError');
-    }
+    if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
     docxDataUrl = await convertPdfToDocxWithConvertApi(sourceDocument.dataUrl, (progress) => {
       onProgress({
@@ -84,7 +104,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     });
   }
 
-  // Phase 1: Parse DOCX document (to extract text for context analysis)
+  // Phase 1: Parse DOCX document
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
@@ -94,37 +114,40 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     message: 'Parsing document...',
   });
 
-  if (abortSignal?.aborted) {
-    throw new DOMException('Translation cancelled', 'AbortError');
-  }
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
-  let segments: TextSegment[];
-  let parseResult: any;
+  const parseResult: ParsedLegalDocx = await parseDocx(docxDataUrl, {
+    translateHeaders,
+    translateFootnotes,
+  });
 
-  parseResult = await parseDocx(docxDataUrl);
-  segments = parseResult.segments;
+  const allSegments = parseResult.segments;
 
-  if (segments.length === 0) {
+  if (allSegments.length === 0) {
     throw new Error('No translatable text found in document.');
   }
 
-  // Phase 2: Analyze document context
+  // Step 1: Filter segments by settings
+  const segmentsToTranslate = filterSegmentsBySettings(allSegments, {
+    translateHeaders,
+    translateFootnotes,
+  });
+
+  // Phase 2: Analyze document context (sample first 15 segments)
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
-    totalSegments: segments.length,
+    totalSegments: segmentsToTranslate.length,
     currentBatch: 0,
     totalBatches: 0,
     message: 'Analyzing document context...',
   });
 
-  if (abortSignal?.aborted) {
-    throw new DOMException('Translation cancelled', 'AbortError');
-  }
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
   const documentContext = await analyzeDocumentContext(
     service,
-    segments,
+    segmentsToTranslate,
     sourceLanguage,
     targetLanguage,
     translationModel,
@@ -132,33 +155,28 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   );
 
   // Phase 3: Create batches
-  const batches = createBatches(segments);
+  const batches = createBatches(segmentsToTranslate);
   const totalBatches = batches.length;
   const translations = new Map<string, string>();
 
   onProgress({
     phase: 'translating',
     currentSegment: 0,
-    totalSegments: segments.length,
+    totalSegments: segmentsToTranslate.length,
     currentBatch: 0,
     totalBatches,
-    message: `Translating ${segments.length} text segments...`,
+    message: `Translating ${segmentsToTranslate.length} text segments...`,
   });
 
-  // Phase 4: Translate batches
+  // Phase 4: Translate batches with limited concurrency
   let processedSegments = 0;
 
-  // Process batches with limited concurrency
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
-    if (abortSignal?.aborted) {
-      throw new DOMException('Translation cancelled', 'AbortError');
-    }
+    if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
     const batchGroup = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
 
-    const batchPromises = batchGroup.map(async (batch, groupIndex) => {
-      const batchIndex = i + groupIndex;
-
+    const batchPromises = batchGroup.map(async (batch) => {
       try {
         const batchTranslations = await translateBatch(
           service,
@@ -170,18 +188,20 @@ export async function translateDocument(options: TranslationOptions): Promise<st
           abortSignal
         );
 
-        // Store translations
         batch.segments.forEach((segment, idx) => {
-          if (batchTranslations[idx] !== undefined) {
-            translations.set(segment.id, batchTranslations[idx]);
-          }
+          const translated = batchTranslations[idx];
+          translations.set(segment.id, translated);
+          segment.translatedText = translated;
+          segment.status = 'completed';
         });
 
         return batch.segments.length;
-      } catch (error) {
+      } catch {
         // On error, keep original text
         batch.segments.forEach((segment) => {
           translations.set(segment.id, segment.text);
+          segment.translatedText = segment.text;
+          segment.status = 'error';
         });
         return batch.segments.length;
       }
@@ -193,43 +213,39 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     onProgress({
       phase: 'translating',
       currentSegment: processedSegments,
-      totalSegments: segments.length,
+      totalSegments: segmentsToTranslate.length,
       currentBatch: Math.min(i + MAX_CONCURRENT_BATCHES, batches.length),
       totalBatches,
-      message: `Translated ${processedSegments} of ${segments.length} segments`,
+      message: `Translated ${processedSegments} of ${segmentsToTranslate.length} segments`,
     });
+  }
+
+  // Final pass: ensure every segment in allSegments has a translation
+  for (const segment of allSegments) {
+    if (!translations.has(segment.id)) {
+      translations.set(segment.id, segment.text);
+    }
   }
 
   // Phase 5: Rebuild DOCX document
   onProgress({
     phase: 'rebuilding',
-    currentSegment: segments.length,
-    totalSegments: segments.length,
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
     currentBatch: totalBatches,
     totalBatches,
     message: 'Rebuilding document...',
   });
 
-  if (abortSignal?.aborted) {
-    throw new DOMException('Translation cancelled', 'AbortError');
-  }
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
-  let translatedDocxDataUrl: string;
-
-  try {
-    translatedDocxDataUrl = await rebuildDocx(parseResult, translations);
-  } catch (error) {
-    throw error;
-  }
-
-  // Output is always the translated DOCX (no conversion back to PDF)
-  let outputDataUrl = translatedDocxDataUrl;
+  const outputDataUrl = await rebuildDocx(parseResult, translations);
 
   // Phase 6: Complete
   onProgress({
     phase: 'complete',
-    currentSegment: segments.length,
-    totalSegments: segments.length,
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
     currentBatch: totalBatches,
     totalBatches,
     message: 'Translation complete!',
@@ -238,11 +254,28 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   return outputDataUrl;
 }
 
-/**
- * Create batches of segments for translation
- */
-function createBatches(segments: TextSegment[]): TranslationBatch[] {
-  const batches: TranslationBatch[] = [];
+// ============================================================================
+// Segment Filtering
+// ============================================================================
+
+function filterSegmentsBySettings(
+  segments: TextSegment[],
+  settings: { translateHeaders: boolean; translateFootnotes: boolean }
+): TextSegment[] {
+  return segments.filter((s) => {
+    if (s.context.location === 'header' && !settings.translateHeaders) return false;
+    if (s.context.location === 'footer' && !settings.translateHeaders) return false;
+    if (s.context.location === 'footnote' && !settings.translateFootnotes) return false;
+    return true;
+  });
+}
+
+// ============================================================================
+// Batching
+// ============================================================================
+
+function createBatches(segments: TextSegment[]): InternalBatch[] {
+  const batches: InternalBatch[] = [];
   let currentBatch: TextSegment[] = [];
   let currentChars = 0;
   let startIndex = 0;
@@ -251,7 +284,6 @@ function createBatches(segments: TextSegment[]): TranslationBatch[] {
     const segment = segments[i];
     const segmentChars = segment.text.length;
 
-    // Start new batch if current batch is full
     if (
       currentBatch.length >= BATCH_SIZE ||
       (currentChars + segmentChars > MAX_CHARS_PER_BATCH && currentBatch.length > 0)
@@ -266,7 +298,6 @@ function createBatches(segments: TextSegment[]): TranslationBatch[] {
     currentChars += segmentChars;
   }
 
-  // Add remaining segments
   if (currentBatch.length > 0) {
     batches.push({ segments: currentBatch, startIndex });
   }
@@ -274,9 +305,10 @@ function createBatches(segments: TextSegment[]): TranslationBatch[] {
   return batches;
 }
 
-/**
- * Analyze document context to improve translation accuracy
- */
+// ============================================================================
+// Context Analysis
+// ============================================================================
+
 async function analyzeDocumentContext(
   service: ReturnType<typeof getGeminiService>,
   segments: TextSegment[],
@@ -285,26 +317,27 @@ async function analyzeDocumentContext(
   model: string,
   abortSignal?: AbortSignal
 ): Promise<string> {
-  // Get full text from first ~500 segments or ~8000 chars for context analysis
-  const sampleSegments = segments.slice(0, 500);
-  const fullText = sampleSegments.map(s => s.text).join('\n');
-  const textSample = fullText.substring(0, 8000); // Limit to ~8k chars for analysis
+  // Sample first 15 segments for context analysis
+  const sampleSegments = segments.slice(0, 15);
+  const textSample = sampleSegments.map((s) => s.text).join('\n');
 
-  const sourceLangDisplay = sourceLanguage === 'auto' ? 'the source language' : getLanguageName(sourceLanguage);
+  const sourceLangDisplay =
+    sourceLanguage === 'auto' ? 'the source language' : getLanguageName(sourceLanguage);
 
-  const prompt = `Analyze this document excerpt and provide a brief context description that will help with translation accuracy.
+  const prompt = `Analyze this document excerpt and return a JSON description to help with translation.
 
 DOCUMENT EXCERPT:
 ${textSample}
 
-Provide a concise 2-3 sentence context description covering:
-1. Document type (e.g., technical manual, architectural specifications, legal contract, marketing materials, etc.)
-2. Subject matter/domain (e.g., construction, medicine, finance, technology, etc.)
-3. Tone/style (e.g., formal, technical, conversational, etc.)
+Return a JSON object with these fields:
+{
+  "documentType": "e.g. technical manual, legal contract, architectural specifications",
+  "domain": "e.g. construction, medicine, finance, technology",
+  "tone": "e.g. formal, technical, conversational",
+  "specialTerms": ["list of domain-specific terms found"]
+}
 
-Focus on information that would help a translator understand specialized terminology and context.
-
-Context description:`;
+Return ONLY the JSON:`;
 
   try {
     const response = await service.generateText({
@@ -312,21 +345,28 @@ Context description:`;
       model,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 300,
+        maxOutputTokens: 500,
         abortSignal,
       },
     });
 
-    return response.trim();
-  } catch (error) {
-    // Return generic context on failure
+    // Try to parse JSON context; fall back to using raw text as context
+    const cleaned = response.trim().replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '');
+    try {
+      const parsed = JSON.parse(cleaned);
+      return `Document type: ${parsed.documentType || 'unknown'}. Domain: ${parsed.domain || 'general'}. Tone: ${parsed.tone || 'formal'}.${parsed.specialTerms?.length ? ` Key terms: ${parsed.specialTerms.join(', ')}.` : ''}`;
+    } catch {
+      return cleaned;
+    }
+  } catch {
     return `Professional document in ${sourceLangDisplay}.`;
   }
 }
 
-/**
- * Translate a batch of text segments using Gemini
- */
+// ============================================================================
+// Translation
+// ============================================================================
+
 async function translateBatch(
   service: ReturnType<typeof getGeminiService>,
   segments: TextSegment[],
@@ -338,7 +378,8 @@ async function translateBatch(
 ): Promise<string[]> {
   const texts = segments.map((s) => s.text);
 
-  const sourceLangDisplay = sourceLanguage === 'auto' ? 'the detected language' : getLanguageName(sourceLanguage);
+  const sourceLangDisplay =
+    sourceLanguage === 'auto' ? 'the detected language' : getLanguageName(sourceLanguage);
   const targetLangDisplay = getLanguageName(targetLanguage);
 
   const prompt = `You are translating a professional document from ${sourceLangDisplay} to ${targetLangDisplay}.
@@ -376,56 +417,76 @@ Return the JSON now:`;
     prompt,
     model,
     generationConfig: {
-      temperature: 0.4, // Balanced temperature for quality and consistency
-      maxOutputTokens: 16384, // Increased for longer paragraphs
+      temperature: 0.4,
+      maxOutputTokens: 16384,
       abortSignal,
     },
   });
 
-  // Parse response
+  return parseTranslationResponse(response, texts);
+}
+
+// ============================================================================
+// Response Parsing (improved)
+// ============================================================================
+
+function parseTranslationResponse(response: string, originalTexts: string[]): string[] {
   try {
-    // Clean up response - remove markdown code blocks if present
-    let cleanResponse = response.trim();
-    if (cleanResponse.startsWith('```')) {
-      cleanResponse = cleanResponse.replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '');
+    let cleaned = response.trim();
+
+    // Remove Markdown fences if present
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '');
     }
 
-    // Try to extract JSON from the response
-    const jsonMatch = cleanResponse.match(/\{[\s\S]*"translations"[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No valid JSON found in response');
-    }
+    let translations: string[];
 
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    if (!Array.isArray(parsed.translations)) {
-      throw new Error('Invalid response format: translations is not an array');
-    }
-
-    // Ensure we have the right number of translations
-    if (parsed.translations.length !== texts.length) {
-      // Pad with original text if we're missing translations
-      while (parsed.translations.length < texts.length) {
-        const missingIndex = parsed.translations.length;
-        parsed.translations.push(texts[missingIndex]);
+    // Try JSON object with "translations" key
+    const objMatch = cleaned.match(/\{[\s\S]*"translations"[\s\S]*\}/);
+    if (objMatch) {
+      const parsed = JSON.parse(objMatch[0]);
+      if (Array.isArray(parsed.translations)) {
+        translations = parsed.translations;
+      } else {
+        throw new Error('translations is not an array');
       }
-
-      // Trim if we have too many
-      if (parsed.translations.length > texts.length) {
-        parsed.translations = parsed.translations.slice(0, texts.length);
+    } else {
+      // Try bare JSON array
+      const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (arrMatch) {
+        const parsed = JSON.parse(arrMatch[0]);
+        if (Array.isArray(parsed)) {
+          translations = parsed;
+        } else {
+          throw new Error('Not an array');
+        }
+      } else {
+        throw new Error('No valid JSON found in response');
       }
     }
 
-    return parsed.translations;
-  } catch (error) {
-    // Return original texts on parse failure
-    return texts;
+    // Count mismatch handling
+    if (translations.length < originalTexts.length) {
+      // Pad with original text
+      while (translations.length < originalTexts.length) {
+        translations.push(originalTexts[translations.length]);
+      }
+    } else if (translations.length > originalTexts.length) {
+      // Trim extras
+      translations = translations.slice(0, originalTexts.length);
+    }
+
+    return translations;
+  } catch {
+    // Total parse failure: return original texts
+    return [...originalTexts];
   }
 }
 
-/**
- * Get human-readable language name
- */
+// ============================================================================
+// Utilities
+// ============================================================================
+
 function getLanguageName(code: string): string {
   const languages: Record<string, string> = {
     auto: 'Auto-detect',
@@ -444,18 +505,10 @@ function getLanguageName(code: string): string {
   return languages[code] || code;
 }
 
-/**
- * Estimate the number of tokens in a text (rough approximation)
- */
 export function estimateTokens(text: string): number {
-  // Rough estimate: ~4 characters per token for English
-  // This varies by language but is a reasonable approximation
   return Math.ceil(text.length / 4);
 }
 
-/**
- * Get supported languages
- */
 export function getSupportedLanguages(): Array<{ code: string; name: string }> {
   return [
     { code: 'auto', name: 'Auto-detect' },
@@ -472,4 +525,3 @@ export function getSupportedLanguages(): Array<{ code: string; name: string }> {
     { code: 'ru', name: 'Russian' },
   ];
 }
-
