@@ -136,6 +136,7 @@ const initialDocumentTranslate: DocumentTranslateState = {
   sourceLanguage: 'auto',
   targetLanguage: 'en',
   preserveFormatting: true,
+  translationQuality: 'fast',
   progress: {
     phase: 'idle',
     currentSegment: 0,

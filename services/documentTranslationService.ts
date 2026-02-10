@@ -1,36 +1,25 @@
 /**
  * Document Translation Service
  * Orchestrates document parsing, translation via Gemini, and rebuilding
- * For PDFs: Uses iLovePDF API (preferred) to convert PDF→DOCX→Translate→DOCX→PDF
- * Falls back to custom PDF Converter API for DOCX→PDF to minimize iLove API usage
+ * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX
+ * Output is always a translated Word document (.docx)
  */
 
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
 import { parseDocx, rebuildDocx, TextSegment as DocxTextSegment } from './docxParser';
-import {
-  convertPdfToDocx as convertPdfToDocxCustom,
-  convertDocxToPdf as convertDocxToPdfCustom,
-  isPdfConverterInitialized,
-  type ConversionProgress
-} from './pdfConverterService';
-import {
-  convertPdfToDocx as convertPdfToDocxCloudConvert,
-  convertDocxToPdf as convertDocxToPdfCloudConvert,
-  isCloudConvertInitialized
-} from './cloudConvertService';
-import {
-  convertPdfToDocxWithILove,
-  convertDocxToPdfWithILove,
-  isILoveApiConfigured,
-  type ILoveConversionProgress
-} from './iLoveApiService';
-import type { DocumentTranslateDocument, TranslationProgress } from '../types';
+import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
+import type { DocumentTranslateDocument, DocumentTranslationQuality, TranslationProgress } from '../types';
 
 // Translation settings
-const TRANSLATION_MODEL = 'gemini-2.5-flash';
+const FAST_TRANSLATION_MODEL = 'gemini-2.5-flash';
+const PROFESSIONAL_TRANSLATION_MODEL = 'gemini-3-flash-preview';
 const BATCH_SIZE = 20; // Max segments per batch (reduced for paragraph-level translation)
 const MAX_CHARS_PER_BATCH = 12000; // Max characters per batch
 const MAX_CONCURRENT_BATCHES = 3;
+
+const getTranslationModel = (quality?: DocumentTranslationQuality) => (
+  quality === 'pro' ? PROFESSIONAL_TRANSLATION_MODEL : FAST_TRANSLATION_MODEL
+);
 
 export type TextSegment = DocxTextSegment;
 
@@ -38,6 +27,7 @@ export interface TranslationOptions {
   sourceDocument: DocumentTranslateDocument;
   sourceLanguage: string;
   targetLanguage: string;
+  translationQuality?: DocumentTranslationQuality;
   onProgress: (progress: TranslationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -51,26 +41,22 @@ interface TranslationBatch {
  * Translate a document
  */
 export async function translateDocument(options: TranslationOptions): Promise<string> {
-  const { sourceDocument, sourceLanguage, targetLanguage, onProgress, abortSignal } = options;
+  const { sourceDocument, sourceLanguage, targetLanguage, onProgress, abortSignal, translationQuality } = options;
 
   if (!isGeminiServiceInitialized()) {
     throw new Error('Gemini API not initialized. Please set your API key.');
   }
 
   const service = getGeminiService();
+  const translationModel = getTranslationModel(translationQuality);
   const isPdf = sourceDocument.mimeType.includes('pdf');
 
-  // Phase 0: Convert PDF to DOCX if needed
+  // Phase 0: Convert PDF to DOCX if needed (using ConvertAPI)
   let docxDataUrl = sourceDocument.dataUrl;
 
   if (isPdf) {
-    // Check which converter is available (prefer iLove API for best quality)
-    const useILoveApi = isILoveApiConfigured();
-    const useCustomApi = !useILoveApi && isPdfConverterInitialized();
-    const useCloudConvert = !useILoveApi && !useCustomApi && isCloudConvertInitialized();
-
-    if (!useILoveApi && !useCustomApi && !useCloudConvert) {
-      throw new Error('No PDF converter configured. Please set up one of:\n1. iLovePDF API (recommended - set VITE_ILOVEPDF_PUBLIC_KEY)\n2. Custom PDF Converter API (free - deploy pdf-converter-api to Vercel)\n3. CloudConvert API key (paid)');
+    if (!isConvertApiConfigured()) {
+      throw new Error('ConvertAPI not configured. Please set VITE_CONVERTAPI_SECRET in .env\n\nGet your API secret from https://www.convertapi.com/ (250 free conversions)');
     }
 
     onProgress({
@@ -86,28 +72,18 @@ export async function translateDocument(options: TranslationOptions): Promise<st
       throw new DOMException('Translation cancelled', 'AbortError');
     }
 
-    if (useILoveApi) {
-      console.log('📄 Converting PDF to DOCX via iLovePDF API...');
-      docxDataUrl = await convertPdfToDocxWithILove(sourceDocument.dataUrl, (convProgress) => {
-        console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
+    console.log('📄 Converting PDF to DOCX via ConvertAPI...');
+    docxDataUrl = await convertPdfToDocxWithConvertApi(sourceDocument.dataUrl, (progress) => {
+      console.log(`📄 PDF→DOCX: ${progress.phase} (${progress.percent}%)`);
+      onProgress({
+        phase: 'parsing',
+        currentSegment: 0,
+        totalSegments: 0,
+        currentBatch: 0,
+        totalBatches: 0,
+        message: progress.message,
       });
-    } else if (useCustomApi) {
-      console.log('📄 Converting PDF to DOCX via custom API...');
-      docxDataUrl = await convertPdfToDocxCustom(sourceDocument.dataUrl, {
-        onProgress: (convProgress) => {
-          console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
-        },
-        abortSignal
-      });
-    } else {
-      console.log('📄 Converting PDF to DOCX via CloudConvert...');
-      docxDataUrl = await convertPdfToDocxCloudConvert(sourceDocument.dataUrl, {
-        onProgress: (convProgress) => {
-          console.log(`📄 PDF→DOCX: ${convProgress.phase} (${convProgress.progress}%)`);
-        },
-        abortSignal
-      });
-    }
+    });
     console.log('✅ PDF converted to DOCX successfully');
   }
 
@@ -155,6 +131,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     segments,
     sourceLanguage,
     targetLanguage,
+    translationModel,
     abortSignal
   );
 
@@ -195,6 +172,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
           sourceLanguage,
           targetLanguage,
           documentContext,
+          translationModel,
           abortSignal
         );
 
@@ -254,65 +232,10 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     throw error;
   }
 
-  // Phase 6: Convert DOCX back to PDF if original was PDF
+  // Output is always the translated DOCX (no conversion back to PDF)
   let outputDataUrl = translatedDocxDataUrl;
 
-  if (isPdf) {
-    onProgress({
-      phase: 'rebuilding',
-      currentSegment: segments.length,
-      totalSegments: segments.length,
-      currentBatch: totalBatches,
-      totalBatches,
-      message: 'Converting Word back to PDF...',
-    });
-
-    if (abortSignal?.aborted) {
-      throw new DOMException('Translation cancelled', 'AbortError');
-    }
-
-    // Priority: Custom API (free, no monthly limit) > iLove API (monthly limit) > CloudConvert (paid)
-    const useCustomApi = isPdfConverterInitialized();
-    const useILoveApi = !useCustomApi && isILoveApiConfigured();
-    const useCloudConvert = !useCustomApi && !useILoveApi && isCloudConvertInitialized();
-
-    if (useCustomApi) {
-      console.log('📄 Converting DOCX back to PDF via custom API (free, unlimited)...');
-      try {
-        outputDataUrl = await convertDocxToPdfCustom(translatedDocxDataUrl, {
-          onProgress: (convProgress) => {
-            console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
-          },
-          abortSignal
-        });
-      } catch (error) {
-        console.warn('⚠️ Custom API conversion failed, trying iLove API...', error);
-        if (isILoveApiConfigured()) {
-          outputDataUrl = await convertDocxToPdfWithILove(translatedDocxDataUrl, (convProgress) => {
-            console.log(`📄 DOCX→PDF (iLove fallback): ${convProgress.phase} (${convProgress.progress}%)`);
-          });
-        } else {
-          throw error;
-        }
-      }
-    } else if (useILoveApi) {
-      console.log('📄 Converting DOCX back to PDF via iLovePDF API...');
-      outputDataUrl = await convertDocxToPdfWithILove(translatedDocxDataUrl, (convProgress) => {
-        console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
-      });
-    } else if (useCloudConvert) {
-      console.log('📄 Converting DOCX back to PDF via CloudConvert...');
-      outputDataUrl = await convertDocxToPdfCloudConvert(translatedDocxDataUrl, {
-        onProgress: (convProgress) => {
-          console.log(`📄 DOCX→PDF: ${convProgress.phase} (${convProgress.progress}%)`);
-        },
-        abortSignal
-      });
-    }
-    console.log('✅ DOCX converted back to PDF successfully');
-  }
-
-  // Phase 7: Complete
+  // Phase 6: Complete
   onProgress({
     phase: 'complete',
     currentSegment: segments.length,
@@ -369,6 +292,7 @@ async function analyzeDocumentContext(
   segments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
+  model: string,
   abortSignal?: AbortSignal
 ): Promise<string> {
   // Get full text from first ~500 segments or ~8000 chars for context analysis
@@ -395,7 +319,7 @@ Context description:`;
   try {
     const response = await service.generateText({
       prompt,
-      model: TRANSLATION_MODEL,
+      model,
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 300,
@@ -420,6 +344,7 @@ async function translateBatch(
   sourceLanguage: string,
   targetLanguage: string,
   documentContext: string,
+  model: string,
   abortSignal?: AbortSignal
 ): Promise<string[]> {
   const texts = segments.map((s) => s.text);
@@ -460,7 +385,7 @@ Return the JSON now:`;
 
   const response = await service.generateText({
     prompt,
-    model: TRANSLATION_MODEL,
+    model,
     generationConfig: {
       temperature: 0.4, // Balanced temperature for quality and consistency
       maxOutputTokens: 16384, // Increased for longer paragraphs

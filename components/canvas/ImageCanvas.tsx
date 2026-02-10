@@ -2005,26 +2005,27 @@ const StandardCanvas: React.FC = () => {
             </div>
          )}
 
-         {(state.isGenerating || state.workflow.visualAutoSelecting) && (
-             <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/30 backdrop-blur-sm animate-fade-in pointer-events-none">
-                 <div className="bg-white/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-white/50">
-                     <div className="relative w-16 h-16">
-                         <div className="absolute inset-0 border-4 border-surface-sunken rounded-full"></div>
-                         <div className="absolute inset-0 border-4 border-accent rounded-full border-t-transparent animate-spin"></div>
-                         <Sparkles size={24} className="absolute inset-0 m-auto text-accent animate-pulse" />
-                     </div>
-                     <div className="text-center">
-                         <h4 className="text-sm font-bold text-foreground">
-                           {state.workflow.visualAutoSelecting ? 'Auto-selecting...' : t('generation.generating')}
-                         </h4>
-                         <p className="text-xs text-foreground-muted mt-1">
-                           {state.workflow.visualAutoSelecting ? 'Detecting selection areas on the image.' : t('canvas.generating.subtitle')}
-                         </p>
-                     </div>
-                 </div>
-             </div>
-         )}
       </div>
+
+      {(state.isGenerating || state.workflow.visualAutoSelecting) && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
+              <div className="bg-white/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-white/50">
+                  <div className="relative w-16 h-16">
+                      <div className="absolute inset-0 border-4 border-surface-sunken rounded-full"></div>
+                      <div className="absolute inset-0 border-4 border-accent rounded-full border-t-transparent animate-spin"></div>
+                      <Sparkles size={24} className="absolute inset-0 m-auto text-accent animate-pulse" />
+                  </div>
+                  <div className="text-center">
+                      <h4 className="text-sm font-bold text-foreground">
+                        {state.workflow.visualAutoSelecting ? 'Auto-selecting...' : t('generation.generating')}
+                      </h4>
+                      <p className="text-xs text-foreground-muted mt-1">
+                        {state.workflow.visualAutoSelecting ? 'Detecting selection areas on the image.' : t('canvas.generating.subtitle')}
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

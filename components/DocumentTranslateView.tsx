@@ -21,49 +21,46 @@ export const DocumentTranslateView: React.FC = () => {
       return;
     }
 
-    const previewDataUrl =
-      progress.phase === 'complete' && translatedDocumentUrl
-        ? translatedDocumentUrl
-        : sourceDocument.dataUrl;
+    // After translation completes, the output is always DOCX (even if input was PDF)
+    const isTranslated = progress.phase === 'complete' && translatedDocumentUrl;
+    const previewDataUrl = isTranslated ? translatedDocumentUrl : sourceDocument.dataUrl;
+    const isDocxPreview = isTranslated || sourceDocument.type === 'docx';
 
-    if (sourceDocument.type === 'pdf') {
+    if (!isDocxPreview && sourceDocument.type === 'pdf') {
+      // Show original PDF in iframe (before translation)
       setDocumentPreviewUrl(previewDataUrl);
       setDocxHtmlContent(null);
       return;
     }
 
-    if (sourceDocument.type === 'docx') {
-      setDocumentPreviewUrl(null);
-      setIsConverting(true);
+    // Preview DOCX content (original docx or translated output)
+    setDocumentPreviewUrl(null);
+    setIsConverting(true);
 
-      // Convert DOCX to HTML for preview
-      const convertDocx = async () => {
-        try {
-          // Convert dataUrl to ArrayBuffer
-          const base64Match = previewDataUrl.match(/^data:[^;]+;base64,(.+)$/);
-          if (!base64Match) {
-            throw new Error('Invalid data URL');
-          }
-
-          const base64 = base64Match[1];
-          const binaryString = atob(base64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          // Convert to HTML using mammoth
-          const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-          setDocxHtmlContent(result.value);
-        } catch (error) {
-          setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
-        } finally {
-          setIsConverting(false);
+    const convertDocx = async () => {
+      try {
+        const base64Match = previewDataUrl.match(/^data:[^;]+;base64,(.+)$/);
+        if (!base64Match) {
+          throw new Error('Invalid data URL');
         }
-      };
 
-      convertDocx();
-    }
+        const base64 = base64Match[1];
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+        setDocxHtmlContent(result.value);
+      } catch (error) {
+        setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
+      } finally {
+        setIsConverting(false);
+      }
+    };
+
+    convertDocx();
   }, [sourceDocument, translatedDocumentUrl, progress.phase]);
 
   const renderDocumentPreview = () => {
@@ -82,10 +79,12 @@ export const DocumentTranslateView: React.FC = () => {
       );
     }
 
-    const fileType = sourceDocument.type;
+    // After translation, output is always DOCX regardless of input type
+    const isTranslated = progress.phase === 'complete' && translatedDocumentUrl;
+    const showAsDocx = isTranslated || sourceDocument.type === 'docx';
 
-    // PDF Preview
-    if (fileType === 'pdf' && documentPreviewUrl) {
+    // PDF Preview (only for original PDF before translation)
+    if (!showAsDocx && sourceDocument.type === 'pdf' && documentPreviewUrl) {
       return (
         <div className="absolute inset-0 overflow-hidden">
           <iframe
@@ -97,8 +96,8 @@ export const DocumentTranslateView: React.FC = () => {
       );
     }
 
-    // DOCX Preview (rendered as HTML)
-    if (fileType === 'docx') {
+    // DOCX Preview (rendered as HTML) - for docx input or translated output
+    if (showAsDocx) {
       // Still converting
       if (isConverting) {
         return (

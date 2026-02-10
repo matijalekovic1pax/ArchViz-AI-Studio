@@ -156,6 +156,17 @@
     "settings": "Settings",
     "preserveFormattingLabel": "Preserve Formatting",
     "preserveFormattingDesc": "Maintains original fonts, styles, and layout where possible.",
+    "qualityLabel": "Translation Quality",
+    "qualityOptions": {
+      "fast": {
+        "label": "Fast",
+        "desc": "Quick turnaround using gemini-2.5-flash."
+      },
+      "pro": {
+        "label": "Professional",
+        "desc": "Higher accuracy with gemini-3-flash-preview (slower)."
+      }
+    },
     "pdfWarningTitle": "Note:",
     "pdfWarningMessage": "PDF translation may have minor layout differences due to font embedding limitations.",
     "progress": {

@@ -3,29 +3,20 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-react';
 import { Toggle } from '../../ui/Toggle';
-import { isPdfConverterInitialized } from '../../../services/pdfConverterService';
-import { isCloudConvertInitialized } from '../../../services/cloudConvertService';
-import { isILoveApiConfigured } from '../../../services/iLoveApiService';
+import { SegmentedControl } from '../../ui/SegmentedControl';
+import { isConvertApiConfigured } from '../../../services/convertApiService';
 
 export const DocumentTranslatePanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
   const docTranslate = state.workflow.documentTranslate;
   const { progress } = docTranslate;
+  const translationQuality = docTranslate.translationQuality ?? 'fast';
 
-  const [converterConfigured, setConverterConfigured] = useState(false);
-  const [converterType, setConverterType] = useState<'ilove' | 'custom' | 'cloudconvert' | null>(null);
+  const [convertApiConfigured, setConvertApiConfigured] = useState(false);
 
   useEffect(() => {
-    // Check if any converter is configured via .env (prefer iLove API for best quality)
-    const hasILoveApi = isILoveApiConfigured();
-    const hasCustomApi = isPdfConverterInitialized();
-    const hasCloudConvert = isCloudConvertInitialized();
-
-    setConverterConfigured(hasILoveApi || hasCustomApi || hasCloudConvert);
-    setConverterType(
-      hasILoveApi ? 'ilove' : hasCustomApi ? 'custom' : hasCloudConvert ? 'cloudconvert' : null
-    );
+    setConvertApiConfigured(isConvertApiConfigured());
   }, []);
 
   const handleDownload = () => {
@@ -34,13 +25,23 @@ export const DocumentTranslatePanel: React.FC = () => {
     const link = document.createElement('a');
     link.href = docTranslate.translatedDocumentUrl;
     const originalName = docTranslate.sourceDocument.name;
-    const ext = originalName.substring(originalName.lastIndexOf('.'));
     const baseName = originalName.substring(0, originalName.lastIndexOf('.'));
-    link.download = `${baseName}_${docTranslate.targetLanguage}${ext}`;
+    // Output is always .docx (PDFs are converted to DOCX before translation)
+    link.download = `${baseName}_${docTranslate.targetLanguage}.docx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  const qualityOptions = [
+    { value: 'fast', label: t('documentTranslate.qualityOptions.fast.label') },
+    { value: 'pro', label: t('documentTranslate.qualityOptions.pro.label') },
+  ];
+
+  const qualityDescription =
+    translationQuality === 'pro'
+      ? t('documentTranslate.qualityOptions.pro.desc')
+      : t('documentTranslate.qualityOptions.fast.desc');
 
   const progressPercent =
     progress.totalSegments > 0
@@ -130,84 +131,48 @@ export const DocumentTranslatePanel: React.FC = () => {
         </div>
       )}
 
-      {/* PDF Converter Configuration Warning (for PDFs) */}
-      {docTranslate.sourceDocument?.mimeType.includes('pdf') && !converterConfigured && (
+      {/* ConvertAPI Configuration Warning (for PDFs) */}
+      {docTranslate.sourceDocument?.mimeType.includes('pdf') && !convertApiConfigured && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-start gap-2">
             <Key size={16} className="text-amber-600 mt-0.5 shrink-0" />
             <div className="flex-1">
               <h4 className="text-sm font-semibold text-amber-900 mb-1">
-                PDF Converter Required
+                ConvertAPI Required for PDF Translation
               </h4>
-              <p className="text-xs text-amber-700 mb-3">
-                PDF translation requires a document converter. Choose one of the following:
+              <p className="text-xs text-amber-700 mb-2">
+                PDF translation uses{' '}
+                <a
+                  href="https://www.convertapi.com/pdf-to-docx"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-amber-900 font-semibold"
+                >
+                  ConvertAPI
+                </a>{' '}
+                to convert PDF to Word (250 free conversions/month).
               </p>
-
-              <div className="space-y-3">
-                {/* Option 1: iLovePDF (RECOMMENDED) */}
-                <div className="bg-white border border-amber-300 rounded p-2">
-                  <p className="text-xs font-semibold text-amber-900 mb-1">
-                    ⭐ Option 1: iLovePDF API (Recommended)
-                  </p>
-                  <p className="text-xs text-amber-700 mb-1">
-                    Best quality conversion. Get your public key from{' '}
-                    <a
-                      href="https://developer.ilovepdf.com/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-amber-900 font-semibold"
-                    >
-                      developer.ilovepdf.com
-                    </a>
-                  </p>
-                  <p className="text-xs text-amber-700 mb-1">
-                    Then add to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>:
-                  </p>
-                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
-                    VITE_ILOVEPDF_PUBLIC_KEY="your_public_key"
-                  </code>
-                </div>
-
-                {/* Option 2: Custom API (FREE) */}
-                <div className="bg-white border border-amber-300 rounded p-2">
-                  <p className="text-xs font-semibold text-amber-900 mb-1">
-                    ✅ Option 2: Custom API (FREE, Unlimited)
-                  </p>
-                  <p className="text-xs text-amber-700 mb-1">
-                    Deploy the <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">pdf-converter-api</code> folder to Vercel (100% free, unlimited usage).
-                  </p>
-                  <p className="text-xs text-amber-700 mb-1">
-                    Then add to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>:
-                  </p>
-                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
-                    VITE_PDF_CONVERTER_API_URL="https://your-project.vercel.app"
-                  </code>
-                  <p className="text-xs text-amber-600 mt-1">
-                    See <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">pdf-converter-api/README.md</code> for deployment instructions.
-                  </p>
-                </div>
-
-                {/* Option 3: CloudConvert (PAID) */}
-                <div className="bg-white border border-amber-300 rounded p-2">
-                  <p className="text-xs font-semibold text-amber-900 mb-1">
-                    💳 Option 3: CloudConvert (Paid Alternative)
-                  </p>
-                  <p className="text-xs text-amber-700 mb-1">
-                    Get API key from{' '}
-                    <a
-                      href="https://cloudconvert.com/api/v2"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-amber-900 font-semibold"
-                    >
-                      cloudconvert.com/api/v2
-                    </a>{' '}
-                    (500 free minutes/month)
-                  </p>
-                  <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
-                    VITE_CLOUDCONVERT_API_KEY="your_key"
-                  </code>
-                </div>
+              <div className="bg-white border border-amber-300 rounded p-2">
+                <p className="text-xs text-amber-700 mb-1">
+                  1. Sign up at{' '}
+                  <a
+                    href="https://www.convertapi.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-amber-900 font-semibold"
+                  >
+                    convertapi.com
+                  </a>
+                </p>
+                <p className="text-xs text-amber-700 mb-1">
+                  2. Get your API secret from the dashboard
+                </p>
+                <p className="text-xs text-amber-700 mb-1">
+                  3. Add to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>:
+                </p>
+                <code className="text-[10px] bg-amber-100 px-1 py-0.5 rounded font-mono block">
+                  VITE_CONVERTAPI_SECRET="your_secret_here"
+                </code>
               </div>
             </div>
           </div>
@@ -220,6 +185,25 @@ export const DocumentTranslatePanel: React.FC = () => {
           {t('documentTranslate.settings')}
         </h3>
         <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs text-foreground-muted block">
+              {t('documentTranslate.qualityLabel')}
+            </label>
+            <SegmentedControl
+              value={translationQuality}
+              options={qualityOptions}
+              onChange={(value) =>
+                dispatch({
+                  type: 'UPDATE_DOCUMENT_TRANSLATE',
+                  payload: { translationQuality: value },
+                })
+              }
+            />
+            <p className="text-[10px] text-foreground-muted leading-relaxed">
+              {qualityDescription}
+            </p>
+          </div>
+
           <Toggle
             label={t('documentTranslate.preserveFormattingLabel')}
             checked={docTranslate.preserveFormatting}
@@ -234,16 +218,12 @@ export const DocumentTranslatePanel: React.FC = () => {
             {t('documentTranslate.preserveFormattingDesc')}
           </p>
 
-          {/* Converter Status (if configured) */}
-          {converterConfigured && (
+          {/* ConvertAPI Status */}
+          {convertApiConfigured && (
             <div className="flex items-center gap-2 pt-2">
               <CheckCircle2 size={14} className="text-accent" />
               <span className="text-[10px] text-foreground-muted">
-                {converterType === 'ilove'
-                  ? 'iLovePDF API configured (best quality)'
-                  : converterType === 'custom'
-                  ? 'Custom PDF Converter configured (free, unlimited)'
-                  : 'CloudConvert configured for PDF translation'}
+                ConvertAPI configured for PDF translation
               </span>
             </div>
           )}
@@ -251,19 +231,9 @@ export const DocumentTranslatePanel: React.FC = () => {
       </div>
 
       {/* PDF Info */}
-      {docTranslate.sourceDocument?.mimeType.includes('pdf') && converterConfigured && (
+      {docTranslate.sourceDocument?.mimeType.includes('pdf') && convertApiConfigured && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          <strong>PDF Translation:</strong> Your PDF will be converted to Word, translated, then converted back to PDF for perfect formatting preservation.
-          {converterType === 'ilove' && (
-            <span className="block mt-1 text-purple-700">
-              ⭐ Using iLovePDF API (best quality)
-            </span>
-          )}
-          {converterType === 'custom' && (
-            <span className="block mt-1 text-green-700">
-              ✨ Using free custom converter (unlimited)
-            </span>
-          )}
+          <strong>PDF Translation:</strong> Your PDF will be converted to Word via ConvertAPI, translated, and returned as a translated Word document (.docx).
         </div>
       )}
     </div>

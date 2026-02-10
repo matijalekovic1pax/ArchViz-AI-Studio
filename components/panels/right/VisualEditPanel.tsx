@@ -1438,6 +1438,15 @@ export const VisualEditPanel = () => {
     });
   }, []);
 
+  const repairJson = useCallback((text: string): string => {
+    let repaired = text;
+    // Fix unquoted keys: e.g. , y": or { y": → , "y": or { "y":
+    repaired = repaired.replace(/([{,]\s*)([a-zA-Z_]\w*)"(\s*:)/g, '$1"$2"$3');
+    // Remove trailing commas before } or ]
+    repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+    return repaired;
+  }, []);
+
   const extractJsonPayload = useCallback((text: string) => {
     if (!text) return '';
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -1460,7 +1469,12 @@ export const VisualEditPanel = () => {
     try {
       parsed = JSON.parse(jsonText);
     } catch {
-      return [];
+      // Attempt repair for malformed JSON (e.g. unquoted keys from Gemini)
+      try {
+        parsed = JSON.parse(repairJson(jsonText));
+      } catch {
+        return [];
+      }
     }
 
     const rawItems: any[] = Array.isArray(parsed)
@@ -1569,7 +1583,7 @@ export const VisualEditPanel = () => {
     });
 
     return shapes;
-  }, [extractJsonPayload]);
+  }, [extractJsonPayload, repairJson]);
 
   const runAutoSelection = useCallback(async (targets: string[]) => {
     if (!targets.length) return;

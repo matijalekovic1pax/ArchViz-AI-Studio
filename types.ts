@@ -975,11 +975,14 @@ export interface TranslationProgress {
   message?: string;
 }
 
+export type DocumentTranslationQuality = 'fast' | 'pro';
+
 export interface DocumentTranslateState {
   sourceDocument: DocumentTranslateDocument | null;
   sourceLanguage: string;
   targetLanguage: string;
   preserveFormatting: boolean;
+  translationQuality: DocumentTranslationQuality;
   progress: TranslationProgress;
   translatedDocumentUrl: string | null;
   error: string | null;

@@ -14,7 +14,11 @@
       "WebFetch(domain:www.iloveapi.com)",
       "WebFetch(domain:docs.cloud.google.com)",
       "WebFetch(domain:ai.google.dev)",
-      "WebFetch(domain:discuss.ai.google.dev)"
+      "WebFetch(domain:discuss.ai.google.dev)",
+      "WebFetch(domain:developer.ilovepdf.com)",
+      "Bash(npx vercel:*)",
+      "WebFetch(domain:www.convertapi.com)",
+      "WebFetch(domain:docs.convertapi.com)"
     ]
   }
 }
