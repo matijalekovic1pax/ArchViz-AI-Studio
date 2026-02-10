@@ -109,7 +109,6 @@ export const BottomPanel: React.FC = () => {
     try {
       await exportAsPng();
     } catch (error) {
-      console.error('History PNG export failed, falling back to original.', error);
       const ext = getHistoryExtension(source);
       const fallbackName = `archviz-history-${index + 1}-${item.timestamp}.${ext}`;
       try {
@@ -124,7 +123,6 @@ export const BottomPanel: React.FC = () => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(blobUrl);
       } catch (fallbackError) {
-        console.error('History download failed, falling back to direct link.', fallbackError);
         const link = document.createElement('a');
         link.href = source;
         link.download = fallbackName;
@@ -488,3 +486,4 @@ export const BottomPanel: React.FC = () => {
     </div>
   );
 };
+

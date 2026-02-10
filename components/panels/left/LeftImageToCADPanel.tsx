@@ -10,6 +10,7 @@ import {
   isGeminiServiceInitialized,
   ImageUtils
 } from '../../../services/geminiService';
+import { isGatewayAuthenticated } from '../../../services/apiGateway';
 
 export const LeftImageToCADPanel = () => {
    const { state, dispatch } = useAppStore();
@@ -23,26 +24,16 @@ export const LeftImageToCADPanel = () => {
       [dispatch]
    );
 
-   const getApiKey = useCallback((): string | null => {
-      // @ts-ignore - Vite injects this
-      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-         // @ts-ignore
-         return import.meta.env.VITE_GEMINI_API_KEY;
-      }
-      return localStorage.getItem('gemini_api_key');
-   }, []);
-
    const ensureServiceInitialized = useCallback((): boolean => {
       if (isGeminiServiceInitialized()) {
          return true;
       }
-      const apiKey = getApiKey();
-      if (!apiKey) {
+      if (!isGatewayAuthenticated()) {
          return false;
       }
-      initGeminiService({ apiKey });
+      initGeminiService();
       return true;
-   }, [getApiKey]);
+   }, []);
 
    const extractJson = (raw: string) => {
       if (!raw) return null;
@@ -108,10 +99,9 @@ export const LeftImageToCADPanel = () => {
 
          updateWf({ imgToCadPreprocess: { guidance, focus } });
       } catch (error) {
-         console.error('CAD pre-processing failed:', error);
-         setPreprocessError('Pre-processing failed. Please try again.');
+        setPreprocessError('Pre-processing failed. Please try again.');
       } finally {
-         setIsPreprocessing(false);
+        setIsPreprocessing(false);
       }
    }, [ensureServiceInitialized, isPreprocessing, sourceImage, updateWf]);
 
@@ -183,3 +173,4 @@ export const LeftImageToCADPanel = () => {
       </div>
    );
 };
+

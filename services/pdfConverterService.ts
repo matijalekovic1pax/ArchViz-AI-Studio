@@ -1,7 +1,10 @@
 /**
  * PDF Converter Service
  * Free, self-hosted PDF ↔ DOCX conversion using custom Vercel API
+ * Auth: includes gateway JWT in requests so Vercel functions can verify identity
  */
+
+import { getGatewayToken } from './apiGateway';
 
 let customApiUrl: string | null = null;
 let bypassToken: string | null = null;
@@ -27,10 +30,7 @@ export function initPdfConverterService(apiUrl: string): void {
     customApiUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
   }
 
-  console.log('✅ PDF Converter service initialized:', customApiUrl);
-  if (bypassToken) {
-    console.log('✅ Vercel bypass token detected');
-  }
+  // Service initialized
 }
 
 /**
@@ -51,17 +51,22 @@ function getApiUrl(): string {
 }
 
 /**
- * Get headers for API requests (including bypass token if configured)
+ * Get headers for API requests (including JWT auth + bypass token if configured)
  */
 function getHeaders(): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
+  // Add gateway JWT for Vercel function auth
+  const token = getGatewayToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   // Add Vercel bypass token as header if configured
   if (bypassToken) {
     headers['x-vercel-protection-bypass'] = bypassToken;
-    // For browser-based requests, set cookie to bypass authorization on follow-up requests
     headers['x-vercel-set-bypass-cookie'] = 'samesitenone';
   }
 
@@ -145,7 +150,6 @@ export async function convertPdfToDocx(
       message: 'Conversion complete'
     });
 
-    console.log('✅ PDF converted to DOCX successfully');
     return docxDataUrl;
 
   } catch (error) {
@@ -159,7 +163,6 @@ export async function convertPdfToDocx(
       message: error instanceof Error ? error.message : 'Conversion failed'
     });
 
-    console.error('❌ PDF to DOCX conversion failed:', error);
     throw new Error(`Failed to convert PDF to DOCX: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -230,7 +233,6 @@ export async function convertDocxToPdf(
       message: 'Conversion complete'
     });
 
-    console.log('✅ DOCX converted to PDF successfully');
     return pdfDataUrl;
 
   } catch (error) {
@@ -244,7 +246,6 @@ export async function convertDocxToPdf(
       message: error instanceof Error ? error.message : 'Conversion failed'
     });
 
-    console.error('❌ DOCX to PDF conversion failed:', error);
     throw new Error(`Failed to convert DOCX to PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

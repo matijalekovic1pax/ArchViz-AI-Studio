@@ -40,7 +40,6 @@ ${text}`;
 
     return translatedText.trim() || text;
   } catch (error) {
-    console.error('Translation failed, using original text:', error);
     return text;
   }
 }
@@ -51,3 +50,4 @@ ${text}`;
 export function needsTranslation(currentLanguage: string): boolean {
   return currentLanguage !== 'en';
 }
+

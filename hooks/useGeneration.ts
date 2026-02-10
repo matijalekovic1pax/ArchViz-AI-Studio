@@ -26,7 +26,7 @@ import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
-import { initCloudConvertService, isCloudConvertInitialized } from '../services/cloudConvertService';
+import { isGatewayAuthenticated } from '../services/apiGateway';
 import { initPdfConverterService, isPdfConverterInitialized } from '../services/pdfConverterService';
 import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
@@ -35,53 +35,18 @@ import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProg
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
-// Get Gemini API key from environment or localStorage
-const getApiKey = (): string | null => {
-  // Check environment variable first (for Vite)
-  // @ts-ignore - Vite injects this
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_GEMINI_API_KEY;
-  }
-  // Fall back to localStorage
-  return localStorage.getItem('gemini_api_key');
-};
-
-// Get PDF Converter API URL from environment
-const getPdfConverterApiUrl = (): string | null => {
-  // Check environment variable (for Vite)
-  // @ts-ignore - Vite injects this
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PDF_CONVERTER_API_URL) {
-    // @ts-ignore
-    return import.meta.env.VITE_PDF_CONVERTER_API_URL;
-  }
-  return null;
-};
-
-// Get CloudConvert API key from environment only
-const getCloudConvertApiKey = (): string | null => {
-  // Check environment variable (for Vite)
-  // @ts-ignore - Vite injects this
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDCONVERT_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_CLOUDCONVERT_API_KEY;
-  }
-  return null;
-};
-
-// Initialize Gemini service if API key is available
+// Initialize Gemini service if gateway is authenticated
 const ensureServiceInitialized = (): boolean => {
   if (isGeminiServiceInitialized()) {
     return true;
   }
 
-  const apiKey = getApiKey();
-  if (apiKey) {
-    initGeminiService({ apiKey });
-    return true;
+  if (!isGatewayAuthenticated()) {
+    return false;
   }
 
-  return false;
+  initGeminiService();
+  return true;
 };
 
 // Initialize PDF Converter service if API URL is available
@@ -90,7 +55,8 @@ const ensurePdfConverterInitialized = (): boolean => {
     return true;
   }
 
-  const apiUrl = getPdfConverterApiUrl();
+  // @ts-ignore - Vite injects this
+  const apiUrl = import.meta.env?.VITE_PDF_API_URL || null;
   if (apiUrl) {
     initPdfConverterService(apiUrl);
     return true;
@@ -99,22 +65,7 @@ const ensurePdfConverterInitialized = (): boolean => {
   return false;
 };
 
-// Initialize CloudConvert service if API key is available
-const ensureCloudConvertInitialized = (): boolean => {
-  if (isCloudConvertInitialized()) {
-    return true;
-  }
-
-  const apiKey = getCloudConvertApiKey();
-  if (apiKey) {
-    initCloudConvertService(apiKey);
-    return true;
-  }
-
-  return false;
-};
-
-// Initialize iLovePDF API if public key is available
+// Initialize iLovePDF API (gateway handles auth)
 const ensureILoveApiInitialized = async (): Promise<boolean> => {
   if (isILoveApiConfigured()) {
     return await initializeILoveApi();
@@ -146,18 +97,15 @@ export function useGeneration(): UseGenerationReturn {
 
   const isReady = ensureServiceInitialized();
 
-  // Auto-initialize PDF converter services if configured in .env
+  // Auto-initialize PDF converter services
   useEffect(() => {
-    ensureILoveApiInitialized(); // Try iLove API first (best quality, monthly limit)
-    ensurePdfConverterInitialized(); // Fall back to custom API (free, unlimited)
-    ensureCloudConvertInitialized(); // Fall back to CloudConvert (paid)
+    ensureILoveApiInitialized(); // iLovePDF via gateway (best quality, monthly limit)
+    ensurePdfConverterInitialized(); // Custom Vercel API (free, unlimited)
   }, []);
 
-  const setApiKey = useCallback((key: string) => {
-    localStorage.setItem('gemini_api_key', key);
-    if (!isGeminiServiceInitialized()) {
-      initGeminiService({ apiKey: key });
-    }
+  // No-op — API keys are managed server-side by the gateway
+  const setApiKey = useCallback((_key: string) => {
+    // No-op: gateway handles API keys server-side
   }, []);
 
   /**
@@ -565,7 +513,6 @@ export function useGeneration(): UseGenerationReturn {
    */
   const generate = useCallback(async (options: GenerationOptions = {}) => {
     if (!ensureServiceInitialized()) {
-      console.error('Gemini API not initialized. Please set your API key.');
       dispatch({ type: 'SET_GENERATING', payload: false });
       return;
     }
@@ -629,7 +576,6 @@ export function useGeneration(): UseGenerationReturn {
         try {
           basePrompt = await translateToEnglish(basePrompt, i18n.language);
         } catch (error) {
-          console.error('Translation failed, using original prompt:', error);
         }
       }
 
@@ -734,11 +680,9 @@ export function useGeneration(): UseGenerationReturn {
       const isPdfCompressionMode = state.mode === 'pdf-compression';
 
       if (isPdfCompressionMode) {
-        console.log('[Generation] PDF Compression mode - starting real compression');
         updateProgress(5);
         const queue = state.workflow.pdfCompression.queue;
         if (queue.length === 0) {
-          console.log('[Generation] No PDFs in queue');
           dispatch({ type: 'SET_GENERATING', payload: false });
           dispatch({ type: 'SET_PROGRESS', payload: 0 });
           return;
@@ -748,8 +692,6 @@ export function useGeneration(): UseGenerationReturn {
         let tickProgress = () => {};
 
         try {
-          console.log(`[Generation] Compressing ${queue.length} PDFs with level: ${state.workflow.pdfCompression.compressionLevel || 'balanced'}`);
-
           // Get compression settings from right panel state
           const compressionLevel = (state.workflow.pdfCompression as any).compressionLevel || 'balanced';
           const imageQuality = ((state.workflow.pdfCompression as any).imageQuality || 70) / 100;
@@ -783,8 +725,6 @@ export function useGeneration(): UseGenerationReturn {
               progressTarget = clampTarget(10 + Math.round(fraction * 70));
             }
           );
-
-          console.log(`[Generation] Compression complete: ${results.filter(r => r.success).length}/${results.length} successful`);
 
           // Create outputs from successful compressions
           const now = Date.now();
@@ -852,7 +792,6 @@ export function useGeneration(): UseGenerationReturn {
           });
 
         } catch (error) {
-          console.error('[Generation] PDF compression error:', error);
           const errorMessage = error instanceof Error ? error.message : 'PDF compression failed';
 
           // Check if it's an API configuration error
@@ -907,9 +846,6 @@ export function useGeneration(): UseGenerationReturn {
           }
 
           try {
-            if (attempt > 0) {
-              console.log(`Retrying ${label}, attempt ${attempt + 1}/${maxRetries + 1}`);
-            }
             const result = await Promise.race([
               fn(),
               new Promise<never>((_, reject) => {
@@ -925,7 +861,6 @@ export function useGeneration(): UseGenerationReturn {
               throw error;
             }
             const isTimeout = lastError.message?.includes('timed out');
-            console.error(`${label} attempt ${attempt + 1} failed${isTimeout ? ' (timeout)' : ''}:`, error);
             if (attempt < maxRetries) {
               const delay = isTimeout ? 1000 : Math.min(1000 * Math.pow(2, attempt), 8000);
               await new Promise(resolve => setTimeout(resolve, delay));
@@ -1016,19 +951,18 @@ export function useGeneration(): UseGenerationReturn {
           }
 
           // Check if PDF converter is needed for PDF documents
-          const isPdf = docTranslate.sourceDocument.mimeType.includes('pdf');
-          if (isPdf) {
-            const hasCustomApi = ensurePdfConverterInitialized();
-            const hasCloudConvert = ensureCloudConvertInitialized();
+        const isPdf = docTranslate.sourceDocument.mimeType.includes('pdf');
+        if (isPdf) {
+          const hasCustomApi = ensurePdfConverterInitialized();
 
-            if (!hasCustomApi && !hasCloudConvert) {
-              dispatch({
-                type: 'UPDATE_DOCUMENT_TRANSLATE',
-                payload: { error: 'No PDF converter configured. Please set up either VITE_PDF_CONVERTER_API_URL (free) or VITE_CLOUDCONVERT_API_KEY (paid) in your .env file.' }
-              });
-              dispatch({ type: 'SET_GENERATING', payload: false });
-              return;
-            }
+          if (!hasCustomApi) {
+            dispatch({
+              type: 'UPDATE_DOCUMENT_TRANSLATE',
+              payload: { error: 'No PDF converter configured. Please set VITE_PDF_API_URL in your .env file.' }
+            });
+            dispatch({ type: 'SET_GENERATING', payload: false });
+            return;
+          }
           }
 
           // Reset state
@@ -1146,8 +1080,6 @@ export function useGeneration(): UseGenerationReturn {
         // Log the current resolution being used
         const currentConfig = buildGenerationConfig(state, aspectRatioOverride);
         const currentResolution = currentConfig.imageConfig?.imageSize || '2K';
-        console.log(`Multi-angle: Generating ${count} views at ${currentResolution} resolution`);
-
         const outputs: Array<{ id: string; name: string; url: string }> = [];
         const imagesOut: GeneratedImage[] = [];
         const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
@@ -1263,8 +1195,6 @@ export function useGeneration(): UseGenerationReturn {
           gridRows = 2;
           gridCols = Math.ceil(count / 2);
         }
-
-        console.log(`Multi-angle: Creating ${gridRows}x${gridCols} grid for ${count} views`);
 
         // Map panel numbers to letters
         const panelLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -1461,7 +1391,6 @@ export function useGeneration(): UseGenerationReturn {
               if (attempt > 0) {
                 queued[0] = { ...item, status: 'processing', retryCount: attempt };
                 syncUpscaleBatch(queued);
-                console.log(`Retrying upscale for ${item.name}, attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
               }
 
               // Create a timeout-aware generation call
@@ -1525,11 +1454,6 @@ export function useGeneration(): UseGenerationReturn {
               }
 
               const isTimeout = lastError.message?.includes('timed out');
-              console.error(
-                `Upscale attempt ${attempt + 1} failed for ${item.name}${isTimeout ? ' (timeout)' : ''}:`,
-                error
-              );
-
               // If we have more retries left, wait before retrying
               // Shorter delay for timeouts since we already waited
               if (attempt < MAX_RETRIES) {
@@ -1542,7 +1466,6 @@ export function useGeneration(): UseGenerationReturn {
           // If all retries failed, mark as failed and keep in batch so user can retry
           if (!upscaleSuccess) {
             const errorMessage = lastError?.message || 'Upscale failed after multiple attempts';
-            console.error(`All ${MAX_RETRIES + 1} attempts failed for ${item.name}: ${errorMessage}`);
             const failedItem = {
               ...item,
               status: 'failed' as const,
@@ -1608,13 +1531,9 @@ export function useGeneration(): UseGenerationReturn {
           generationConfig: generationConfigWithAbort
         }));
       } else if (isVideoMode) {
-        console.log('🎬 [VIDEO MODE] Starting video generation...');
-        console.log('🎬 Video state:', state.workflow.videoState);
         updateProgress(10);
         const videoState = state.workflow.videoState;
         const videoService = getVideoGenerationService();
-        console.log('🎬 Video service initialized');
-
         // Prepare input image for image-animate mode
         let inputImage: ImageData | undefined;
         if (videoState.inputMode === 'image-animate' && state.uploadedImage) {
@@ -1626,11 +1545,6 @@ export function useGeneration(): UseGenerationReturn {
               dataUrl: state.uploadedImage
             };
           }
-          console.log('🎬 Input image prepared:', {
-            hasImage: !!inputImage,
-            hasDataUrl: !!inputImage?.dataUrl,
-            dataUrlLength: inputImage?.dataUrl?.length || 0
-          });
         }
 
         // Prepare keyframes for multi-frame modes
@@ -1649,15 +1563,6 @@ export function useGeneration(): UseGenerationReturn {
           });
           updateProgress(progress.progress);
         };
-
-        console.log('🎬 Calling videoService.generateVideo with options:', {
-          model: videoState.model,
-          prompt: fullPrompt,
-          hasInputImage: !!inputImage,
-          keyframesCount: keyframes?.length || 0,
-          duration: videoState.duration,
-          resolution: videoState.resolution
-        });
 
         try {
           const videoResult = await runWithRetry(
@@ -1684,8 +1589,6 @@ export function useGeneration(): UseGenerationReturn {
             }),
             { timeoutMs: 10 * 60 * 1000 }
           );
-          console.log('🎬 Video generation successful!', videoResult);
-
           // Store result in video state
           dispatch({
             type: 'UPDATE_VIDEO_STATE',
@@ -1717,7 +1620,6 @@ export function useGeneration(): UseGenerationReturn {
           result = { text: null, images: [] };
         } catch (videoError) {
           // Handle video generation errors
-          console.error('❌ Video generation error:', videoError);
           const errorMessage = videoError instanceof Error ? videoError.message : 'Video generation failed';
 
           // Show user-friendly error notification
@@ -1762,11 +1664,6 @@ export function useGeneration(): UseGenerationReturn {
         }));
       }
       updateProgress(95);
-
-      // Debug: Log the full result
-      console.log('Gemini API Response:', result);
-      console.log('Images count:', result.images?.length || 0);
-      console.log('Text:', result.text);
 
       // Process result
       if (result.images && result.images.length > 0 && !isUpscaleMode && !multiAngleHistoryHandled) {
@@ -1929,7 +1826,6 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_PROGRESS', payload: 0 });
         return;
       }
-      console.error('Generation failed:', error);
       resetUpscaleProcessing();
       const errorMessage = error instanceof Error ? error.message : '';
       const lowerMessage = errorMessage.toLowerCase();
@@ -2015,3 +1911,4 @@ export function useGeneration(): UseGenerationReturn {
 }
 
 export default useGeneration;
+

@@ -78,18 +78,17 @@ export const LeftPdfCompressionPanel: React.FC = () => {
       Promise.all(readers)
         .then((results) => {
           const updatedDocs = [...newDocs];
-        results.forEach(({ index, dataUrl }) => {
-          updatedDocs[index] = { ...updatedDocs[index], dataUrl };
-        });
+          results.forEach(({ index, dataUrl }) => {
+            updatedDocs[index] = { ...updatedDocs[index], dataUrl };
+          });
 
-        const merged = [...pdfState.queue, ...updatedDocs];
-        updatePdfState({
-          queue: merged,
-          selectedId: pdfState.selectedId ?? (updatedDocs[0]?.id || null)
-        });
+          const merged = [...pdfState.queue, ...updatedDocs];
+          updatePdfState({
+            queue: merged,
+            selectedId: pdfState.selectedId ?? (updatedDocs[0]?.id || null)
+          });
         })
-        .catch((error) => {
-          console.error('Failed to load PDFs', error);
+        .catch(() => {
         })
         .finally(() => {
           setIsUploading(false);
@@ -213,3 +212,4 @@ export const LeftPdfCompressionPanel: React.FC = () => {
     </div>
   );
 };
+

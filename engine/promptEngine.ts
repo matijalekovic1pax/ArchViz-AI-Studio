@@ -1845,7 +1845,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
-    parts.push('Focus exclusively on 3D people in this architectural render. Preserve all architecture, materials, landscaping, vehicles, and background elements exactly.');
+    parts.push('Focus exclusively on 3D people in this architectural airport render. Preserve all architecture, materials, landscaping, vehicles, signage, and background elements exactly.');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
@@ -1853,99 +1853,326 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('No selection is provided; auto-detect all people across the frame and target them only.');
     }
 
+    // Operation mode
     if (people.mode === 'enhance') {
       parts.push('Enhance existing people without changing the overall count unless absolutely necessary for realism.');
     } else if (people.mode === 'repopulate') {
-      parts.push('Repopulate the scene with better-quality people, adjusting the count to match the desired density.');
+      parts.push('Repopulate the scene with better-quality people, adjusting the count to match the desired density and configuration.');
     } else {
       parts.push('Clean up the people: remove artifacts, fix distortions, and eliminate unrealistic silhouettes.');
     }
 
-    const densityDesc = people.density > 75
-      ? 'high occupancy with lively activity'
-      : people.density > 45
-        ? 'balanced occupancy with a realistic crowd level'
-        : people.density > 15
-          ? 'lightly populated with a few intentional figures'
-          : 'minimal people presence';
+    // Airport zone context
+    const zoneDescriptions: Record<string, string> = {
+      'terminal-general': 'a general airport terminal concourse with open circulation',
+      'check-in': 'an airport check-in hall with counters, queues, and self-service kiosks',
+      'security': 'an airport security screening area with queues and scanning equipment',
+      'departure-gate': 'a departure gate waiting area with seating and boarding zones',
+      'arrival-hall': 'an arrivals hall where passengers emerge to meet greeters',
+      'baggage-claim': 'a baggage claim area with carousels and waiting passengers',
+      'retail-area': 'an airport retail/duty-free shopping zone',
+      'food-court': 'an airport food court or restaurant area',
+      'lounge': 'an airport lounge with premium seating and a calm atmosphere',
+      'transit-corridor': 'a transit corridor connecting gates or terminals',
+    };
+    parts.push(`Airport context: This is ${zoneDescriptions[people.airportZone] || 'a general airport terminal'}.`);
+
+    const timeDescriptions: Record<string, string> = {
+      'peak-hours': 'Peak hours — the terminal is bustling with high foot traffic, longer queues, and crowded seating',
+      'normal': 'Normal operating hours with steady, moderate passenger flow',
+      'off-peak': 'Off-peak hours with lighter traffic and a more relaxed atmosphere',
+      'early-morning': 'Early morning — bleary-eyed travelers, some yawning, with coffee cups, quieter mood',
+      'late-night': 'Late night — sparse, tired travelers, some sleeping on seats, subdued lighting atmosphere',
+    };
+    parts.push(`${timeDescriptions[people.timeContext] || 'Normal operating hours'}.`);
+
+    // Demographics & Diversity
+    if (people.regionMix.length > 0) {
+      const regionLabels: Record<string, string> = {
+        'european': 'European',
+        'east-asian': 'East Asian',
+        'south-asian': 'South Asian',
+        'southeast-asian': 'Southeast Asian',
+        'middle-eastern': 'Middle Eastern',
+        'african': 'African',
+        'latin-american': 'Latin American',
+        'pacific-islander': 'Pacific Islander',
+        'central-asian': 'Central Asian',
+      };
+      const selectedRegions = people.regionMix.map(r => regionLabels[r] || r).join(', ');
+      if (people.regionMix.length >= 6) {
+        parts.push(`Ethnic diversity: Highly diverse international crowd representing ${selectedRegions} appearances. Skin tones, facial features, and hair types should vary widely to reflect a global airport.`);
+      } else {
+        parts.push(`Ethnic/regional mix: Predominantly ${selectedRegions} appearances. Reflect appropriate skin tones, facial features, and hair types for these regions.`);
+      }
+    } else {
+      parts.push('Ethnic diversity: Generic diverse crowd with varied appearances.');
+    }
+
+    const ageDescriptions: Record<string, string> = {
+      'young-adults': 'Predominantly young adults (20s-30s)',
+      'business-age': 'Mostly working-age professionals (30s-50s)',
+      'mixed-all-ages': 'Full age range from children to elderly, reflecting a realistic airport cross-section',
+      'families': 'Many family groups with children, parents, and some grandparents',
+      'elderly-included': 'Notable presence of elderly travelers alongside other ages',
+    };
+    parts.push(`Age distribution: ${ageDescriptions[people.ageDistribution] || 'Mixed ages'}.`);
+
+    const genderDesc: Record<string, string> = {
+      'balanced': 'roughly equal male and female representation',
+      'male-leaning': 'slightly more male travelers (e.g. business hub)',
+      'female-leaning': 'slightly more female travelers',
+    };
+    parts.push(`Gender: ${genderDesc[people.genderBalance] || 'balanced'}.`);
+
+    if (people.childrenPresence > 50) {
+      parts.push(`Children are prominently present — include toddlers held by parents, children walking alongside families, and teenagers.`);
+    } else if (people.childrenPresence > 20) {
+      parts.push('Some children visible among family groups.');
+    } else if (people.childrenPresence > 0) {
+      parts.push('Very few children, mostly an adult crowd.');
+    }
+
+    if (people.bodyTypeVariety > 60) {
+      parts.push('Wide variety of body types and builds — tall, short, slim, heavy-set, athletic — for a realistic cross-section.');
+    } else if (people.bodyTypeVariety > 30) {
+      parts.push('Some variety in body types for natural realism.');
+    }
+
+    // Crowd configuration
+    const densityDesc = people.density > 85
+      ? 'very high occupancy — packed terminal with dense foot traffic'
+      : people.density > 65
+        ? 'high occupancy with lively, bustling activity'
+        : people.density > 45
+          ? 'moderate, balanced occupancy with a realistic crowd level'
+          : people.density > 20
+            ? 'lightly populated with intentionally placed figures'
+            : 'minimal people presence — nearly empty terminal';
     parts.push(`Population density: ${densityDesc}.`);
 
+    const groupingDescriptions: Record<string, string> = {
+      'solo-dominant': 'Mostly solo travelers walking or waiting independently',
+      'couples': 'Many traveling couples and pairs',
+      'families': 'Prominent family groups with children and luggage',
+      'business-groups': 'Groups of colleagues and business travelers together',
+      'mixed-groups': 'A natural mix of solo travelers, couples, families, and small groups',
+    };
+    parts.push(`Social grouping: ${groupingDescriptions[people.grouping] || 'Mixed groups'}.`);
+
+    const flowDescriptions: Record<string, string> = {
+      'random': 'People moving in various directions organically',
+      'directional': 'A dominant flow direction as if heading to gates or exits',
+      'converging': 'People converging toward a focal point (gate, exit, attraction)',
+      'dispersing': 'People dispersing outward from a central area (e.g. just arrived)',
+      'queuing': 'Visible queue formations — people lined up at counters, gates, or security',
+    };
+    parts.push(`Flow pattern: ${flowDescriptions[people.flowPattern] || 'Random movement'}.`);
+
+    const directionDescriptions: Record<string, string> = {
+      'mixed': 'Movement in various directions',
+      'mostly-left': 'Most people moving toward the left side of frame',
+      'mostly-right': 'Most people moving toward the right side of frame',
+      'toward-camera': 'Most people walking toward the camera viewpoint',
+      'away-from-camera': 'Most people walking away from the camera',
+    };
+    parts.push(`Direction: ${directionDescriptions[people.movementDirection] || 'Mixed directions'}.`);
+
+    const paceDescriptions: Record<string, string> = {
+      'relaxed': 'Relaxed, leisurely pace — people strolling, browsing, taking their time',
+      'moderate': 'Moderate walking pace typical of airport navigation',
+      'hurried': 'Hurried, purposeful movement — people rushing to gates, checking watches',
+      'mixed': 'A mix of paces — some rushing, some strolling',
+    };
+    parts.push(`Pace: ${paceDescriptions[people.paceOfMovement] || 'Moderate pace'}.`);
+
+    if (people.clusteringTendency > 60) {
+      parts.push('People tend to cluster in groups and gather near amenities, seating, and screens — leave some open space between clusters.');
+    } else if (people.clusteringTendency > 30) {
+      parts.push('Natural clustering around points of interest with even distribution elsewhere.');
+    } else {
+      parts.push('People are evenly distributed throughout the space with minimal clustering.');
+    }
+
+    // Appearance & Wardrobe
+    const wardrobeMap: Record<string, string> = {
+      'business': 'business professional attire — suits, blazers, dress shoes, neat grooming',
+      'casual': 'casual everyday clothing — jeans, t-shirts, sneakers, comfortable wear',
+      'travel': 'travel-ready practical outfits — layered clothing, comfortable shoes, easy-to-move-in garments',
+      'luxury': 'upscale, designer-looking clothing — quality fabrics, refined accessories, premium luggage matching the outfits',
+      'sporty': 'athleisure and sporty outfits — tracksuits, running shoes, gym bags',
+      'mixed': 'a realistic mix of business, casual, travel, and luxury attire reflecting an international airport crowd',
+    };
+    parts.push(`Wardrobe direction: ${wardrobeMap[people.wardrobeStyle] || 'mixed attire'}.`);
+
+    const seasonDescriptions: Record<string, string> = {
+      'summer': 'Summer clothing — light fabrics, short sleeves, sunglasses, sandals, linen, bright colors',
+      'winter': 'Winter clothing — coats, scarves, boots, gloves, layered outfits, darker tones',
+      'spring-fall': 'Spring/autumn transitional clothing — light jackets, layered looks, moderate coverage',
+      'tropical': 'Tropical climate wear — loose-fitting, breathable fabrics, vibrant patterns, resort-style',
+      'mixed': 'Mixed seasonal wear reflecting travelers from various climates and destinations',
+    };
+    parts.push(`Seasonal clothing: ${seasonDescriptions[people.seasonalClothing] || 'Mixed seasonal'}.`);
+
+    if (people.formalityLevel > 70) {
+      parts.push('High formality — more suits, polished looks, and well-groomed appearances.');
+    } else if (people.formalityLevel > 40) {
+      parts.push('Moderate formality — a mix of smart-casual and some formal attire.');
+    } else {
+      parts.push('Low formality — predominantly casual, comfortable clothing.');
+    }
+
+    if (people.culturalAttire > 60) {
+      parts.push('Significant presence of cultural and traditional clothing: hijabs, saris, kaftans, kimonos, dashikis, turbans, kippahs, and other traditional garments appropriate to the selected regional mix.');
+    } else if (people.culturalAttire > 25) {
+      parts.push('Some travelers in cultural or traditional dress (hijabs, saris, etc.) mixed naturally with Western attire.');
+    } else if (people.culturalAttire > 5) {
+      parts.push('Occasional cultural garments visible in the crowd.');
+    }
+
+    // Activities & Behavior
+    if (people.activities.length > 0) {
+      const activityLabels: Record<string, string> = {
+        'walking': 'walking through the terminal',
+        'standing': 'standing and waiting',
+        'sitting': 'sitting in seating areas',
+        'rushing': 'rushing or jogging to catch flights',
+        'queuing': 'standing in queues or lines',
+        'browsing-shops': 'browsing retail shops and duty-free',
+        'eating': 'eating or drinking at food areas',
+        'phone-use': 'looking at or using smartphones',
+        'reading': 'reading books, magazines, or departure screens',
+        'conversation': 'engaged in conversations with companions',
+        'sleeping': 'sleeping or dozing in seats',
+        'working-laptop': 'working on laptops at seats or tables',
+        'taking-photos': 'taking photos or selfies',
+        'pushing-stroller': 'pushing baby strollers',
+        'wheelchair': 'using wheelchairs or mobility assistance',
+      };
+      const actDesc = people.activities.map(a => activityLabels[a] || a).join('; ');
+      parts.push(`Activities to depict: ${actDesc}.`);
+    }
+
+    if (people.interactionLevel > 60) {
+      parts.push('High social interaction — many people talking in groups, couples holding hands, parents engaging with children, staff helping passengers.');
+    } else if (people.interactionLevel > 30) {
+      parts.push('Moderate interaction — some conversation groups and couples, alongside many solo travelers.');
+    } else {
+      parts.push('Low interaction — mostly solo travelers in their own space, few conversations.');
+    }
+
+    // Luggage & Accessories
+    if (people.luggageTypes.length > 0) {
+      const luggageLabels: Record<string, string> = {
+        'rolling-suitcase': 'rolling suitcases (various sizes)',
+        'backpack': 'backpacks and rucksacks',
+        'carry-on': 'cabin-sized carry-on bags',
+        'duffel-bag': 'duffel bags and soft travel bags',
+        'oversized': 'oversized luggage or sports equipment cases',
+        'shopping-bags': 'shopping bags from airport retail',
+        'duty-free': 'duty-free shopping bags',
+        'briefcase': 'briefcases and laptop bags',
+        'garment-bag': 'garment bags',
+      };
+      const luggageDesc = people.luggageTypes.map(l => luggageLabels[l] || l).join(', ');
+      parts.push(`Luggage types visible: ${luggageDesc}.`);
+    }
+
+    if (people.luggageAmount > 70) {
+      parts.push('Heavy luggage presence — most travelers carry bags, many with multiple pieces.');
+    } else if (people.luggageAmount > 40) {
+      parts.push('Moderate luggage — many travelers have bags, some traveling light.');
+    } else if (people.luggageAmount > 10) {
+      parts.push('Light luggage presence — some carry-ons visible, many people without visible bags.');
+    } else {
+      parts.push('Minimal luggage visible.');
+    }
+
+    if (people.trolleyUsage > 50) {
+      parts.push('Noticeable airport trolley/cart usage — several passengers with loaded luggage carts.');
+    } else if (people.trolleyUsage > 15) {
+      parts.push('A few luggage trolleys visible in the scene.');
+    }
+
+    if (people.personalDevices > 60) {
+      parts.push('Many people using personal devices — smartphones, tablets, laptops, headphones, and earbuds clearly visible.');
+    } else if (people.personalDevices > 30) {
+      parts.push('Some people on phones or wearing headphones.');
+    }
+
+    if (people.travelAccessories > 60) {
+      parts.push('Prominent travel accessories: neck pillows, sunglasses on heads, hats, water bottles, travel mugs, passport holders, lanyards.');
+    } else if (people.travelAccessories > 25) {
+      parts.push('Some travel accessories visible: occasional neck pillows, sunglasses, and water bottles.');
+    }
+
+    // Airport Staff
+    const staffTypes: string[] = [];
+    if (people.includeAirportStaff) staffTypes.push('airline or airport counter staff in branded uniforms');
+    if (people.includeSecurityPersonnel) staffTypes.push('security personnel in uniform (clearly identifiable with badges)');
+    if (people.includeAirlineCrew) staffTypes.push('airline crew members — pilots in uniform with captain hats and flight attendants in airline livery');
+    if (people.includeGroundCrew) staffTypes.push('ground crew in high-visibility vests');
+    if (people.includeServiceStaff) staffTypes.push('service staff — retail workers, food court employees, and cleaning personnel in work attire');
+    if (staffTypes.length > 0) {
+      parts.push(`Airport staff to include: ${staffTypes.join('; ')}. Staff should comprise roughly ${people.staffDensity}% of all visible people.`);
+    }
+
+    // Quality & Integration
     const realismDesc = people.realism > 75
-      ? 'ultra-realistic, cinematic-quality people'
+      ? 'ultra-realistic, cinematic-quality people with readable facial features and fabric textures'
       : people.realism > 45
-        ? 'natural, believable people'
-        : 'subtle cleanup with minimal stylization';
+        ? 'natural, believable people at architectural visualization quality'
+        : 'stylized or simplified people appropriate for conceptual renders';
     parts.push(`Realism goal: ${realismDesc}.`);
 
     const sharpnessDesc = people.sharpness > 75
-      ? 'crisp edges and readable micro-details in clothing and faces'
+      ? 'crisp edges and readable micro-details in clothing, faces, and accessories'
       : people.sharpness > 45
         ? 'clean, moderately sharp people'
-        : 'softer detail with minimal sharpening';
+        : 'softer detail — people can be slightly impressionistic at distance';
     parts.push(`Detail sharpness: ${sharpnessDesc}.`);
 
-    const varietyDesc = people.variety > 75
-      ? 'wide variety of ages, postures, and wardrobe'
-      : people.variety > 45
-        ? 'some variation while keeping cohesion'
-        : 'consistent, cohesive set of people';
-    parts.push(`Variety level: ${varietyDesc}.`);
-
     const scaleDesc = people.scaleAccuracy > 75
-      ? 'strict scale accuracy relative to the architecture'
+      ? 'strict scale accuracy — people must be correctly proportioned relative to the architecture, doors, furniture, and ceiling heights'
       : people.scaleAccuracy > 45
-        ? 'balanced scale accuracy'
-        : 'gentle scale adjustments, never oversized';
+        ? 'balanced scale accuracy relative to surroundings'
+        : 'gentle scale, approximate proportions acceptable';
     parts.push(`Scale accuracy: ${scaleDesc}.`);
 
     const placementDesc = people.placementDiscipline > 75
-      ? 'strict placement on walkable surfaces with proper spacing'
+      ? 'strict placement — people only on walkable surfaces (floors, seating, escalators), proper spacing, no floating or clipping'
       : people.placementDiscipline > 45
-        ? 'realistic placement and spacing'
+        ? 'realistic placement and spacing on appropriate surfaces'
         : 'looser placement while still believable';
     parts.push(`Placement discipline: ${placementDesc}.`);
 
-    const luggageDesc = people.luggage > 70
-      ? 'visible luggage, bags, or props where appropriate'
-      : people.luggage > 40
-        ? 'some accessories and light props'
-        : 'minimal props and accessories';
-    parts.push(`Accessories: ${luggageDesc}.`);
-
     const motionDesc = people.motionBlur > 70
-      ? 'pronounced motion blur for moving figures'
+      ? 'pronounced motion blur on moving figures for a long-exposure photography feel'
       : people.motionBlur > 40
-        ? 'subtle motion blur where needed'
-        : 'mostly sharp, frozen motion';
+        ? 'subtle motion blur on fast-moving figures'
+        : 'mostly sharp, frozen motion — all people clearly defined';
     parts.push(`Motion treatment: ${motionDesc}.`);
 
-    const wardrobeMap: Record<string, string> = {
-      business: 'business and professional attire',
-      casual: 'casual everyday clothing',
-      travel: 'travel-ready outfits with backpacks or luggage',
-      mixed: 'a balanced mix of business, casual, and travel attire',
-    };
-    parts.push(`Wardrobe direction: ${wardrobeMap[people.wardrobeStyle] || people.wardrobeStyle}.`);
-
+    // Advanced toggles
     if (people.preserveExisting) {
       parts.push('Preserve existing people where possible, refining instead of replacing.');
     } else {
       parts.push('Allow replacing or removing existing people to achieve the desired result.');
     }
     if (people.matchLighting) {
-      parts.push('Match scene lighting precisely on all people: intensity, direction, and color temperature.');
+      parts.push('Match scene lighting precisely on all people: intensity, direction, color temperature, and ambient occlusion.');
     }
     if (people.matchPerspective) {
       parts.push('Match camera perspective and lens distortion so people sit naturally in the scene.');
     }
     if (people.groundContact) {
-      parts.push('Ensure perfect ground contact with correct shadows and no floating.');
+      parts.push('Ensure perfect ground contact with correct cast shadows and no floating figures.');
     }
     if (people.removeArtifacts) {
-      parts.push('Remove AI artifacts: extra limbs, warped faces, smeared textures, or inconsistent silhouettes.');
+      parts.push('Remove AI artifacts: extra limbs, warped faces, smeared textures, missing hands, or inconsistent silhouettes.');
     }
 
-    parts.push('Critical constraints: ONLY modify people. Do not change the building, landscape, vehicles, sky, or materials. Keep camera, perspective, and composition locked. Any edits must integrate seamlessly with the original render.');
+    parts.push('Critical constraints: ONLY modify people and their immediate accessories. Do not change the building, landscape, vehicles, sky, signage, or materials. Keep camera, perspective, and composition locked. Any edits must integrate seamlessly with the original render.');
     return parts.filter(Boolean).join(' ');
   }
 

@@ -82,7 +82,6 @@ async function checkOperation(operationName, accessToken, projectId) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Operation check error:', response.status, errorText);
       return {
         status: 'error',
         error: `API returned status ${response.status}: ${errorText}`
@@ -92,8 +91,6 @@ async function checkOperation(operationName, accessToken, projectId) {
     const data = await response.json();
 
     if (data.done) {
-      console.log('✅ Operation complete! Response keys:', Object.keys(data));
-
       if (data.error) {
         return {
           status: 'error',
@@ -104,15 +101,12 @@ async function checkOperation(operationName, accessToken, projectId) {
       // Extract video URL from response
       try {
         const videoUrl = extractVideoUrl(data.response);
-        console.log('📹 Video URL extracted:', videoUrl);
         return {
           status: 'complete',
           videoUrl,
           expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
         };
       } catch (error) {
-        console.error('❌ Video URL extraction failed:', error.message);
-        console.log('Response structure:', JSON.stringify(data.response).substring(0, 500));
         return {
           status: 'error',
           error: error.message
@@ -127,7 +121,6 @@ async function checkOperation(operationName, accessToken, projectId) {
     };
 
   } catch (error) {
-    console.error('Operation check failed:', error);
     return {
       status: 'error',
       error: error.message || 'Failed to check operation status'
@@ -139,32 +132,21 @@ async function checkOperation(operationName, accessToken, projectId) {
  * Extract video URL from API response
  */
 function extractVideoUrl(response) {
-  console.log('Extracting video URL. Response has:', {
-    hasPredictions: !!response.predictions,
-    hasVideo: !!response.video,
-    hasVideoUrl: !!response.videoUrl,
-    keys: Object.keys(response || {})
-  });
-
   // Try different possible response formats
   if (response.predictions && response.predictions.length > 0) {
     const prediction = response.predictions[0];
-    console.log('Prediction keys:', Object.keys(prediction));
-
     const videoUrl = prediction.videoUrl ||
                      prediction.videoUri ||
                      prediction.video_url ||
                      prediction.video_uri;
 
     if (videoUrl) {
-      console.log('Found video URL in prediction:', videoUrl.substring(0, 50) + '...');
       return videoUrl;
     }
 
     if (prediction.video) {
       const url = prediction.video.url || prediction.video.uri;
       if (url) {
-        console.log('Found video URL in prediction.video:', url.substring(0, 50) + '...');
         return url;
       }
     }
@@ -172,14 +154,11 @@ function extractVideoUrl(response) {
 
   if (response.video?.url || response.videoUrl) {
     const url = response.video?.url || response.videoUrl;
-    console.log('Found video URL at response level:', url.substring(0, 50) + '...');
     return url;
   }
 
   // Log a sample of the response for debugging
   const responseSample = JSON.stringify(response).substring(0, 500);
-  console.error('Could not find video URL. Response sample:', responseSample);
-
   throw new Error('No video URL found in response. Check worker logs for response structure.');
 }
 
@@ -213,7 +192,6 @@ async function handleStatusCheck(request) {
     );
 
   } catch (error) {
-    console.error('Status check error:', error);
     return new Response(
       JSON.stringify({
         status: 'error',
@@ -248,16 +226,6 @@ async function handleInitiateGeneration(request) {
       projectId,
       accessToken
     } = body;
-
-    console.log('🎬 Init:', {
-      duration: durationSeconds,
-      aspectRatio,
-      resolution,
-      generateAudio,
-      personGeneration,
-      hasSeed: !!seed,
-      hasImage: !!image
-    });
 
     if (!projectId || !accessToken) {
       return new Response(
@@ -303,8 +271,6 @@ async function handleInitiateGeneration(request) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Vertex AI error:', response.status, errorText);
-
       let errorMessage = `Vertex AI API error (${response.status})`;
       try {
         const errorData = JSON.parse(errorText);
@@ -323,8 +289,6 @@ async function handleInitiateGeneration(request) {
     }
 
     const data = await response.json();
-    console.log('✅ Initial request successful, operation:', data.name);
-
     if (!data.name) {
       throw new Error('No operation name in response: ' + JSON.stringify(data));
     }
@@ -336,7 +300,6 @@ async function handleInitiateGeneration(request) {
       const result = await checkOperation(data.name, accessToken, projectId);
 
       if (result.status === 'complete' || result.status === 'error') {
-        console.log(`✅ Operation completed on quick poll attempt ${i + 1}`);
         return new Response(
           JSON.stringify(result),
           {
@@ -350,7 +313,6 @@ async function handleInitiateGeneration(request) {
     }
 
     // Still processing, return operation name for client-side polling
-    console.log('⏳ Operation still processing, returning operation name for polling');
     return new Response(
       JSON.stringify({
         status: 'processing',
@@ -366,7 +328,6 @@ async function handleInitiateGeneration(request) {
     );
 
   } catch (error) {
-    console.error('Initiation error:', error);
     return new Response(
       JSON.stringify({
         status: 'error',
@@ -404,3 +365,4 @@ addEventListener('fetch', event => {
     );
   }
 });
+

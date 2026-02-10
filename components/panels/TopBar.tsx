@@ -333,14 +333,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleGenerate = async () => {
-    console.log('🚀 Generate button clicked!');
-    console.log('🚀 Mode:', state.mode);
-    console.log('🚀 isVideoMode:', isVideoMode);
-    console.log('🚀 videoReady:', videoReady);
-    console.log('🚀 isGenerating:', state.isGenerating);
-
     if (state.isGenerating) {
-      console.log('⚠️ Already generating, exiting...');
       return;
     }
     if (state.mode === 'material-validation') {
@@ -365,9 +358,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       return;
     }
     if (isVideoMode) {
-      console.log('🎬 Video mode detected, calling generate...');
       if (!videoReady) {
-        console.log('⚠️ Video not ready');
         return;
       }
       await generate();
@@ -486,8 +477,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                 setShowDownloadMenu(false);
             }
         } catch (e) {
-            console.error("Canvas export failed (likely CORS restrictions), falling back to blob fetch.", e);
-            
             // Fallback: Fetch as blob to bypass canvas tainting for simple downloads
             fetch(downloadSource)
                 .then(response => response.blob())
@@ -503,7 +492,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                     setShowDownloadMenu(false);
                 })
                 .catch(fetchErr => {
-                    console.error("Fallback fetch failed", fetchErr);
                     // Ultimate fallback: open in new tab
                     window.open(downloadSource, '_blank');
                     setShowDownloadMenu(false);
@@ -512,10 +500,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     };
 
     img.onerror = () => {
-         console.error("Image failed to load for download processing.");
-         // Fallback if image object fails
-         window.open(downloadSource, '_blank');
-         setShowDownloadMenu(false);
+      // Fallback if image object fails
+      window.open(downloadSource, '_blank');
+      setShowDownloadMenu(false);
     };
 
     // Set src after handlers
@@ -1834,3 +1821,4 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     </>
   );
 };
+

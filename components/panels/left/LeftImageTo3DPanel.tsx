@@ -42,7 +42,6 @@ export const LeftImageTo3DPanel = () => {
          );
          updateWf({ img3dInputs: [...wf.img3dInputs, ...results] });
       } catch (error) {
-         console.error('Failed to add 3D inputs', error);
       } finally {
          event.target.value = '';
       }
@@ -131,3 +130,4 @@ export const LeftImageTo3DPanel = () => {
       </div>
    );
 };
+

@@ -77,7 +77,6 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
     // Validate PDF header
     const header = String.fromCharCode.apply(null, Array.from(bytes.slice(0, 5)));
     if (!header.startsWith('%PDF-')) {
-      console.error('Invalid PDF header. First 20 bytes:', Array.from(bytes.slice(0, 20)));
       throw new Error('Invalid PDF file: Missing PDF header. The file may be corrupted.');
     }
 
@@ -193,23 +192,15 @@ function createLineFromItems(items: PdfTextItem[]): LineGroup {
  * Parse a PDF file from a data URL
  */
 export async function parsePdf(dataUrl: string): Promise<PdfParseResult> {
-  console.log('📄 Parsing PDF, dataUrl length:', dataUrl.length);
-  console.log('📄 DataUrl starts with:', dataUrl.substring(0, 50));
-
   const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
   const bytes = new Uint8Array(arrayBuffer);
-
-  console.log('📄 PDF bytes length:', bytes.length);
-  console.log('📄 First 10 bytes:', Array.from(bytes.slice(0, 10)));
 
   // Load with pdfjs for text extraction
   const loadingTask = getDocument({ data: bytes });
   let pdfJsDoc: PDFDocumentProxy;
   try {
     pdfJsDoc = await loadingTask.promise;
-    console.log('📄 PDF loaded successfully, pages:', pdfJsDoc.numPages);
   } catch (error) {
-    console.error('📄 Failed to load PDF with PDF.js:', error);
     throw new Error(
       'Failed to parse PDF document: ' +
         (error instanceof Error ? error.message : 'Unknown error') +
@@ -245,8 +236,6 @@ export async function parsePdf(dataUrl: string): Promise<PdfParseResult> {
 
     // Group items into lines using spatial thresholds
     const lines = groupTextItemsIntoLines(items);
-    console.log(`📄 Page ${pageNum}: ${items.length} items → ${lines.length} lines`);
-
     // Create segments from lines (not individual items)
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const line = lines[lineIndex];
@@ -276,32 +265,21 @@ export async function rebuildPdf(
   parseResult: PdfParseResult,
   translations: Map<string, string>
 ): Promise<string> {
-  console.log('📄 Rebuilding PDF with', translations.size, 'translations');
   const { originalDataUrl } = parseResult;
 
   // Reload PDF bytes specifically for pdf-lib from the original dataUrl
   // This ensures pdf-lib gets fresh, properly formatted bytes
-  console.log('📄 Reloading PDF from originalDataUrl for pdf-lib...');
   const arrayBuffer = dataUrlToArrayBuffer(originalDataUrl);
   const pdfBytes = new Uint8Array(arrayBuffer);
-  console.log('📄 Reloaded PDF bytes length:', pdfBytes.length);
-  console.log('📄 First 10 bytes:', Array.from(pdfBytes.slice(0, 10)));
 
   // Load the PDF with pdf-lib
-  console.log('📄 Loading PDF with pdf-lib...');
   const pdfDoc = await PDFDocument.load(pdfBytes);
 
   // Register fontkit to enable custom font embedding (required for Unicode fonts)
   // @ts-ignore - fontkit types don't perfectly match pdf-lib expectations but work at runtime
   pdfDoc.registerFontkit(fontkit);
-  console.log('📄 Fontkit registered for custom font support');
-
   const pages = pdfDoc.getPages();
-  console.log('📄 PDF loaded,', pages.length, 'pages');
-
   // Embed Unicode-compatible font for international character support
-  console.log('📄 Embedding Unicode font for multilingual support...');
-
   // Noto Sans supports ALL Unicode characters: Latin, Cyrillic, Greek, Arabic, Chinese, Japanese, Korean, etc.
   let unicodeFont: PDFFont;
   try {
@@ -317,7 +295,6 @@ export async function rebuildPdf(
 
     for (const source of fontSources) {
       try {
-        console.log(`📄 Loading Noto Sans from ${source.description}...`);
         const fontResponse = await fetch(source.url);
         if (!fontResponse.ok) {
           throw new Error(`HTTP ${fontResponse.status}`);
@@ -328,17 +305,12 @@ export async function rebuildPdf(
           throw new Error(`Invalid font file (too small: ${fontBytes.byteLength} bytes)`);
         }
 
-        console.log(`📄 Font loaded successfully, size: ${(fontBytes.byteLength / 1024 / 1024).toFixed(2)} MB`);
-
         // Embed font without subsetting (subsetting has compatibility issues in browser)
         // This embeds the full font, resulting in larger PDF but ensuring compatibility
-        console.log(`📄 Embedding font (full, no subsetting)...`);
         unicodeFont = await pdfDoc.embedFont(fontBytes);
-        console.log(`✅ Unicode font embedded successfully from ${source.description}`);
         fontLoaded = true;
         break;
       } catch (error) {
-        console.warn(`⚠️ Failed to load from ${source.description}:`, error instanceof Error ? error.message : error);
         lastError = error as Error;
         continue;
       }
@@ -351,7 +323,6 @@ export async function rebuildPdf(
       );
     }
   } catch (fontError) {
-    console.error('❌ CRITICAL: Failed to embed Unicode font:', fontError);
     throw new Error(
       'Cannot translate PDF with international characters. ' +
       'Unicode font loading failed. Please ensure the font file exists at public/fonts/NotoSans-Regular.ttf ' +
@@ -359,17 +330,11 @@ export async function rebuildPdf(
       'Error: ' + (fontError instanceof Error ? fontError.message : 'Unknown error')
     );
   }
-  console.log('📄 Fonts embedded');
-
   // Process each page using line-based approach
   const { pageLines } = parseResult;
-  console.log('📄 Processing', pageLines.size, 'pages with line-based rendering');
-
   for (const [pageIndex, lines] of pageLines.entries()) {
     const page = pages[pageIndex];
     if (!page) continue;
-
-    console.log(`📄 Page ${pageIndex + 1}: ${lines.length} lines`);
 
     // Apply translations line by line
     let appliedCount = 0;
@@ -410,18 +375,12 @@ export async function rebuildPdf(
       });
     }
 
-    console.log(`📄 Page ${pageIndex + 1}: Applied ${appliedCount} line translations`);
   }
 
   // Save the modified PDF
-  console.log('📄 Saving modified PDF...');
   const outputBytes = await pdfDoc.save();
-  console.log('📄 PDF saved, size:', outputBytes.length, 'bytes');
-
   // Convert to base64 data URL
-  console.log('📄 Converting to base64...');
   const base64 = bytesToBase64(outputBytes);
-  console.log('📄 Base64 conversion complete, length:', base64.length);
   return `data:application/pdf;base64,${base64}`;
 }
 
@@ -453,3 +412,4 @@ export function getPdfSummary(parseResult: PdfParseResult): {
     totalCharacters: segments.reduce((sum, s) => sum + s.text.length, 0),
   };
 }
+

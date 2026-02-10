@@ -4,6 +4,7 @@ import { FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import mammoth from 'mammoth';
+import DOMPurify from 'dompurify';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -52,7 +53,7 @@ export const DocumentTranslateView: React.FC = () => {
         }
 
         const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-        setDocxHtmlContent(result.value);
+        setDocxHtmlContent(DOMPurify.sanitize(result.value));
       } catch (error) {
         setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
       } finally {

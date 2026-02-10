@@ -72,7 +72,6 @@ export const LeftMultiAnglePanel = () => {
     try {
       await exportAsPng();
     } catch (error) {
-      console.error('Multi-angle PNG export failed, falling back to original.', error);
       const ext = getExtension(url);
       const fallbackName = `multi-angle-${index + 1}-${Date.now()}.${ext}`;
       try {
@@ -87,7 +86,6 @@ export const LeftMultiAnglePanel = () => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(blobUrl);
       } catch (fallbackError) {
-        console.error('Multi-angle download failed, falling back to direct link.', fallbackError);
         const link = document.createElement('a');
         link.href = url;
         link.download = fallbackName;
@@ -230,3 +228,4 @@ export const LeftMultiAnglePanel = () => {
     </div>
   );
 };
+

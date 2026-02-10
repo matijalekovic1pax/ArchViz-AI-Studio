@@ -74,7 +74,6 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       const data: SearchResult[] = await response.json();
       setSearchResults(data);
     } catch (error) {
-      console.error('Geocoding error:', error);
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -309,3 +308,4 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     </div>
   );
 };
+

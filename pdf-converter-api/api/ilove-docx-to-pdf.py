@@ -9,17 +9,33 @@ import os
 import urllib.request
 import urllib.error
 from urllib.parse import urlencode
+from _auth import authenticate_request, check_payload_size, send_unauthorized, send_payload_too_large, get_cors_origin, send_cors_headers
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Handle CORS preflight"""
+        origin = get_cors_origin(self)
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        send_cors_headers(self, origin)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.end_headers()
 
     def do_POST(self):
+        # Auth check
+        authed, result = authenticate_request(self)
+        if not authed:
+            send_unauthorized(self, result)
+            return
+
+        # Payload size check
+        size_ok, size_result = check_payload_size(self)
+        if not size_ok:
+            send_payload_too_large(self)
+            return
+
+        origin = get_cors_origin(self)
+
         try:
             # Read request body
             content_length = int(self.headers['Content-Length'])
@@ -35,7 +51,6 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             # Step 1: Start task
-            print('Step 1: Starting iLovePDF task...')
             task_data = self.start_task(public_key, 'officepdf')
             if not task_data:
                 self.send_error_response(500, 'Failed to start iLovePDF task')
@@ -43,40 +58,31 @@ class handler(BaseHTTPRequestHandler):
 
             server = task_data['server']
             task = task_data['task']
-            print(f'Task started: {task} on server: {server}')
 
             # Step 2: Upload file
-            print('Step 2: Uploading DOCX...')
             upload_data = self.upload_file(server, task, docx_base64, 'document.docx')
             if not upload_data:
                 self.send_error_response(500, 'Failed to upload DOCX')
                 return
 
             server_filename = upload_data['server_filename']
-            print(f'File uploaded: {server_filename}')
 
             # Step 3: Process conversion
-            print('Step 3: Processing conversion...')
             process_result = self.process_conversion(server, task, server_filename, 'officepdf')
             if not process_result:
                 self.send_error_response(500, 'Failed to process conversion')
                 return
 
-            print('Conversion processed')
-
             # Step 4: Download result
-            print('Step 4: Downloading PDF...')
             pdf_base64 = self.download_file(server, task)
             if not pdf_base64:
                 self.send_error_response(500, 'Failed to download PDF')
                 return
 
-            print('✅ DOCX to PDF conversion complete')
-
             # Send success response
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            send_cors_headers(self, origin)
             self.end_headers()
 
             response = {
@@ -86,7 +92,6 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(response).encode())
 
         except Exception as e:
-            print(f'Error: {str(e)}')
             self.send_error_response(500, str(e))
 
     def start_task(self, public_key, tool):
@@ -180,9 +185,10 @@ class handler(BaseHTTPRequestHandler):
 
     def send_error_response(self, code, message):
         """Send error response"""
+        origin = get_cors_origin(self)
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        send_cors_headers(self, origin)
         self.end_headers()
 
         response = {

@@ -1,8 +1,9 @@
 /**
  * Video Generation Service - Unified Interface
+ * All API calls go through the API gateway — no API keys in the client.
  *
  * Abstracts Veo and Kling services, routing requests to the appropriate API
- * Handles model capability detection and API key management
+ * Handles model capability detection
  * Provides a single interface for video generation across different providers
  */
 
@@ -17,7 +18,6 @@ import {
   initVeoService,
   getVeoService,
   isVeoServiceInitialized,
-  getVeoApiKey,
   type VeoGenerationOptions,
   type VeoResponse,
   VeoError
@@ -27,7 +27,6 @@ import {
   initKlingService,
   getKlingService,
   isKlingServiceInitialized,
-  getKlingApiKey,
   type KlingGenerationOptions,
   type KlingResponse,
   KlingError
@@ -93,10 +92,10 @@ class VideoGenerationService {
    * Generate video using the specified model
    */
   async generateVideo(options: VideoGenerationOptions): Promise<VideoGenerationResponse> {
-    const { model, klingProvider, onProgress } = options;
+    const { model, klingProvider } = options;
 
     // Ensure appropriate service is initialized
-    await this.ensureServiceInitialized(model, klingProvider);
+    this.ensureServiceInitialized(model, klingProvider);
 
     // Route to appropriate service
     if (model === 'veo-2') {
@@ -195,45 +194,19 @@ class VideoGenerationService {
 
   /**
    * Ensure the appropriate service is initialized
+   * No API keys needed — gateway handles auth
    */
-  private async ensureServiceInitialized(
+  private ensureServiceInitialized(
     model: 'veo-2' | 'kling-2.6',
     klingProvider: KlingProvider
-  ): Promise<void> {
+  ): void {
     if (model === 'veo-2') {
       if (!isVeoServiceInitialized()) {
-        const apiKey = getVeoApiKey();
-        if (!apiKey) {
-          throw new VideoGenerationError(
-            'Google API key not found. Please set VITE_GOOGLE_API_KEY or add it in settings.',
-            'veo-2'
-          );
-        }
-        // Get project ID from environment or localStorage
-        // @ts-ignore
-        const projectId = import.meta.env?.VITE_GOOGLE_PROJECT_ID || localStorage.getItem('google_project_id');
-        // @ts-ignore
-        const region = import.meta.env?.VITE_GOOGLE_REGION || 'us-central1';
-
-        if (!projectId) {
-          throw new VideoGenerationError(
-            'Google Cloud Project ID not found. Please set VITE_GOOGLE_PROJECT_ID in .env or add "google_project_id" to localStorage.',
-            'veo-2'
-          );
-        }
-
-        initVeoService(apiKey, projectId, region);
+        initVeoService();
       }
     } else if (model === 'kling-2.6') {
       if (!isKlingServiceInitialized()) {
-        const apiKey = getKlingApiKey(klingProvider);
-        if (!apiKey) {
-          throw new VideoGenerationError(
-            `Kling API key not found for ${klingProvider}. Please add it in settings.`,
-            'kling-2.6'
-          );
-        }
-        initKlingService(apiKey, klingProvider);
+        initKlingService(klingProvider);
       } else {
         // Update provider if different
         const klingService = getKlingService();
@@ -272,22 +245,18 @@ class VideoGenerationService {
     const capabilities = this.getModelCapabilities(options.model);
     const errors: string[] = [];
 
-    // Check duration
     if (options.duration > capabilities.maxDuration) {
       errors.push(`${options.model} supports max ${capabilities.maxDuration}s videos (requested: ${options.duration}s)`);
     }
 
-    // Check resolution
     if (options.resolution === '4k' && capabilities.maxResolution !== '4k') {
       errors.push(`${options.model} does not support 4K resolution (max: ${capabilities.maxResolution})`);
     }
 
-    // Check camera controls
     if (!capabilities.supportsCameraControls && options.camera.type !== 'static') {
       errors.push(`${options.model} does not support camera controls`);
     }
 
-    // Check aspect ratio
     if (!capabilities.supportedAspectRatios.includes(options.aspectRatio)) {
       errors.push(`${options.model} does not support ${options.aspectRatio} aspect ratio`);
     }
@@ -336,7 +305,6 @@ export function getVideoGenerationService(): VideoGenerationService {
 
 /**
  * Initialize video generation service
- * Note: This doesn't require immediate initialization since API keys are loaded per-model
  */
 export function initVideoGenerationService(): VideoGenerationService {
   serviceInstance = new VideoGenerationService();

@@ -35,21 +35,6 @@ interface GoogleCredentialResponse {
   select_by: string;
 }
 
-interface GoogleJwtPayload {
-  email: string;
-  email_verified: boolean;
-  name: string;
-  picture: string;
-  given_name: string;
-  family_name: string;
-  sub: string;
-  aud: string;
-  iss: string;
-  exp: number;
-  iat: number;
-  hd?: string; // Hosted domain (Google Workspace domain)
-}
-
 export interface AuthUser {
   email: string;
   name: string;
@@ -58,30 +43,6 @@ export interface AuthUser {
 }
 
 const AUTH_STORAGE_KEY = 'archviz_auth';
-
-// Decode JWT token (base64url)
-function decodeJwt(token: string): GoogleJwtPayload {
-  const base64Url = token.split('.')[1];
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const jsonPayload = decodeURIComponent(
-    atob(base64)
-      .split('')
-      .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-      .join('')
-  );
-  return JSON.parse(jsonPayload);
-}
-
-// Extract domain from email
-function getDomainFromEmail(email: string): string {
-  return email.split('@')[1]?.toLowerCase() || '';
-}
-
-// Verify email domain matches allowed domain
-export function verifyDomain(email: string, allowedDomain: string): boolean {
-  const userDomain = getDomainFromEmail(email);
-  return userDomain === allowedDomain.toLowerCase();
-}
 
 // Get allowed domain from environment
 export function getAllowedDomain(): string {
@@ -93,33 +54,11 @@ export function getGoogleClientId(): string {
   return (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
 }
 
-// Process Google credential and extract user info
-export function processGoogleCredential(credential: string): AuthUser | null {
-  try {
-    const payload = decodeJwt(credential);
-
-    if (!payload.email || !payload.email_verified) {
-      return null;
-    }
-
-    return {
-      email: payload.email,
-      name: payload.name || payload.email,
-      picture: payload.picture || '',
-      domain: getDomainFromEmail(payload.email),
-    };
-  } catch (error) {
-    console.error('Failed to decode Google credential:', error);
-    return null;
-  }
-}
-
-// Session storage helpers
+// Session storage helpers (for non-secret user profile info only)
 export function saveAuthSession(user: AuthUser): void {
   try {
     sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
   } catch (error) {
-    console.error('Failed to save auth session:', error);
   }
 }
 
@@ -130,7 +69,6 @@ export function loadAuthSession(): AuthUser | null {
       return JSON.parse(stored);
     }
   } catch (error) {
-    console.error('Failed to load auth session:', error);
   }
   return null;
 }
@@ -139,11 +77,11 @@ export function clearAuthSession(): void {
   try {
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
   } catch (error) {
-    console.error('Failed to clear auth session:', error);
   }
 }
 
 // Initialize Google Sign-In
+// On success, exchanges the Google ID token with the gateway for a short-lived JWT
 export function initializeGoogleSignIn(
   buttonElement: HTMLElement,
   onSuccess: (user: AuthUser) => void,
@@ -171,21 +109,18 @@ export function initializeGoogleSignIn(
 
     window.google.accounts.id.initialize({
       client_id: clientId,
-      callback: (response: GoogleCredentialResponse) => {
-        const user = processGoogleCredential(response.credential);
+      callback: async (response: GoogleCredentialResponse) => {
+        try {
+          // Exchange Google ID token for gateway JWT (server-side verified)
+          const { verifyAuth } = await import('../services/apiGateway');
+          const authResult = await verifyAuth(response.credential);
+          const user: AuthUser = authResult.user;
 
-        if (!user) {
-          onError('Failed to process Google sign-in. Please try again.');
-          return;
+          saveAuthSession(user);
+          onSuccess(user);
+        } catch (error: any) {
+          onError(error.message || 'Authentication failed. Please try again.');
         }
-
-        if (!verifyDomain(user.email, allowedDomain)) {
-          onError(`Access denied. Only ${allowedDomain} accounts are allowed.`);
-          return;
-        }
-
-        saveAuthSession(user);
-        onSuccess(user);
       },
       auto_select: false,
       cancel_on_tap_outside: true,
@@ -206,3 +141,4 @@ export function initializeGoogleSignIn(
 }
 
 export {};
+

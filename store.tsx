@@ -461,15 +461,50 @@ const initialWorkflow: WorkflowSettings = {
   },
   visualPeople: {
     mode: 'enhance',
+
+    airportZone: 'terminal-general',
+    timeContext: 'normal',
+
+    regionMix: ['european', 'east-asian', 'south-asian', 'middle-eastern', 'african', 'latin-american'],
+    ageDistribution: 'mixed-all-ages',
+    genderBalance: 'balanced',
+    childrenPresence: 30,
+    bodyTypeVariety: 60,
+
     density: 50,
+    grouping: 'mixed-groups',
+    flowPattern: 'random',
+    movementDirection: 'mixed',
+    paceOfMovement: 'moderate',
+    clusteringTendency: 40,
+
+    wardrobeStyle: 'mixed',
+    seasonalClothing: 'mixed',
+    formalityLevel: 50,
+    culturalAttire: 20,
+
+    activities: ['walking', 'standing', 'sitting', 'phone-use'],
+    interactionLevel: 40,
+
+    luggageTypes: ['rolling-suitcase', 'backpack', 'carry-on'],
+    luggageAmount: 50,
+    trolleyUsage: 20,
+    personalDevices: 50,
+    travelAccessories: 30,
+
+    includeAirportStaff: true,
+    includeSecurityPersonnel: false,
+    includeAirlineCrew: false,
+    includeGroundCrew: false,
+    includeServiceStaff: false,
+    staffDensity: 15,
+
     realism: 70,
     sharpness: 60,
-    variety: 50,
     scaleAccuracy: 70,
     placementDiscipline: 70,
-    luggage: 40,
     motionBlur: 10,
-    wardrobeStyle: 'mixed',
+
     preserveExisting: true,
     matchLighting: true,
     matchPerspective: true,

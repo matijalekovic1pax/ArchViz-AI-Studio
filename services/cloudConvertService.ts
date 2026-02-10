@@ -17,7 +17,6 @@ export function initCloudConvertService(apiKey: string): void {
     throw new Error('CloudConvert API key is required');
   }
   cloudConvertInstance = new CloudConvert(apiKey);
-  console.log('✅ CloudConvert service initialized');
 }
 
 /**
@@ -58,8 +57,6 @@ export async function convertPdfToDocx(
   const cloudConvert = getCloudConvert();
   const { onProgress, abortSignal } = options || {};
 
-  console.log('📄 Starting PDF to DOCX conversion via CloudConvert');
-
   try {
     // Report progress: uploading
     onProgress?.({ phase: 'uploading', progress: 10, message: 'Uploading PDF...' });
@@ -95,8 +92,6 @@ export async function convertPdfToDocx(
       }
     });
 
-    console.log('✅ CloudConvert job created:', job.id);
-
     // Report progress: converting
     onProgress?.({ phase: 'converting', progress: 40, message: 'Converting PDF to DOCX...' });
 
@@ -119,8 +114,6 @@ export async function convertPdfToDocx(
 
     // Download the converted file
     const fileUrl = exportTask.result.files[0].url;
-    console.log('📥 Downloading converted DOCX from:', fileUrl);
-
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(`Failed to download DOCX: ${response.status}`);
@@ -136,11 +129,9 @@ export async function convertPdfToDocx(
     // Report progress: complete
     onProgress?.({ phase: 'complete', progress: 100, message: 'Conversion complete!' });
 
-    console.log('✅ PDF to DOCX conversion complete');
     return docxDataUrl;
 
   } catch (error) {
-    console.error('❌ CloudConvert PDF to DOCX error:', error);
     onProgress?.({
       phase: 'error',
       progress: 0,
@@ -162,8 +153,6 @@ export async function convertDocxToPdf(
 ): Promise<string> {
   const cloudConvert = getCloudConvert();
   const { onProgress, abortSignal } = options || {};
-
-  console.log('📄 Starting DOCX to PDF conversion via CloudConvert');
 
   try {
     // Report progress: uploading
@@ -200,8 +189,6 @@ export async function convertDocxToPdf(
       }
     });
 
-    console.log('✅ CloudConvert job created:', job.id);
-
     // Report progress: converting
     onProgress?.({ phase: 'converting', progress: 40, message: 'Converting DOCX to PDF...' });
 
@@ -224,8 +211,6 @@ export async function convertDocxToPdf(
 
     // Download the converted file
     const fileUrl = exportTask.result.files[0].url;
-    console.log('📥 Downloading converted PDF from:', fileUrl);
-
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(`Failed to download PDF: ${response.status}`);
@@ -241,11 +226,9 @@ export async function convertDocxToPdf(
     // Report progress: complete
     onProgress?.({ phase: 'complete', progress: 100, message: 'Conversion complete!' });
 
-    console.log('✅ DOCX to PDF conversion complete');
     return pdfDataUrl;
 
   } catch (error) {
-    console.error('❌ CloudConvert DOCX to PDF error:', error);
     onProgress?.({
       phase: 'error',
       progress: 0,
@@ -257,3 +240,4 @@ export async function convertDocxToPdf(
     );
   }
 }
+

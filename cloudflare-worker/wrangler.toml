@@ -1,9 +1,22 @@
-name = "veo-proxy"
-main = "veo-proxy.js"
+name = "archviz-api-gateway"
+main = "worker.js"
 compatibility_date = "2024-01-01"
 
 # Account ID - get this from your Cloudflare dashboard
 # account_id = "your-account-id-here"
 
+# Secrets (set via `wrangler secret put <NAME>`):
+#   JWT_SECRET            - Random 256-bit secret for signing JWTs
+#   GOOGLE_CLIENT_ID      - Google OAuth Client ID
+#   ALLOWED_DOMAIN        - Allowed Google Workspace domain (e.g. "1pax.com")
+#   GEMINI_API_KEY        - Google Gemini API key
+#   VERTEX_AI_TOKEN       - Vertex AI OAuth token (optional, for legacy Veo)
+#   GOOGLE_PROJECT_ID     - Google Cloud project ID (optional, for legacy Veo)
+#   KLING_PIAPI_API_KEY   - PiAPI key for Kling video
+#   KLING_ULAZAI_API_KEY  - UlazAI key for Kling video
+#   KLING_WAVESPEEDAI_API_KEY - WaveSpeedAI key for Kling video
+#   CONVERTAPI_SECRET     - ConvertAPI secret
+#   ILOVEPDF_PUBLIC_KEY   - iLovePDF public key
+
 [env.production]
-name = "veo-proxy-prod"
+name = "archviz-api-gateway-prod"

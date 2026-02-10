@@ -72,9 +72,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
       throw new DOMException('Translation cancelled', 'AbortError');
     }
 
-    console.log('📄 Converting PDF to DOCX via ConvertAPI...');
     docxDataUrl = await convertPdfToDocxWithConvertApi(sourceDocument.dataUrl, (progress) => {
-      console.log(`📄 PDF→DOCX: ${progress.phase} (${progress.percent}%)`);
       onProgress({
         phase: 'parsing',
         currentSegment: 0,
@@ -84,7 +82,6 @@ export async function translateDocument(options: TranslationOptions): Promise<st
         message: progress.message,
       });
     });
-    console.log('✅ PDF converted to DOCX successfully');
   }
 
   // Phase 1: Parse DOCX document (to extract text for context analysis)
@@ -104,7 +101,6 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   let segments: TextSegment[];
   let parseResult: any;
 
-  console.log('📝 Parsing DOCX document...');
   parseResult = await parseDocx(docxDataUrl);
   segments = parseResult.segments;
 
@@ -134,8 +130,6 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     translationModel,
     abortSignal
   );
-
-  console.log('📋 Document context:', documentContext);
 
   // Phase 3: Create batches
   const batches = createBatches(segments);
@@ -220,15 +214,11 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     throw new DOMException('Translation cancelled', 'AbortError');
   }
 
-  console.log('📝 Rebuilding DOCX document...');
-  console.log('📝 Translations map size:', translations.size);
   let translatedDocxDataUrl: string;
 
   try {
     translatedDocxDataUrl = await rebuildDocx(parseResult, translations);
-    console.log('✅ DOCX rebuild complete, dataUrl length:', translatedDocxDataUrl.length);
   } catch (error) {
-    console.error('❌ Document rebuild failed:', error);
     throw error;
   }
 
@@ -329,7 +319,6 @@ Context description:`;
 
     return response.trim();
   } catch (error) {
-    console.warn('Failed to analyze document context:', error);
     // Return generic context on failure
     return `Professional document in ${sourceLangDisplay}.`;
   }
@@ -483,3 +472,4 @@ export function getSupportedLanguages(): Array<{ code: string; name: string }> {
     { code: 'ru', name: 'Russian' },
   ];
 }
+

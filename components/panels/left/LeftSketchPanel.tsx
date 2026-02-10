@@ -16,6 +16,7 @@ import {
   isGeminiServiceInitialized,
   ImageUtils
 } from '../../../services/geminiService';
+import { isGatewayAuthenticated } from '../../../services/apiGateway';
 
 const materialPalettes = [
   'Concrete & Glass',
@@ -109,26 +110,16 @@ export const LeftSketchPanel = () => {
     [dispatch]
   );
 
-  const getApiKey = useCallback((): string | null => {
-    // @ts-ignore - Vite injects this
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_GEMINI_API_KEY;
-    }
-    return localStorage.getItem('gemini_api_key');
-  }, []);
-
   const ensureServiceInitialized = useCallback((): boolean => {
     if (isGeminiServiceInitialized()) {
       return true;
     }
-    const apiKey = getApiKey();
-    if (!apiKey) {
+    if (!isGatewayAuthenticated()) {
       return false;
     }
-    initGeminiService({ apiKey });
+    initGeminiService();
     return true;
-  }, [getApiKey]);
+  }, []);
 
   const parseSketchAnalysis = useCallback((raw: string) => {
     const trimmed = raw.trim();
@@ -219,7 +210,6 @@ export const LeftSketchPanel = () => {
         });
       }
     } catch (error) {
-      console.error('Sketch analysis failed:', error);
     } finally {
       if (lastScanRef.current === imageUrl) {
         setIsDetecting(false);
@@ -701,3 +691,4 @@ export const LeftSketchPanel = () => {
     </div>
   );
 };
+

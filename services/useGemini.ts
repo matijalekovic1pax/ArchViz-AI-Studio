@@ -19,7 +19,6 @@ import {
 } from './geminiService';
 
 export interface UseGeminiOptions {
-  apiKey: string;
   model?: string;  // Any valid Gemini/Imagen model ID
   onError?: (error: GeminiError) => void;
 }
@@ -66,7 +65,6 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
   const serviceRef = useRef<GeminiService | null>(null);
   if (!serviceRef.current) {
     serviceRef.current = new GeminiService({
-      apiKey: options.apiKey,
       model: options.model
     });
   }

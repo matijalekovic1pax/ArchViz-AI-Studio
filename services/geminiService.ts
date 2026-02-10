@@ -1,16 +1,15 @@
 /**
  * Gemini API Service
- * Handles all communication with Google's Gemini API using the official SDK
- * Supports: text + images input, text + images output, batch image generation
+ * All calls go through the API gateway (Cloudflare Worker) — no API keys in the client.
+ * Public API is unchanged from the SDK-based version.
  */
 
-import { GoogleGenAI, type GenerateContentResponse } from '@google/genai';
+import { geminiRequest, geminiStreamRequest } from './apiGateway';
 
 // ============================================================================
 // Types & Interfaces
 // ============================================================================
 
-// Default model for native image generation
 export const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
 export const IMAGE_MODEL = 'gemini-3-pro-image-preview';
 export const TEXT_MODEL = 'gemini-3-pro-preview';
@@ -18,7 +17,6 @@ export const TEXT_MODEL = 'gemini-3-pro-preview';
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
 export interface GeminiConfig {
-  apiKey: string;
   model?: string;
 }
 
@@ -233,19 +231,14 @@ export class ImageUtils {
 }
 
 // ============================================================================
-// Main Gemini Service
+// Main Gemini Service (REST through gateway)
 // ============================================================================
 
 export class GeminiService {
-  private ai: GoogleGenAI;
   private model: string;
   private maxRetries = 3;
 
-  constructor(config: GeminiConfig) {
-    if (!config.apiKey) {
-      throw new GeminiError('API key is required');
-    }
-    this.ai = new GoogleGenAI({ apiKey: config.apiKey });
+  constructor(config: GeminiConfig = {}) {
     this.model = config.model || DEFAULT_MODEL;
   }
 
@@ -261,91 +254,62 @@ export class GeminiService {
   // Core Generation Methods
   // --------------------------------------------------------------------------
 
-  /**
-   * Main generation method - supports text + images input, text + images output
-   */
   async generate(request: GeminiRequest): Promise<GeminiResponse> {
     const contents = this.buildContents(request);
-    const { imageConfig, ...restConfig } = request.generationConfig || {};
+    const generationConfig = this.buildGenerationConfig(request.generationConfig, ['TEXT', 'IMAGE']);
 
     const response = await this.executeWithRetry(() =>
-      this.ai.models.generateContent({
-        model: this.model,
+      geminiRequest(this.model, 'generateContent', {
         contents,
-        config: {
-          ...restConfig,
-          responseModalities: request.generationConfig?.responseModalities || ['TEXT', 'IMAGE'],
-          ...(imageConfig && { imageConfig })
-        }
-      })
+        generationConfig,
+      }, { signal: request.generationConfig?.abortSignal })
     );
 
     return this.parseResponse(response);
   }
 
-  /**
-   * Generate text-only response
-   */
   async generateText(request: GeminiRequest): Promise<string> {
     const contents = this.buildContents(request);
-    const baseConfig: GenerationConfig = {
-      ...request.generationConfig,
-      responseModalities: ['TEXT']
-    };
     const model = request.model || TEXT_MODEL;
-    const config = this.normalizeThinkingConfig(model, baseConfig);
+    const baseConfig = { ...request.generationConfig, responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'> };
+    const normalized = this.normalizeThinkingConfig(model, baseConfig);
+    const generationConfig = this.buildGenerationConfig(normalized, ['TEXT']);
 
     const response = await this.executeWithRetry(() =>
-      this.ai.models.generateContent({
-        model,
+      geminiRequest(model, 'generateContent', {
         contents,
-        config
-      })
+        generationConfig,
+      }, { signal: request.generationConfig?.abortSignal })
     );
 
     const parsed = this.parseResponse(response);
     return parsed.text || '';
   }
 
-  /**
-   * Generate images - main method for image generation
-   */
   async generateImages(request: GeminiRequest): Promise<GeminiResponse> {
     const imagePrompt = request.prompt.includes('generate') || request.prompt.includes('create')
       ? request.prompt
       : `Generate an image: ${request.prompt}`;
 
     const contents = this.buildContents({ ...request, prompt: imagePrompt });
-
-    const { imageConfig, ...restConfig } = request.generationConfig || {};
+    const generationConfig = this.buildGenerationConfig(request.generationConfig, ['TEXT', 'IMAGE']);
 
     const response = await this.executeWithRetry(() =>
-      this.ai.models.generateContent({
-        model: IMAGE_MODEL,
+      geminiRequest(IMAGE_MODEL, 'generateContent', {
         contents,
-        config: {
-          ...restConfig,
-          responseModalities: ['TEXT', 'IMAGE'],
-          ...(imageConfig && { imageConfig })
-        }
-      })
+        generationConfig,
+      }, { signal: request.generationConfig?.abortSignal })
     );
 
-    const result = this.parseResponse(response);
-    console.log('generateImages returning:', result.images.length, 'images');
-    return result;
+    return this.parseResponse(response);
   }
 
   // --------------------------------------------------------------------------
   // Batch Image Generation
   // --------------------------------------------------------------------------
 
-  /**
-   * Generate multiple images in parallel
-   */
   async generateBatchImages(request: BatchImageRequest): Promise<BatchImageResponse> {
     const numberOfImages = Math.min(Math.max(1, request.numberOfImages), 8);
-
     const promises: Promise<GeminiResponse>[] = [];
 
     for (let i = 0; i < numberOfImages; i++) {
@@ -366,7 +330,6 @@ export class GeminiService {
     }
 
     const results = await Promise.allSettled(promises);
-
     const allImages: GeneratedImage[] = [];
     let combinedText = '';
 
@@ -389,9 +352,6 @@ export class GeminiService {
   // Chat/Conversation Support
   // --------------------------------------------------------------------------
 
-  /**
-   * Send a message in a conversation context
-   */
   async chat(
     messages: Array<{ role: 'user' | 'model'; content: string; images?: ImageData[] }>,
     generationConfig?: GenerationConfig
@@ -400,30 +360,21 @@ export class GeminiService {
       const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
         { text: msg.content }
       ];
-
       if (msg.images) {
         for (const img of msg.images) {
-          parts.push({
-            inlineData: {
-              mimeType: img.mimeType,
-              data: img.base64
-            }
-          });
+          parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
         }
       }
-
       return { role: msg.role, parts };
     });
 
+    const config = this.buildGenerationConfig(generationConfig, generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
+
     const response = await this.executeWithRetry(() =>
-      this.ai.models.generateContent({
-        model: this.model,
+      geminiRequest(this.model, 'generateContent', {
         contents,
-        config: {
-          ...generationConfig,
-          responseModalities: generationConfig?.responseModalities || ['TEXT', 'IMAGE']
-        }
-      })
+        generationConfig: config,
+      }, { signal: generationConfig?.abortSignal })
     );
 
     return this.parseResponse(response);
@@ -433,9 +384,6 @@ export class GeminiService {
   // Image Editing
   // --------------------------------------------------------------------------
 
-  /**
-   * Edit an existing image based on a prompt
-   */
   async editImage(request: ImageEditRequest): Promise<GeminiResponse> {
     let editPrompt = request.prompt;
 
@@ -461,9 +409,7 @@ export class GeminiService {
     }
 
     const images: ImageData[] = [request.sourceImage];
-    if (request.maskImage) {
-      images.push(request.maskImage);
-    }
+    if (request.maskImage) images.push(request.maskImage);
 
     return this.generate({
       prompt: editPrompt,
@@ -472,15 +418,12 @@ export class GeminiService {
     });
   }
 
-  /**
-   * Alias for generateBatchImages for backward compatibility
-   */
   async generateBatchImagesParallel(request: BatchImageRequest): Promise<BatchImageResponse> {
     return this.generateBatchImages(request);
   }
 
   // --------------------------------------------------------------------------
-  // Batch Text Generation (Batch API)
+  // Batch Text Generation (uses batches API)
   // --------------------------------------------------------------------------
 
   async generateBatchText(
@@ -489,34 +432,49 @@ export class GeminiService {
   ): Promise<BatchTextResult[]> {
     if (!requests.length) return [];
     const pollIntervalMs = options.pollIntervalMs ?? 5000;
-    const ai = this.ai as any;
 
     const src = requests.map((request) => {
       const contents = this.buildContents(request);
-      const config = this.normalizeThinkingConfig(TEXT_MODEL, {
+      const normalized = this.normalizeThinkingConfig(TEXT_MODEL, {
         ...request.generationConfig,
-        responseModalities: ['TEXT']
+        responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'>
       });
+      const config = this.buildGenerationConfig(normalized, ['TEXT']);
       return { contents, config };
     });
 
+    // Create batch job via gateway passthrough
     const batchJob = await this.executeWithRetry(() =>
-      ai.batches.create({
-        model: TEXT_MODEL,
-        src,
-        config: options.displayName ? { displayName: options.displayName } : undefined
+      geminiRequest(TEXT_MODEL, 'batchGenerateContent', {
+        requests: src.map(s => ({
+          model: `models/${TEXT_MODEL}`,
+          contents: s.contents,
+          generationConfig: s.config,
+        }))
       })
     );
 
-    let job = batchJob as any;
-    // Poll until completion
+    // If it returns inline responses directly (sync batch)
+    if (batchJob.responses) {
+      return batchJob.responses.map((resp: any) => {
+        if (resp?.candidates?.[0]) {
+          const parsed = this.parseResponse(resp);
+          return { text: parsed.text };
+        }
+        return { text: null, error: 'Batch item returned no response.' };
+      });
+    }
+
+    // Async batch: poll for completion
+    let job = batchJob;
     while (true) {
       const state = typeof job.state === 'string' ? job.state : job.state?.name;
       if (state === 'JOB_STATE_SUCCEEDED' || state === 'JOB_STATE_FAILED' || state === 'JOB_STATE_CANCELLED') {
         break;
       }
       await this.sleep(pollIntervalMs);
-      job = await ai.batches.get({ name: job.name });
+      const { geminiGetOperation } = await import('./apiGateway');
+      job = await geminiGetOperation(job.name);
     }
 
     const finalState = typeof job.state === 'string' ? job.state : job.state?.name;
@@ -529,7 +487,7 @@ export class GeminiService {
 
     return inlineResponses.map((response: any) => {
       if (response?.response) {
-        const parsed = this.parseResponse(response.response as GenerateContentResponse);
+        const parsed = this.parseResponse(response.response);
         return { text: parsed.text };
       }
       if (response?.error) {
@@ -543,50 +501,63 @@ export class GeminiService {
   // Streaming Support
   // --------------------------------------------------------------------------
 
-  /**
-   * Generate content with streaming response
-   */
   async *generateStream(request: GeminiRequest): AsyncGenerator<Partial<GeminiResponse>> {
     const contents = this.buildContents(request);
-    const { imageConfig, ...restConfig } = request.generationConfig || {};
+    const generationConfig = this.buildGenerationConfig(request.generationConfig, request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
 
-    // Use streaming endpoint
-    const stream = await this.ai.models.generateContentStream({
-      model: request.model || this.model,
+    const model = request.model || this.model;
+    const response = await geminiStreamRequest(model, {
       contents,
-      config: {
-        ...restConfig,
-        responseModalities: request.generationConfig?.responseModalities || ['TEXT', 'IMAGE'],
-        ...(imageConfig && { imageConfig })
-      }
-    });
+      generationConfig,
+    }, { signal: request.generationConfig?.abortSignal });
 
     let accumulatedText = '';
     const accumulatedImages: GeneratedImage[] = [];
 
-    for await (const chunk of stream) {
-      const parts = chunk.candidates?.[0]?.content?.parts || [];
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-      for (const part of parts) {
-        if ('text' in part && part.text) {
-          accumulatedText += part.text;
-        }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-        if ('inlineData' in part && part.inlineData) {
-          const mimeType = part.inlineData.mimeType as ImageMimeType;
-          const base64 = part.inlineData.data as string;
-          accumulatedImages.push({
-            base64,
-            mimeType,
-            dataUrl: `data:${mimeType};base64,${base64}`
-          });
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr || jsonStr === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(jsonStr);
+            const parts = chunk.candidates?.[0]?.content?.parts || [];
+
+            for (const part of parts) {
+              if ('text' in part && part.text) {
+                accumulatedText += part.text;
+              }
+              if ('inlineData' in part && part.inlineData) {
+                const mimeType = part.inlineData.mimeType as ImageMimeType;
+                const base64 = part.inlineData.data as string;
+                accumulatedImages.push({
+                  base64,
+                  mimeType,
+                  dataUrl: `data:${mimeType};base64,${base64}`
+                });
+              }
+            }
+
+            yield {
+              text: accumulatedText || null,
+              images: accumulatedImages
+            };
+          } catch {
+            // Skip malformed SSE chunks
+          }
         }
       }
-
-      yield {
-        text: accumulatedText || null,
-        images: accumulatedImages
-      };
     }
   }
 
@@ -600,57 +571,46 @@ export class GeminiService {
     const hasNonImageAttachment = attachments.some((attachment) => !attachment.mimeType.startsWith('image/'));
 
     if (hasNonImageAttachment) {
-      // For document workflows, keep prompt first, then documents, then images.
-      if (request.prompt) {
-        parts.push({ text: request.prompt });
-      }
+      if (request.prompt) parts.push({ text: request.prompt });
       for (const attachment of attachments) {
-        parts.push({
-          inlineData: {
-            mimeType: attachment.mimeType,
-            data: attachment.base64
-          }
-        });
+        parts.push({ inlineData: { mimeType: attachment.mimeType, data: attachment.base64 } });
       }
       if (request.images) {
         for (const image of request.images) {
-          parts.push({
-            inlineData: {
-              mimeType: image.mimeType,
-              data: image.base64
-            }
-          });
+          parts.push({ inlineData: { mimeType: image.mimeType, data: image.base64 } });
         }
       }
     } else {
-      // For image-only flows, keep images first, then text.
       if (attachments.length > 0) {
         for (const attachment of attachments) {
-          parts.push({
-            inlineData: {
-              mimeType: attachment.mimeType,
-              data: attachment.base64
-            }
-          });
+          parts.push({ inlineData: { mimeType: attachment.mimeType, data: attachment.base64 } });
         }
       }
       if (request.images) {
         for (const image of request.images) {
-          parts.push({
-            inlineData: {
-              mimeType: image.mimeType,
-              data: image.base64
-            }
-          });
+          parts.push({ inlineData: { mimeType: image.mimeType, data: image.base64 } });
         }
       }
-      if (request.prompt) {
-        parts.push({ text: request.prompt });
-      }
+      if (request.prompt) parts.push({ text: request.prompt });
     }
 
-    // Always return a properly shaped contents array for the SDK.
     return [{ role: 'user', parts }];
+  }
+
+  /** Build REST API generationConfig from our GenerationConfig type */
+  private buildGenerationConfig(
+    config: GenerationConfig | undefined,
+    defaultModalities: Array<'TEXT' | 'IMAGE'>
+  ): Record<string, any> {
+    if (!config) return { responseModalities: defaultModalities };
+
+    const { abortSignal, imageConfig, ...rest } = config;
+    const result: Record<string, any> = {
+      ...rest,
+      responseModalities: config.responseModalities || defaultModalities,
+    };
+    if (imageConfig) result.imageConfig = imageConfig;
+    return result;
   }
 
   private normalizeThinkingConfig(model: string, config: GenerationConfig): GenerationConfig {
@@ -658,35 +618,26 @@ export class GeminiService {
     const isGemini3 = modelId.startsWith('gemini-3');
     const isGemini25 = modelId.startsWith('gemini-2.5');
 
-    if (!isGemini3 && !isGemini25) {
-      return config;
-    }
+    if (!isGemini3 && !isGemini25) return config;
 
     const incomingThinking = config.thinkingConfig || {};
     const thinkingConfig: GenerationConfig['thinkingConfig'] = { ...incomingThinking };
 
     if (isGemini3) {
-      // Gemini 3 uses thinkingLevel; ensure we don't send a zero thinking budget.
       if ('thinkingBudget' in thinkingConfig) {
         delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
       }
-      if (!thinkingConfig.thinkingLevel) {
-        thinkingConfig.thinkingLevel = 'low';
-      }
+      if (!thinkingConfig.thinkingLevel) thinkingConfig.thinkingLevel = 'low';
     } else {
-      // Gemini 2.5 uses thinkingBudget.
       if ('thinkingLevel' in thinkingConfig) {
-        delete (thinkingConfig as { thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' }).thinkingLevel;
+        delete (thinkingConfig as { thinkingLevel?: string }).thinkingLevel;
       }
       if (typeof thinkingConfig.thinkingBudget !== 'number' || thinkingConfig.thinkingBudget <= 0) {
         thinkingConfig.thinkingBudget = 256;
       }
     }
 
-    return {
-      ...config,
-      thinkingConfig
-    };
+    return { ...config, thinkingConfig };
   }
 
   private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -697,8 +648,6 @@ export class GeminiService {
         return await fn();
       } catch (error) {
         lastError = error as Error;
-
-        // Check if it's a retryable error (rate limit or server error)
         const errorMessage = lastError.message?.toLowerCase() || '';
         const isRetryable =
           errorMessage.includes('rate') ||
@@ -729,11 +678,7 @@ export class GeminiService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private parseResponse(response: GenerateContentResponse): GeminiResponse {
-    // Debug: Log response structure (not full data - too large)
-    console.log('Raw Gemini Response candidates:', response.candidates?.length);
-    console.log('Finish reason:', response.candidates?.[0]?.finishReason);
-
+  private parseResponse(response: any): GeminiResponse {
     const result: GeminiResponse = {
       text: null,
       images: [],
@@ -741,26 +686,14 @@ export class GeminiService {
     };
 
     const parts = response.candidates?.[0]?.content?.parts || [];
-    console.log('Response parts count:', parts.length);
-
-    // Log what types of parts we have and their full structure
-    parts.forEach((part, i) => {
-      console.log(`Part ${i} keys:`, Object.keys(part));
-      console.log(`Part ${i} full:`, part);
-      if ('text' in part) console.log(`Part ${i}: text (${part.text?.length} chars)`);
-      if ('inlineData' in part) console.log(`Part ${i}: inlineData found`);
-    });
 
     for (const part of parts) {
-      // Handle text
       if ('text' in part && part.text) {
         result.text = (result.text || '') + part.text;
       }
 
-      // Handle image - check multiple possible property names
-      const imageData = (part as any).inlineData || (part as any).inline_data;
+      const imageData = part.inlineData || part.inline_data;
       if (imageData) {
-        console.log('Found image data:', imageData.mimeType, imageData.data?.length);
         const mimeType = imageData.mimeType as ImageMimeType;
         const base64 = imageData.data as string;
         if (base64) {
@@ -769,12 +702,10 @@ export class GeminiService {
             mimeType,
             dataUrl: `data:${mimeType};base64,${base64}`
           });
-          console.log('Added image to result, total images:', result.images.length);
         }
       }
     }
 
-    console.log('parseResponse returning:', result.images.length, 'images');
     return result;
   }
 }
@@ -785,17 +716,11 @@ export class GeminiService {
 
 let serviceInstance: GeminiService | null = null;
 
-/**
- * Initialize the Gemini service with your API key
- */
-export function initGeminiService(config: GeminiConfig): GeminiService {
+export function initGeminiService(config: GeminiConfig = {}): GeminiService {
   serviceInstance = new GeminiService(config);
   return serviceInstance;
 }
 
-/**
- * Get the initialized Gemini service instance
- */
 export function getGeminiService(): GeminiService {
   if (!serviceInstance) {
     throw new GeminiError('Gemini service not initialized. Call initGeminiService first.');
@@ -803,9 +728,6 @@ export function getGeminiService(): GeminiService {
   return serviceInstance;
 }
 
-/**
- * Check if the service has been initialized
- */
 export function isGeminiServiceInitialized(): boolean {
   return serviceInstance !== null;
 }

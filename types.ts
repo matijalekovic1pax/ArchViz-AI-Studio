@@ -485,16 +485,61 @@ export interface WorkflowSettings {
     styleStrength: number;
   };
   visualPeople: {
+    // Operation mode
     mode: 'enhance' | 'repopulate' | 'cleanup';
+
+    // Airport zone context
+    airportZone: 'terminal-general' | 'check-in' | 'security' | 'departure-gate' | 'arrival-hall' | 'baggage-claim' | 'retail-area' | 'food-court' | 'lounge' | 'transit-corridor';
+    timeContext: 'peak-hours' | 'off-peak' | 'early-morning' | 'late-night' | 'normal';
+
+    // Demographics & Diversity
+    regionMix: string[];
+    ageDistribution: 'young-adults' | 'mixed-all-ages' | 'business-age' | 'families' | 'elderly-included';
+    genderBalance: 'balanced' | 'male-leaning' | 'female-leaning';
+    childrenPresence: number;
+    bodyTypeVariety: number;
+
+    // Crowd configuration
     density: number;
+    grouping: 'solo-dominant' | 'couples' | 'families' | 'mixed-groups' | 'business-groups';
+    flowPattern: 'random' | 'directional' | 'converging' | 'dispersing' | 'queuing';
+    movementDirection: 'mixed' | 'mostly-left' | 'mostly-right' | 'toward-camera' | 'away-from-camera';
+    paceOfMovement: 'relaxed' | 'moderate' | 'hurried' | 'mixed';
+    clusteringTendency: number;
+
+    // Appearance & Wardrobe
+    wardrobeStyle: 'business' | 'casual' | 'travel' | 'luxury' | 'sporty' | 'mixed';
+    seasonalClothing: 'summer' | 'winter' | 'spring-fall' | 'tropical' | 'mixed';
+    formalityLevel: number;
+    culturalAttire: number;
+
+    // Activities & Behavior
+    activities: string[];
+    interactionLevel: number;
+
+    // Luggage & Accessories
+    luggageTypes: string[];
+    luggageAmount: number;
+    trolleyUsage: number;
+    personalDevices: number;
+    travelAccessories: number;
+
+    // Airport Staff
+    includeAirportStaff: boolean;
+    includeSecurityPersonnel: boolean;
+    includeAirlineCrew: boolean;
+    includeGroundCrew: boolean;
+    includeServiceStaff: boolean;
+    staffDensity: number;
+
+    // Quality & Integration
     realism: number;
     sharpness: number;
-    variety: number;
     scaleAccuracy: number;
     placementDiscipline: number;
-    luggage: number;
     motionBlur: number;
-    wardrobeStyle: 'business' | 'casual' | 'travel' | 'mixed';
+
+    // Advanced toggles
     preserveExisting: boolean;
     matchLighting: boolean;
     matchPerspective: boolean;
@@ -748,6 +793,13 @@ export type MotionStyle =
   | 'subtle'
   | 'dramatic'
   | 'gentle';
+
+// Image data passed to video generation services
+export interface ImageData {
+  dataUrl?: string;
+  base64?: string;
+  mimeType?: string;
+}
 
 // API Provider Types
 export type KlingProvider = 'piapi' | 'ulazai' | 'wavespeedai';

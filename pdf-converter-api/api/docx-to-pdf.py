@@ -13,10 +13,25 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
+from _auth import authenticate_request, check_payload_size, send_unauthorized, send_payload_too_large, get_cors_origin, send_cors_headers
 
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        # Auth check
+        authed, result = authenticate_request(self)
+        if not authed:
+            send_unauthorized(self, result)
+            return
+
+        # Payload size check
+        size_ok, size_result = check_payload_size(self)
+        if not size_ok:
+            send_payload_too_large(self)
+            return
+
+        origin = get_cors_origin(self)
+
         try:
             # Read request body
             content_length = int(self.headers['Content-Length'])
@@ -102,7 +117,7 @@ class handler(BaseHTTPRequestHandler):
             # Send response
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            send_cors_headers(self, origin)
             self.end_headers()
 
             response = {
@@ -116,7 +131,7 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            send_cors_headers(self, origin)
             self.end_headers()
 
             error_response = {
@@ -128,9 +143,9 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
     def do_OPTIONS(self):
-        # Handle CORS preflight
+        origin = get_cors_origin(self)
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        send_cors_headers(self, origin)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, x-vercel-protection-bypass, x-vercel-set-bypass-cookie')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.end_headers()

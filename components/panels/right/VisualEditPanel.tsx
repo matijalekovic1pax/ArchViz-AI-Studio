@@ -5,6 +5,7 @@ import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './SharedRightComponents';
 import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized, IMAGE_MODEL } from '../../../services/geminiService';
+import { isGatewayAuthenticated } from '../../../services/apiGateway';
 import { nanoid } from 'nanoid';
 import {
   Image as ImageIcon,
@@ -1400,26 +1401,16 @@ export const VisualEditPanel = () => {
   const updateBackground = (updates: Partial<typeof wf.visualBackground>) =>
     updateWf({ visualBackground: { ...wf.visualBackground, ...updates } });
 
-  const getApiKey = useCallback((): string | null => {
-    // @ts-ignore - Vite injects this
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_GEMINI_API_KEY;
-    }
-    return localStorage.getItem('gemini_api_key');
-  }, []);
-
   const ensureAutoSelectService = useCallback(() => {
     if (isGeminiServiceInitialized()) {
       return true;
     }
-    const apiKey = getApiKey();
-    if (apiKey) {
-      initGeminiService({ apiKey });
-      return true;
+    if (!isGatewayAuthenticated()) {
+      return false;
     }
-    return false;
-  }, [getApiKey]);
+    initGeminiService();
+    return true;
+  }, []);
 
   const loadImageSize = useCallback((dataUrl: string) => {
     return new Promise<{ width: number; height: number } | null>((resolve) => {
@@ -2531,10 +2522,93 @@ export const VisualEditPanel = () => {
             )}
           </div>
         );
-      case 'people':
+      case 'people': {
+        const people = wf.visualPeople;
+        const toggleChip = (arr: string[], value: string) => {
+          const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+          return next;
+        };
+        const ChipGrid = ({ items, selected, onToggle, columns = 3 }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void; columns?: number }) => (
+          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
+            {items.map(item => {
+              const active = selected.includes(item.value);
+              return (
+                <button
+                  key={item.value}
+                  onClick={() => onToggle(item.value)}
+                  className={cn(
+                    "px-2 py-1.5 text-[10px] font-medium rounded-md border transition-all duration-150 text-center leading-tight",
+                    active
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+        const PeopleSection = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
+          const [open, setOpen] = React.useState(defaultOpen);
+          return (
+            <div className="border-t border-border-subtle pt-2">
+              <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between py-1 group">
+                <span className="text-[10px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground-secondary transition-colors">{title}</span>
+                <span className={cn("text-[10px] text-foreground-muted transition-transform", open ? "rotate-0" : "-rotate-90")}>&#9660;</span>
+              </button>
+              {open && <div className="space-y-3 pt-2">{children}</div>}
+            </div>
+          );
+        };
+
+        const regionOptions = [
+          { value: 'european', label: 'European' },
+          { value: 'east-asian', label: 'East Asian' },
+          { value: 'south-asian', label: 'South Asian' },
+          { value: 'southeast-asian', label: 'SE Asian' },
+          { value: 'middle-eastern', label: 'Middle Eastern' },
+          { value: 'african', label: 'African' },
+          { value: 'latin-american', label: 'Latin American' },
+          { value: 'pacific-islander', label: 'Pacific Isl.' },
+          { value: 'central-asian', label: 'Central Asian' },
+        ];
+
+        const activityOptions = [
+          { value: 'walking', label: 'Walking' },
+          { value: 'standing', label: 'Standing' },
+          { value: 'sitting', label: 'Sitting' },
+          { value: 'rushing', label: 'Rushing' },
+          { value: 'queuing', label: 'Queuing' },
+          { value: 'browsing-shops', label: 'Shopping' },
+          { value: 'eating', label: 'Eating' },
+          { value: 'phone-use', label: 'On Phone' },
+          { value: 'reading', label: 'Reading' },
+          { value: 'conversation', label: 'Chatting' },
+          { value: 'sleeping', label: 'Sleeping' },
+          { value: 'working-laptop', label: 'On Laptop' },
+          { value: 'taking-photos', label: 'Taking Photos' },
+          { value: 'pushing-stroller', label: 'w/ Stroller' },
+          { value: 'wheelchair', label: 'Wheelchair' },
+        ];
+
+        const luggageTypeOptions = [
+          { value: 'rolling-suitcase', label: 'Rolling Case' },
+          { value: 'backpack', label: 'Backpack' },
+          { value: 'carry-on', label: 'Carry-on' },
+          { value: 'duffel-bag', label: 'Duffel Bag' },
+          { value: 'oversized', label: 'Oversized' },
+          { value: 'shopping-bags', label: 'Shopping Bags' },
+          { value: 'duty-free', label: 'Duty Free' },
+          { value: 'briefcase', label: 'Briefcase' },
+          { value: 'garment-bag', label: 'Garment Bag' },
+        ];
+
         return (
-          <div className="space-y-4 animate-fade-in">
-            <SectionDesc>Refine 3D people realism, placement, and density without touching the architecture.</SectionDesc>
+          <div className="space-y-3 animate-fade-in">
+            <SectionDesc>Comprehensive 3D people editing for airport renderings — demographics, wardrobe, luggage, behavior, and staff.</SectionDesc>
+
+            {/* Target Scope */}
             <div className="rounded-lg border border-border bg-surface-sunken/60 p-3">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
                 <span>Target Scope</span>
@@ -2543,12 +2617,13 @@ export const VisualEditPanel = () => {
               <div className="text-[11px] text-foreground-muted mt-1">
                 {selectionCount > 0
                   ? `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will be prioritized.`
-                  : 'No selection active - auto-detect and refine all people in the frame.'}
+                  : 'No selection — auto-detect and refine all people in the frame.'}
               </div>
             </div>
 
+            {/* Operation Mode */}
             <SegmentedControl
-              value={wf.visualPeople.mode}
+              value={people.mode}
               options={[
                 { label: 'Enhance', value: 'enhance' },
                 { label: 'Repopulate', value: 'repopulate' },
@@ -2556,28 +2631,391 @@ export const VisualEditPanel = () => {
               ]}
               onChange={(value) => updatePeople({ mode: value })}
             />
-            <div className="text-[11px] text-foreground-muted">
-              {wf.visualPeople.mode === 'enhance'
+            <div className="text-[11px] text-foreground-muted -mt-1">
+              {people.mode === 'enhance'
                 ? 'Improve existing people without changing the overall count.'
-                : wf.visualPeople.mode === 'repopulate'
-                  ? 'Add or replace people to reach the desired density.'
+                : people.mode === 'repopulate'
+                  ? 'Add or replace people to reach the desired density and configuration.'
                   : 'Remove artifacts and fix problematic people or silhouettes.'}
             </div>
 
-            <div className="pt-2 border-t border-border-subtle space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Population & Quality</div>
+            {/* Airport Zone Context */}
+            <PeopleSection title="Airport Zone & Time">
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Zone</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    { value: 'terminal-general', label: 'Terminal' },
+                    { value: 'check-in', label: 'Check-in' },
+                    { value: 'security', label: 'Security' },
+                    { value: 'departure-gate', label: 'Dep. Gate' },
+                    { value: 'arrival-hall', label: 'Arrival Hall' },
+                    { value: 'baggage-claim', label: 'Bag. Claim' },
+                    { value: 'retail-area', label: 'Retail' },
+                    { value: 'food-court', label: 'Food Court' },
+                    { value: 'lounge', label: 'Lounge' },
+                    { value: 'transit-corridor', label: 'Transit' },
+                  ] as const).map(z => (
+                    <button
+                      key={z.value}
+                      onClick={() => updatePeople({ airportZone: z.value })}
+                      className={cn(
+                        "px-2 py-1.5 text-[10px] font-medium rounded-md border transition-all duration-150 text-center",
+                        people.airportZone === z.value
+                          ? "bg-foreground text-background border-foreground"
+                          : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
+                      )}
+                    >
+                      {z.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Time of Day</label>
+                <SegmentedControl
+                  value={people.timeContext}
+                  options={[
+                    { label: 'Peak', value: 'peak-hours' },
+                    { label: 'Normal', value: 'normal' },
+                    { label: 'Off-peak', value: 'off-peak' },
+                    { label: 'Early AM', value: 'early-morning' },
+                    { label: 'Late PM', value: 'late-night' },
+                  ]}
+                  onChange={(value) => updatePeople({ timeContext: value })}
+                />
+              </div>
+            </PeopleSection>
+
+            {/* Demographics & Diversity */}
+            <PeopleSection title="Demographics & Diversity">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-foreground-secondary">Ethnic / Regional Mix</label>
+                  <button
+                    onClick={() => updatePeople({ regionMix: people.regionMix.length === regionOptions.length ? [] : regionOptions.map(o => o.value) })}
+                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
+                  >
+                    {people.regionMix.length === regionOptions.length ? 'Clear all' : 'Select all'}
+                  </button>
+                </div>
+                <ChipGrid
+                  items={regionOptions}
+                  selected={people.regionMix}
+                  onToggle={(val) => updatePeople({ regionMix: toggleChip(people.regionMix, val) })}
+                  columns={3}
+                />
+                <div className="text-[10px] text-foreground-muted italic">
+                  {people.regionMix.length === 0 ? 'No regions selected — will default to generic diverse crowd.' : `${people.regionMix.length} region${people.regionMix.length === 1 ? '' : 's'} selected`}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Age Distribution</label>
+                <SegmentedControl
+                  value={people.ageDistribution}
+                  options={[
+                    { label: 'Young', value: 'young-adults' },
+                    { label: 'Business', value: 'business-age' },
+                    { label: 'Mixed', value: 'mixed-all-ages' },
+                    { label: 'Families', value: 'families' },
+                    { label: '+ Elderly', value: 'elderly-included' },
+                  ]}
+                  onChange={(value) => updatePeople({ ageDistribution: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Gender Balance</label>
+                <SegmentedControl
+                  value={people.genderBalance}
+                  options={[
+                    { label: 'Balanced', value: 'balanced' },
+                    { label: 'Male-leaning', value: 'male-leaning' },
+                    { label: 'Female-leaning', value: 'female-leaning' },
+                  ]}
+                  onChange={(value) => updatePeople({ genderBalance: value })}
+                />
+              </div>
+              <SliderControl
+                label="Children Presence"
+                value={people.childrenPresence}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ childrenPresence: value })}
+              />
+              <SliderControl
+                label="Body Type Variety"
+                value={people.bodyTypeVariety}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ bodyTypeVariety: value })}
+              />
+            </PeopleSection>
+
+            {/* Crowd Configuration */}
+            <PeopleSection title="Crowd Configuration">
               <SliderControl
                 label="Density"
-                value={wf.visualPeople.density}
+                value={people.density}
                 min={0}
                 max={100}
                 step={1}
                 unit="%"
                 onChange={(value) => updatePeople({ density: value })}
               />
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Social Grouping</label>
+                <SegmentedControl
+                  value={people.grouping}
+                  options={[
+                    { label: 'Solo', value: 'solo-dominant' },
+                    { label: 'Couples', value: 'couples' },
+                    { label: 'Families', value: 'families' },
+                    { label: 'Groups', value: 'business-groups' },
+                    { label: 'Mixed', value: 'mixed-groups' },
+                  ]}
+                  onChange={(value) => updatePeople({ grouping: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Flow Pattern</label>
+                <SegmentedControl
+                  value={people.flowPattern}
+                  options={[
+                    { label: 'Random', value: 'random' },
+                    { label: 'Directional', value: 'directional' },
+                    { label: 'Converge', value: 'converging' },
+                    { label: 'Disperse', value: 'dispersing' },
+                    { label: 'Queue', value: 'queuing' },
+                  ]}
+                  onChange={(value) => updatePeople({ flowPattern: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Movement Direction</label>
+                <SegmentedControl
+                  value={people.movementDirection}
+                  options={[
+                    { label: 'Mixed', value: 'mixed' },
+                    { label: '← Left', value: 'mostly-left' },
+                    { label: 'Right →', value: 'mostly-right' },
+                    { label: '↑ Toward', value: 'toward-camera' },
+                    { label: '↓ Away', value: 'away-from-camera' },
+                  ]}
+                  onChange={(value) => updatePeople({ movementDirection: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Pace of Movement</label>
+                <SegmentedControl
+                  value={people.paceOfMovement}
+                  options={[
+                    { label: 'Relaxed', value: 'relaxed' },
+                    { label: 'Moderate', value: 'moderate' },
+                    { label: 'Hurried', value: 'hurried' },
+                    { label: 'Mixed', value: 'mixed' },
+                  ]}
+                  onChange={(value) => updatePeople({ paceOfMovement: value })}
+                />
+              </div>
+              <SliderControl
+                label="Clustering Tendency"
+                value={people.clusteringTendency}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ clusteringTendency: value })}
+              />
+            </PeopleSection>
+
+            {/* Appearance & Wardrobe */}
+            <PeopleSection title="Appearance & Wardrobe">
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Wardrobe Style</label>
+                <SegmentedControl
+                  value={people.wardrobeStyle}
+                  options={[
+                    { label: 'Business', value: 'business' },
+                    { label: 'Casual', value: 'casual' },
+                    { label: 'Travel', value: 'travel' },
+                    { label: 'Luxury', value: 'luxury' },
+                    { label: 'Sporty', value: 'sporty' },
+                    { label: 'Mixed', value: 'mixed' },
+                  ]}
+                  onChange={(value) => updatePeople({ wardrobeStyle: value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] text-foreground-secondary">Seasonal Clothing</label>
+                <SegmentedControl
+                  value={people.seasonalClothing}
+                  options={[
+                    { label: 'Summer', value: 'summer' },
+                    { label: 'Winter', value: 'winter' },
+                    { label: 'Spring', value: 'spring-fall' },
+                    { label: 'Tropical', value: 'tropical' },
+                    { label: 'Mixed', value: 'mixed' },
+                  ]}
+                  onChange={(value) => updatePeople({ seasonalClothing: value })}
+                />
+              </div>
+              <SliderControl
+                label="Formality Level"
+                value={people.formalityLevel}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ formalityLevel: value })}
+              />
+              <SliderControl
+                label="Cultural / Traditional Attire"
+                value={people.culturalAttire}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ culturalAttire: value })}
+              />
+            </PeopleSection>
+
+            {/* Activities & Behavior */}
+            <PeopleSection title="Activities & Behavior">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-foreground-secondary">Activities</label>
+                  <button
+                    onClick={() => updatePeople({ activities: people.activities.length === activityOptions.length ? [] : activityOptions.map(o => o.value) })}
+                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
+                  >
+                    {people.activities.length === activityOptions.length ? 'Clear all' : 'Select all'}
+                  </button>
+                </div>
+                <ChipGrid
+                  items={activityOptions}
+                  selected={people.activities}
+                  onToggle={(val) => updatePeople({ activities: toggleChip(people.activities, val) })}
+                  columns={3}
+                />
+              </div>
+              <SliderControl
+                label="Social Interaction"
+                value={people.interactionLevel}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ interactionLevel: value })}
+              />
+            </PeopleSection>
+
+            {/* Luggage & Accessories */}
+            <PeopleSection title="Luggage & Accessories">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-foreground-secondary">Luggage Types</label>
+                  <button
+                    onClick={() => updatePeople({ luggageTypes: people.luggageTypes.length === luggageTypeOptions.length ? [] : luggageTypeOptions.map(o => o.value) })}
+                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
+                  >
+                    {people.luggageTypes.length === luggageTypeOptions.length ? 'Clear all' : 'Select all'}
+                  </button>
+                </div>
+                <ChipGrid
+                  items={luggageTypeOptions}
+                  selected={people.luggageTypes}
+                  onToggle={(val) => updatePeople({ luggageTypes: toggleChip(people.luggageTypes, val) })}
+                  columns={3}
+                />
+              </div>
+              <SliderControl
+                label="Luggage Amount"
+                value={people.luggageAmount}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ luggageAmount: value })}
+              />
+              <SliderControl
+                label="Trolley / Cart Usage"
+                value={people.trolleyUsage}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ trolleyUsage: value })}
+              />
+              <SliderControl
+                label="Personal Devices"
+                value={people.personalDevices}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ personalDevices: value })}
+              />
+              <SliderControl
+                label="Travel Accessories"
+                value={people.travelAccessories}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                onChange={(value) => updatePeople({ travelAccessories: value })}
+              />
+            </PeopleSection>
+
+            {/* Airport Staff */}
+            <PeopleSection title="Airport Staff & Crew" defaultOpen={false}>
+              <div className="space-y-1">
+                <Toggle
+                  label="Airport / Airline Staff"
+                  checked={people.includeAirportStaff}
+                  onChange={(value) => updatePeople({ includeAirportStaff: value })}
+                />
+                <Toggle
+                  label="Security Personnel"
+                  checked={people.includeSecurityPersonnel}
+                  onChange={(value) => updatePeople({ includeSecurityPersonnel: value })}
+                />
+                <Toggle
+                  label="Airline Crew (Pilots / Attendants)"
+                  checked={people.includeAirlineCrew}
+                  onChange={(value) => updatePeople({ includeAirlineCrew: value })}
+                />
+                <Toggle
+                  label="Ground Crew (Hi-vis Vests)"
+                  checked={people.includeGroundCrew}
+                  onChange={(value) => updatePeople({ includeGroundCrew: value })}
+                />
+                <Toggle
+                  label="Service Staff (Retail / F&B / Cleaning)"
+                  checked={people.includeServiceStaff}
+                  onChange={(value) => updatePeople({ includeServiceStaff: value })}
+                />
+              </div>
+              <SliderControl
+                label="Staff Proportion"
+                value={people.staffDensity}
+                min={0}
+                max={50}
+                step={1}
+                unit="%"
+                disabled={!people.includeAirportStaff && !people.includeSecurityPersonnel && !people.includeAirlineCrew && !people.includeGroundCrew && !people.includeServiceStaff}
+                onChange={(value) => updatePeople({ staffDensity: value })}
+              />
+            </PeopleSection>
+
+            {/* Quality & Integration */}
+            <PeopleSection title="Quality & Integration">
               <SliderControl
                 label="Realism"
-                value={wf.visualPeople.realism}
+                value={people.realism}
                 min={0}
                 max={100}
                 step={1}
@@ -2586,7 +3024,7 @@ export const VisualEditPanel = () => {
               />
               <SliderControl
                 label="Sharpness"
-                value={wf.visualPeople.sharpness}
+                value={people.sharpness}
                 min={0}
                 max={100}
                 step={1}
@@ -2594,21 +3032,8 @@ export const VisualEditPanel = () => {
                 onChange={(value) => updatePeople({ sharpness: value })}
               />
               <SliderControl
-                label="Variety"
-                value={wf.visualPeople.variety}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ variety: value })}
-              />
-            </div>
-
-            <div className="pt-2 border-t border-border-subtle space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Placement & Scale</div>
-              <SliderControl
                 label="Scale Accuracy"
-                value={wf.visualPeople.scaleAccuracy}
+                value={people.scaleAccuracy}
                 min={0}
                 max={100}
                 step={1}
@@ -2617,80 +3042,57 @@ export const VisualEditPanel = () => {
               />
               <SliderControl
                 label="Placement Discipline"
-                value={wf.visualPeople.placementDiscipline}
+                value={people.placementDiscipline}
                 min={0}
                 max={100}
                 step={1}
                 unit="%"
                 onChange={(value) => updatePeople({ placementDiscipline: value })}
               />
-            </div>
-
-            <div className="pt-2 border-t border-border-subtle space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Accessories & Motion</div>
-              <SliderControl
-                label="Luggage & Props"
-                value={wf.visualPeople.luggage}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ luggage: value })}
-              />
               <SliderControl
                 label="Motion Blur"
-                value={wf.visualPeople.motionBlur}
+                value={people.motionBlur}
                 min={0}
                 max={100}
                 step={1}
                 unit="%"
                 onChange={(value) => updatePeople({ motionBlur: value })}
               />
-            </div>
+            </PeopleSection>
 
-            <div className="pt-2 border-t border-border-subtle space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Wardrobe</div>
-              <SegmentedControl
-                value={wf.visualPeople.wardrobeStyle}
-                options={[
-                  { label: 'Business', value: 'business' },
-                  { label: 'Casual', value: 'casual' },
-                  { label: 'Travel', value: 'travel' },
-                  { label: 'Mixed', value: 'mixed' },
-                ]}
-                onChange={(value) => updatePeople({ wardrobeStyle: value })}
-              />
-            </div>
-
-            <div className="pt-2 border-t border-border-subtle space-y-2">
-              <Toggle
-                label="Preserve Existing People"
-                checked={wf.visualPeople.preserveExisting}
-                onChange={(value) => updatePeople({ preserveExisting: value })}
-              />
-              <Toggle
-                label="Match Scene Lighting"
-                checked={wf.visualPeople.matchLighting}
-                onChange={(value) => updatePeople({ matchLighting: value })}
-              />
-              <Toggle
-                label="Match Perspective"
-                checked={wf.visualPeople.matchPerspective}
-                onChange={(value) => updatePeople({ matchPerspective: value })}
-              />
-              <Toggle
-                label="Ground Contact"
-                checked={wf.visualPeople.groundContact}
-                onChange={(value) => updatePeople({ groundContact: value })}
-              />
-              <Toggle
-                label="Remove AI Artifacts"
-                checked={wf.visualPeople.removeArtifacts}
-                onChange={(value) => updatePeople({ removeArtifacts: value })}
-              />
-            </div>
+            {/* Advanced Toggles */}
+            <PeopleSection title="Advanced Options" defaultOpen={false}>
+              <div className="space-y-1">
+                <Toggle
+                  label="Preserve Existing People"
+                  checked={people.preserveExisting}
+                  onChange={(value) => updatePeople({ preserveExisting: value })}
+                />
+                <Toggle
+                  label="Match Scene Lighting"
+                  checked={people.matchLighting}
+                  onChange={(value) => updatePeople({ matchLighting: value })}
+                />
+                <Toggle
+                  label="Match Perspective"
+                  checked={people.matchPerspective}
+                  onChange={(value) => updatePeople({ matchPerspective: value })}
+                />
+                <Toggle
+                  label="Ground Contact"
+                  checked={people.groundContact}
+                  onChange={(value) => updatePeople({ groundContact: value })}
+                />
+                <Toggle
+                  label="Remove AI Artifacts"
+                  checked={people.removeArtifacts}
+                  onChange={(value) => updatePeople({ removeArtifacts: value })}
+                />
+              </div>
+            </PeopleSection>
           </div>
         );
+      }
       case 'sky':
         return (
           <div className="space-y-4 animate-fade-in">

@@ -69,12 +69,6 @@ export const PdfCompressionPanel: React.FC = () => {
 
   const downloadItem = (name: string, dataUrl: string) => {
     // Verify the dataUrl before downloading
-    const dataUrlSizeEstimate = dataUrl.length * 0.75; // base64 overhead
-    console.log(`[Download] Downloading: ${name}`);
-    console.log(`[Download] DataURL length: ${dataUrl.length} chars`);
-    console.log(`[Download] Estimated file size: ${(dataUrlSizeEstimate / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[Download] DataURL preview: ${dataUrl.substring(0, 100)}...`);
-
     const link = document.createElement('a');
     link.href = dataUrl;
     link.download = name;
@@ -82,25 +76,19 @@ export const PdfCompressionPanel: React.FC = () => {
     link.click();
     document.body.removeChild(link);
 
-    console.log(`[Download] ✓ Download triggered for ${name}`);
   };
 
   const handleDownloadAll = () => {
-    console.log(`[DownloadAll] Downloading ${outputs.length} files`);
-    outputs.forEach((item, index) => {
-      console.log(`[DownloadAll] Item ${index + 1}: ${item.name}, size=${(item.size / 1024 / 1024).toFixed(2)}MB, dataUrl length=${item.dataUrl.length}`);
+    outputs.forEach((item) => {
       downloadItem(item.name, item.dataUrl);
     });
   };
 
   const handleDownloadSelected = () => {
-    console.log(`[DownloadSelected] Downloading ${selectedOutputs.length} files`);
-    selectedOutputs.forEach((item, index) => {
-      console.log(`[DownloadSelected] Item ${index + 1}: ${item.name}, size=${(item.size / 1024 / 1024).toFixed(2)}MB, dataUrl length=${item.dataUrl.length}`);
+    selectedOutputs.forEach((item) => {
       downloadItem(item.name, item.dataUrl);
     });
   };
-
 
   return (
     <div className="space-y-6">
@@ -137,7 +125,6 @@ export const PdfCompressionPanel: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  console.log('🗑️ Clearing all outputs');
                   dispatch({
                     type: 'UPDATE_WORKFLOW',
                     payload: {
@@ -254,3 +241,4 @@ export const PdfCompressionPanel: React.FC = () => {
     </div>
   );
 };
+

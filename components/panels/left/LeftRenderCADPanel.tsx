@@ -16,6 +16,7 @@ import {
     isGeminiServiceInitialized,
     ImageUtils
 } from '../../../services/geminiService';
+import { isGatewayAuthenticated } from '../../../services/apiGateway';
 
 export const LeftRenderCADPanel = () => {
     const { state, dispatch } = useAppStore();
@@ -294,26 +295,16 @@ export const LeftRenderCADPanel = () => {
         .map(({ layer }) => layer);
     }, [layerColors, normalizeLayerType]);
 
-    const getApiKey = useCallback((): string | null => {
-      // @ts-ignore - Vite injects this
-      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-        // @ts-ignore
-        return import.meta.env.VITE_GEMINI_API_KEY;
-      }
-      return localStorage.getItem('gemini_api_key');
-    }, []);
-
     const ensureServiceInitialized = useCallback((): boolean => {
       if (isGeminiServiceInitialized()) {
         return true;
       }
-      const apiKey = getApiKey();
-      if (!apiKey) {
+      if (!isGatewayAuthenticated()) {
         return false;
       }
-      initGeminiService({ apiKey });
+      initGeminiService();
       return true;
-    }, [getApiKey]);
+    }, []);
 
     const analyzeCadLayers = useCallback(async (imageUrl: string) => {
       if (!ensureServiceInitialized()) {
@@ -347,7 +338,6 @@ export const LeftRenderCADPanel = () => {
           updateWf({ cadLayers: parsed });
         }
       } catch (error) {
-        console.error('CAD layer detection failed:', error);
         if (lastLayerScanRef.current === imageUrl) {
           updateWf({ cadLayers: [] });
         }
@@ -799,3 +789,4 @@ export const LeftRenderCADPanel = () => {
       </div>
     );
 };
+

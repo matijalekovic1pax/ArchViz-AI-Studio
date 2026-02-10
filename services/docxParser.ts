@@ -76,7 +76,6 @@ export async function parseDocx(dataUrl: string): Promise<DocxParseResult> {
     // Check for parsing errors
     const parseError = doc.querySelector('parsererror');
     if (parseError) {
-      console.warn(`XML parsing error in ${path}:`, parseError.textContent);
       continue;
     }
 
@@ -255,3 +254,4 @@ export function getDocumentSummary(parseResult: DocxParseResult): {
     totalCharacters: segments.reduce((sum, s) => sum + s.text.length, 0),
   };
 }
+

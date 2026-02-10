@@ -14,6 +14,7 @@ import {
   isGeminiServiceInitialized,
   ImageUtils
 } from '../../../services/geminiService';
+import { isGatewayAuthenticated } from '../../../services/apiGateway';
 
 
 export const LeftRender3DPanel = () => {
@@ -90,26 +91,16 @@ export const LeftRender3DPanel = () => {
     return { label: t('render3d.problemAreas.low'), dotClass: 'bg-emerald-500', textClass: 'text-emerald-600' };
   }, [t]);
 
-  const getApiKey = useCallback((): string | null => {
-    // @ts-ignore - Vite injects this
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_GEMINI_API_KEY;
-    }
-    return localStorage.getItem('gemini_api_key');
-  }, []);
-
   const ensureServiceInitialized = useCallback((): boolean => {
     if (isGeminiServiceInitialized()) {
       return true;
     }
-    const apiKey = getApiKey();
-    if (!apiKey) {
+    if (!isGatewayAuthenticated()) {
       return false;
     }
-    initGeminiService({ apiKey });
+    initGeminiService();
     return true;
-  }, [getApiKey]);
+  }, []);
 
   const parseProblemAreas = useCallback((raw: string) => {
     const trimmed = raw.trim();
@@ -249,11 +240,6 @@ export const LeftRender3DPanel = () => {
       const parsed = parseProblemAreas(text);
       updateWf({ detectedElements: parsed });
     } catch (error) {
-      if (error instanceof Error && (error.name === 'AbortError' || /aborted/i.test(error.message))) {
-        console.warn('Problem area analysis timed out.');
-      } else {
-        console.error('Problem area analysis failed:', error);
-      }
       updateWf({ detectedElements: [] });
     } finally {
       setIsAnalyzing(false);
@@ -483,3 +469,4 @@ export const LeftRender3DPanel = () => {
     </div>
   );
 };
+

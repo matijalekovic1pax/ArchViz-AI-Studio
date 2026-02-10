@@ -202,7 +202,6 @@ export class MaterialValidationService {
         pollIntervalMs: 3000
       });
     } catch (batchError) {
-      console.warn('Batch API failed, falling back to sequential:', batchError);
       results = await this.sequentialFallback(requests);
     }
 
@@ -254,7 +253,6 @@ export class MaterialValidationService {
             });
           }
         } catch (parseError) {
-          console.warn('Failed to parse validation result:', parseError);
           parsedMaterials.push(this.createFallbackMaterial(material));
         }
       }
@@ -294,7 +292,6 @@ export class MaterialValidationService {
         pollIntervalMs: 3000
       });
     } catch (batchError) {
-      console.warn('Batch API failed for BoQ, falling back to sequential:', batchError);
       results = await this.sequentialFallback(requests);
     }
 
@@ -334,7 +331,6 @@ export class MaterialValidationService {
             });
           }
         } catch (parseError) {
-          console.warn('Failed to parse BoQ result:', parseError);
         }
       } else if (result.error) {
         issues.push({
@@ -466,3 +462,4 @@ export class MaterialValidationService {
 export function createMaterialValidationService(onProgress?: ProgressCallback): MaterialValidationService {
   return new MaterialValidationService(onProgress);
 }
+

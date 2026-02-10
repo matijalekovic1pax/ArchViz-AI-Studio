@@ -18,7 +18,11 @@
       "WebFetch(domain:developer.ilovepdf.com)",
       "Bash(npx vercel:*)",
       "WebFetch(domain:www.convertapi.com)",
-      "WebFetch(domain:docs.convertapi.com)"
+      "WebFetch(domain:docs.convertapi.com)",
+      "Bash(git -C \"c:\\\\Users\\\\1Pax Mateja\\\\Documents\\\\ArchViz\\\\ArchViz-AI-Studio\" log --oneline -20)",
+      "Bash(wrangler:*)",
+      "Bash(node -e:*)",
+      "Bash(npx wrangler dev:*)"
     ]
   }
 }

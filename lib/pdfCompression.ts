@@ -43,12 +43,9 @@ export async function compressPdf(
     compressionLevel = 'balanced',
   } = options;
 
-  console.log(`[Compression] Starting compression with level: ${compressionLevel}`);
-
   // Only use iLovePDF
   if (!isILovePDFConfigured()) {
     const errorMsg = 'iLovePDF API key not configured. Please add VITE_ILOVEPDF_PUBLIC_KEY to your .env file. Get a free key at https://developer.ilovepdf.com/';
-    console.error('[Compression] ✗', errorMsg);
     return {
       success: false,
       originalSize: 0,
@@ -59,7 +56,6 @@ export async function compressPdf(
     };
   }
 
-  console.log('[Compression] Using iLovePDF service');
   const ilovepdf = getILovePDFService();
 
   if (!ilovepdf) {
@@ -77,7 +73,6 @@ export async function compressPdf(
     const result = await ilovepdf.compressPDF(pdfDataUrl, filename, compressionLevel);
     return result;
   } catch (error) {
-    console.error('[Compression] ✗ iLovePDF error:', error);
     return {
       success: false,
       originalSize: 0,
@@ -99,8 +94,6 @@ export async function compressPdfBatch(
 ): Promise<Array<CompressionResult & { id: string; name: string }>> {
   const results: Array<CompressionResult & { id: string; name: string }> = [];
 
-  console.log(`[Batch] Starting compression of ${pdfs.length} PDFs with level: ${options.compressionLevel}`);
-
   for (let i = 0; i < pdfs.length; i++) {
     const pdf = pdfs[i];
 
@@ -108,20 +101,7 @@ export async function compressPdfBatch(
       onProgress(i + 1, pdfs.length, pdf.id);
     }
 
-    console.log(`\n========== Compressing ${pdf.name} (${i + 1}/${pdfs.length}) ==========`);
-    const startTime = performance.now();
-
     const result = await compressPdf(pdf.dataUrl, options, pdf.name);
-
-    const endTime = performance.now();
-    const duration = ((endTime - startTime) / 1000).toFixed(2);
-
-    if (result.success) {
-      console.log(`✓ ${pdf.name}: ${duration}s, ${(result.originalSize / 1024 / 1024).toFixed(2)}MB → ${(result.compressedSize / 1024 / 1024).toFixed(2)}MB (${result.compressionRatio.toFixed(1)}% reduction)`);
-      console.log(`  DataURL length: ${result.dataUrl.length} chars`);
-    } else {
-      console.error(`✗ ${pdf.name}: FAILED - ${result.error}`);
-    }
 
     results.push({
       ...result,
@@ -133,7 +113,6 @@ export async function compressPdfBatch(
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  console.log(`\n[Batch] Complete. Processed ${results.filter(r => r.success).length}/${pdfs.length} successfully`);
-
   return results;
 }
+

@@ -48,7 +48,6 @@ export const LeftUpscalePanel = () => {
          );
          updateWf({ upscaleBatch: [...wf.upscaleBatch, ...results] });
       } catch (error) {
-         console.error('Failed to add images', error);
       } finally {
          event.target.value = '';
       }
@@ -213,3 +212,4 @@ export const LeftUpscalePanel = () => {
       </div>
    );
 };
+
