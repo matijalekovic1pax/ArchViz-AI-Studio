@@ -23,7 +23,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 const MAX_PAYLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
-const JWT_EXPIRY_SECONDS = 3600; // 1 hour
+const JWT_EXPIRY_SECONDS = 7200; // 2 hours
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';

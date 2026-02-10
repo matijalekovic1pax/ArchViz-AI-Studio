@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, PropsWithChildren } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, PropsWithChildren } from 'react';
 import { AuthUser, loadAuthSession, clearAuthSession } from '../../lib/googleAuth';
+import { clearGatewayToken, getTokenExpiresAt, setOnSessionExpired } from '../../services/apiGateway';
 import { LoginPage } from './LoginPage';
 
 interface AuthContextValue {
@@ -22,6 +23,7 @@ export function useAuth() {
 export function AuthGate({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const logoutCalledRef = useRef(false);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -33,13 +35,40 @@ export function AuthGate({ children }: PropsWithChildren) {
   }, []);
 
   const login = (newUser: AuthUser) => {
+    logoutCalledRef.current = false;
     setUser(newUser);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
+    if (logoutCalledRef.current) return;
+    logoutCalledRef.current = true;
+    clearGatewayToken();
     clearAuthSession();
     setUser(null);
-  };
+  }, []);
+
+  // Instant logout when a 401 is received from the gateway
+  useEffect(() => {
+    setOnSessionExpired(logout);
+    return () => setOnSessionExpired(null);
+  }, [logout]);
+
+  // Timer-based auto-logout when the JWT expires naturally
+  useEffect(() => {
+    if (!user) return;
+
+    const expiresAt = getTokenExpiresAt();
+    if (expiresAt <= 0) return; // no token yet (session restored from storage)
+
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      logout();
+      return;
+    }
+
+    const timer = setTimeout(logout, remaining);
+    return () => clearTimeout(timer);
+  }, [user, logout]);
 
   const contextValue: AuthContextValue = {
     user,

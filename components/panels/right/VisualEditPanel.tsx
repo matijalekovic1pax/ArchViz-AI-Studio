@@ -1609,6 +1609,9 @@ export const VisualEditPanel = () => {
     setAutoSelectMessage(`Auto-selecting ${targets.join(', ')}...`);
     updateWf({ visualAutoSelecting: true });
 
+    const loadingStartedAt = Date.now();
+    const MIN_LOADING_MS = 1500;
+
     try {
       const imageData = ImageUtils.dataUrlToImageData(state.uploadedImage);
       if (!imageData) {
@@ -1674,7 +1677,14 @@ export const VisualEditPanel = () => {
       });
     } finally {
       if (autoSelectRequestIdRef.current === requestId) {
-        updateWf({ visualAutoSelecting: false });
+        const elapsed = Date.now() - loadingStartedAt;
+        const remaining = MIN_LOADING_MS - elapsed;
+        if (remaining > 0) {
+          await new Promise(resolve => setTimeout(resolve, remaining));
+        }
+        if (autoSelectRequestIdRef.current === requestId) {
+          updateWf({ visualAutoSelecting: false });
+        }
       }
     }
   }, [
@@ -1772,9 +1782,9 @@ export const VisualEditPanel = () => {
     if (wf.visualSelection.mode !== 'ai' || wf.visualSelection.autoTargets.length === 0) {
       setAutoSelectStatus('idle');
       setAutoSelectMessage('');
-      updateWf({ visualAutoSelecting: false });
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
     }
-  }, [updateWf, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
+  }, [dispatch, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
 
   const filteredMaterials = useMemo(() => {
     const query = materialQuery.trim().toLowerCase();
@@ -2101,35 +2111,45 @@ export const VisualEditPanel = () => {
 
             {wf.visualSelection.mode === 'ai' && (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {selectionTargets.map((target) => {
-                    const active = wf.visualSelection.autoTargets.includes(target);
-                    return (
-                      <button
-                        key={target}
-                        className={cn(
-                          'text-[10px] border rounded px-2 py-2 transition-colors',
-                          active
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground'
-                        )}
-                        onClick={() => handleToggleTarget(target)}
-                      >
-                        {target}
-                      </button>
-                    );
-                  })}
+                <div className="relative">
+                  <div className={cn(
+                    'grid grid-cols-2 sm:grid-cols-3 gap-2 transition-opacity',
+                    wf.visualAutoSelecting && 'opacity-50 pointer-events-none'
+                  )}>
+                    {selectionTargets.map((target) => {
+                      const active = wf.visualSelection.autoTargets.includes(target);
+                      return (
+                        <button
+                          key={target}
+                          disabled={wf.visualAutoSelecting}
+                          className={cn(
+                            'text-[10px] border rounded px-2 py-2 transition-colors',
+                            active
+                              ? 'bg-foreground text-background border-foreground'
+                              : 'border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground',
+                            wf.visualAutoSelecting && 'cursor-not-allowed'
+                          )}
+                          onClick={() => handleToggleTarget(target)}
+                        >
+                          {target}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {wf.visualAutoSelecting && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex items-center gap-2 bg-surface-elevated/95 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border border-border">
+                        <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[10px] font-medium text-foreground-muted">
+                          {autoSelectMessage || 'Auto-selecting...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {autoSelectStatus !== 'idle' && (
-                  <div
-                    className={cn(
-                      'text-[10px] rounded-md px-2 py-1 border',
-                      autoSelectStatus === 'loading'
-                        ? 'border-border text-foreground-muted bg-surface-sunken/60'
-                        : 'border-red-200 text-red-500 bg-red-50/80'
-                    )}
-                  >
-                    {autoSelectMessage || (autoSelectStatus === 'loading' ? 'Auto-selecting...' : 'Auto selection failed.')}
+                {autoSelectStatus === 'error' && (
+                  <div className="text-[10px] rounded-md px-2 py-1 border border-red-200 text-red-500 bg-red-50/80">
+                    {autoSelectMessage || 'Auto selection failed.'}
                   </div>
                 )}
               </div>

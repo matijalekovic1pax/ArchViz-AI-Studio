@@ -10,6 +10,7 @@ const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:87
 // JWT stored in memory only (not localStorage/sessionStorage)
 let _jwt: string | null = null;
 let _jwtExpiresAt: number = 0;
+let _onSessionExpired: (() => void) | null = null;
 
 // ─── Token Management ────────────────────────────────────────────────────────
 
@@ -31,6 +32,16 @@ export function clearGatewayToken(): void {
 
 export function isGatewayAuthenticated(): boolean {
   return getGatewayToken() !== null;
+}
+
+/** Returns the timestamp (ms) when the current token expires, or 0 if none. */
+export function getTokenExpiresAt(): number {
+  return _jwtExpiresAt;
+}
+
+/** Register a callback invoked when a 401 or token expiry is detected. */
+export function setOnSessionExpired(callback: (() => void) | null): void {
+  _onSessionExpired = callback;
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -78,6 +89,7 @@ async function gatewayFetch(path: string, init: RequestInit = {}): Promise<Respo
 
   if (resp.status === 401) {
     clearGatewayToken();
+    _onSessionExpired?.();
     throw new Error('Session expired. Please sign in again.');
   }
 
