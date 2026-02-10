@@ -1498,11 +1498,28 @@ export const VisualEditPanel = () => {
 
       if (!normalizedPoints.length) return [];
       const maxCoord = Math.max(...normalizedPoints.map((point) => Math.max(point.x, point.y)));
-      const isNormalized = maxCoord <= 2;
-      return normalizedPoints.map((point) => ({
-        x: Math.min(Math.max(isNormalized ? point.x * width : point.x, 0), width),
-        y: Math.min(Math.max(isNormalized ? point.y * height : point.y, 0), height),
-      }));
+
+      // Detect coordinate range:
+      //  - 0..1.5   → normalized 0-1 (multiply by image dimensions)
+      //  - 1.5..1050 → Gemini's native 0-1000 range (divide by 1000, then multiply)
+      //  - >1050    → absolute pixel coordinates (use as-is)
+      const toPixel = (vx: number, vy: number) => {
+        if (maxCoord <= 1.5) {
+          return { x: vx * width, y: vy * height };
+        }
+        if (maxCoord <= 1050) {
+          return { x: (vx / 1000) * width, y: (vy / 1000) * height };
+        }
+        return { x: vx, y: vy };
+      };
+
+      return normalizedPoints.map((point) => {
+        const p = toPixel(point.x, point.y);
+        return {
+          x: Math.min(Math.max(p.x, 0), width),
+          y: Math.min(Math.max(p.y, 0), height),
+        };
+      });
     };
 
     const shapes: VisualSelectionShape[] = [];
@@ -1623,14 +1640,13 @@ export const VisualEditPanel = () => {
       }
 
       const prompt = [
-        'You are a precise segmentation assistant for architectural renders.',
-        `Target objects: ${targets.join(', ')}.`,
-        'Return ONLY valid JSON.',
-        'Output schema:',
-        '{ "polygons": [ { "label": string, "points": [ { "x": number, "y": number } ] } ] }',
-        'Coordinates must be normalized in the 0..1 range relative to image width/height.',
-        'Each polygon should tightly trace the object outline with enough points to match a selection lasso.',
-        'Do not include any commentary, markdown, or code fences.'
+        'You are a precise object detection and segmentation assistant for architectural visualization renders.',
+        `Detect and outline every instance of: ${targets.join(', ')}.`,
+        'Return ONLY valid JSON with no commentary, markdown, or code fences.',
+        'Schema: { "polygons": [ { "label": string, "points": [ { "x": number, "y": number } ] } ] }',
+        'All x and y coordinates MUST be integers in the 0 to 1000 range, where 0 is the top-left and 1000 is the bottom-right of the image.',
+        'Trace each object tightly with 8-20 polygon points along its visible outline.',
+        'Return one polygon per distinct object instance found.',
       ].join(' ');
 
       const response = await getGeminiService().generate({
