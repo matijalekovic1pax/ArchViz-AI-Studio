@@ -773,7 +773,7 @@ export default {
 
     // Gemini passthrough: /api/gemini/{anything}
     if (path.startsWith('/api/gemini/')) {
-      const subpath = path.replace('/api/gemini/', '');
+      const subpath = path.replace('/api/gemini/', '') + url.search;
       return handleGeminiProxy(request, env, subpath);
     }
 

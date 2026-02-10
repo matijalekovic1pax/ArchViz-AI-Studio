@@ -24,7 +24,8 @@
       "Bash(node -e:*)",
       "Bash(npx wrangler dev:*)",
       "Bash(del \"services\\\\docxParser.ts\")",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(cd:*)"
     ]
   }
 }
