@@ -91,7 +91,7 @@ export const LeftExplodedPanel = () => {
       return;
     }
     if (!isGeminiServiceInitialized()) {
-      setComponentsDetectError('Gemini service not initialized. Add your API key to enable detection.');
+      setComponentsDetectError('Please sign in to use AI detection.');
       return;
     }
 

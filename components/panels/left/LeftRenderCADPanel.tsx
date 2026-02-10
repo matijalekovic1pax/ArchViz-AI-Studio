@@ -308,6 +308,14 @@ export const LeftRenderCADPanel = () => {
 
     const analyzeCadLayers = useCallback(async (imageUrl: string) => {
       if (!ensureServiceInitialized()) {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: nanoid(),
+            tone: 'warning',
+            message: 'Please sign in to use AI analysis.'
+          }
+        });
         updateWf({ cadLayers: [] });
         return;
       }

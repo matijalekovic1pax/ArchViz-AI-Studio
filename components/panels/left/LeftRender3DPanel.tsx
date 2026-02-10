@@ -151,6 +151,14 @@ export const LeftRender3DPanel = () => {
       return;
     }
     if (!ensureServiceInitialized()) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: 'Please sign in to use AI analysis.'
+        }
+      });
       updateWf({ detectedElements: [] });
       return;
     }

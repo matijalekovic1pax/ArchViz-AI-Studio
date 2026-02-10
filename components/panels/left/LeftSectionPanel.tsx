@@ -67,7 +67,7 @@ export const LeftSectionPanel = () => {
       return;
     }
     if (!isGeminiServiceInitialized()) {
-      setAreaDetectError('Gemini service not initialized. Add your API key to enable detection.');
+      setAreaDetectError('Please sign in to use AI detection.');
       return;
     }
 

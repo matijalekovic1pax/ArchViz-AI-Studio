@@ -513,6 +513,14 @@ export function useGeneration(): UseGenerationReturn {
    */
   const generate = useCallback(async (options: GenerationOptions = {}) => {
     if (!ensureServiceInitialized()) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'error',
+          message: 'Please sign in to use AI generation.'
+        }
+      });
       dispatch({ type: 'SET_GENERATING', payload: false });
       return;
     }
@@ -1843,6 +1851,17 @@ export function useGeneration(): UseGenerationReturn {
             id: nanoid(),
             tone: 'warning',
             message: 'Gemini image service is temporarily unavailable (503). Please retry in a moment.'
+          }
+        });
+      }
+      if (!isServiceUnavailable) {
+        const message = errorMessage || 'Generation failed. Please try again.';
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: nanoid(),
+            tone: 'error',
+            message
           }
         });
       }

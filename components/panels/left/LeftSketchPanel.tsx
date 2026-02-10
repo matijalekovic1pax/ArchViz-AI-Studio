@@ -182,6 +182,14 @@ export const LeftSketchPanel = () => {
 
   const analyzeSketch = useCallback(async (imageUrl: string) => {
     if (!ensureServiceInitialized()) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: 'Please sign in to use AI analysis.'
+        }
+      });
       return;
     }
 

@@ -64,7 +64,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
   } = options;
 
   if (!isGeminiServiceInitialized()) {
-    throw new Error('Gemini API not initialized. Please set your API key.');
+    throw new Error('Not authenticated. Please sign in to use document translation.');
   }
 
   const service = getGeminiService();

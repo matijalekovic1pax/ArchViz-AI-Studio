@@ -58,7 +58,7 @@ export const LeftImageToCADPanel = () => {
          return;
       }
       if (!ensureServiceInitialized()) {
-         setPreprocessError('Gemini service not initialized. Add your API key to continue.');
+         setPreprocessError('Please sign in to use AI pre-processing.');
          return;
       }
 

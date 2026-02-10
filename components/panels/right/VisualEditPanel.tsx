@@ -1597,7 +1597,7 @@ export const VisualEditPanel = () => {
         payload: {
           id: nanoid(),
           tone: 'warning',
-          message: 'Gemini API key not configured. Add it in .env or settings.'
+          message: 'Please sign in to use AI auto selection.'
         }
       });
       return;
