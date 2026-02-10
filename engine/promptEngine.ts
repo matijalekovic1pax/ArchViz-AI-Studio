@@ -1877,15 +1877,6 @@ const generateVisualEditPrompt = (state: AppState): string => {
     };
     parts.push(`Airport context: This is ${zoneDescriptions[people.airportZone] || 'a general airport terminal'}.`);
 
-    const timeDescriptions: Record<string, string> = {
-      'peak-hours': 'Peak hours — the terminal is bustling with high foot traffic, longer queues, and crowded seating',
-      'normal': 'Normal operating hours with steady, moderate passenger flow',
-      'off-peak': 'Off-peak hours with lighter traffic and a more relaxed atmosphere',
-      'early-morning': 'Early morning — bleary-eyed travelers, some yawning, with coffee cups, quieter mood',
-      'late-night': 'Late night — sparse, tired travelers, some sleeping on seats, subdued lighting atmosphere',
-    };
-    parts.push(`${timeDescriptions[people.timeContext] || 'Normal operating hours'}.`);
-
     // Demographics & Diversity
     if (people.regionMix.length > 0) {
       const regionLabels: Record<string, string> = {
@@ -1911,7 +1902,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     const ageDescriptions: Record<string, string> = {
       'young-adults': 'Predominantly young adults (20s-30s)',
-      'business-age': 'Mostly working-age professionals (30s-50s)',
+      'adults': 'Mostly adults (30s-50s)',
       'mixed-all-ages': 'Full age range from children to elderly, reflecting a realistic airport cross-section',
       'families': 'Many family groups with children, parents, and some grandparents',
       'elderly-included': 'Notable presence of elderly travelers alongside other ages',

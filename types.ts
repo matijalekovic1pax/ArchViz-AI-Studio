@@ -490,11 +490,10 @@ export interface WorkflowSettings {
 
     // Airport zone context
     airportZone: 'terminal-general' | 'check-in' | 'security' | 'departure-gate' | 'arrival-hall' | 'baggage-claim' | 'retail-area' | 'food-court' | 'lounge' | 'transit-corridor';
-    timeContext: 'peak-hours' | 'off-peak' | 'early-morning' | 'late-night' | 'normal';
 
     // Demographics & Diversity
     regionMix: string[];
-    ageDistribution: 'young-adults' | 'mixed-all-ages' | 'business-age' | 'families' | 'elderly-included';
+    ageDistribution: 'young-adults' | 'mixed-all-ages' | 'adults' | 'families' | 'elderly-included';
     genderBalance: 'balanced' | 'male-leaning' | 'female-leaning';
     childrenPresence: number;
     bodyTypeVariety: number;

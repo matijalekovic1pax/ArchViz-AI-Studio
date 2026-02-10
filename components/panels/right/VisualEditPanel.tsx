@@ -2524,52 +2524,89 @@ export const VisualEditPanel = () => {
         );
       case 'people': {
         const people = wf.visualPeople;
-        const toggleChip = (arr: string[], value: string) => {
-          const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
-          return next;
-        };
-        const ChipGrid = ({ items, selected, onToggle, columns = 3 }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void; columns?: number }) => (
-          <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
-            {items.map(item => {
-              const active = selected.includes(item.value);
-              return (
-                <button
-                  key={item.value}
-                  onClick={() => onToggle(item.value)}
-                  className={cn(
-                    "px-2 py-1.5 text-[10px] font-medium rounded-md border transition-all duration-150 text-center leading-tight",
-                    active
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
-                  )}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
+        const toggleChip = (arr: string[], value: string) =>
+          arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+
+        const Chip = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
+          <button
+            onClick={onClick}
+            className={cn(
+              "px-1.5 py-1 text-[10px] font-medium rounded border transition-all duration-150 text-center leading-tight truncate min-w-0",
+              active
+                ? "bg-foreground text-background border-foreground"
+                : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
+            )}
+          >
+            {label}
+          </button>
+        );
+
+        const ChipGrid2 = ({ items, selected, onToggle }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void }) => (
+          <div className="grid grid-cols-2 gap-1">
+            {items.map(item => (
+              <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
+            ))}
           </div>
         );
+
+        const ChipGrid3 = ({ items, selected, onToggle }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void }) => (
+          <div className="grid grid-cols-3 gap-1">
+            {items.map(item => (
+              <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
+            ))}
+          </div>
+        );
+
+        const SingleChipGrid2 = ({ items, value, onChange }: { items: { value: string; label: string }[]; value: string; onChange: (val: string) => void }) => (
+          <div className="grid grid-cols-2 gap-1">
+            {items.map(item => (
+              <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
+            ))}
+          </div>
+        );
+
+        const SingleChipGrid3 = ({ items, value, onChange }: { items: { value: string; label: string }[]; value: string; onChange: (val: string) => void }) => (
+          <div className="grid grid-cols-3 gap-1">
+            {items.map(item => (
+              <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
+            ))}
+          </div>
+        );
+
         const PeopleSection = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
           const [open, setOpen] = React.useState(defaultOpen);
           return (
-            <div className="border-t border-border-subtle pt-2">
+            <div className="border-t border-border-subtle pt-1.5">
               <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between py-1 group">
                 <span className="text-[10px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground-secondary transition-colors">{title}</span>
-                <span className={cn("text-[10px] text-foreground-muted transition-transform", open ? "rotate-0" : "-rotate-90")}>&#9660;</span>
+                <span className={cn("text-[9px] text-foreground-muted transition-transform duration-150", open ? "rotate-0" : "-rotate-90")}>&#9660;</span>
               </button>
-              {open && <div className="space-y-3 pt-2">{children}</div>}
+              {open && <div className="space-y-2.5 pt-1.5 pb-0.5">{children}</div>}
             </div>
           );
         };
+
+        const SectionLabel = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-foreground-secondary">{children}</span>
+            {right}
+          </div>
+        );
+
+        const AllToggle = ({ count, total, onToggle }: { count: number; total: number; onToggle: () => void }) => (
+          <button onClick={onToggle} className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors">
+            {count === total ? 'Clear' : 'All'}
+          </button>
+        );
 
         const regionOptions = [
           { value: 'european', label: 'European' },
           { value: 'east-asian', label: 'East Asian' },
           { value: 'south-asian', label: 'South Asian' },
           { value: 'southeast-asian', label: 'SE Asian' },
-          { value: 'middle-eastern', label: 'Middle Eastern' },
+          { value: 'middle-eastern', label: 'Mid. Eastern' },
           { value: 'african', label: 'African' },
-          { value: 'latin-american', label: 'Latin American' },
+          { value: 'latin-american', label: 'Latin Amer.' },
           { value: 'pacific-islander', label: 'Pacific Isl.' },
           { value: 'central-asian', label: 'Central Asian' },
         ];
@@ -2586,38 +2623,35 @@ export const VisualEditPanel = () => {
           { value: 'reading', label: 'Reading' },
           { value: 'conversation', label: 'Chatting' },
           { value: 'sleeping', label: 'Sleeping' },
-          { value: 'working-laptop', label: 'On Laptop' },
-          { value: 'taking-photos', label: 'Taking Photos' },
-          { value: 'pushing-stroller', label: 'w/ Stroller' },
+          { value: 'working-laptop', label: 'Laptop' },
+          { value: 'taking-photos', label: 'Photos' },
+          { value: 'pushing-stroller', label: 'Stroller' },
           { value: 'wheelchair', label: 'Wheelchair' },
         ];
 
         const luggageTypeOptions = [
-          { value: 'rolling-suitcase', label: 'Rolling Case' },
+          { value: 'rolling-suitcase', label: 'Roller' },
           { value: 'backpack', label: 'Backpack' },
           { value: 'carry-on', label: 'Carry-on' },
-          { value: 'duffel-bag', label: 'Duffel Bag' },
+          { value: 'duffel-bag', label: 'Duffel' },
           { value: 'oversized', label: 'Oversized' },
-          { value: 'shopping-bags', label: 'Shopping Bags' },
+          { value: 'shopping-bags', label: 'Shopping' },
           { value: 'duty-free', label: 'Duty Free' },
           { value: 'briefcase', label: 'Briefcase' },
-          { value: 'garment-bag', label: 'Garment Bag' },
+          { value: 'garment-bag', label: 'Garment' },
         ];
 
         return (
-          <div className="space-y-3 animate-fade-in">
-            <SectionDesc>Comprehensive 3D people editing for airport renderings — demographics, wardrobe, luggage, behavior, and staff.</SectionDesc>
+          <div className="space-y-2 animate-fade-in">
+            <SectionDesc>Edit and refine 3D people in airport renderings — adjust demographics, wardrobe, luggage, and behavior.</SectionDesc>
 
             {/* Target Scope */}
-            <div className="rounded-lg border border-border bg-surface-sunken/60 p-3">
+            <div className="rounded-md border border-border bg-surface-sunken/60 px-2.5 py-2">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
-                <span>Target Scope</span>
-                <span className={selectionCount > 0 ? 'text-foreground' : 'text-foreground-muted'}>Selection</span>
-              </div>
-              <div className="text-[11px] text-foreground-muted mt-1">
-                {selectionCount > 0
-                  ? `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will be prioritized.`
-                  : 'No selection — auto-detect and refine all people in the frame.'}
+                <span>Scope</span>
+                <span className={selectionCount > 0 ? 'text-foreground' : ''}>
+                  {selectionCount > 0 ? `${selectionCount} area${selectionCount === 1 ? '' : 's'}` : 'Full frame'}
+                </span>
               </div>
             </div>
 
@@ -2631,464 +2665,222 @@ export const VisualEditPanel = () => {
               ]}
               onChange={(value) => updatePeople({ mode: value })}
             />
-            <div className="text-[11px] text-foreground-muted -mt-1">
+            <div className="text-[10px] text-foreground-muted -mt-0.5">
               {people.mode === 'enhance'
-                ? 'Improve existing people without changing the overall count.'
+                ? 'Refine existing people — improve realism, fix artifacts, adjust appearance.'
                 : people.mode === 'repopulate'
-                  ? 'Add or replace people to reach the desired density and configuration.'
-                  : 'Remove artifacts and fix problematic people or silhouettes.'}
+                  ? 'Replace or add people to match desired look and density.'
+                  : 'Remove problematic figures, fix distortions and silhouettes.'}
             </div>
 
-            {/* Airport Zone Context */}
-            <PeopleSection title="Airport Zone & Time">
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Zone</label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {([
-                    { value: 'terminal-general', label: 'Terminal' },
-                    { value: 'check-in', label: 'Check-in' },
-                    { value: 'security', label: 'Security' },
-                    { value: 'departure-gate', label: 'Dep. Gate' },
-                    { value: 'arrival-hall', label: 'Arrival Hall' },
-                    { value: 'baggage-claim', label: 'Bag. Claim' },
-                    { value: 'retail-area', label: 'Retail' },
-                    { value: 'food-court', label: 'Food Court' },
-                    { value: 'lounge', label: 'Lounge' },
-                    { value: 'transit-corridor', label: 'Transit' },
-                  ] as const).map(z => (
-                    <button
-                      key={z.value}
-                      onClick={() => updatePeople({ airportZone: z.value })}
-                      className={cn(
-                        "px-2 py-1.5 text-[10px] font-medium rounded-md border transition-all duration-150 text-center",
-                        people.airportZone === z.value
-                          ? "bg-foreground text-background border-foreground"
-                          : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
-                      )}
-                    >
-                      {z.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Time of Day</label>
-                <SegmentedControl
-                  value={people.timeContext}
-                  options={[
-                    { label: 'Peak', value: 'peak-hours' },
-                    { label: 'Normal', value: 'normal' },
-                    { label: 'Off-peak', value: 'off-peak' },
-                    { label: 'Early AM', value: 'early-morning' },
-                    { label: 'Late PM', value: 'late-night' },
-                  ]}
-                  onChange={(value) => updatePeople({ timeContext: value })}
-                />
-              </div>
-            </PeopleSection>
-
-            {/* Demographics & Diversity */}
-            <PeopleSection title="Demographics & Diversity">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-foreground-secondary">Ethnic / Regional Mix</label>
-                  <button
-                    onClick={() => updatePeople({ regionMix: people.regionMix.length === regionOptions.length ? [] : regionOptions.map(o => o.value) })}
-                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
-                  >
-                    {people.regionMix.length === regionOptions.length ? 'Clear all' : 'Select all'}
-                  </button>
-                </div>
-                <ChipGrid
-                  items={regionOptions}
-                  selected={people.regionMix}
-                  onToggle={(val) => updatePeople({ regionMix: toggleChip(people.regionMix, val) })}
-                  columns={3}
-                />
-                <div className="text-[10px] text-foreground-muted italic">
-                  {people.regionMix.length === 0 ? 'No regions selected — will default to generic diverse crowd.' : `${people.regionMix.length} region${people.regionMix.length === 1 ? '' : 's'} selected`}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Age Distribution</label>
-                <SegmentedControl
-                  value={people.ageDistribution}
-                  options={[
-                    { label: 'Young', value: 'young-adults' },
-                    { label: 'Business', value: 'business-age' },
-                    { label: 'Mixed', value: 'mixed-all-ages' },
-                    { label: 'Families', value: 'families' },
-                    { label: '+ Elderly', value: 'elderly-included' },
-                  ]}
-                  onChange={(value) => updatePeople({ ageDistribution: value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Gender Balance</label>
-                <SegmentedControl
-                  value={people.genderBalance}
-                  options={[
-                    { label: 'Balanced', value: 'balanced' },
-                    { label: 'Male-leaning', value: 'male-leaning' },
-                    { label: 'Female-leaning', value: 'female-leaning' },
-                  ]}
-                  onChange={(value) => updatePeople({ genderBalance: value })}
-                />
-              </div>
-              <SliderControl
-                label="Children Presence"
-                value={people.childrenPresence}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ childrenPresence: value })}
-              />
-              <SliderControl
-                label="Body Type Variety"
-                value={people.bodyTypeVariety}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ bodyTypeVariety: value })}
+            {/* Airport Zone */}
+            <PeopleSection title="Airport Zone">
+              <SingleChipGrid2
+                items={[
+                  { value: 'terminal-general', label: 'Terminal' },
+                  { value: 'check-in', label: 'Check-in' },
+                  { value: 'security', label: 'Security' },
+                  { value: 'departure-gate', label: 'Dep. Gate' },
+                  { value: 'arrival-hall', label: 'Arrivals' },
+                  { value: 'baggage-claim', label: 'Bag. Claim' },
+                  { value: 'retail-area', label: 'Retail' },
+                  { value: 'food-court', label: 'Food Court' },
+                  { value: 'lounge', label: 'Lounge' },
+                  { value: 'transit-corridor', label: 'Transit' },
+                ]}
+                value={people.airportZone}
+                onChange={(value) => updatePeople({ airportZone: value as typeof people.airportZone })}
               />
             </PeopleSection>
 
-            {/* Crowd Configuration */}
-            <PeopleSection title="Crowd Configuration">
-              <SliderControl
-                label="Density"
-                value={people.density}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ density: value })}
+            {/* Demographics */}
+            <PeopleSection title="Demographics">
+              <SectionLabel right={<AllToggle count={people.regionMix.length} total={regionOptions.length} onToggle={() => updatePeople({ regionMix: people.regionMix.length === regionOptions.length ? [] : regionOptions.map(o => o.value) })} />}>
+                Ethnicity / Region
+              </SectionLabel>
+              <ChipGrid3
+                items={regionOptions}
+                selected={people.regionMix}
+                onToggle={(val) => updatePeople({ regionMix: toggleChip(people.regionMix, val) })}
               />
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Social Grouping</label>
-                <SegmentedControl
-                  value={people.grouping}
-                  options={[
-                    { label: 'Solo', value: 'solo-dominant' },
-                    { label: 'Couples', value: 'couples' },
-                    { label: 'Families', value: 'families' },
-                    { label: 'Groups', value: 'business-groups' },
-                    { label: 'Mixed', value: 'mixed-groups' },
-                  ]}
-                  onChange={(value) => updatePeople({ grouping: value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Flow Pattern</label>
-                <SegmentedControl
-                  value={people.flowPattern}
-                  options={[
-                    { label: 'Random', value: 'random' },
-                    { label: 'Directional', value: 'directional' },
-                    { label: 'Converge', value: 'converging' },
-                    { label: 'Disperse', value: 'dispersing' },
-                    { label: 'Queue', value: 'queuing' },
-                  ]}
-                  onChange={(value) => updatePeople({ flowPattern: value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Movement Direction</label>
-                <SegmentedControl
-                  value={people.movementDirection}
-                  options={[
-                    { label: 'Mixed', value: 'mixed' },
-                    { label: '← Left', value: 'mostly-left' },
-                    { label: 'Right →', value: 'mostly-right' },
-                    { label: '↑ Toward', value: 'toward-camera' },
-                    { label: '↓ Away', value: 'away-from-camera' },
-                  ]}
-                  onChange={(value) => updatePeople({ movementDirection: value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Pace of Movement</label>
-                <SegmentedControl
-                  value={people.paceOfMovement}
-                  options={[
-                    { label: 'Relaxed', value: 'relaxed' },
-                    { label: 'Moderate', value: 'moderate' },
-                    { label: 'Hurried', value: 'hurried' },
-                    { label: 'Mixed', value: 'mixed' },
-                  ]}
-                  onChange={(value) => updatePeople({ paceOfMovement: value })}
-                />
-              </div>
-              <SliderControl
-                label="Clustering Tendency"
-                value={people.clusteringTendency}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ clusteringTendency: value })}
+
+              <SectionLabel>Age</SectionLabel>
+              <SingleChipGrid2
+                items={[
+                  { value: 'young-adults', label: 'Young Adults' },
+                  { value: 'adults', label: 'Adults' },
+                  { value: 'mixed-all-ages', label: 'Mixed Ages' },
+                  { value: 'families', label: 'Families' },
+                  { value: 'elderly-included', label: '+ Elderly' },
+                ]}
+                value={people.ageDistribution}
+                onChange={(value) => updatePeople({ ageDistribution: value as typeof people.ageDistribution })}
               />
+
+              <SectionLabel>Gender</SectionLabel>
+              <SegmentedControl
+                value={people.genderBalance}
+                options={[
+                  { label: 'Balanced', value: 'balanced' },
+                  { label: 'Male-lean', value: 'male-leaning' },
+                  { label: 'Female-lean', value: 'female-leaning' },
+                ]}
+                onChange={(value) => updatePeople({ genderBalance: value })}
+              />
+              <SliderControl label="Children" value={people.childrenPresence} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ childrenPresence: value })} />
+              <SliderControl label="Body Type Variety" value={people.bodyTypeVariety} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ bodyTypeVariety: value })} />
             </PeopleSection>
 
-            {/* Appearance & Wardrobe */}
-            <PeopleSection title="Appearance & Wardrobe">
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Wardrobe Style</label>
-                <SegmentedControl
-                  value={people.wardrobeStyle}
-                  options={[
-                    { label: 'Business', value: 'business' },
-                    { label: 'Casual', value: 'casual' },
-                    { label: 'Travel', value: 'travel' },
-                    { label: 'Luxury', value: 'luxury' },
-                    { label: 'Sporty', value: 'sporty' },
-                    { label: 'Mixed', value: 'mixed' },
-                  ]}
-                  onChange={(value) => updatePeople({ wardrobeStyle: value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] text-foreground-secondary">Seasonal Clothing</label>
-                <SegmentedControl
-                  value={people.seasonalClothing}
-                  options={[
-                    { label: 'Summer', value: 'summer' },
-                    { label: 'Winter', value: 'winter' },
-                    { label: 'Spring', value: 'spring-fall' },
-                    { label: 'Tropical', value: 'tropical' },
-                    { label: 'Mixed', value: 'mixed' },
-                  ]}
-                  onChange={(value) => updatePeople({ seasonalClothing: value })}
-                />
-              </div>
-              <SliderControl
-                label="Formality Level"
-                value={people.formalityLevel}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ formalityLevel: value })}
+            {/* Crowd */}
+            <PeopleSection title="Crowd & Flow">
+              <SliderControl label="Density" value={people.density} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ density: value })} />
+
+              <SectionLabel>Grouping</SectionLabel>
+              <SingleChipGrid2
+                items={[
+                  { value: 'solo-dominant', label: 'Solo' },
+                  { value: 'couples', label: 'Couples' },
+                  { value: 'families', label: 'Families' },
+                  { value: 'business-groups', label: 'Groups' },
+                  { value: 'mixed-groups', label: 'Mixed' },
+                ]}
+                value={people.grouping}
+                onChange={(value) => updatePeople({ grouping: value as typeof people.grouping })}
               />
-              <SliderControl
-                label="Cultural / Traditional Attire"
-                value={people.culturalAttire}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ culturalAttire: value })}
+
+              <SectionLabel>Flow</SectionLabel>
+              <SingleChipGrid2
+                items={[
+                  { value: 'random', label: 'Random' },
+                  { value: 'directional', label: 'Directional' },
+                  { value: 'converging', label: 'Converging' },
+                  { value: 'dispersing', label: 'Dispersing' },
+                  { value: 'queuing', label: 'Queuing' },
+                ]}
+                value={people.flowPattern}
+                onChange={(value) => updatePeople({ flowPattern: value as typeof people.flowPattern })}
               />
+
+              <SectionLabel>Direction</SectionLabel>
+              <SingleChipGrid3
+                items={[
+                  { value: 'mixed', label: 'Mixed' },
+                  { value: 'mostly-left', label: 'Left' },
+                  { value: 'mostly-right', label: 'Right' },
+                  { value: 'toward-camera', label: 'Toward' },
+                  { value: 'away-from-camera', label: 'Away' },
+                ]}
+                value={people.movementDirection}
+                onChange={(value) => updatePeople({ movementDirection: value as typeof people.movementDirection })}
+              />
+
+              <SectionLabel>Pace</SectionLabel>
+              <SegmentedControl
+                value={people.paceOfMovement}
+                options={[
+                  { label: 'Relaxed', value: 'relaxed' },
+                  { label: 'Moderate', value: 'moderate' },
+                  { label: 'Hurried', value: 'hurried' },
+                  { label: 'Mixed', value: 'mixed' },
+                ]}
+                onChange={(value) => updatePeople({ paceOfMovement: value })}
+              />
+              <SliderControl label="Clustering" value={people.clusteringTendency} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ clusteringTendency: value })} />
             </PeopleSection>
 
-            {/* Activities & Behavior */}
-            <PeopleSection title="Activities & Behavior">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-foreground-secondary">Activities</label>
-                  <button
-                    onClick={() => updatePeople({ activities: people.activities.length === activityOptions.length ? [] : activityOptions.map(o => o.value) })}
-                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
-                  >
-                    {people.activities.length === activityOptions.length ? 'Clear all' : 'Select all'}
-                  </button>
-                </div>
-                <ChipGrid
-                  items={activityOptions}
-                  selected={people.activities}
-                  onToggle={(val) => updatePeople({ activities: toggleChip(people.activities, val) })}
-                  columns={3}
-                />
-              </div>
-              <SliderControl
-                label="Social Interaction"
-                value={people.interactionLevel}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ interactionLevel: value })}
+            {/* Wardrobe */}
+            <PeopleSection title="Wardrobe">
+              <SectionLabel>Style</SectionLabel>
+              <SingleChipGrid3
+                items={[
+                  { value: 'business', label: 'Business' },
+                  { value: 'casual', label: 'Casual' },
+                  { value: 'travel', label: 'Travel' },
+                  { value: 'luxury', label: 'Luxury' },
+                  { value: 'sporty', label: 'Sporty' },
+                  { value: 'mixed', label: 'Mixed' },
+                ]}
+                value={people.wardrobeStyle}
+                onChange={(value) => updatePeople({ wardrobeStyle: value as typeof people.wardrobeStyle })}
               />
+
+              <SectionLabel>Season</SectionLabel>
+              <SingleChipGrid3
+                items={[
+                  { value: 'summer', label: 'Summer' },
+                  { value: 'winter', label: 'Winter' },
+                  { value: 'spring-fall', label: 'Spring' },
+                  { value: 'tropical', label: 'Tropical' },
+                  { value: 'mixed', label: 'Mixed' },
+                ]}
+                value={people.seasonalClothing}
+                onChange={(value) => updatePeople({ seasonalClothing: value as typeof people.seasonalClothing })}
+              />
+              <SliderControl label="Formality" value={people.formalityLevel} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ formalityLevel: value })} />
+              <SliderControl label="Cultural Attire" value={people.culturalAttire} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ culturalAttire: value })} />
             </PeopleSection>
 
-            {/* Luggage & Accessories */}
-            <PeopleSection title="Luggage & Accessories">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-foreground-secondary">Luggage Types</label>
-                  <button
-                    onClick={() => updatePeople({ luggageTypes: people.luggageTypes.length === luggageTypeOptions.length ? [] : luggageTypeOptions.map(o => o.value) })}
-                    className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors"
-                  >
-                    {people.luggageTypes.length === luggageTypeOptions.length ? 'Clear all' : 'Select all'}
-                  </button>
-                </div>
-                <ChipGrid
-                  items={luggageTypeOptions}
-                  selected={people.luggageTypes}
-                  onToggle={(val) => updatePeople({ luggageTypes: toggleChip(people.luggageTypes, val) })}
-                  columns={3}
-                />
-              </div>
-              <SliderControl
-                label="Luggage Amount"
-                value={people.luggageAmount}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ luggageAmount: value })}
+            {/* Activities */}
+            <PeopleSection title="Activities" defaultOpen={false}>
+              <SectionLabel right={<AllToggle count={people.activities.length} total={activityOptions.length} onToggle={() => updatePeople({ activities: people.activities.length === activityOptions.length ? [] : activityOptions.map(o => o.value) })} />}>
+                Behavior
+              </SectionLabel>
+              <ChipGrid3
+                items={activityOptions}
+                selected={people.activities}
+                onToggle={(val) => updatePeople({ activities: toggleChip(people.activities, val) })}
               />
-              <SliderControl
-                label="Trolley / Cart Usage"
-                value={people.trolleyUsage}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ trolleyUsage: value })}
-              />
-              <SliderControl
-                label="Personal Devices"
-                value={people.personalDevices}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ personalDevices: value })}
-              />
-              <SliderControl
-                label="Travel Accessories"
-                value={people.travelAccessories}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ travelAccessories: value })}
-              />
+              <SliderControl label="Interaction" value={people.interactionLevel} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ interactionLevel: value })} />
             </PeopleSection>
 
-            {/* Airport Staff */}
-            <PeopleSection title="Airport Staff & Crew" defaultOpen={false}>
-              <div className="space-y-1">
-                <Toggle
-                  label="Airport / Airline Staff"
-                  checked={people.includeAirportStaff}
-                  onChange={(value) => updatePeople({ includeAirportStaff: value })}
-                />
-                <Toggle
-                  label="Security Personnel"
-                  checked={people.includeSecurityPersonnel}
-                  onChange={(value) => updatePeople({ includeSecurityPersonnel: value })}
-                />
-                <Toggle
-                  label="Airline Crew (Pilots / Attendants)"
-                  checked={people.includeAirlineCrew}
-                  onChange={(value) => updatePeople({ includeAirlineCrew: value })}
-                />
-                <Toggle
-                  label="Ground Crew (Hi-vis Vests)"
-                  checked={people.includeGroundCrew}
-                  onChange={(value) => updatePeople({ includeGroundCrew: value })}
-                />
-                <Toggle
-                  label="Service Staff (Retail / F&B / Cleaning)"
-                  checked={people.includeServiceStaff}
-                  onChange={(value) => updatePeople({ includeServiceStaff: value })}
-                />
-              </div>
+            {/* Luggage */}
+            <PeopleSection title="Luggage & Props" defaultOpen={false}>
+              <SectionLabel right={<AllToggle count={people.luggageTypes.length} total={luggageTypeOptions.length} onToggle={() => updatePeople({ luggageTypes: people.luggageTypes.length === luggageTypeOptions.length ? [] : luggageTypeOptions.map(o => o.value) })} />}>
+                Types
+              </SectionLabel>
+              <ChipGrid3
+                items={luggageTypeOptions}
+                selected={people.luggageTypes}
+                onToggle={(val) => updatePeople({ luggageTypes: toggleChip(people.luggageTypes, val) })}
+              />
+              <SliderControl label="Amount" value={people.luggageAmount} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ luggageAmount: value })} />
+              <SliderControl label="Trolleys" value={people.trolleyUsage} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ trolleyUsage: value })} />
+              <SliderControl label="Devices" value={people.personalDevices} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ personalDevices: value })} />
+              <SliderControl label="Accessories" value={people.travelAccessories} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ travelAccessories: value })} />
+            </PeopleSection>
+
+            {/* Staff */}
+            <PeopleSection title="Staff & Crew" defaultOpen={false}>
+              <Toggle label="Airport Staff" checked={people.includeAirportStaff} onChange={(value) => updatePeople({ includeAirportStaff: value })} />
+              <Toggle label="Security" checked={people.includeSecurityPersonnel} onChange={(value) => updatePeople({ includeSecurityPersonnel: value })} />
+              <Toggle label="Airline Crew" checked={people.includeAirlineCrew} onChange={(value) => updatePeople({ includeAirlineCrew: value })} />
+              <Toggle label="Ground Crew" checked={people.includeGroundCrew} onChange={(value) => updatePeople({ includeGroundCrew: value })} />
+              <Toggle label="Service Staff" checked={people.includeServiceStaff} onChange={(value) => updatePeople({ includeServiceStaff: value })} />
               <SliderControl
-                label="Staff Proportion"
+                label="Staff Ratio"
                 value={people.staffDensity}
-                min={0}
-                max={50}
-                step={1}
-                unit="%"
+                min={0} max={50} step={1} unit="%"
                 disabled={!people.includeAirportStaff && !people.includeSecurityPersonnel && !people.includeAirlineCrew && !people.includeGroundCrew && !people.includeServiceStaff}
                 onChange={(value) => updatePeople({ staffDensity: value })}
               />
             </PeopleSection>
 
-            {/* Quality & Integration */}
-            <PeopleSection title="Quality & Integration">
-              <SliderControl
-                label="Realism"
-                value={people.realism}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ realism: value })}
-              />
-              <SliderControl
-                label="Sharpness"
-                value={people.sharpness}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ sharpness: value })}
-              />
-              <SliderControl
-                label="Scale Accuracy"
-                value={people.scaleAccuracy}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ scaleAccuracy: value })}
-              />
-              <SliderControl
-                label="Placement Discipline"
-                value={people.placementDiscipline}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ placementDiscipline: value })}
-              />
-              <SliderControl
-                label="Motion Blur"
-                value={people.motionBlur}
-                min={0}
-                max={100}
-                step={1}
-                unit="%"
-                onChange={(value) => updatePeople({ motionBlur: value })}
-              />
+            {/* Quality */}
+            <PeopleSection title="Quality" defaultOpen={false}>
+              <SliderControl label="Realism" value={people.realism} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ realism: value })} />
+              <SliderControl label="Sharpness" value={people.sharpness} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ sharpness: value })} />
+              <SliderControl label="Scale Accuracy" value={people.scaleAccuracy} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ scaleAccuracy: value })} />
+              <SliderControl label="Placement" value={people.placementDiscipline} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ placementDiscipline: value })} />
+              <SliderControl label="Motion Blur" value={people.motionBlur} min={0} max={100} step={1} unit="%" onChange={(value) => updatePeople({ motionBlur: value })} />
             </PeopleSection>
 
-            {/* Advanced Toggles */}
-            <PeopleSection title="Advanced Options" defaultOpen={false}>
-              <div className="space-y-1">
-                <Toggle
-                  label="Preserve Existing People"
-                  checked={people.preserveExisting}
-                  onChange={(value) => updatePeople({ preserveExisting: value })}
-                />
-                <Toggle
-                  label="Match Scene Lighting"
-                  checked={people.matchLighting}
-                  onChange={(value) => updatePeople({ matchLighting: value })}
-                />
-                <Toggle
-                  label="Match Perspective"
-                  checked={people.matchPerspective}
-                  onChange={(value) => updatePeople({ matchPerspective: value })}
-                />
-                <Toggle
-                  label="Ground Contact"
-                  checked={people.groundContact}
-                  onChange={(value) => updatePeople({ groundContact: value })}
-                />
-                <Toggle
-                  label="Remove AI Artifacts"
-                  checked={people.removeArtifacts}
-                  onChange={(value) => updatePeople({ removeArtifacts: value })}
-                />
-              </div>
+            {/* Advanced */}
+            <PeopleSection title="Advanced" defaultOpen={false}>
+              <Toggle label="Preserve Existing" checked={people.preserveExisting} onChange={(value) => updatePeople({ preserveExisting: value })} />
+              <Toggle label="Match Lighting" checked={people.matchLighting} onChange={(value) => updatePeople({ matchLighting: value })} />
+              <Toggle label="Match Perspective" checked={people.matchPerspective} onChange={(value) => updatePeople({ matchPerspective: value })} />
+              <Toggle label="Ground Contact" checked={people.groundContact} onChange={(value) => updatePeople({ groundContact: value })} />
+              <Toggle label="Remove Artifacts" checked={people.removeArtifacts} onChange={(value) => updatePeople({ removeArtifacts: value })} />
             </PeopleSection>
           </div>
         );

@@ -465,7 +465,6 @@ const initialWorkflow: WorkflowSettings = {
     mode: 'enhance',
 
     airportZone: 'terminal-general',
-    timeContext: 'normal',
 
     regionMix: ['european', 'east-asian', 'south-asian', 'middle-eastern', 'african', 'latin-american'],
     ageDistribution: 'mixed-all-ages',
