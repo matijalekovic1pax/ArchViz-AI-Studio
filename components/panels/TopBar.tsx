@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -8,6 +8,7 @@ import { Slider } from '../ui/Slider';
 import { VisualSelectionShape } from '../../types';
 import { useGeneration } from '../../hooks/useGeneration';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../auth/AuthGate';
 import { MobilePanelType } from './mobile/MobilePanels';
 
 const drawSelectionOverlay = (
@@ -174,6 +175,7 @@ const drawSelectionOverlay = (
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
   const { t, i18n } = useTranslation();
+  const { user, logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlsMenuRef = useRef<HTMLDivElement>(null);
   const controlsButtonRef = useRef<HTMLButtonElement>(null);
@@ -743,6 +745,23 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   </div>
                 )}
               </div>
+
+              {/* User Profile & Logout (Mobile) */}
+              {user?.picture && (
+                <img
+                  src={user.picture}
+                  alt={user.name || ''}
+                  referrerPolicy="no-referrer"
+                  className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
+                />
+              )}
+              <button
+                onClick={() => logout()}
+                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                title="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           </div>
 
@@ -1703,6 +1722,25 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               </div>
             </div>
           )}
+        </div>
+
+        {/* User Profile & Logout */}
+        <div className="flex items-center gap-2 pl-2 border-l border-border-subtle shrink-0">
+          {user?.picture && (
+            <img
+              src={user.picture}
+              alt={user.name || ''}
+              referrerPolicy="no-referrer"
+              className="w-7 h-7 rounded-full object-cover border border-border"
+            />
+          )}
+          <button
+            onClick={() => logout()}
+            className="p-1.5 text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+            title="Sign out"
+          >
+            <LogOut size={15} />
+          </button>
         </div>
       </div>
       </div>
