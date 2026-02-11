@@ -288,3 +288,17 @@ export async function ilovepdfDownload(
   if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
   return resp.blob();
 }
+
+// ─── URL Fetch Proxy (material validation) ───────────────────────────────────
+
+export interface FetchUrlResult {
+  url: string;
+  title?: string;
+  content: string;
+  fetchedAt: number;
+  error?: string;
+}
+
+export async function fetchUrlViaGateway(url: string): Promise<FetchUrlResult> {
+  return gatewayGet<FetchUrlResult>(`/api/fetch-url?url=${encodeURIComponent(url)}`, { timeoutMs: 15_000 });
+}

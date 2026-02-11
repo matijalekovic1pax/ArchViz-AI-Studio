@@ -10,7 +10,7 @@
  */
 
 import { nanoid } from 'nanoid';
-import { GeminiService, getGeminiService, BatchTextResult } from './geminiService';
+import { GeminiService, getGeminiService, type BatchTextResult } from './geminiService';
 import {
   extractMaterialsFromDocument,
   extractBoqItemsFromDocument,
@@ -194,16 +194,17 @@ export class MaterialValidationService {
       }
     }));
 
-    // Try batch API first, fall back to sequential if it fails
-    let results: BatchTextResult[];
-    try {
-      results = await this.service.generateBatchText(requests, {
-        displayName: `technical-validation-${Date.now()}`,
-        pollIntervalMs: 3000
+    // Sequential API calls — one per material for reliability
+    const results = await this.sequentialFallback(requests, (completed, total) => {
+      this.updateProgress({
+        phase: 'Technical validation',
+        document: materials[0]?.docName,
+        documentsProcessed: 0,
+        documentsTotal: 1,
+        materialsProcessed: completed,
+        materialsTotal: total
       });
-    } catch (batchError) {
-      results = await this.sequentialFallback(requests);
-    }
+    });
 
     // Parse results
     const parsedMaterials: ParsedMaterial[] = [];
@@ -284,16 +285,17 @@ export class MaterialValidationService {
       };
     });
 
-    // Try batch API first, fall back to sequential
-    let results: BatchTextResult[];
-    try {
-      results = await this.service.generateBatchText(requests, {
-        displayName: `boq-validation-${Date.now()}`,
-        pollIntervalMs: 3000
+    // Sequential API calls — one per material for reliability
+    const results = await this.sequentialFallback(requests, (completed, total) => {
+      this.updateProgress({
+        phase: 'BoQ cross-reference',
+        document: materials[0]?.docName,
+        documentsProcessed: 0,
+        documentsTotal: 1,
+        materialsProcessed: completed,
+        materialsTotal: total
       });
-    } catch (batchError) {
-      results = await this.sequentialFallback(requests);
-    }
+    });
 
     // Parse results
     const boqItems: BoQItem[] = [];
@@ -350,9 +352,12 @@ export class MaterialValidationService {
   }
 
   /**
-   * Sequential fallback when batch API fails
+   * Sequential API calls — one per material
    */
-  private async sequentialFallback(requests: Array<{ prompt: string; generationConfig: any }>): Promise<BatchTextResult[]> {
+  private async sequentialFallback(
+    requests: Array<{ prompt: string; generationConfig: any }>,
+    onItemComplete?: (completed: number, total: number) => void
+  ): Promise<BatchTextResult[]> {
     const results: BatchTextResult[] = [];
 
     for (let i = 0; i < requests.length; i++) {
@@ -370,9 +375,11 @@ export class MaterialValidationService {
         });
       }
 
-      // Small delay between requests to avoid rate limiting
+      onItemComplete?.(i + 1, requests.length);
+
+      // Delay between requests to avoid rate limiting
       if (i < requests.length - 1) {
-        await this.sleep(100);
+        await this.sleep(200);
       }
     }
 

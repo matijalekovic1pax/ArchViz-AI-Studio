@@ -804,6 +804,80 @@ async function handleILovePdfProxy(request, env, subpath) {
   }
 }
 
+// ─── URL Fetch Proxy (for material validation link fetching) ─────────────────
+
+async function handleFetchUrl(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const reqUrl = new URL(request.url);
+  const targetUrl = reqUrl.searchParams.get('url');
+
+  if (!targetUrl) {
+    return corsResponse(origin, { error: 'Missing url parameter' }, { status: 400 });
+  }
+
+  let parsedUrl;
+  try {
+    let normalizedUrl = targetUrl;
+    if (normalizedUrl.startsWith('www.')) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    parsedUrl = new URL(normalizedUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+  } catch {
+    return corsResponse(origin, { error: 'Invalid URL' }, { status: 400 });
+  }
+
+  try {
+    const resp = await fetchWithRetry(
+      (signal) => fetch(parsedUrl.href, {
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'User-Agent': 'ArchVizAIStudio/1.0',
+        },
+        signal,
+        redirect: 'follow',
+      }),
+      { maxRetries: 1, timeoutMs: 10000, label: 'URL fetch' }
+    );
+
+    if (!resp.ok) {
+      return corsResponse(origin, {
+        url: parsedUrl.href,
+        content: '',
+        fetchedAt: Date.now(),
+        error: `HTTP ${resp.status}`
+      });
+    }
+
+    const html = await resp.text();
+    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : undefined;
+    const content = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 3000);
+
+    return corsResponse(origin, {
+      url: parsedUrl.href,
+      title,
+      content,
+      fetchedAt: Date.now()
+    });
+  } catch (err) {
+    return corsResponse(origin, {
+      url: parsedUrl.href,
+      content: '',
+      fetchedAt: Date.now(),
+      error: err.message
+    });
+  }
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
@@ -859,6 +933,9 @@ export default {
       const subpath = path.replace('/api/ilovepdf/', '');
       return handleILovePdfProxy(request, env, subpath);
     }
+
+    // URL fetch proxy (material validation link fetching)
+    if (path === '/api/fetch-url' && request.method === 'GET') return handleFetchUrl(request, env);
 
     return corsResponse(origin, { error: 'Not found' }, { status: 404 });
   },

@@ -9,7 +9,7 @@ import {
 import { cn } from '../lib/utils';
 import { ParsedMaterial, ValidationIssue } from '../types';
 
-// --- ENHANCED MOCK DATA ---
+// --- TYPES ---
 
 interface ExtendedMaterial extends ParsedMaterial {
   status: 'ok' | 'warning' | 'error';
@@ -20,103 +20,6 @@ interface ExtendedMaterial extends ParsedMaterial {
   };
   application: string;
 }
-
-const MOCK_MATERIALS: ExtendedMaterial[] = [
-  { 
-    code: 'FF10', 
-    name: 'POLYURETHANE FLOOR_GRAY_e:3mm', 
-    category: 'FF', 
-    description: 'Sika Sikafloor Hardtop polyurethane system', 
-    referenceProduct: { type: 'SIKAFLOOR HARDTOP', brand: 'Sika' }, 
-    drawingRef: '0130', 
-    source: 'terminal', 
-    dimensions: '3mm', 
-    notes: ['Heavy duty'], 
-    status: 'ok',
-    checks: { typology: true, dimensions: 'ok', application: true },
-    application: 'Heavy Traffic'
-  },
-  { 
-    code: 'FF30', 
-    name: 'CERAMIC FLOOR TILES_GRAFITE_600x600x12mm', 
-    category: 'FF', 
-    description: 'High traffic ceramic tiles', 
-    referenceProduct: { type: 'OMNI IRON', brand: 'Revigres' }, 
-    drawingRef: '0130', 
-    source: 'terminal', 
-    dimensions: '12mm', 
-    notes: ['Public area'], 
-    status: 'warning',
-    checks: { typology: true, dimensions: 'warning', application: true },
-    application: 'High Traffic'
-  },
-  { 
-    code: 'WF72B', 
-    name: 'ALUMINIUM CLADDING_GREEN_RAL 6019', 
-    category: 'WF', 
-    description: 'Aluminium cladding tiles', 
-    referenceProduct: { type: 'PURE WHITE 10 100', brand: 'Alucolux' }, 
-    drawingRef: '0141', 
-    source: 'terminal', 
-    dimensions: 'N/A', 
-    notes: ['External facade'], 
-    status: 'error',
-    checks: { typology: true, dimensions: 'ok', application: true },
-    application: 'Wall Cladding'
-  },
-  { 
-    code: 'WP20', 
-    name: 'CURTAIN WALL (FACADE) – TRANSPARENT GLASS', 
-    category: 'WP', 
-    description: 'Glass facade system', 
-    referenceProduct: { type: 'PILKINGTON INSULIGHT', brand: 'Pilkington' }, 
-    drawingRef: '0140', 
-    source: 'terminal', 
-    notes: [], 
-    status: 'ok',
-    checks: { typology: true, dimensions: 'ok', application: true },
-    application: 'Facade'
-  },
-  { 
-    code: 'WP21', 
-    name: 'CURTAIN WALL – SANDBLASTED GLASS', 
-    category: 'WP', 
-    description: 'Profilit glass system', 
-    referenceProduct: { type: 'PROFILIT', brand: 'Pilkington' }, 
-    drawingRef: 'RAI-0140', // Intentional error for demo
-    source: 'terminal', 
-    notes: [], 
-    status: 'warning',
-    checks: { typology: true, dimensions: 'ok', application: true },
-    application: 'Facade'
-  },
-  { 
-    code: 'L60', 
-    name: 'LED GROUND RECESSED', 
-    category: 'L', 
-    description: 'Linear LED', 
-    referenceProduct: { type: 'GAMA HR', brand: 'KLUS' }, 
-    drawingRef: '0500', 
-    source: 'terminal', 
-    notes: [], 
-    status: 'error',
-    checks: { typology: true, dimensions: 'ok', application: true },
-    application: 'Lighting'
-  }
-];
-
-const MOCK_ISSUES: ValidationIssue[] = [
-  { id: '1', code: 'FF30', type: 'technical', severity: 'warning', message: 'Dimension Warning', details: 'Material specifies 12mm thickness. BoQ item 1.6.2 specifies 8mm thickness.', recommendation: 'Clarify correct thickness with design team', sourceDocument: 'Terminal_Materials.pdf', resolved: false, date: 'Jan 8' },
-  { id: '2', code: 'WF72B', type: 'technical', severity: 'error', message: 'Product Reference Error', details: 'Brand ref "PURE WHITE" conflicts with description "GREEN RAL 6019"', recommendation: 'Update brand reference to match RAL 6019', sourceDocument: 'Terminal_Materials.pdf', resolved: false, date: 'Jan 8' },
-  { id: '3', code: 'L60', type: 'boq', severity: 'error', message: 'Material not found in BoQ', details: 'Material exists in spec but not found in BoQ', recommendation: 'Add item to BoQ or confirm exclusion', sourceDocument: 'MQT_BoQ.xlsx', resolved: false, date: 'Jan 8' },
-  { id: '4', code: 'WP21', type: 'drawing', severity: 'warning', message: 'Drawing Ref Mismatch', details: 'References RAI drawing instead of BVC prefix', recommendation: 'Correct drawing reference to BVC prefix', sourceDocument: 'Terminal_Materials.pdf', resolved: false, date: 'Jan 8' },
-];
-
-const MOCK_BOQ_ITEMS = [
-  { code: '1.2.1', section: 'Walls', description: 'Parede cortina vidro transparente', materialRef: 'WP20', product: 'Pilkington', quantity: '91.50 m²' },
-  { code: '1.2.2', section: 'Walls', description: 'Parede vidro profilit', materialRef: 'WP21', product: 'Pilkington', quantity: '83.20 m²' },
-  { code: '1.6.2', section: 'Floors', description: 'Mosaico cerâmico alto tráfego 600x600x8mm', materialRef: 'FF30', product: 'Revigres', quantity: '60.00 m²' },
-];
 
 // --- COMPONENTS ---
 

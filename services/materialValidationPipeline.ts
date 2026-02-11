@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker?url';
+import { fetchUrlViaGateway } from './apiGateway';
 import type { MaterialValidationDocument, FetchedLinkContent, EnrichedMaterialCandidate } from '../types';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -354,54 +355,23 @@ const LINK_FETCH_TIMEOUT = 10000; // 10 seconds
 const MAX_CONTENT_LENGTH = 2000;  // Characters to extract per link
 
 /**
- * Extract readable text from HTML by removing scripts, styles, and tags
- */
-const extractTextFromHtml = (html: string): string => {
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
-
-/**
- * Fetch content from a single URL with timeout
+ * Fetch content from a single URL via the API gateway proxy (bypasses CORS)
  */
 export const fetchLinkContent = async (url: string): Promise<FetchedLinkContent> => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), LINK_FETCH_TIMEOUT);
-
   try {
-    // Normalize URL
     let normalizedUrl = url;
     if (url.startsWith('www.')) {
       normalizedUrl = `https://${url}`;
     }
 
-    const response = await fetch(normalizedUrl, {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const html = await response.text();
-    const content = extractTextFromHtml(html);
-
-    // Try to extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : undefined;
+    const result = await fetchUrlViaGateway(normalizedUrl);
 
     return {
-      url: normalizedUrl,
-      title,
-      content: content.slice(0, MAX_CONTENT_LENGTH),
-      fetchedAt: Date.now()
+      url: result.url,
+      title: result.title,
+      content: (result.content || '').slice(0, MAX_CONTENT_LENGTH),
+      fetchedAt: result.fetchedAt || Date.now(),
+      error: result.error
     };
   } catch (error) {
     return {
@@ -410,8 +380,6 @@ export const fetchLinkContent = async (url: string): Promise<FetchedLinkContent>
       fetchedAt: Date.now(),
       error: error instanceof Error ? error.message : 'Fetch failed'
     };
-  } finally {
-    clearTimeout(timeoutId);
   }
 };
 
