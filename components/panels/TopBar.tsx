@@ -488,7 +488,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    window.URL.revokeObjectURL(blobUrl);
+                    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1500);
                     setShowDownloadMenu(false);
                 })
                 .catch(fetchErr => {

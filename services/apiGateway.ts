@@ -5,6 +5,8 @@
  * The gateway adds API keys server-side — no secrets in the client.
  */
 
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
 
 // JWT stored in memory only (not localStorage/sessionStorage)
@@ -59,10 +61,11 @@ export interface GatewayAuthResult {
 
 /** Exchange a Google ID token for a gateway JWT */
 export async function verifyAuth(idToken: string): Promise<GatewayAuthResult> {
-  const resp = await fetch(`${GATEWAY_URL}/auth/verify`, {
+  const resp = await fetchWithTimeout(`${GATEWAY_URL}/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken }),
+    timeoutMs: 15_000,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: 'Auth failed' }));
@@ -75,17 +78,25 @@ export async function verifyAuth(idToken: string): Promise<GatewayAuthResult> {
 
 // ─── Generic Request Helper ──────────────────────────────────────────────────
 
-async function gatewayFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function gatewayFetch(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
   const token = getGatewayToken();
   if (!token) throw new Error('Not authenticated. Please sign in.');
 
-  const headers = new Headers(init.headers);
+  const { timeoutMs, ...restInit } = init;
+  const headers = new Headers(restInit.headers);
   headers.set('Authorization', `Bearer ${token}`);
-  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+  if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {
     headers.set('Content-Type', 'application/json');
   }
 
-  const resp = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers });
+  const resp = await fetchWithTimeout(`${GATEWAY_URL}${path}`, {
+    ...restInit,
+    headers,
+    timeoutMs: timeoutMs ?? 30_000,
+  });
 
   if (resp.status === 401) {
     clearGatewayToken();
@@ -96,10 +107,15 @@ async function gatewayFetch(path: string, init: RequestInit = {}): Promise<Respo
   return resp;
 }
 
-async function gatewayPost<T = any>(path: string, body: any): Promise<T> {
+async function gatewayPost<T = any>(
+  path: string,
+  body: any,
+  options?: { timeoutMs?: number },
+): Promise<T> {
   const resp = await gatewayFetch(path, {
     method: 'POST',
     body: JSON.stringify(body),
+    timeoutMs: options?.timeoutMs,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: `Request failed (${resp.status})` }));
@@ -108,8 +124,11 @@ async function gatewayPost<T = any>(path: string, body: any): Promise<T> {
   return resp.json();
 }
 
-async function gatewayGet<T = any>(path: string): Promise<T> {
-  const resp = await gatewayFetch(path);
+async function gatewayGet<T = any>(
+  path: string,
+  options?: { timeoutMs?: number },
+): Promise<T> {
+  const resp = await gatewayFetch(path, { timeoutMs: options?.timeoutMs });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: `Request failed (${resp.status})` }));
     throw new Error(err.error || `Request failed (${resp.status})`);
@@ -130,6 +149,7 @@ export async function geminiRequest(
     method: 'POST',
     body: JSON.stringify(body),
     signal: options?.signal,
+    timeoutMs: 120_000,
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -150,6 +170,7 @@ export async function geminiStreamRequest(
     method: 'POST',
     body: JSON.stringify(body),
     signal: options?.signal,
+    timeoutMs: 120_000,
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -162,7 +183,7 @@ export async function geminiStreamRequest(
 
 /** Poll a Gemini long-running operation (used by Veo via Gemini API) */
 export async function geminiGetOperation(operationName: string): Promise<any> {
-  const resp = await gatewayFetch(`/api/gemini/${operationName}`);
+  const resp = await gatewayFetch(`/api/gemini/${operationName}`, { timeoutMs: 15_000 });
   if (!resp.ok) throw new Error(`Operation poll failed (${resp.status})`);
   return resp.json();
 }
@@ -191,13 +212,13 @@ export interface VeoStatusResult {
 }
 
 export async function veoGenerate(request: VeoGenerateRequest): Promise<VeoStatusResult> {
-  return gatewayPost('/api/veo/generate', request);
+  return gatewayPost('/api/veo/generate', request, { timeoutMs: 60_000 });
 }
 
 export async function veoCheckStatus(operationName: string, useVertexAi = false): Promise<VeoStatusResult> {
   const params = new URLSearchParams({ operation: operationName });
   if (useVertexAi) params.set('useVertexAi', 'true');
-  return gatewayGet(`/api/veo/status?${params}`);
+  return gatewayGet(`/api/veo/status?${params}`, { timeoutMs: 15_000 });
 }
 
 // ─── Kling Video Generation ──────────────────────────────────────────────────
@@ -214,27 +235,27 @@ export interface KlingGenerateRequest {
 }
 
 export async function klingGenerate(request: KlingGenerateRequest): Promise<{ taskId: string; provider: string }> {
-  return gatewayPost('/api/kling/generate', request);
+  return gatewayPost('/api/kling/generate', request, { timeoutMs: 60_000 });
 }
 
 export async function klingCheckStatus(taskId: string, provider = 'piapi'): Promise<any> {
-  return gatewayGet(`/api/kling/status?taskId=${encodeURIComponent(taskId)}&provider=${provider}`);
+  return gatewayGet(`/api/kling/status?taskId=${encodeURIComponent(taskId)}&provider=${provider}`, { timeoutMs: 15_000 });
 }
 
 // ─── ConvertAPI ──────────────────────────────────────────────────────────────
 
 export async function convertPdfToDocx(fileName: string, fileData: string): Promise<any> {
-  return gatewayPost('/api/convert/pdf-to-docx', { fileName, fileData });
+  return gatewayPost('/api/convert/pdf-to-docx', { fileName, fileData }, { timeoutMs: 120_000 });
 }
 
 // ─── iLovePDF ────────────────────────────────────────────────────────────────
 
 export async function ilovepdfAuth(): Promise<{ token: string }> {
-  return gatewayPost('/api/ilovepdf/auth', {});
+  return gatewayPost('/api/ilovepdf/auth', {}, { timeoutMs: 15_000 });
 }
 
 export async function ilovepdfStart(tool: string, ilovepdfToken: string): Promise<{ server: string; task: string }> {
-  return gatewayPost(`/api/ilovepdf/start/${tool}`, { ilovepdfToken });
+  return gatewayPost(`/api/ilovepdf/start/${tool}`, { ilovepdfToken }, { timeoutMs: 15_000 });
 }
 
 export async function ilovepdfUpload(
@@ -244,7 +265,7 @@ export async function ilovepdfUpload(
   fileData: string,
   fileName: string
 ): Promise<{ server_filename: string }> {
-  return gatewayPost('/api/ilovepdf/upload', { server, task, ilovepdfToken, fileData, fileName });
+  return gatewayPost('/api/ilovepdf/upload', { server, task, ilovepdfToken, fileData, fileName }, { timeoutMs: 120_000 });
 }
 
 export async function ilovepdfProcess(
@@ -252,7 +273,7 @@ export async function ilovepdfProcess(
   ilovepdfToken: string,
   processPayload: any
 ): Promise<any> {
-  return gatewayPost('/api/ilovepdf/process', { server, ilovepdfToken, ...processPayload });
+  return gatewayPost('/api/ilovepdf/process', { server, ilovepdfToken, ...processPayload }, { timeoutMs: 120_000 });
 }
 
 export async function ilovepdfDownload(
@@ -261,7 +282,8 @@ export async function ilovepdfDownload(
   ilovepdfToken: string
 ): Promise<Blob> {
   const resp = await gatewayFetch(
-    `/api/ilovepdf/download/${task}?server=${encodeURIComponent(server)}&token=${encodeURIComponent(ilovepdfToken)}`
+    `/api/ilovepdf/download/${task}?server=${encodeURIComponent(server)}&token=${encodeURIComponent(ilovepdfToken)}`,
+    { timeoutMs: 120_000 },
   );
   if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
   return resp.blob();

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, PropsWithChildren } from 'react';
 import { AuthUser, loadAuthSession, clearAuthSession } from '../../lib/googleAuth';
-import { clearGatewayToken, getTokenExpiresAt, setOnSessionExpired } from '../../services/apiGateway';
+import { clearGatewayToken, getTokenExpiresAt, isGatewayAuthenticated, setOnSessionExpired } from '../../services/apiGateway';
 import { LoginPage } from './LoginPage';
 
 interface AuthContextValue {
@@ -39,17 +39,20 @@ export function AuthGate({ children }: PropsWithChildren) {
     setUser(newUser);
   };
 
-  const logout = useCallback(() => {
+  const logout = useCallback((reload = false) => {
     if (logoutCalledRef.current) return;
     logoutCalledRef.current = true;
     clearGatewayToken();
     clearAuthSession();
     setUser(null);
+    if (reload) {
+      window.location.reload();
+    }
   }, []);
 
-  // Instant logout when a 401 is received from the gateway
+  // Instant logout + reload when a 401 is received from the gateway
   useEffect(() => {
-    setOnSessionExpired(logout);
+    setOnSessionExpired(() => logout(true));
     return () => setOnSessionExpired(null);
   }, [logout]);
 
@@ -57,16 +60,21 @@ export function AuthGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!user) return;
 
-    const expiresAt = getTokenExpiresAt();
-    if (expiresAt <= 0) return; // no token yet (session restored from storage)
-
-    const remaining = expiresAt - Date.now();
-    if (remaining <= 0) {
-      logout();
+    // If user profile exists in sessionStorage but JWT is gone (e.g. page refresh
+    // after expiry, or token cleared), force logout immediately
+    if (!isGatewayAuthenticated()) {
+      logout(true);
       return;
     }
 
-    const timer = setTimeout(logout, remaining);
+    const expiresAt = getTokenExpiresAt();
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      logout(true);
+      return;
+    }
+
+    const timer = setTimeout(() => logout(true), remaining);
     return () => clearTimeout(timer);
   }, [user, logout]);
 

@@ -6,6 +6,7 @@ import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
 import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
 import { Slider } from '../../ui/Slider';
 import type { HistoryItem } from '../../../types';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
@@ -57,89 +58,15 @@ export const BottomPanel: React.FC = () => {
     });
   }, []);
 
-  const getHistoryExtension = useCallback((dataUrl: string) => {
-    const match = dataUrl.match(/^data:([^;]+);/);
-    const mimeType = match?.[1] || '';
-    switch (mimeType) {
-      case 'image/png':
-        return 'png';
-      case 'image/jpeg':
-        return 'jpg';
-      case 'image/webp':
-        return 'webp';
-      case 'image/tiff':
-        return 'tiff';
-      default:
-        return 'png';
-    }
+  const downloadHistoryItems = useCallback(async (items: HistoryItem[]) => {
+    const downloadList = items
+      .map((item, index) => ({
+        source: item.thumbnail,
+        filename: `archviz-history-${index + 1}-${item.timestamp}.png`,
+      }))
+      .filter((entry): entry is { source: string; filename: string } => Boolean(entry.source));
+    await downloadImagesSequentially(downloadList);
   }, []);
-
-  const downloadHistoryItem = useCallback(async (item: HistoryItem, index: number) => {
-    const source = item.thumbnail;
-    if (!source) return;
-    const filename = `archviz-history-${index + 1}-${item.timestamp}.png`;
-
-    const exportAsPng = () => new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('No canvas context');
-          ctx.drawImage(img, 0, 0, img.width, img.height);
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => reject(new Error('Image load failed'));
-      img.src = source;
-    });
-
-    try {
-      await exportAsPng();
-    } catch (error) {
-      const ext = getHistoryExtension(source);
-      const fallbackName = `archviz-history-${index + 1}-${item.timestamp}.${ext}`;
-      try {
-        const response = await fetch(source);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fallbackName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      } catch (fallbackError) {
-        const link = document.createElement('a');
-        link.href = source;
-        link.download = fallbackName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    }
-  }, [getHistoryExtension]);
-
-  const downloadHistoryItems = useCallback((items: HistoryItem[]) => {
-    items.forEach((item, index) => {
-      window.setTimeout(() => {
-        void downloadHistoryItem(item, index);
-      }, index * 120);
-    });
-  }, [downloadHistoryItem]);
 
   const historyItems = useMemo(() => {
     if (!isMultiAngleMode) return state.history;

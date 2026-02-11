@@ -46,6 +46,41 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Retry a fetch call with exponential backoff.
+ * @param {Function} fn - Async function receiving (signal) that returns a Response
+ * @param {Object} options
+ * @param {number} [options.maxRetries=2] - Max retry attempts
+ * @param {number} [options.timeoutMs=30000] - Per-attempt timeout
+ * @param {string} [options.label='request'] - Label for error messages
+ */
+async function fetchWithRetry(fn, options = {}) {
+  const { maxRetries = 2, timeoutMs = 30000, label = 'request' } = options;
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const result = await fn(controller.signal);
+        clearTimeout(timeoutId);
+        return result;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
+}
+
 /** Base64url encode a buffer or string */
 function base64UrlEncode(data) {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
@@ -570,9 +605,13 @@ async function handleKlingStatus(request, env) {
   else statusUrl = `${endpoint.base}/status/${taskId}`;
 
   try {
-    const resp = await fetch(statusUrl, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
+    const resp = await fetchWithRetry(
+      (signal) => fetch(statusUrl, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        signal,
+      }),
+      { maxRetries: 2, timeoutMs: 15000, label: 'Kling status' },
+    );
     if (!resp.ok) {
       return corsResponse(origin, { error: `Status check failed (${resp.status})` }, { status: resp.status });
     }
@@ -593,13 +632,18 @@ async function handleConvertApi(request, env) {
 
     if (!fileData) return corsResponse(origin, { error: 'Missing fileData (base64)' }, { status: 400 });
 
-    const resp = await fetch(`${CONVERTAPI_BASE}/convert/pdf/to/docx?Secret=${env.CONVERTAPI_SECRET}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        Parameters: [{ Name: 'File', FileValue: { Name: fileName || 'document.pdf', Data: fileData } }],
-      }),
+    const convertBody = JSON.stringify({
+      Parameters: [{ Name: 'File', FileValue: { Name: fileName || 'document.pdf', Data: fileData } }],
     });
+    const resp = await fetchWithRetry(
+      (signal) => fetch(`${CONVERTAPI_BASE}/convert/pdf/to/docx?Secret=${env.CONVERTAPI_SECRET}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: convertBody,
+        signal,
+      }),
+      { maxRetries: 2, timeoutMs: 60000, label: 'ConvertAPI' },
+    );
 
     if (!resp.ok) {
       const errText = await resp.text();
@@ -620,11 +664,16 @@ async function handleILovePdfProxy(request, env, subpath) {
   try {
     if (subpath === 'auth') {
       // Step 1: Authenticate with iLovePDF using our secret key
-      const resp = await fetch(`${ILOVEPDF_BASE}/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_key: env.ILOVEPDF_PUBLIC_KEY }),
-      });
+      const authBody = JSON.stringify({ public_key: env.ILOVEPDF_PUBLIC_KEY });
+      const resp = await fetchWithRetry(
+        (signal) => fetch(`${ILOVEPDF_BASE}/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: authBody,
+          signal,
+        }),
+        { maxRetries: 2, timeoutMs: 15000, label: 'iLovePDF auth' },
+      );
       if (!resp.ok) {
         const errText = await resp.text();
         return corsResponse(origin, { error: `iLovePDF auth failed: ${errText}` }, { status: resp.status });
@@ -640,9 +689,13 @@ async function handleILovePdfProxy(request, env, subpath) {
       const iToken = body.ilovepdfToken;
       if (!iToken) return corsResponse(origin, { error: 'Missing ilovepdfToken' }, { status: 400 });
 
-      const resp = await fetch(`${ILOVEPDF_BASE}/start/${tool}`, {
-        headers: { 'Authorization': `Bearer ${iToken}` },
-      });
+      const resp = await fetchWithRetry(
+        (signal) => fetch(`${ILOVEPDF_BASE}/start/${tool}`, {
+          headers: { 'Authorization': `Bearer ${iToken}` },
+          signal,
+        }),
+        { maxRetries: 2, timeoutMs: 15000, label: 'iLovePDF start' },
+      );
       if (!resp.ok) {
         const errText = await resp.text();
         return corsResponse(origin, { error: `Start task failed: ${errText}` }, { status: resp.status });
@@ -668,11 +721,15 @@ async function handleILovePdfProxy(request, env, subpath) {
       formData.append('task', task);
       formData.append('file', blob, fileName || 'document.pdf');
 
-      const resp = await fetch(`https://${server}/v1/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${ilovepdfToken}` },
-        body: formData,
-      });
+      const resp = await fetchWithRetry(
+        (signal) => fetch(`https://${server}/v1/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${ilovepdfToken}` },
+          body: formData,
+          signal,
+        }),
+        { maxRetries: 2, timeoutMs: 60000, label: 'iLovePDF upload' },
+      );
       if (!resp.ok) {
         const errText = await resp.text();
         return corsResponse(origin, { error: `Upload failed: ${errText}` }, { status: resp.status });
@@ -688,14 +745,19 @@ async function handleILovePdfProxy(request, env, subpath) {
         return corsResponse(origin, { error: 'Missing server or ilovepdfToken' }, { status: 400 });
       }
 
-      const resp = await fetch(`https://${server}/v1/process`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ilovepdfToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(processPayload),
-      });
+      const processBody = JSON.stringify(processPayload);
+      const resp = await fetchWithRetry(
+        (signal) => fetch(`https://${server}/v1/process`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ilovepdfToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: processBody,
+          signal,
+        }),
+        { maxRetries: 2, timeoutMs: 60000, label: 'iLovePDF process' },
+      );
       if (!resp.ok) {
         const errText = await resp.text();
         return corsResponse(origin, { error: `Process failed: ${errText}` }, { status: resp.status });
@@ -715,9 +777,13 @@ async function handleILovePdfProxy(request, env, subpath) {
         return corsResponse(origin, { error: 'Missing server or token params' }, { status: 400 });
       }
 
-      const resp = await fetch(`https://${server}/v1/download/${taskId}`, {
-        headers: { 'Authorization': `Bearer ${iToken}` },
-      });
+      const resp = await fetchWithRetry(
+        (signal) => fetch(`https://${server}/v1/download/${taskId}`, {
+          headers: { 'Authorization': `Bearer ${iToken}` },
+          signal,
+        }),
+        { maxRetries: 2, timeoutMs: 60000, label: 'iLovePDF download' },
+      );
       if (!resp.ok) {
         return corsResponse(origin, { error: `Download failed (${resp.status})` }, { status: resp.status });
       }

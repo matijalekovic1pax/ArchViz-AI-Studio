@@ -527,9 +527,18 @@ export class GeminiService {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const STREAM_READ_TIMEOUT_MS = 30_000;
 
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Stream stalled: no data received for 30 seconds. Please check your connection and try again.')),
+            STREAM_READ_TIMEOUT_MS,
+          ),
+        ),
+      ]);
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });

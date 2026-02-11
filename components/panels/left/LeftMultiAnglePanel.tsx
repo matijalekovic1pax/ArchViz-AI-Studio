@@ -3,6 +3,7 @@ import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { Download, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
 
 export const LeftMultiAnglePanel = () => {
   const { state, dispatch } = useAppStore();
@@ -22,87 +23,13 @@ export const LeftMultiAnglePanel = () => {
     });
   }, []);
 
-  const getExtension = useCallback((dataUrl: string) => {
-    const match = dataUrl.match(/^data:([^;]+);/);
-    const mimeType = match?.[1] || '';
-    switch (mimeType) {
-      case 'image/png':
-        return 'png';
-      case 'image/jpeg':
-        return 'jpg';
-      case 'image/webp':
-        return 'webp';
-      case 'image/tiff':
-        return 'tiff';
-      default:
-        return 'png';
-    }
+  const downloadOutputs = useCallback(async (outputs: typeof wf.multiAngleOutputs) => {
+    const downloadList = outputs.map((output, index) => ({
+      source: output.url,
+      filename: `multi-angle-${index + 1}-${Date.now()}.png`,
+    }));
+    await downloadImagesSequentially(downloadList);
   }, []);
-
-  const downloadOutput = useCallback(async (url: string, index: number) => {
-    if (!url) return;
-    const filename = `multi-angle-${index + 1}-${Date.now()}.png`;
-    const exportAsPng = () => new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('No canvas context');
-          ctx.drawImage(img, 0, 0, img.width, img.height);
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => reject(new Error('Image load failed'));
-      img.src = url;
-    });
-
-    try {
-      await exportAsPng();
-    } catch (error) {
-      const ext = getExtension(url);
-      const fallbackName = `multi-angle-${index + 1}-${Date.now()}.${ext}`;
-      try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fallbackName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      } catch (fallbackError) {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fallbackName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    }
-  }, [getExtension]);
-
-  const downloadOutputs = useCallback((outputs: typeof wf.multiAngleOutputs) => {
-    outputs.forEach((output, index) => {
-      window.setTimeout(() => {
-        void downloadOutput(output.url, index);
-      }, index * 120);
-    });
-  }, [downloadOutput]);
 
   const selectedOutputs = useMemo(
     () => wf.multiAngleOutputs.filter((output) => selectedIds.has(output.id)),
