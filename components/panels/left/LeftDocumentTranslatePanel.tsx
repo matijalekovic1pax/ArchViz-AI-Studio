@@ -37,10 +37,11 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
       const reader = new FileReader();
       reader.onload = () => {
         const isPdf = file.type === 'application/pdf';
+        const isXlsx = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx');
         const doc: DocumentTranslateDocument = {
           id: nanoid(),
           name: file.name,
-          type: isPdf ? 'pdf' : 'docx',
+          type: isPdf ? 'pdf' : isXlsx ? 'xlsx' : 'docx',
           mimeType: file.type as DocumentTranslateDocument['mimeType'],
           size: file.size,
           dataUrl: reader.result as string,
@@ -102,6 +103,8 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
                   'w-10 h-10 rounded flex items-center justify-center shrink-0',
                   docTranslate.sourceDocument.mimeType.includes('pdf')
                     ? 'bg-red-50 text-red-600'
+                    : docTranslate.sourceDocument.type === 'xlsx'
+                    ? 'bg-green-50 text-green-600'
                     : 'bg-blue-50 text-blue-600'
                 )}
               >
@@ -130,7 +133,7 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={handleFileSelect}
             />
             <button

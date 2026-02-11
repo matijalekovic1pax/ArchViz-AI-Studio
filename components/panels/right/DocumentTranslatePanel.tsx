@@ -25,9 +25,12 @@ export const DocumentTranslatePanel: React.FC = () => {
 
     const originalName = docTranslate.sourceDocument.name;
     const baseName = originalName.substring(0, originalName.lastIndexOf('.'));
-    const filename = `${baseName}_${docTranslate.targetLanguage}.docx`;
+    const ext = docTranslate.sourceDocument.type === 'xlsx' ? 'xlsx' : 'docx';
+    const filename = `${baseName}_${docTranslate.targetLanguage}.${ext}`;
     downloadFile(docTranslate.translatedDocumentUrl, filename);
   };
+
+  const isXlsx = docTranslate.sourceDocument?.type === 'xlsx';
 
   const qualityOptions = [
     { value: 'fast', label: t('documentTranslate.qualityOptions.fast.label') },
@@ -214,33 +217,37 @@ export const DocumentTranslatePanel: React.FC = () => {
             {t('documentTranslate.preserveFormattingDesc')}
           </p>
 
-          <Toggle
-            label="Translate Headers & Footers"
-            checked={docTranslate.translateHeaders}
-            onChange={(checked) =>
-              dispatch({
-                type: 'UPDATE_DOCUMENT_TRANSLATE',
-                payload: { translateHeaders: checked },
-              })
-            }
-          />
-          <p className="text-[10px] text-foreground-muted leading-relaxed">
-            Include document headers and footers in translation.
-          </p>
+          {!isXlsx && (
+            <>
+              <Toggle
+                label="Translate Headers & Footers"
+                checked={docTranslate.translateHeaders}
+                onChange={(checked) =>
+                  dispatch({
+                    type: 'UPDATE_DOCUMENT_TRANSLATE',
+                    payload: { translateHeaders: checked },
+                  })
+                }
+              />
+              <p className="text-[10px] text-foreground-muted leading-relaxed">
+                Include document headers and footers in translation.
+              </p>
 
-          <Toggle
-            label="Translate Footnotes"
-            checked={docTranslate.translateFootnotes}
-            onChange={(checked) =>
-              dispatch({
-                type: 'UPDATE_DOCUMENT_TRANSLATE',
-                payload: { translateFootnotes: checked },
-              })
-            }
-          />
-          <p className="text-[10px] text-foreground-muted leading-relaxed">
-            Include footnotes and endnotes in translation.
-          </p>
+              <Toggle
+                label="Translate Footnotes"
+                checked={docTranslate.translateFootnotes}
+                onChange={(checked) =>
+                  dispatch({
+                    type: 'UPDATE_DOCUMENT_TRANSLATE',
+                    payload: { translateFootnotes: checked },
+                  })
+                }
+              />
+              <p className="text-[10px] text-foreground-muted leading-relaxed">
+                Include footnotes and endnotes in translation.
+              </p>
+            </>
+          )}
 
           {/* ConvertAPI Status */}
           {convertApiConfigured && (
@@ -258,6 +265,13 @@ export const DocumentTranslatePanel: React.FC = () => {
       {docTranslate.sourceDocument?.mimeType.includes('pdf') && convertApiConfigured && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <strong>PDF Translation:</strong> Your PDF will be converted to Word via ConvertAPI, translated, and returned as a translated Word document (.docx).
+        </div>
+      )}
+
+      {/* Excel Info */}
+      {isXlsx && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+          <strong>Excel Translation:</strong> All text cells across every sheet will be translated. Numbers, dates, formulas, and formatting are preserved. The output is a translated Excel file (.xlsx).
         </div>
       )}
     </div>

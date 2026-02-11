@@ -2,7 +2,8 @@
  * Document Translation Service
  * Orchestrates document parsing, translation via Gemini, and rebuilding.
  * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX.
- * Output is always a translated Word document (.docx).
+ * For XLSX: Parses cells, translates, and rebuilds as XLSX.
+ * Output matches input format (DOCX for Word/PDF, XLSX for Excel).
  *
  * Pipeline: parse → filter → analyze context → batch → translate → map → rebuild
  */
@@ -10,6 +11,8 @@
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
 import { parseDocx } from './docxParserService';
 import { rebuildDocx } from './docxRebuilderService';
+import { parseXlsx } from './xlsxParserService';
+import { rebuildXlsx } from './xlsxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
 import type {
   DocumentTranslateDocument,
@@ -17,6 +20,7 @@ import type {
   TranslationProgress,
   TextSegment,
   ParsedLegalDocx,
+  ParsedXlsx,
 } from '../types';
 
 // Translation settings
@@ -65,6 +69,13 @@ export async function translateDocument(options: TranslationOptions): Promise<st
 
   if (!isGeminiServiceInitialized()) {
     throw new Error('Not authenticated. Please sign in to use document translation.');
+  }
+
+  const isXlsx = sourceDocument.type === 'xlsx';
+
+  // Route to xlsx-specific pipeline
+  if (isXlsx) {
+    return translateXlsxDocument(options);
   }
 
   const service = getGeminiService();
@@ -133,7 +144,132 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     translateFootnotes,
   });
 
-  // Phase 2: Analyze document context (sample first 15 segments)
+  // Shared translation pipeline
+  const translations = await runTranslationPipeline(
+    segmentsToTranslate,
+    allSegments,
+    sourceLanguage,
+    targetLanguage,
+    translationQuality,
+    onProgress,
+    abortSignal
+  );
+
+  // Phase 5: Rebuild DOCX document
+  onProgress({
+    phase: 'rebuilding',
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Rebuilding document...',
+  });
+
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
+
+  const outputDataUrl = await rebuildDocx(parseResult, translations);
+
+  // Phase 6: Complete
+  onProgress({
+    phase: 'complete',
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Translation complete!',
+  });
+
+  return outputDataUrl;
+}
+
+// ============================================================================
+// XLSX Translation Pipeline
+// ============================================================================
+
+async function translateXlsxDocument(options: TranslationOptions): Promise<string> {
+  const {
+    sourceDocument,
+    sourceLanguage,
+    targetLanguage,
+    onProgress,
+    abortSignal,
+    translationQuality,
+  } = options;
+
+  // Phase 1: Parse XLSX
+  onProgress({
+    phase: 'parsing',
+    currentSegment: 0,
+    totalSegments: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Parsing spreadsheet...',
+  });
+
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
+
+  const parseResult: ParsedXlsx = await parseXlsx(sourceDocument.dataUrl);
+  const allSegments = parseResult.segments;
+
+  if (allSegments.length === 0) {
+    throw new Error('No translatable text found in spreadsheet.');
+  }
+
+  // All xlsx segments are translatable (no header/footer filtering)
+  const translations = await runTranslationPipeline(
+    allSegments,
+    allSegments,
+    sourceLanguage,
+    targetLanguage,
+    translationQuality,
+    onProgress,
+    abortSignal
+  );
+
+  // Phase: Rebuild XLSX
+  onProgress({
+    phase: 'rebuilding',
+    currentSegment: allSegments.length,
+    totalSegments: allSegments.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Rebuilding spreadsheet...',
+  });
+
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
+
+  const outputDataUrl = await rebuildXlsx(parseResult, translations);
+
+  // Phase: Complete
+  onProgress({
+    phase: 'complete',
+    currentSegment: allSegments.length,
+    totalSegments: allSegments.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Translation complete!',
+  });
+
+  return outputDataUrl;
+}
+
+// ============================================================================
+// Shared Translation Pipeline
+// ============================================================================
+
+async function runTranslationPipeline(
+  segmentsToTranslate: TextSegment[],
+  allSegments: TextSegment[],
+  sourceLanguage: string,
+  targetLanguage: string,
+  translationQuality: DocumentTranslationQuality | undefined,
+  onProgress: (progress: TranslationProgress) => void,
+  abortSignal?: AbortSignal
+): Promise<Map<string, string>> {
+  const service = getGeminiService();
+  const translationModel = getTranslationModel(translationQuality);
+
+  // Analyze document context (sample first 15 segments)
   onProgress({
     phase: 'parsing',
     currentSegment: 0,
@@ -154,7 +290,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     abortSignal
   );
 
-  // Phase 3: Create batches
+  // Create batches
   const batches = createBatches(segmentsToTranslate);
   const totalBatches = batches.length;
   const translations = new Map<string, string>();
@@ -168,7 +304,7 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     message: `Translating ${segmentsToTranslate.length} text segments...`,
   });
 
-  // Phase 4: Translate batches with limited concurrency
+  // Translate batches with limited concurrency
   let processedSegments = 0;
 
   for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
@@ -220,38 +356,14 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     });
   }
 
-  // Final pass: ensure every segment in allSegments has a translation
+  // Final pass: ensure every segment has a translation
   for (const segment of allSegments) {
     if (!translations.has(segment.id)) {
       translations.set(segment.id, segment.text);
     }
   }
 
-  // Phase 5: Rebuild DOCX document
-  onProgress({
-    phase: 'rebuilding',
-    currentSegment: segmentsToTranslate.length,
-    totalSegments: segmentsToTranslate.length,
-    currentBatch: totalBatches,
-    totalBatches,
-    message: 'Rebuilding document...',
-  });
-
-  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
-
-  const outputDataUrl = await rebuildDocx(parseResult, translations);
-
-  // Phase 6: Complete
-  onProgress({
-    phase: 'complete',
-    currentSegment: segmentsToTranslate.length,
-    totalSegments: segmentsToTranslate.length,
-    currentBatch: totalBatches,
-    totalBatches,
-    message: 'Translation complete!',
-  });
-
-  return outputDataUrl;
+  return translations;
 }
 
 // ============================================================================
@@ -501,6 +613,7 @@ function getLanguageName(code: string): string {
     ko: 'Korean',
     ar: 'Arabic',
     ru: 'Russian',
+    sr: 'Serbian',
   };
   return languages[code] || code;
 }
@@ -523,5 +636,6 @@ export function getSupportedLanguages(): Array<{ code: string; name: string }> {
     { code: 'ko', name: 'Korean' },
     { code: 'ar', name: 'Arabic' },
     { code: 'ru', name: 'Russian' },
+    { code: 'sr', name: 'Serbian' },
   ];
 }

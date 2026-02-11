@@ -1010,8 +1010,8 @@ export interface MaterialValidationResult {
 export interface DocumentTranslateDocument {
   id: string;
   name: string;
-  type: 'pdf' | 'docx';
-  mimeType: 'application/pdf' | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  type: 'pdf' | 'docx' | 'xlsx';
+  mimeType: 'application/pdf' | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   size: number;
   dataUrl: string;
   uploadedAt: number;
@@ -1055,6 +1055,13 @@ export interface LegalSection {
 
 export interface ParsedLegalDocx extends ParsedDocx {
   sections: LegalSection[];
+}
+
+export interface ParsedXlsx {
+  workbook: any; // XLSX.WorkBook
+  segments: TextSegment[];
+  cellMap: Map<string, { sheetName: string; cellAddress: string }>;
+  metadata: DocumentMetadata;
 }
 
 export interface TranslationConfig {

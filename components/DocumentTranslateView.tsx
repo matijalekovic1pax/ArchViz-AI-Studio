@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
+import * as XLSX from 'xlsx';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -13,18 +14,68 @@ export const DocumentTranslateView: React.FC = () => {
 
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [docxHtmlContent, setDocxHtmlContent] = useState<string | null>(null);
+  const [xlsxHtmlContent, setXlsxHtmlContent] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => {
     if (!sourceDocument) {
       setDocumentPreviewUrl(null);
       setDocxHtmlContent(null);
+      setXlsxHtmlContent(null);
       return;
     }
 
-    // After translation completes, the output is always DOCX (even if input was PDF)
     const isTranslated = progress.phase === 'complete' && translatedDocumentUrl;
     const previewDataUrl = isTranslated ? translatedDocumentUrl : sourceDocument.dataUrl;
+    const isXlsx = sourceDocument.type === 'xlsx';
+
+    // XLSX preview
+    if (isXlsx) {
+      setDocumentPreviewUrl(null);
+      setDocxHtmlContent(null);
+      setIsConverting(true);
+
+      const convertXlsx = async () => {
+        try {
+          const base64Match = previewDataUrl.match(/^data:[^;]+;base64,(.+)$/);
+          if (!base64Match) throw new Error('Invalid data URL');
+
+          const base64 = base64Match[1];
+          const binaryString = atob(base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          const workbook = XLSX.read(bytes, { type: 'array' });
+          const htmlParts: string[] = [];
+
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) continue;
+
+            const html = XLSX.utils.sheet_to_html(sheet, { id: `sheet-${sheetName}` });
+            htmlParts.push(
+              `<div class="sheet-section"><h3 class="sheet-title">${DOMPurify.sanitize(sheetName)}</h3>${html}</div>`
+            );
+          }
+
+          setXlsxHtmlContent(DOMPurify.sanitize(htmlParts.join('')));
+        } catch {
+          setXlsxHtmlContent('<p style="color: red;">Failed to load spreadsheet preview.</p>');
+        } finally {
+          setIsConverting(false);
+        }
+      };
+
+      convertXlsx();
+      return;
+    }
+
+    // Reset xlsx state for non-xlsx
+    setXlsxHtmlContent(null);
+
+    // After translation completes, the output is DOCX (even if input was PDF)
     const isDocxPreview = isTranslated || sourceDocument.type === 'docx';
 
     if (!isDocxPreview && sourceDocument.type === 'pdf') {
@@ -74,6 +125,62 @@ export const DocumentTranslateView: React.FC = () => {
             <h3 className="text-lg font-semibold mb-2 text-foreground">{t('documentTranslate.noDocumentUploaded')}</h3>
             <p className="text-sm text-foreground-muted">
               {t('documentTranslate.dropOrClick')}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // XLSX Preview
+    if (sourceDocument.type === 'xlsx') {
+      if (isConverting) {
+        return (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={32} className="animate-spin text-accent" />
+              <p className="text-sm text-foreground-muted">Loading spreadsheet preview...</p>
+            </div>
+          </div>
+        );
+      }
+
+      if (xlsxHtmlContent) {
+        return (
+          <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-4 sm:p-8">
+            <div className="max-w-6xl mx-auto bg-white shadow-lg rounded-lg mb-6 sm:mb-8">
+              <div className="bg-green-50 px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <FileText size={18} className="text-green-600" />
+                  <h3 className="text-sm font-medium text-gray-800">{sourceDocument.name}</h3>
+                </div>
+              </div>
+              <div className="p-4 sm:p-6 overflow-x-auto">
+                <style>{`
+                  .xlsx-preview .sheet-section { margin-bottom: 2em; }
+                  .xlsx-preview .sheet-title { font-size: 1.1em; font-weight: 600; margin-bottom: 0.5em; color: #1a7f37; }
+                  .xlsx-preview table { border-collapse: collapse; width: 100%; font-size: 12px; }
+                  .xlsx-preview td, .xlsx-preview th { border: 1px solid #d0d7de; padding: 4px 8px; text-align: left; white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+                  .xlsx-preview th { background: #f6f8fa; font-weight: 600; }
+                  .xlsx-preview tr:nth-child(even) { background: #f9fafb; }
+                  .xlsx-preview tr:hover { background: #f0f4f8; }
+                `}</style>
+                <div
+                  className="xlsx-preview"
+                  dangerouslySetInnerHTML={{ __html: xlsxHtmlContent }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center max-w-md px-4 sm:px-6">
+            <FileText size={64} className="mx-auto mb-4 opacity-20 text-red-500" />
+            <h3 className="text-lg font-semibold mb-2 text-foreground">Failed to load spreadsheet</h3>
+            <p className="text-sm text-foreground-muted">
+              Unable to preview this spreadsheet. You can still translate it.
             </p>
           </div>
         </div>

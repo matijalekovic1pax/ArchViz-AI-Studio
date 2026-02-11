@@ -14,6 +14,9 @@ import { GeminiService, getGeminiService, type BatchTextResult } from './geminiS
 import {
   extractMaterialsFromDocument,
   extractBoqItemsFromDocument,
+  getRawDocumentText,
+  normalizeCode,
+  normalizeSource,
   fetchAllMaterialLinks,
   buildEnhancedTechnicalPrompt,
   buildEnhancedBoqPrompt,
@@ -90,9 +93,9 @@ export class MaterialValidationService {
     for (let docIndex = 0; docIndex < materialDocs.length; docIndex++) {
       const doc = materialDocs[docIndex];
 
-      // Phase 1: Extract materials from this document
+      // Phase 1: Extract materials from this document using AI
       this.updateProgress({
-        phase: 'Extracting materials',
+        phase: 'Extracting materials (AI)',
         document: doc.name,
         documentsProcessed: docIndex,
         documentsTotal: materialDocs.length,
@@ -100,7 +103,7 @@ export class MaterialValidationService {
         materialsTotal: 0
       });
 
-      const materials = await extractMaterialsFromDocument(doc);
+      const materials = await this.aiExtractMaterials(doc);
       if (materials.length === 0) continue;
 
       // Phase 2: Fetch web links for all materials in this document
@@ -173,6 +176,86 @@ export class MaterialValidationService {
       boqItems: allBoqItems,
       summary: this.generateSummary(allMaterials, allIssues)
     };
+  }
+
+  /**
+   * Use Gemini to extract ALL materials from the raw document text.
+   * Falls back to regex-based extraction if AI fails.
+   */
+  private async aiExtractMaterials(doc: MaterialValidationDocument): Promise<MaterialCandidate[]> {
+    const rawText = await getRawDocumentText(doc);
+    if (!rawText.trim()) return extractMaterialsFromDocument(doc);
+
+    const prompt = [
+      'You are a construction materials specification parser.',
+      'The following is raw text extracted from a material schedule / finishing schedule document.',
+      'It contains a TABLE listing construction materials with their specifications.',
+      '',
+      'DOCUMENT TEXT:',
+      '---',
+      rawText,
+      '---',
+      '',
+      'Extract EVERY SINGLE material listed in this document. Each material typically has:',
+      '- A material CODE following patterns like: FF-10, FF10, WF-72B, WF72B, IC-30, WP-5, RF-2, L-1, etc.',
+      '  (prefixes: FF = Floor Finish, WF = Wall Finish, IC = Internal Ceiling, WP = Wall Partition, RF = Roof Finish, L = Lighting)',
+      '- A material NAME/TYPE (e.g. "Ceramic Floor Tile", "Wall Paint", "Acoustic Ceiling Panel")',
+      '- Full SPECIFICATION TEXT (dimensions, colors, finishes, standards, application, brand references, etc.)',
+      '- Product LINKS/URLs (manufacturer website links for the product)',
+      '',
+      'Return ONLY valid JSON:',
+      '{',
+      '  "materials": [',
+      '    {',
+      '      "code": "FF10",',
+      '      "name": "Ceramic Floor Tile",',
+      '      "specText": "Full specification text including dimensions, colors, standards, brands, etc.",',
+      '      "links": ["https://example.com/product-page"]',
+      '    }',
+      '  ]',
+      '}',
+      '',
+      'CRITICAL RULES:',
+      '- Extract ALL materials. A typical document has 10-40+ materials. Do NOT skip any.',
+      '- Include the COMPLETE specification text for each material — dimensions, colors, standards, brands, applications.',
+      '- Extract ALL URLs/web links associated with each material.',
+      '- If a material has no URL, use an empty array for links.',
+      '- Material codes may have spaces or dashes (e.g. "FF - 10" or "FF10") — normalize to the compact form.',
+      '- Do not invent materials that are not in the document.',
+      '- Do not include markdown or commentary outside the JSON.'
+    ].join('\n');
+
+    try {
+      const response = await this.service.generateText({
+        prompt,
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response);
+      if (!parsed.materials || !Array.isArray(parsed.materials) || parsed.materials.length === 0) {
+        return extractMaterialsFromDocument(doc);
+      }
+
+      return parsed.materials
+        .map((m: any) => ({
+          id: nanoid(),
+          code: normalizeCode(m.code || ''),
+          name: m.name || '',
+          specText: m.specText || '',
+          links: Array.isArray(m.links) ? m.links.filter((l: string) => l && l.length > 0) : [],
+          docId: doc.id,
+          docName: doc.name,
+          source: normalizeSource(doc.name)
+        }))
+        .filter((m: MaterialCandidate) => m.code.length > 0);
+    } catch (error) {
+      // Fallback to regex-based extraction
+      return extractMaterialsFromDocument(doc);
+    }
   }
 
   /**

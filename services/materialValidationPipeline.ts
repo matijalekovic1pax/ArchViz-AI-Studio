@@ -36,9 +36,9 @@ const MATERIAL_CODE_REGEX = /\b(?:FF|WF|IC|WP|RF|L)\s*-?\s*\d{1,4}[A-Z]?\b/i;
 const BOQ_CODE_REGEX = /\b\d+(?:\.\d+)+\b/;
 const URL_REGEX = /(https?:\/\/[^\s)]+|www\.[^\s)]+)/gi;
 
-const normalizeCode = (value: string) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+export const normalizeCode = (value: string) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
-const normalizeSource = (name: string) => (name.toLowerCase().includes('cargo') ? 'cargo' : 'terminal');
+export const normalizeSource = (name: string): 'terminal' | 'cargo' => (name.toLowerCase().includes('cargo') ? 'cargo' : 'terminal');
 
 const dataUrlToArrayBuffer = (dataUrl: string): ArrayBuffer => {
   const base64 = dataUrl.split(',')[1] || '';
@@ -281,6 +281,22 @@ export const extractBoqItemsFromDocument = async (doc: MaterialValidationDocumen
   return [];
 };
 
+/**
+ * Get the full raw text from a document (for AI-based extraction)
+ */
+export const getRawDocumentText = async (doc: MaterialValidationDocument): Promise<string> => {
+  const name = doc.name.toLowerCase();
+  if (name.endsWith('.pdf') || doc.mimeType.includes('pdf')) {
+    const pages = await getPdfLines(doc);
+    return pages.map(p => `--- Page ${p.page} ---\n${p.lines.join('\n')}`).join('\n\n');
+  }
+  if (name.endsWith('.csv') || doc.mimeType.includes('csv') || name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const rows = getSheetRows(doc);
+    return rows.map(row => row.join(' | ')).join('\n');
+  }
+  return '';
+};
+
 export const pickBoqMatches = (material: MaterialCandidate, boqItems: BoQCandidate[], limit = 6): BoQCandidate[] => {
   if (!boqItems.length) return [];
   const code = material.code.toLowerCase();
@@ -455,9 +471,21 @@ export const buildEnhancedTechnicalPrompt = (
     ? `\nVALIDATION CHECKS:\n${checks.map(c => `- ${c}`).join('\n')}`
     : '';
 
+  const hasWebContent = linkContent.length > 0;
+  const webContentSection = hasWebContent
+    ? [
+        'WEB REFERENCE CONTENT (fetched from product URLs):',
+        linkContent,
+        failedLinkNote,
+        ''
+      ].join('\n')
+    : material.links.length > 0
+      ? `PRODUCT URLs (content could not be fetched): ${material.links.join(', ')}\n`
+      : '';
+
   return [
-    'You are a technical materials validation assistant for architectural projects.',
-    'Validate the material specification for consistency, completeness, and plausibility.',
+    'You are a technical materials validation assistant for architectural/construction projects.',
+    'Your job is to validate a material specification for correctness, completeness, and consistency.',
     '',
     'MATERIAL DATA:',
     `- Code: ${material.code}`,
@@ -465,14 +493,16 @@ export const buildEnhancedTechnicalPrompt = (
     `- Specification: ${material.specText || 'none'}`,
     `- Source Document: ${material.docName}${material.pageRef ? ` (${material.pageRef})` : ''}`,
     '',
-    linkContent ? `REFERENCE DOCUMENTATION FROM WEB LINKS:\n${linkContent}${failedLinkNote}\n` : '',
+    webContentSection,
     checkLine,
     '',
-    'ANALYZE:',
-    '1. Does the specification make sense technically?',
-    '2. Are dimensions/quantities plausible for the material type?',
-    '3. Does the product reference match the description?',
-    '4. Any inconsistencies with the web documentation (if provided)?',
+    'MANDATORY CHECKS:',
+    '1. TECHNICAL PLAUSIBILITY: Does the specification make sense for this material type? Are dimensions, thicknesses, formats, standards correct?',
+    '2. PRODUCT REFERENCE: Does the brand/product name match the described material? Is the product real and appropriate?',
+    hasWebContent
+      ? '3. WEB CROSS-REFERENCE: Compare the specification against the fetched web content above. Do the dimensions, product name, brand, technical properties MATCH? Flag ANY discrepancy between what the spec says and what the manufacturer website says.'
+      : '3. WEB CROSS-REFERENCE: No web content available — note this as an info issue if product URLs were expected.',
+    '4. COMPLETENESS: Are key fields present (dimensions, application, standard references)?',
     '',
     'Return ONLY valid JSON with this exact shape:',
     '{',
@@ -505,8 +535,9 @@ export const buildEnhancedTechnicalPrompt = (
     '}',
     '',
     'Rules:',
-    '- severity: pass (no issues), warning (minor), error (critical), info (FYI)',
-    '- If material is valid, return empty issues array',
+    '- severity: pass (everything checks out), warning (minor mismatch), error (critical discrepancy), info (note for review)',
+    '- ALWAYS create at least one issue — either a pass (confirming validation) or a warning/error',
+    '- If web content was provided, you MUST comment on whether the spec matches the manufacturer data',
     '- Use empty strings instead of null',
     '- Do not include markdown or commentary outside JSON'
   ].filter(Boolean).join('\n');
