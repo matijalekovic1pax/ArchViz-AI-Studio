@@ -89,6 +89,25 @@ export async function downloadImage(
 }
 
 /**
+ * Download any file (PDF, DOCX, video, etc.) without image-specific processing.
+ * Converts data URLs to blob URLs for reliable cross-browser downloads.
+ */
+export async function downloadFile(
+  source: string,
+  filename: string,
+): Promise<void> {
+  try {
+    const response = await fetch(source);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    await triggerDownload(blobUrl, filename);
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1500);
+  } catch {
+    await triggerDownload(source, filename);
+  }
+}
+
+/**
  * Download multiple images sequentially with a delay between each.
  * Safari requires ~400-500ms between programmatic download triggers.
  */

@@ -7,7 +7,7 @@ import { cn } from '../../../lib/utils';
 import { ChevronDown, ChevronUp, Download, X } from 'lucide-react';
 import type { KlingProvider, CameraMotionType } from '../../../types';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
-import { downloadImage } from '../../../lib/download';
+import { downloadFile } from '../../../lib/download';
 
 export const VideoPanel = () => {
    const { state, dispatch } = useAppStore();
@@ -460,7 +460,7 @@ export const VideoPanel = () => {
                      />
                   </div>
                   <button
-                     onClick={() => downloadImage(video.generatedVideoUrl!, `video-${Date.now()}.mp4`)}
+                     onClick={() => downloadFile(video.generatedVideoUrl!, `video-${Date.now()}.mp4`)}
                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-foreground text-background rounded-lg font-bold text-xs hover:opacity-90 transition-opacity"
                   >
                      <Download size={14} />

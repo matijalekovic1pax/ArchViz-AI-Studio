@@ -3,7 +3,7 @@ import { Download, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
+import { downloadFile } from '../../../lib/download';
 
 const formatFileSize = (bytes: number) => {
   if (!bytes && bytes !== 0) return '';
@@ -69,17 +69,21 @@ export const PdfCompressionPanel: React.FC = () => {
   }, [dispatch, pdfState]);
 
   const downloadItem = (name: string, dataUrl: string) => {
-    downloadImage(dataUrl, name);
+    downloadFile(dataUrl, name);
   };
 
   const handleDownloadAll = async () => {
-    const items = outputs.map((item) => ({ source: item.dataUrl, filename: item.name }));
-    await downloadImagesSequentially(items);
+    for (const item of outputs) {
+      await downloadFile(item.dataUrl, item.name);
+      await new Promise((r) => setTimeout(r, 600));
+    }
   };
 
   const handleDownloadSelected = async () => {
-    const items = selectedOutputs.map((item) => ({ source: item.dataUrl, filename: item.name }));
-    await downloadImagesSequentially(items);
+    for (const item of selectedOutputs) {
+      await downloadFile(item.dataUrl, item.name);
+      await new Promise((r) => setTimeout(r, 600));
+    }
   };
 
   return (
