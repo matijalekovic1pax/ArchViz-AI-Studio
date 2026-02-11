@@ -6,6 +6,16 @@
 
 import CloudConvert from 'cloudconvert';
 
+// Chunked base64 encoding to avoid call stack overflow on large files
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, len)));
+  }
+  return btoa(binary);
+}
+
 // Singleton instance
 let cloudConvertInstance: CloudConvert | null = null;
 
@@ -123,7 +133,7 @@ export async function convertPdfToDocx(
     const bytes = new Uint8Array(arrayBuffer);
 
     // Convert to data URL
-    const base64 = btoa(String.fromCharCode(...bytes));
+    const base64 = uint8ArrayToBase64(bytes);
     const docxDataUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`;
 
     // Report progress: complete
@@ -220,7 +230,7 @@ export async function convertDocxToPdf(
     const bytes = new Uint8Array(arrayBuffer);
 
     // Convert to data URL
-    const base64 = btoa(String.fromCharCode(...bytes));
+    const base64 = uint8ArrayToBase64(bytes);
     const pdfDataUrl = `data:application/pdf;base64,${base64}`;
 
     // Report progress: complete

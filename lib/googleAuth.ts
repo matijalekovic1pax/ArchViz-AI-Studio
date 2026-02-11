@@ -100,9 +100,16 @@ export function initializeGoogleSignIn(
     return;
   }
 
-  // Wait for Google script to load
+  // Wait for Google script to load (max 5s before showing error)
+  let gsiRetries = 0;
+  const GSI_MAX_RETRIES = 50; // 50 * 100ms = 5s
   const initGoogle = () => {
     if (!window.google?.accounts?.id) {
+      gsiRetries++;
+      if (gsiRetries >= GSI_MAX_RETRIES) {
+        onError('Google Sign-In could not load. This may happen if Google services are blocked in your region. Please check your VPN/network connection and reload.');
+        return;
+      }
       setTimeout(initGoogle, 100);
       return;
     }

@@ -5,6 +5,7 @@ import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-rea
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { isConvertApiConfigured } from '../../../services/convertApiService';
+import { downloadImage } from '../../../lib/download';
 
 export const DocumentTranslatePanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -22,15 +23,10 @@ export const DocumentTranslatePanel: React.FC = () => {
   const handleDownload = () => {
     if (!docTranslate.translatedDocumentUrl || !docTranslate.sourceDocument) return;
 
-    const link = document.createElement('a');
-    link.href = docTranslate.translatedDocumentUrl;
     const originalName = docTranslate.sourceDocument.name;
     const baseName = originalName.substring(0, originalName.lastIndexOf('.'));
-    // Output is always .docx (PDFs are converted to DOCX before translation)
-    link.download = `${baseName}_${docTranslate.targetLanguage}.docx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `${baseName}_${docTranslate.targetLanguage}.docx`;
+    downloadImage(docTranslate.translatedDocumentUrl, filename);
   };
 
   const qualityOptions = [

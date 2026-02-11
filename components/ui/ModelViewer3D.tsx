@@ -9,10 +9,12 @@ interface ModelViewer3DProps {
 
 // Load model-viewer script once
 let scriptLoaded = false;
+let scriptFailed = false;
 const loadModelViewerScript = () => {
   if (scriptLoaded) return Promise.resolve();
+  if (scriptFailed) return Promise.reject(new Error('3D viewer script failed to load'));
 
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     if (document.querySelector('script[src*="model-viewer"]')) {
       scriptLoaded = true;
       resolve();
@@ -26,6 +28,10 @@ const loadModelViewerScript = () => {
       scriptLoaded = true;
       resolve();
     };
+    script.onerror = () => {
+      scriptFailed = true;
+      reject(new Error('3D viewer script failed to load'));
+    };
     document.head.appendChild(script);
   });
 };
@@ -38,9 +44,12 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = React.useState(false);
 
   useEffect(() => {
-    loadModelViewerScript().then(() => setReady(true));
+    loadModelViewerScript()
+      .then(() => setReady(true))
+      .catch(() => setLoadFailed(true));
   }, []);
 
   useEffect(() => {
@@ -57,6 +66,20 @@ export const ModelViewer3D: React.FC<ModelViewer3DProps> = ({
   };
 
   const isSupported = modelUrl ? ['glb', 'gltf'].includes(getExtension(modelUrl)) : true;
+
+  if (loadFailed) {
+    return (
+      <div className="flex flex-col">
+        <div
+          className="bg-[#1a1a1a] border border-border rounded-lg overflow-hidden flex flex-col items-center justify-center gap-2"
+          style={{ height }}
+        >
+          <span className="text-xs text-red-400">3D viewer could not load</span>
+          <span className="text-[10px] text-foreground-muted opacity-60">Check your network connection or try reloading</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!ready) {
     return (

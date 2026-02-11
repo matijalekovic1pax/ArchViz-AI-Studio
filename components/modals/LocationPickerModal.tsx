@@ -41,6 +41,10 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<{ name: string; lat: number; lng: number } | null>(
     initialData.coordinates ? { name: initialData.location || '', lat: initialData.coordinates.lat, lng: initialData.coordinates.lng } : null
   );
@@ -66,6 +70,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     }
 
     setIsSearching(true);
+    setSearchError(null);
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`,
@@ -75,6 +80,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       setSearchResults(data);
     } catch (error) {
       setSearchResults([]);
+      setSearchError('Search unavailable — enter coordinates manually');
+      setShowManualInput(true);
     } finally {
       setIsSearching(false);
     }
@@ -85,6 +92,14 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = window.setTimeout(() => handleSearch(value), 400);
   };
+
+  const handleApplyManualCoords = useCallback(() => {
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+    setSelectedLocation({ name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng });
+    setSearchQuery(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+  }, [manualLat, manualLng]);
 
   const handleSelectResult = (result: SearchResult) => {
     const shortName = result.display_name.split(',').slice(0, 2).join(',');
@@ -216,6 +231,53 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Search error + manual coordinate entry */}
+              {searchError && (
+                <div className="text-[10px] text-red-500 mt-1">{searchError}</div>
+              )}
+              {!showManualInput && !searchError && (
+                <button
+                  type="button"
+                  onClick={() => setShowManualInput(true)}
+                  className="text-[10px] text-accent hover:underline mt-1"
+                >
+                  Enter coordinates manually
+                </button>
+              )}
+              {showManualInput && (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="number"
+                    step="any"
+                    value={manualLat}
+                    onChange={(e) => setManualLat(e.target.value)}
+                    placeholder="Lat"
+                    className="w-24 h-8 px-2 bg-surface-elevated border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    value={manualLng}
+                    onChange={(e) => setManualLng(e.target.value)}
+                    placeholder="Lng"
+                    className="w-24 h-8 px-2 bg-surface-elevated border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyManualCoords}
+                    disabled={!manualLat || !manualLng}
+                    className={cn(
+                      "h-8 px-3 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                      manualLat && manualLng
+                        ? "bg-foreground text-background hover:bg-foreground/90"
+                        : "bg-foreground/30 text-background/50 cursor-not-allowed"
+                    )}
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
 
               {/* Radius */}
               <div>

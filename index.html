@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://arch-viz-ai-studio.vercel.app https://archviz-api-gateway.matija-lekovic.workers.dev http://localhost:8787 https://accounts.google.com; frame-src https://accounts.google.com;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://ajax.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://arch-viz-ai-studio.vercel.app https://archviz-api-gateway.matija-lekovic.workers.dev http://localhost:8787 https://accounts.google.com https://nominatim.openstreetmap.org https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src https://accounts.google.com https://www.openstreetmap.org;" />
     <title>ArchViz AI Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -96,23 +96,6 @@
       ::-webkit-scrollbar-thumb { background: #D0D0C8; border-radius: 99px; }
       ::-webkit-scrollbar-thumb:hover { background: #8A8A8A; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
-    "react-dom/": "https://esm.sh/react-dom@18.3.1?deps=react@18.3.1/",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "clsx": "https://esm.sh/clsx@2.1.1",
-    "tailwind-merge": "https://esm.sh/tailwind-merge@2.3.0",
-    "@radix-ui/react-slider": "https://esm.sh/@radix-ui/react-slider@1.1.2?deps=react@18.3.1,react-dom@18.3.1",
-    "@radix-ui/react-switch": "https://esm.sh/@radix-ui/react-switch@1.0.3?deps=react@18.3.1,react-dom@18.3.1",
-    "@radix-ui/react-accordion": "https://esm.sh/@radix-ui/react-accordion@1.1.2?deps=react@18.3.1,react-dom@18.3.1",
-    "lucide-react": "https://esm.sh/lucide-react@0.378.0?deps=react@18.3.1",
-    "nanoid": "https://esm.sh/nanoid@5.0.7"
-  }
-}
-</script>
 </head>
   <body class="bg-background text-foreground antialiased overflow-hidden">
     <div id="root"></div>
