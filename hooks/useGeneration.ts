@@ -27,7 +27,7 @@ import { createMaterialValidationService } from '../services/materialValidationS
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
 import { isGatewayAuthenticated } from '../services/apiGateway';
-import { initPdfConverterService, isPdfConverterInitialized } from '../services/pdfConverterService';
+import { isConvertApiConfigured } from '../services/convertApiService';
 import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
 import { nanoid } from 'nanoid';
@@ -49,20 +49,9 @@ const ensureServiceInitialized = (): boolean => {
   return true;
 };
 
-// Initialize PDF Converter service if API URL is available
+// Check if PDF conversion is available (ConvertAPI via gateway)
 const ensurePdfConverterInitialized = (): boolean => {
-  if (isPdfConverterInitialized()) {
-    return true;
-  }
-
-  // @ts-ignore - Vite injects this
-  const apiUrl = import.meta.env?.VITE_PDF_API_URL || null;
-  if (apiUrl) {
-    initPdfConverterService(apiUrl);
-    return true;
-  }
-
-  return false;
+  return isConvertApiConfigured();
 };
 
 // Initialize iLovePDF API (gateway handles auth)
@@ -97,10 +86,9 @@ export function useGeneration(): UseGenerationReturn {
 
   const isReady = ensureServiceInitialized();
 
-  // Auto-initialize PDF converter services
+  // Auto-initialize PDF services
   useEffect(() => {
     ensureILoveApiInitialized(); // iLovePDF via gateway (best quality, monthly limit)
-    ensurePdfConverterInitialized(); // Custom Vercel API (free, unlimited)
   }, []);
 
   // No-op — API keys are managed server-side by the gateway
@@ -966,7 +954,7 @@ export function useGeneration(): UseGenerationReturn {
           if (!hasCustomApi) {
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
-              payload: { error: 'No PDF converter configured. Please set VITE_PDF_API_URL in your .env file.' }
+              payload: { error: 'PDF conversion service is unavailable. Please try again later.' }
             });
             dispatch({ type: 'SET_GENERATING', payload: false });
             return;
