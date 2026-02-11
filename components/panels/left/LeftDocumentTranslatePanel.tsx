@@ -20,6 +20,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ko', labelKey: 'documentTranslate.languages.ko' },
   { code: 'ar', labelKey: 'documentTranslate.languages.ar' },
   { code: 'ru', labelKey: 'documentTranslate.languages.ru' },
+  { code: 'sr', labelKey: 'documentTranslate.languages.sr' },
 ];
 
 export const LeftDocumentTranslatePanel: React.FC = () => {
