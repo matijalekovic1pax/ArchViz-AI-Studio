@@ -931,7 +931,7 @@ export function useGeneration(): UseGenerationReturn {
             type: 'UPDATE_MATERIAL_VALIDATION',
             payload: { isRunning: true, aiSummary: null, lastRunAt: Date.now(), error: null }
           });
-          await runWithRetry('material validation', () => runBatchMaterialValidation(), { timeoutMs: 5 * 60 * 1000 });
+          await runBatchMaterialValidation();
           result = { text: null, images: [] };
         } else if (state.mode === 'document-translate') {
           // Document translation mode
