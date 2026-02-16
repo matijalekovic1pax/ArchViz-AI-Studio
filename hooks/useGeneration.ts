@@ -526,7 +526,7 @@ export function useGeneration(): UseGenerationReturn {
     if (state.mode === 'document-translate' && !state.workflow.documentTranslate.sourceDocument) {
       dispatch({
         type: 'UPDATE_DOCUMENT_TRANSLATE',
-        payload: { error: 'Please upload a document to translate.' }
+        payload: { error: 'Please upload a document to translate.', warnings: null, xlsxStats: null }
       });
       return;
     }
@@ -940,7 +940,7 @@ export function useGeneration(): UseGenerationReturn {
           if (!docTranslate.sourceDocument) {
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
-              payload: { error: 'Please upload a document to translate.' }
+              payload: { error: 'Please upload a document to translate.', warnings: null, xlsxStats: null }
             });
             dispatch({ type: 'SET_GENERATING', payload: false });
             return;
@@ -954,7 +954,11 @@ export function useGeneration(): UseGenerationReturn {
           if (!hasCustomApi) {
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
-              payload: { error: 'PDF conversion service is unavailable. Please try again later.' }
+              payload: {
+                error: 'PDF conversion service is unavailable. Please try again later.',
+                warnings: null,
+                xlsxStats: null,
+              }
             });
             dispatch({ type: 'SET_GENERATING', payload: false });
             return;
@@ -967,6 +971,8 @@ export function useGeneration(): UseGenerationReturn {
             payload: {
               error: null,
               translatedDocumentUrl: null,
+              warnings: null,
+              xlsxStats: null,
               progress: {
                 phase: 'parsing',
                 currentSegment: 0,
@@ -978,13 +984,14 @@ export function useGeneration(): UseGenerationReturn {
           });
 
           try {
-            const translatedUrl = await runWithRetry(
+            const translationResult = await runWithRetry(
               'document translation',
               () => translateDocument({
                 sourceDocument: docTranslate.sourceDocument,
                 sourceLanguage: docTranslate.sourceLanguage,
                 targetLanguage: docTranslate.targetLanguage,
                 translationQuality: docTranslate.translationQuality,
+                preserveFormatting: docTranslate.preserveFormatting,
                 translateHeaders: docTranslate.translateHeaders,
                 translateFootnotes: docTranslate.translateFootnotes,
                 onProgress: (progress: TranslationProgress) => {
@@ -1006,7 +1013,9 @@ export function useGeneration(): UseGenerationReturn {
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
               payload: {
-                translatedDocumentUrl: translatedUrl,
+                translatedDocumentUrl: translationResult.dataUrl,
+                warnings: translationResult.warnings,
+                xlsxStats: translationResult.xlsxStats,
                 progress: {
                   phase: 'complete',
                   currentSegment: 0,
@@ -1022,6 +1031,8 @@ export function useGeneration(): UseGenerationReturn {
                 type: 'UPDATE_DOCUMENT_TRANSLATE',
                 payload: {
                   error: 'Translation cancelled.',
+                  warnings: null,
+                  xlsxStats: null,
                   progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
                 }
               });
@@ -1030,6 +1041,8 @@ export function useGeneration(): UseGenerationReturn {
                 type: 'UPDATE_DOCUMENT_TRANSLATE',
                 payload: {
                   error: error instanceof Error ? error.message : 'Translation failed.',
+                  warnings: null,
+                  xlsxStats: null,
                   progress: { phase: 'error', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
                 }
               });
@@ -1902,6 +1915,8 @@ export function useGeneration(): UseGenerationReturn {
         type: 'UPDATE_DOCUMENT_TRANSLATE',
         payload: {
           error: 'Translation cancelled.',
+          warnings: null,
+          xlsxStats: null,
           progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
         }
       });

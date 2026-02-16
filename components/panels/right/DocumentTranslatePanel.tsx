@@ -31,6 +31,7 @@ export const DocumentTranslatePanel: React.FC = () => {
   };
 
   const isXlsx = docTranslate.sourceDocument?.type === 'xlsx';
+  const preserveFormattingChecked = isXlsx ? true : docTranslate.preserveFormatting;
 
   const qualityOptions = [
     { value: 'fast', label: t('documentTranslate.qualityOptions.fast.label') },
@@ -120,6 +121,35 @@ export const DocumentTranslatePanel: React.FC = () => {
         </div>
       )}
 
+      {/* XLSX warnings */}
+      {progress.phase === 'complete' && isXlsx && docTranslate.warnings && docTranslate.warnings.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={16} className="text-amber-600" />
+            <span className="text-sm font-semibold text-amber-900">
+              {t('documentTranslate.xlsxWarningsTitle')}
+            </span>
+          </div>
+          <div className="space-y-1">
+            {docTranslate.warnings.map((warning, idx) => (
+              <p key={`${warning}-${idx}`} className="text-xs text-amber-800">
+                {warning}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* XLSX translation stats */}
+      {progress.phase === 'complete' && isXlsx && docTranslate.xlsxStats && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-xs text-green-800 space-y-1">
+          <p className="font-semibold">{t('documentTranslate.xlsxStatsTitle')}</p>
+          <p>{t('documentTranslate.xlsxStatsTranslated', { count: docTranslate.xlsxStats.translatedCount })}</p>
+          <p>{t('documentTranslate.xlsxStatsSkipped', { count: docTranslate.xlsxStats.skippedCount })}</p>
+          <p>{t('documentTranslate.xlsxStatsDetected', { count: docTranslate.xlsxStats.detectedTextCount })}</p>
+        </div>
+      )}
+
       {/* No Document Uploaded Message */}
       {!docTranslate.sourceDocument && progress.phase === 'idle' && (
         <div className="bg-surface-sunken border border-border-subtle rounded-lg p-4 flex flex-col items-center gap-2 text-center">
@@ -205,7 +235,8 @@ export const DocumentTranslatePanel: React.FC = () => {
 
           <Toggle
             label={t('documentTranslate.preserveFormattingLabel')}
-            checked={docTranslate.preserveFormatting}
+            checked={preserveFormattingChecked}
+            disabled={isXlsx}
             onChange={(checked) =>
               dispatch({
                 type: 'UPDATE_DOCUMENT_TRANSLATE',
@@ -214,7 +245,9 @@ export const DocumentTranslatePanel: React.FC = () => {
             }
           />
           <p className="text-[10px] text-foreground-muted leading-relaxed">
-            {t('documentTranslate.preserveFormattingDesc')}
+            {isXlsx
+              ? t('documentTranslate.xlsxPreserveFormattingLocked')
+              : t('documentTranslate.preserveFormattingDesc')}
           </p>
 
           {!isXlsx && (

@@ -142,7 +142,7 @@
   "documentTranslate": {
     "uploadDocument": "Document",
     "dropOrClick": "Glissez ou cliquez pour télécharger",
-    "supportedFormats": "PDF, Word (.docx)",
+    "supportedFormats": "PDF, Word (.docx), Excel (.xlsx)",
     "removeDocument": "Supprimer le document",
     "languagesTitle": "Langues",
     "sourceLanguage": "De",
@@ -190,7 +190,13 @@
       "ar": "Arabe",
       "ru": "Russe",
       "sr": "Serbe"
-    }
+    },
+    "xlsxPreserveFormattingLocked": "Pour les fichiers Excel, le mode de preservation de structure est toujours active.",
+    "xlsxWarningsTitle": "Avertissements de Conservation de Structure",
+    "xlsxStatsTitle": "Resume de Traduction Excel",
+    "xlsxStatsTranslated": "Cellules traduites: {{count}}",
+    "xlsxStatsSkipped": "Cellules ignorees: {{count}}",
+    "xlsxStatsDetected": "Cellules texte detectees: {{count}}"
   },
   "workflows": {
     "generateText": "Generer",

@@ -6,23 +6,34 @@ interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
+  disabled?: boolean;
 }
 
-export const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label }) => {
+export const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label, disabled = false }) => {
   const hasLabel = Boolean(label && label.trim().length > 0);
   return (
     <div className={cn("flex items-center", hasLabel ? "justify-between py-1" : "py-0")}>
       {hasLabel && (
-        <label className="text-sm text-foreground-secondary select-none cursor-pointer" onClick={() => onChange(!checked)}>
+        <label
+          className={cn(
+            'text-sm text-foreground-secondary select-none',
+            disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          )}
+          onClick={() => {
+            if (!disabled) onChange(!checked);
+          }}
+        >
           {label}
         </label>
       )}
       <Switch.Root
         className={cn(
-          "w-[36px] h-[20px] rounded-full relative shadow-inner-subtle transition-colors duration-200 ease-in-out cursor-pointer shrink-0",
-          checked ? "bg-foreground" : "bg-border-strong"
+          "w-[36px] h-[20px] rounded-full relative shadow-inner-subtle transition-colors duration-200 ease-in-out shrink-0",
+          checked ? "bg-foreground" : "bg-border-strong",
+          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
         )}
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onChange}
       >
         <Switch.Thumb

@@ -147,6 +147,8 @@ const initialDocumentTranslate: DocumentTranslateState = {
     totalBatches: 0,
   },
   translatedDocumentUrl: null,
+  warnings: null,
+  xlsxStats: null,
   error: null,
 };
 

@@ -49,13 +49,20 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
         };
         dispatch({
           type: 'UPDATE_DOCUMENT_TRANSLATE',
-          payload: { sourceDocument: doc, error: null, translatedDocumentUrl: null },
+          payload: {
+            sourceDocument: doc,
+            error: null,
+            translatedDocumentUrl: null,
+            warnings: null,
+            xlsxStats: null,
+            preserveFormatting: isXlsx ? true : docTranslate.preserveFormatting,
+          },
         });
       };
       reader.readAsDataURL(file);
       e.target.value = '';
     },
-    [dispatch]
+    [dispatch, docTranslate.preserveFormatting]
   );
 
   const handleRemoveDocument = useCallback(() => {
@@ -65,6 +72,8 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
         sourceDocument: null,
         translatedDocumentUrl: null,
         error: null,
+        warnings: null,
+        xlsxStats: null,
         progress: {
           phase: 'idle',
           currentSegment: 0,

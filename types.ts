@@ -1057,10 +1057,40 @@ export interface ParsedLegalDocx extends ParsedDocx {
   sections: LegalSection[];
 }
 
+export type XlsxTranslationTargetKind = 'shared-string' | 'inline-string' | 'formula-string';
+
+export interface XlsxTranslationTarget {
+  kind: XlsxTranslationTargetKind;
+  xmlPath: string;
+  sheetName: string;
+  cellAddress: string;
+  textElement: Element;
+  sharedStringIndex?: number;
+}
+
+export type XlsxSkipReason =
+  | 'formula-cell'
+  | 'rich-text'
+  | 'malformed-cell-reference'
+  | 'missing-text-node'
+  | 'missing-shared-strings'
+  | 'invalid-shared-string-index'
+  | 'unsupported-cell-type';
+
+export interface XlsxSkippedCell {
+  sheetName: string;
+  cellAddress: string;
+  reason: XlsxSkipReason;
+}
+
 export interface ParsedXlsx {
-  workbook: any; // XLSX.WorkBook
+  zipInstance: any; // JSZip instance
+  xmlDocuments: Map<string, Document>;
   segments: TextSegment[];
-  cellMap: Map<string, { sheetName: string; cellAddress: string }>;
+  targetMap: Map<string, XlsxTranslationTarget>;
+  skippedCells: XlsxSkippedCell[];
+  detectedTextCount: number;
+  sheetCount: number;
   metadata: DocumentMetadata;
 }
 
@@ -1098,6 +1128,18 @@ export interface TranslationProgress {
 
 export type DocumentTranslationQuality = 'fast' | 'pro';
 
+export interface XlsxTranslationStats {
+  translatedCount: number;
+  skippedCount: number;
+  detectedTextCount: number;
+}
+
+export interface DocumentTranslationResult {
+  dataUrl: string;
+  warnings: string[] | null;
+  xlsxStats: XlsxTranslationStats | null;
+}
+
 export interface DocumentTranslateState {
   sourceDocument: DocumentTranslateDocument | null;
   sourceLanguage: string;
@@ -1108,6 +1150,8 @@ export interface DocumentTranslateState {
   translationQuality: DocumentTranslationQuality;
   progress: TranslationProgress;
   translatedDocumentUrl: string | null;
+  warnings: string[] | null;
+  xlsxStats: XlsxTranslationStats | null;
   error: string | null;
 }
 

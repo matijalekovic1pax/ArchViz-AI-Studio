@@ -16,11 +16,14 @@ import { rebuildXlsx } from './xlsxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
 import type {
   DocumentTranslateDocument,
+  DocumentTranslationResult,
   DocumentTranslationQuality,
   TranslationProgress,
   TextSegment,
   ParsedLegalDocx,
   ParsedXlsx,
+  XlsxSkippedCell,
+  XlsxTranslationStats,
 } from '../types';
 
 // Translation settings
@@ -40,6 +43,7 @@ export interface TranslationOptions {
   sourceLanguage: string;
   targetLanguage: string;
   translationQuality?: DocumentTranslationQuality;
+  preserveFormatting?: boolean;
   translateHeaders?: boolean;
   translateFootnotes?: boolean;
   onProgress: (progress: TranslationProgress) => void;
@@ -55,7 +59,7 @@ interface InternalBatch {
 // Main Pipeline
 // ============================================================================
 
-export async function translateDocument(options: TranslationOptions): Promise<string> {
+export async function translateDocument(options: TranslationOptions): Promise<DocumentTranslationResult> {
   const {
     sourceDocument,
     sourceLanguage,
@@ -179,14 +183,18 @@ export async function translateDocument(options: TranslationOptions): Promise<st
     message: 'Translation complete!',
   });
 
-  return outputDataUrl;
+  return {
+    dataUrl: outputDataUrl,
+    warnings: null,
+    xlsxStats: null,
+  };
 }
 
 // ============================================================================
 // XLSX Translation Pipeline
 // ============================================================================
 
-async function translateXlsxDocument(options: TranslationOptions): Promise<string> {
+async function translateXlsxDocument(options: TranslationOptions): Promise<DocumentTranslationResult> {
   const {
     sourceDocument,
     sourceLanguage,
@@ -209,16 +217,44 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<strin
   if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
   const parseResult: ParsedXlsx = await parseXlsx(sourceDocument.dataUrl);
-  const allSegments = parseResult.segments;
+  const safeSegments = parseResult.segments;
+  const parseSkipCount = parseResult.skippedCells.length;
+  const detectedTextCount = Math.max(
+    parseResult.detectedTextCount,
+    safeSegments.length + parseSkipCount
+  );
 
-  if (allSegments.length === 0) {
+  if (safeSegments.length === 0 && detectedTextCount === 0) {
     throw new Error('No translatable text found in spreadsheet.');
   }
 
-  // All xlsx segments are translatable (no header/footer filtering)
+  // All detected text is unsafe to patch without risking workbook fidelity.
+  if (safeSegments.length === 0 && detectedTextCount > 0) {
+    const xlsxStats: XlsxTranslationStats = {
+      translatedCount: 0,
+      skippedCount: detectedTextCount,
+      detectedTextCount,
+    };
+
+    onProgress({
+      phase: 'complete',
+      currentSegment: 0,
+      totalSegments: 0,
+      currentBatch: 0,
+      totalBatches: 0,
+      message: 'Spreadsheet preserved. No safe text cells could be translated.',
+    });
+
+    return {
+      dataUrl: sourceDocument.dataUrl,
+      warnings: buildXlsxWarnings(xlsxStats, parseResult.skippedCells),
+      xlsxStats,
+    };
+  }
+
   const translations = await runTranslationPipeline(
-    allSegments,
-    allSegments,
+    safeSegments,
+    safeSegments,
     sourceLanguage,
     targetLanguage,
     translationQuality,
@@ -229,8 +265,8 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<strin
   // Phase: Rebuild XLSX
   onProgress({
     phase: 'rebuilding',
-    currentSegment: allSegments.length,
-    totalSegments: allSegments.length,
+    currentSegment: safeSegments.length,
+    totalSegments: safeSegments.length,
     currentBatch: 0,
     totalBatches: 0,
     message: 'Rebuilding spreadsheet...',
@@ -238,19 +274,30 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<strin
 
   if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
-  const outputDataUrl = await rebuildXlsx(parseResult, translations);
+  const rebuilt = await rebuildXlsx(parseResult, translations);
+  const translatedCount = rebuilt.appliedCount;
+  const skippedCount = parseSkipCount + rebuilt.missingTargetCount;
+  const xlsxStats: XlsxTranslationStats = {
+    translatedCount,
+    skippedCount,
+    detectedTextCount,
+  };
 
   // Phase: Complete
   onProgress({
     phase: 'complete',
-    currentSegment: allSegments.length,
-    totalSegments: allSegments.length,
+    currentSegment: safeSegments.length,
+    totalSegments: safeSegments.length,
     currentBatch: 0,
     totalBatches: 0,
     message: 'Translation complete!',
   });
 
-  return outputDataUrl;
+  return {
+    dataUrl: rebuilt.dataUrl,
+    warnings: buildXlsxWarnings(xlsxStats, parseResult.skippedCells),
+    xlsxStats,
+  };
 }
 
 // ============================================================================
@@ -616,6 +663,57 @@ function getLanguageName(code: string): string {
     sr: 'Serbian',
   };
   return languages[code] || code;
+}
+
+function buildXlsxWarnings(
+  stats: XlsxTranslationStats,
+  skippedCells: XlsxSkippedCell[]
+): string[] | null {
+  if (stats.skippedCount <= 0) return null;
+
+  const warnings: string[] = [];
+  warnings.push(
+    `Skipped ${stats.skippedCount} of ${stats.detectedTextCount} text cell(s) to preserve spreadsheet structure.`
+  );
+
+  if (skippedCells.length > 0) {
+    const reasonCounts = skippedCells.reduce((acc, cell) => {
+      acc[cell.reason] = (acc[cell.reason] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const topReasons = Object.entries(reasonCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([reason, count]) => `${count} ${humanizeSkipReason(reason)}`);
+
+    if (topReasons.length > 0) {
+      warnings.push(`Most common skip reasons: ${topReasons.join(', ')}.`);
+    }
+  }
+
+  return warnings;
+}
+
+function humanizeSkipReason(reason: string): string {
+  switch (reason) {
+    case 'formula-cell':
+      return 'formula cells';
+    case 'rich-text':
+      return 'rich-text cells';
+    case 'malformed-cell-reference':
+      return 'cells with malformed references';
+    case 'missing-text-node':
+      return 'cells missing text nodes';
+    case 'missing-shared-strings':
+      return 'cells missing shared string table entries';
+    case 'invalid-shared-string-index':
+      return 'cells with invalid shared string indices';
+    case 'unsupported-cell-type':
+      return 'unsupported text cell types';
+    default:
+      return reason;
+  }
 }
 
 export function estimateTokens(text: string): number {
