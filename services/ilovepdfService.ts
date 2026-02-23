@@ -36,15 +36,9 @@ export class ILovePDFService {
     error?: string;
   }> {
     try {
-      // Convert dataUrl to Blob for size measurement (without fetch, to avoid CSP connect-src restrictions on data: URIs)
-      const base64Parts = dataUrl.split(',');
-      const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-      const binaryStr = atob(base64Parts[1]);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: mime });
+      // Convert dataUrl to Blob using native fetch (more memory-efficient than JS atob for large files)
+      const blobResponse = await fetch(dataUrl);
+      const blob = await blobResponse.blob();
       const originalSize = blob.size;
 
       // Map our levels to iLovePDF levels
@@ -61,11 +55,8 @@ export class ILovePDFService {
       // Step 2: Start task
       const { server, task } = await ilovepdfStart('compress', ilovepdfToken);
 
-      // Step 3: Upload file
-      const base64Match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
-      if (!base64Match) throw new Error('Invalid data URL');
-      const fileData = base64Match[1];
-      const { server_filename } = await ilovepdfUpload(server, task, ilovepdfToken, fileData, filename);
+      // Step 3: Upload file directly to iLovePDF (bypasses Worker — no size limit)
+      const { server_filename } = await ilovepdfUpload(server, task, ilovepdfToken, blob, filename);
 
       // Step 4: Process compression
       await ilovepdfProcess(server, ilovepdfToken, {

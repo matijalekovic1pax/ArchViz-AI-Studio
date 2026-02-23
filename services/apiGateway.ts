@@ -262,10 +262,32 @@ export async function ilovepdfUpload(
   server: string,
   task: string,
   ilovepdfToken: string,
-  fileData: string,
+  file: Blob,
   fileName: string
 ): Promise<{ server_filename: string }> {
-  return gatewayPost('/api/ilovepdf/upload', { server, task, ilovepdfToken, fileData, fileName }, { timeoutMs: 120_000 });
+  // Upload directly to iLovePDF server (bypasses Worker to avoid 100MB body limit)
+  const formData = new FormData();
+  formData.append('task', task);
+  formData.append('file', file, fileName);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 600_000); // 10 min for large files
+
+  try {
+    const resp = await fetch(`https://${server}/v1/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${ilovepdfToken}` },
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error(`Upload failed (${resp.status}): ${errText}`);
+    }
+    return resp.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function ilovepdfProcess(
@@ -273,7 +295,7 @@ export async function ilovepdfProcess(
   ilovepdfToken: string,
   processPayload: any
 ): Promise<any> {
-  return gatewayPost('/api/ilovepdf/process', { server, ilovepdfToken, ...processPayload }, { timeoutMs: 120_000 });
+  return gatewayPost('/api/ilovepdf/process', { server, ilovepdfToken, ...processPayload }, { timeoutMs: 300_000 });
 }
 
 export async function ilovepdfDownload(
@@ -281,12 +303,20 @@ export async function ilovepdfDownload(
   task: string,
   ilovepdfToken: string
 ): Promise<Blob> {
-  const resp = await gatewayFetch(
-    `/api/ilovepdf/download/${task}?server=${encodeURIComponent(server)}&token=${encodeURIComponent(ilovepdfToken)}`,
-    { timeoutMs: 120_000 },
-  );
-  if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
-  return resp.blob();
+  // Download directly from iLovePDF server (bypasses Worker for large files)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 600_000); // 10 min for large files
+
+  try {
+    const resp = await fetch(`https://${server}/v1/download/${task}`, {
+      headers: { 'Authorization': `Bearer ${ilovepdfToken}` },
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
+    return resp.blob();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // ─── URL Fetch Proxy (material validation) ───────────────────────────────────
