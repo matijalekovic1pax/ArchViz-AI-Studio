@@ -10,8 +10,8 @@ import { geminiRequest, geminiStreamRequest } from './apiGateway';
 // Types & Interfaces
 // ============================================================================
 
-export const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
-export const IMAGE_MODEL = 'gemini-3-pro-image-preview';
+export const DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
+export const IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
 export const TEXT_MODEL = 'gemini-3-pro-preview';
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
