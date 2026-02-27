@@ -91,6 +91,7 @@ const selectionTargets = [
   'Water',
   'Vegetation',
   'Sky',
+  'Background',
 ];
 const selectionExamples = [
   'Replace with modern glass facade',
