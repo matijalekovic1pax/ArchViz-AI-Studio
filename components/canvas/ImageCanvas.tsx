@@ -1222,9 +1222,10 @@ const StandardCanvas: React.FC = () => {
     if (isPlaying) {
       videoRef.current.pause();
     } else {
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {
+        setIsPlaying(false);
+      });
     }
-    setIsPlaying(!isPlaying);
   }, [isPlaying]);
 
   const handleVideoTimeUpdate = useCallback(() => {
@@ -1291,12 +1292,11 @@ const StandardCanvas: React.FC = () => {
     a.click();
   }, [state.workflow.videoState.generatedVideoUrl]);
 
-  // Reload video element when blob URL changes (React doesn't auto-reload <video> on src change)
+  // Reset play state when a new video loads
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !state.workflow.videoState.generatedVideoUrl) return;
-    el.load();
+    setIsPlaying(false);
   }, [state.workflow.videoState.generatedVideoUrl]);
+
 
   useEffect(() => {
     if (!state.uploadedImage) {
@@ -1693,6 +1693,7 @@ const StandardCanvas: React.FC = () => {
                                    ) : state.workflow.videoState.generatedVideoUrl ? (
                                       <>
                                          <video
+                                            key={state.workflow.videoState.generatedVideoUrl}
                                             ref={videoRef}
                                             src={state.workflow.videoState.generatedVideoUrl}
                                             className="w-full h-full object-contain block select-none"
@@ -1703,6 +1704,7 @@ const StandardCanvas: React.FC = () => {
                                             onEnded={() => setIsPlaying(false)}
                                             loop
                                             playsInline
+                                            preload="auto"
                                          />
 
                                          {/* Center Play/Pause Button Overlay */}

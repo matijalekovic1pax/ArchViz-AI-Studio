@@ -937,7 +937,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                     {state.isGenerating ? (
                       <>
                         <Loader2 className="animate-spin" size={16} />
-                        <span className="font-bold text-[11px]">{t('generation.generating')} {state.progress}%</span>
+                        <span className="font-bold text-[11px]">{t('generation.generating')} {Math.round(state.progress)}%</span>
                       </>
                     ) : (
                       <>
@@ -1448,7 +1448,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                     <Loader2 className="animate-spin" size={18} />
                     <div className="flex flex-col items-start leading-none">
                       <span className="font-bold text-xs">{t('generation.generating')}</span>
-                      <span className="text-[9px] opacity-80 font-mono">{state.progress}%</span>
+                      <span className="text-[9px] opacity-80 font-mono">{Math.round(state.progress)}%</span>
                     </div>
                   </>
                 ) : (

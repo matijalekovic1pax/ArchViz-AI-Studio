@@ -38,7 +38,7 @@ export const FloatingGenerateButton: React.FC = () => {
               {state.isGenerating ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  <span className="font-medium">Generating... {state.progress}%</span>
+                  <span className="font-medium">Generating... {Math.round(state.progress)}%</span>
                 </>
               ) : (
                 <>
