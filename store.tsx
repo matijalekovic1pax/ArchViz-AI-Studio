@@ -8,7 +8,7 @@ const initialVideoState: VideoState = {
   model: 'veo-2',
   scenario: '',
   compareMode: false,
-  accessUnlocked: false,
+  accessUnlocked: true,
 
   duration: 8,
   resolution: '1080p',
