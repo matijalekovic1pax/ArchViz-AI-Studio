@@ -19,6 +19,7 @@ const initialVideoState: VideoState = {
   seedLocked: false,
   generateAudio: false,
   personGeneration: 'allow_adult',
+  videoInputImage: null,
   startFrame: null,
   endFrame: null,
 

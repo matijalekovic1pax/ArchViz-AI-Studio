@@ -9,7 +9,7 @@
  */
 
 import type { VideoGenerationProgress, ImageData } from '../types';
-import { veoGenerate, veoCheckStatus } from './apiGateway';
+import { veoGenerate, veoCheckStatus, veoDownloadVideo } from './apiGateway';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -150,19 +150,11 @@ class VeoService {
         throw new VeoError(result.error || 'Video generation failed');
       }
 
-      // If complete immediately, return video URL
-      if (result.status === 'complete' && result.videoUrl) {
-        onProgress?.({
-          phase: 'complete',
-          progress: 100,
-          message: 'Video generation complete!',
-          videoUrl: result.videoUrl
-        });
+      let rawVideoUrl: string | undefined;
 
-        return {
-          videoUrl: result.videoUrl,
-          expiresAt: new Date(result.expiresAt || Date.now() + 2 * 24 * 60 * 60 * 1000)
-        };
+      // If complete immediately
+      if (result.status === 'complete' && result.videoUrl) {
+        rawVideoUrl = result.videoUrl;
       }
 
       // If still processing, poll for completion
@@ -173,26 +165,43 @@ class VeoService {
           message: 'Rendering video...'
         });
 
-        const videoUrl = await this.pollForCompletion(
+        rawVideoUrl = await this.pollForCompletion(
           result.operationName,
           onProgress,
           abortSignal
         );
-
-        onProgress?.({
-          phase: 'complete',
-          progress: 100,
-          message: 'Video generation complete!',
-          videoUrl
-        });
-
-        return {
-          videoUrl,
-          expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
-        };
       }
 
-      throw new VeoError('Unexpected response from API gateway');
+      if (!rawVideoUrl) {
+        throw new VeoError('Unexpected response from API gateway');
+      }
+
+      // Download through proxy to get a local blob URL for playback
+      onProgress?.({
+        phase: 'rendering',
+        progress: 92,
+        message: 'Downloading video...'
+      });
+
+      let playableUrl = rawVideoUrl;
+      try {
+        playableUrl = await veoDownloadVideo(rawVideoUrl);
+      } catch {
+        // Fallback: use raw URL (may not be directly playable)
+        playableUrl = rawVideoUrl;
+      }
+
+      onProgress?.({
+        phase: 'complete',
+        progress: 100,
+        message: 'Video ready!',
+        videoUrl: playableUrl
+      });
+
+      return {
+        videoUrl: playableUrl,
+        expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+      };
 
     } catch (error) {
       if (error instanceof VeoError) throw error;

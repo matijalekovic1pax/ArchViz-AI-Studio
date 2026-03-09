@@ -223,6 +223,15 @@ export async function veoCheckStatus(operationName: string, useVertexAi = false)
   return gatewayGet(`/api/veo/status?${params}`, { timeoutMs: 15_000 });
 }
 
+/** Download generated video bytes through the gateway proxy and return a local blob URL */
+export async function veoDownloadVideo(videoUrl: string): Promise<string> {
+  const params = new URLSearchParams({ url: videoUrl });
+  const resp = await gatewayFetch(`/api/veo/download?${params}`, { timeoutMs: 180_000 });
+  if (!resp.ok) throw new Error(`Video download failed (${resp.status})`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
 // ─── Kling Video Generation ──────────────────────────────────────────────────
 
 export interface KlingGenerateRequest {

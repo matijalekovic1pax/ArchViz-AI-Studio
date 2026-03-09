@@ -832,9 +832,10 @@ export interface VideoState {
   generateAudio?: boolean; // Whether to generate audio (default: false)
   personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all'; // Person generation setting (default: allow_adult)
 
-  // Frame Interpolation (image-morph mode) — Veo first/last frame
-  startFrame: string | null; // base64 data URL for start frame
-  endFrame: string | null;   // base64 data URL for end frame
+  // Veo input images
+  videoInputImage: string | null; // base64 data URL for image-animate mode
+  startFrame: string | null;      // base64 data URL for start frame (interpolation)
+  endFrame: string | null;        // base64 data URL for end frame (interpolation)
 
   // Camera Control
   camera: {

@@ -484,6 +484,56 @@ function extractVertexVideoUrl(response) {
   return null;
 }
 
+// ─── Route: GET /api/veo/download ───────────────────────────────────────────
+
+async function handleVeoDownload(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const url = new URL(request.url);
+  const videoUrl = url.searchParams.get('url');
+
+  if (!videoUrl) {
+    return corsResponse(origin, { error: 'Missing url parameter' }, { status: 400 });
+  }
+
+  // Only allow downloading from known Google domains
+  let fetchUrl = videoUrl;
+  let fetchHeaders = {};
+
+  if (videoUrl.startsWith('https://generativelanguage.googleapis.com/')) {
+    // Gemini Files API — needs API key and alt=media
+    const parsed = new URL(videoUrl);
+    if (!parsed.searchParams.has('alt')) parsed.searchParams.set('alt', 'media');
+    fetchUrl = parsed.toString();
+    fetchHeaders = { 'x-goog-api-key': env.GEMINI_API_KEY };
+  } else if (videoUrl.startsWith('gs://')) {
+    // Convert gs:// to HTTPS storage URL
+    fetchUrl = videoUrl.replace('gs://', 'https://storage.googleapis.com/');
+  } else if (videoUrl.startsWith('https://storage.googleapis.com/')) {
+    fetchUrl = videoUrl;
+  } else {
+    return corsResponse(origin, { error: 'URL domain not allowed' }, { status: 403 });
+  }
+
+  try {
+    const resp = await fetch(fetchUrl, { headers: fetchHeaders });
+    if (!resp.ok) {
+      return corsResponse(origin, { error: `Download failed (${resp.status})` }, { status: resp.status });
+    }
+    const contentType = resp.headers.get('Content-Type') || 'video/mp4';
+    return new Response(resp.body, {
+      status: 200,
+      headers: {
+        ...getCorsHeaders(origin),
+        'Content-Type': contentType,
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'private, max-age=172800', // 2 days
+      },
+    });
+  } catch (err) {
+    return corsResponse(origin, { error: err.message }, { status: 500 });
+  }
+}
+
 // ─── Route: POST /api/kling/generate ─────────────────────────────────────────
 
 async function handleKlingGenerate(request, env) {
@@ -929,6 +979,7 @@ export default {
     // Veo video generation
     if (path === '/api/veo/generate' && request.method === 'POST') return handleVeoGenerate(request, env);
     if (path === '/api/veo/status' && request.method === 'GET') return handleVeoStatus(request, env);
+    if (path === '/api/veo/download' && request.method === 'GET') return handleVeoDownload(request, env);
 
     // Kling video generation
     if (path === '/api/kling/generate' && request.method === 'POST') return handleKlingGenerate(request, env);

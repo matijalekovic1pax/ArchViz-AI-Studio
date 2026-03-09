@@ -1546,15 +1546,15 @@ export function useGeneration(): UseGenerationReturn {
         const videoState = state.workflow.videoState;
         const videoService = getVideoGenerationService();
         // Prepare input image for image-animate mode
+        // Prefer videoState.videoInputImage, fall back to global uploadedImage
         let inputImage: ImageData | undefined;
-        if (videoState.inputMode === 'image-animate' && state.uploadedImage) {
-          const converted = dataUrlToImageData(state.uploadedImage);
-          if (converted) {
-            // Ensure dataUrl is preserved
-            inputImage = {
-              ...converted,
-              dataUrl: state.uploadedImage
-            };
+        if (videoState.inputMode === 'image-animate') {
+          const src = videoState.videoInputImage || state.uploadedImage;
+          if (src) {
+            const converted = dataUrlToImageData(src);
+            if (converted) {
+              inputImage = { ...converted, dataUrl: src };
+            }
           }
         }
 
@@ -1593,24 +1593,23 @@ export function useGeneration(): UseGenerationReturn {
           const videoResult = await runWithRetry(
             'video generation',
             () => videoService.generateVideo({
-              model: videoState.model,
+              model: 'veo-2',
               prompt: fullPrompt,
               inputImage,
-              keyframes,
               startFrame,
               endFrame,
               duration: videoState.duration,
               resolution: videoState.resolution,
-              fps: videoState.fps,
+              fps: 30,
               aspectRatio: videoState.aspectRatio,
-              motionAmount: videoState.motionAmount,
+              motionAmount: 5,
               camera: videoState.camera,
-              quality: videoState.quality,
-              transitionEffect: videoState.transitionEffect,
+              quality: 'standard',
+              transitionEffect: 'none',
               seed: videoState.seedLocked ? videoState.seed : undefined,
               generateAudio: videoState.generateAudio,
               personGeneration: videoState.personGeneration,
-              klingProvider: videoState.klingProvider,
+              klingProvider: 'piapi',
               onProgress: onVideoProgress,
               abortSignal
             }),

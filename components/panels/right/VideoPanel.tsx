@@ -1,523 +1,341 @@
-
-import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useRef, useEffect } from 'react';
 import { useAppStore } from '../../../store';
-import { Slider } from '../../ui/Slider';
 import { cn } from '../../../lib/utils';
-import { ChevronDown, ChevronUp, Download, X } from 'lucide-react';
-import type { KlingProvider, CameraMotionType } from '../../../types';
+import { Download, Play, RotateCcw, Lock, Unlock } from 'lucide-react';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
 import { downloadFile } from '../../../lib/download';
 
-export const VideoPanel = () => {
-   const { state, dispatch } = useAppStore();
-   const { t } = useTranslation();
-   const video = state.workflow.videoState;
-   const isLocked = !video.accessUnlocked;
-   const [advancedOpen, setAdvancedOpen] = useState(false);
-
-   const updateVideo = (payload: Partial<typeof video>) => {
-      dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
-   };
-
-   const updateCamera = (payload: Partial<typeof video.camera>) => {
-      dispatch({ type: 'UPDATE_VIDEO_CAMERA', payload });
-   };
-
-   const isGenerating = state.isGenerating;
-   const progress = video.generationProgress;
-
-   // Model capabilities
-   const isVeo = video.model === 'veo-2';
-   const isKling = video.model === 'kling-2.6';
-   const maxDuration = isVeo ? 8 : 10;
-   const supportsCameraControls = isKling;
-   const isInterpolationMode = isVeo && video.inputMode === 'image-morph';
-   const hasStartFrame = !!video.startFrame;
-   const hasEndFrame = !!video.endFrame;
-
-   // Duration options based on model
-   // Veo 3.1: Supports 4, 6, or 8 seconds (8 seconds for high-fidelity 720p/1080p/4K)
-   // Kling: Supports 5, 8, or 10 seconds
-   const durationOptions = isVeo ? [4, 6, 8] : [5, 8, 10];
-   const aspectRatioOptions = isVeo ? (['16:9', '9:16'] as const) : (['16:9', '9:16', '1:1', '4:3', '21:9'] as const);
-   const resolutionOptions = isVeo ? (['720p', '1080p', '4k'] as const) : (['720p', '1080p'] as const);
-   const fpsOptions = isVeo ? ([24, 30] as const) : ([24, 30, 60] as const);
-
-   useEffect(() => {
-      if (!isVeo) return;
-      const next: Partial<typeof video> = {};
-      if (!aspectRatioOptions.includes(video.aspectRatio)) {
-         next.aspectRatio = '16:9';
-      }
-      if (!durationOptions.includes(video.duration)) {
-         next.duration = 8;
-      }
-      if (!resolutionOptions.includes(video.resolution)) {
-         next.resolution = '1080p';
-      }
-      if (!fpsOptions.includes(video.fps)) {
-         next.fps = 24;
-      }
-      if (video.camera.type !== 'static') {
-         updateCamera({ type: 'static' });
-      }
-      if (Object.keys(next).length > 0) {
-         updateVideo(next);
-      }
-   }, [
-      aspectRatioOptions,
-      durationOptions,
-      fpsOptions,
-      isVeo,
-      resolutionOptions,
-      updateCamera,
-      video.aspectRatio,
-      video.camera.type,
-      video.duration,
-      video.fps,
-      video.resolution
-   ]);
-
-   if (isLocked) {
-      return <VideoLockBanner compact />;
-   }
-
-   return (
-      <div className="space-y-6">
-         {/* 1. Model Selection & Provider */}
-         <div>
-            <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-               {t('rightPanel.video.model.title')}
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-               <button
-                  onClick={() => updateVideo({ model: 'veo-2' })}
-                  className={cn(
-                     "p-3 rounded-lg border text-left transition-all",
-                     isVeo
-                        ? "bg-surface-elevated border-foreground shadow-sm"
-                        : "bg-background-tertiary border-border hover:bg-surface-elevated"
-                  )}
-               >
-                  <div className="text-xs font-bold mb-0.5">Veo 3.1</div>
-                  <div className="text-[10px] text-foreground-muted">Google · 4K · 8s · Audio</div>
-               </button>
-               <button
-                  onClick={() => updateVideo({ model: 'kling-2.6' })}
-                  className={cn(
-                     "p-3 rounded-lg border text-left transition-all",
-                     isKling
-                        ? "bg-surface-elevated border-foreground shadow-sm"
-                        : "bg-background-tertiary border-border hover:bg-surface-elevated"
-                  )}
-               >
-                  <div className="text-xs font-bold mb-0.5">{t('rightPanel.video.model.kling.name')}</div>
-                  <div className="text-[10px] text-foreground-muted">{t('rightPanel.video.model.kling.description')}</div>
-               </button>
-            </div>
-
-            {isKling && (
-               <select
-                  value={video.klingProvider}
-                  onChange={(e) => updateVideo({ klingProvider: e.target.value as KlingProvider })}
-                  className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-               >
-                  <option value="piapi">{t('rightPanel.video.model.providers.piapi')}</option>
-                  <option value="ulazai">{t('rightPanel.video.model.providers.ulazai')}</option>
-                  <option value="wavespeedai">{t('rightPanel.video.model.providers.wavespeedai')}</option>
-               </select>
+// ── Small pill-button group ───────────────────────────────────────────────────
+interface PillGroupProps<T extends string | number> {
+  label: string;
+  options: { value: T; label: string; disabled?: boolean; hint?: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}
+function PillGroup<T extends string | number>({ label, options, value, onChange }: PillGroupProps<T>) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">{label}</p>
+      <div className={cn('grid gap-1.5', {
+        'grid-cols-2': options.length === 2,
+        'grid-cols-3': options.length === 3,
+        'grid-cols-4': options.length === 4,
+      })}>
+        {options.map((opt) => (
+          <button
+            key={String(opt.value)}
+            onClick={() => !opt.disabled && onChange(opt.value)}
+            disabled={opt.disabled}
+            title={opt.hint}
+            className={cn(
+              'py-2 text-[11px] font-bold rounded-lg border transition-all',
+              value === opt.value
+                ? 'bg-foreground text-background border-foreground'
+                : opt.disabled
+                  ? 'bg-surface-sunken text-foreground-muted border-transparent opacity-40 cursor-not-allowed'
+                  : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
             )}
-         </div>
-
-         {/* 2. Duration & Timing */}
-         <div>
-            <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-               {t('rightPanel.video.duration.label')}
-            </label>
-            {isVeo && (
-               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
-                  💡 Veo 3.1: 8s recommended for high-fidelity 720p/1080p/4K videos
-               </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-               {durationOptions.map(dur => (
-                  <button
-                     key={dur}
-                     onClick={() => updateVideo({ duration: dur })}
-                     disabled={dur > maxDuration}
-                     className={cn(
-                        "py-2.5 text-xs font-bold border rounded-lg transition-all",
-                        video.duration === dur
-                           ? "bg-foreground text-background border-foreground"
-                           : dur > maxDuration
-                              ? "bg-surface-sunken text-foreground-muted border-border cursor-not-allowed opacity-40"
-                              : "bg-surface-elevated border-border hover:bg-surface-elevated hover:border-foreground-muted"
-                     )}
-                  >
-                     {dur}s
-                  </button>
-               ))}
-            </div>
-         </div>
-
-         {/* 3. Format & Quality */}
-         <div>
-            <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-               {t('rightPanel.video.aspectRatio.label')}
-            </label>
-            {isVeo && (
-               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
-                  📱 Veo 3.1: Supports portrait (9:16) for social media & landscape (16:9)
-               </div>
-            )}
-            <div className={cn(
-               "grid gap-1.5 mb-4",
-               isVeo ? "grid-cols-2" : "grid-cols-5"
-            )}>
-               {aspectRatioOptions.map(ratio => (
-                  <button
-                     key={ratio}
-                     onClick={() => updateVideo({ aspectRatio: ratio })}
-                     className={cn(
-                        "py-2 text-[10px] font-bold border rounded transition-all",
-                        video.aspectRatio === ratio
-                           ? "bg-foreground text-background border-foreground"
-                           : "bg-surface-elevated border-border hover:border-foreground-muted"
-                     )}
-                  >
-                     {ratio}
-                  </button>
-               ))}
-            </div>
-
-            <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-               {t('rightPanel.video.resolution.label')}
-            </label>
-            {isVeo && (
-               <div className="mb-2 text-[10px] text-foreground-muted bg-surface-elevated border border-border rounded-lg p-2">
-                  ✨ Veo 3.1: Full support for 720p, 1080p & 4K (requires 8s duration)
-               </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-               {resolutionOptions.map(res => (
-                  <button
-                     key={res}
-                     onClick={() => updateVideo({ resolution: res })}
-                     disabled={isVeo && res === '4k' && video.duration < 8}
-                     className={cn(
-                        "py-2.5 text-xs font-bold border rounded-lg transition-all",
-                        video.resolution === res
-                           ? "bg-foreground text-background border-foreground"
-                           : isVeo && res === '4k' && video.duration < 8
-                              ? "bg-surface-sunken text-foreground-muted border-border cursor-not-allowed opacity-40"
-                              : "bg-surface-elevated border-border hover:border-foreground-muted"
-                     )}
-                  >
-                     {res === '4k' ? '4K' : res.toUpperCase()}
-                  </button>
-               ))}
-            </div>
-
-            {!isVeo && (
-               <>
-                  <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-                     {t('rightPanel.video.frameRate.label')}
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                     {fpsOptions.map(fps => (
-                        <button
-                           key={fps}
-                           onClick={() => updateVideo({ fps: fps as 24 | 30 | 60 })}
-                           className={cn(
-                              "py-2.5 text-xs font-bold border rounded-lg transition-all",
-                              video.fps === fps
-                                 ? "bg-foreground text-background border-foreground"
-                                 : "bg-surface-elevated border-border hover:border-foreground-muted"
-                           )}
-                        >
-                           {fps} FPS
-                        </button>
-                     ))}
-                  </div>
-               </>
-            )}
-         </div>
-
-         {/* 4. Camera Motion (Kling only) */}
-         {supportsCameraControls && (
-            <div>
-               <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-                  {t('rightPanel.video.camera.type.label')}
-               </label>
-               <select
-                  value={video.camera.type}
-                  onChange={(e) => updateCamera({ type: e.target.value as CameraMotionType })}
-                  className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3 mb-3"
-               >
-                  <option value="static">{t('rightPanel.video.camera.type.static')}</option>
-                  <option value="pan">{t('rightPanel.video.camera.type.pan')}</option>
-                  <option value="orbit">{t('rightPanel.video.camera.type.orbit')}</option>
-                  <option value="dolly">{t('rightPanel.video.camera.type.dolly')}</option>
-                  <option value="crane">{t('rightPanel.video.camera.type.crane')}</option>
-                  <option value="drone">{t('rightPanel.video.camera.type.drone')}</option>
-                  <option value="rotate">{t('rightPanel.video.camera.type.rotate')}</option>
-                  <option value="push-in">{t('rightPanel.video.camera.type.pushIn')}</option>
-                  <option value="pull-out">{t('rightPanel.video.camera.type.pullOut')}</option>
-                  <option value="custom">{t('rightPanel.video.camera.type.custom')}</option>
-               </select>
-
-               {video.camera.type !== 'static' && (
-                  <>
-                     <div className="mb-3">
-                        <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                           {t('rightPanel.video.camera.directionValue', { value: video.camera.direction })}
-                        </label>
-                        <input
-                           type="range"
-                           min={0}
-                           max={360}
-                           value={video.camera.direction}
-                           onChange={(e) => updateCamera({ direction: parseInt(e.target.value) })}
-                           className="w-full h-2 bg-surface-sunken rounded-lg appearance-none cursor-pointer"
-                        />
-                     </div>
-
-                     <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                        {t('rightPanel.video.camera.speed.label')}
-                     </label>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                        {(['slow', 'normal', 'fast'] as const).map(speed => (
-                           <button
-                              key={speed}
-                              onClick={() => updateCamera({ speed })}
-                              className={cn(
-                                 "py-2 text-[10px] font-bold border rounded transition-all capitalize",
-                                 video.camera.speed === speed
-                                    ? "bg-foreground text-background border-foreground"
-                                    : "bg-surface-elevated border-border hover:border-foreground-muted"
-                              )}
-                           >
-                              {t(`rightPanel.video.camera.speed.${speed}`)}
-                           </button>
-                        ))}
-                     </div>
-
-                     <Slider
-                        label={t('rightPanel.video.camera.smoothness')}
-                        value={video.camera.smoothness}
-                        min={0}
-                        max={100}
-                        onChange={(val) => updateCamera({ smoothness: val })}
-                     />
-                  </>
-               )}
-            </div>
-         )}
-
-         {/* 5. Motion Controls */}
-         <div>
-            <Slider
-               label={t('rightPanel.video.motionAmount.label')}
-               value={video.motionAmount}
-               min={1}
-               max={10}
-               onChange={(val) => updateVideo({ motionAmount: val })}
-            />
-         </div>
-
-         {/* 6. Advanced Settings (Collapsible) */}
-         <div>
-            <button
-               onClick={() => setAdvancedOpen(!advancedOpen)}
-               className="w-full flex items-center justify-between text-xs text-foreground-muted mb-2 font-bold uppercase tracking-wider hover:text-foreground transition-colors"
-            >
-               <span>{t('rightPanel.video.advanced.title')}</span>
-               {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-
-            {advancedOpen && (
-               <div className="space-y-3 pt-2">
-                  <div>
-                     <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                        {t('rightPanel.video.seed.label')} {video.seedLocked && `(${video.seed})`}
-                     </label>
-                     <input
-                        type="number"
-                        value={video.seed}
-                        onChange={(e) => updateVideo({ seed: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-                        disabled={!video.seedLocked}
-                     />
-                  </div>
-
-                  {isKling && (
-                     <div>
-                        <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                           {t('rightPanel.video.quality.label')}
-                        </label>
-                        <select
-                           value={video.quality}
-                           onChange={(e) => updateVideo({ quality: e.target.value as any })}
-                           className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-                        >
-                           <option value="draft">{t('rightPanel.video.quality.draft')}</option>
-                           <option value="standard">{t('rightPanel.video.quality.standard')}</option>
-                           <option value="high">{t('rightPanel.video.quality.high')}</option>
-                           <option value="ultra">{t('rightPanel.video.quality.ultra')}</option>
-                        </select>
-                     </div>
-                  )}
-
-                  {isVeo && (
-                     <>
-                        <div className="flex items-center justify-between rounded border border-border bg-surface-elevated px-3 py-2">
-                           <span className="text-[10px] font-medium text-foreground-muted">
-                              Generate Audio (Veo)
-                           </span>
-                           <button
-                              type="button"
-                              className={cn(
-                                 "px-2 py-1 rounded text-[10px] font-semibold border transition-colors",
-                                 video.generateAudio
-                                    ? "bg-foreground text-background border-foreground"
-                                    : "bg-surface-sunken text-foreground-muted border-border"
-                              )}
-                              onClick={() => updateVideo({ generateAudio: !video.generateAudio })}
-                           >
-                              {video.generateAudio ? 'On' : 'Off'}
-                           </button>
-                        </div>
-                        <div>
-                           <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                              People in Scene
-                           </label>
-                           <select
-                              value={video.personGeneration || 'allow_adult'}
-                              onChange={(e) => updateVideo({ personGeneration: e.target.value as any })}
-                              className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-                           >
-                              <option value="allow_adult">Allow Adults</option>
-                              <option value="dont_allow">No People</option>
-                              <option value="allow_all">Allow All</option>
-                           </select>
-                        </div>
-                     </>
-                  )}
-
-                  {isKling && video.inputMode !== 'image-animate' && (
-                     <div>
-                        <label className="text-[10px] text-foreground-muted mb-2 block font-medium">
-                           {t('rightPanel.video.transition.label')}
-                        </label>
-                        <select
-                           value={video.transitionEffect}
-                           onChange={(e) => updateVideo({ transitionEffect: e.target.value as any })}
-                           className="w-full bg-surface-elevated border border-border rounded text-xs h-9 px-3"
-                        >
-                           <option value="cut">{t('rightPanel.video.transition.cut')}</option>
-                           <option value="fade">{t('rightPanel.video.transition.fade')}</option>
-                           <option value="dissolve">{t('rightPanel.video.transition.dissolve')}</option>
-                           <option value="wipe">{t('rightPanel.video.transition.wipe')}</option>
-                           <option value="none">{t('rightPanel.video.transition.none')}</option>
-                        </select>
-                     </div>
-                  )}
-               </div>
-            )}
-         </div>
-
-         {/* Frame Interpolation status */}
-         {isInterpolationMode && (
-            <div className={cn(
-               "p-3 rounded-lg border text-[10px] leading-snug",
-               hasStartFrame && hasEndFrame
-                  ? "bg-surface-elevated border-foreground text-foreground"
-                  : "bg-surface-sunken border-border text-foreground-muted"
-            )}>
-               <div className="font-bold mb-1">Frame Interpolation</div>
-               <div className="flex items-center gap-2">
-                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", hasStartFrame ? "bg-green-500" : "bg-border")} />
-                  <span>Start frame {hasStartFrame ? '✓' : '— not uploaded'}</span>
-               </div>
-               <div className="flex items-center gap-2 mt-1">
-                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", hasEndFrame ? "bg-green-500" : "bg-border")} />
-                  <span>End frame {hasEndFrame ? '✓' : '— not uploaded'}</span>
-               </div>
-               {!(hasStartFrame && hasEndFrame) && (
-                  <p className="mt-2 opacity-70">Upload both frames in the left panel to enable interpolation.</p>
-               )}
-            </div>
-         )}
-
-         {/* 7. Generation Progress */}
-         {isGenerating && progress && (
-            <div className="p-4 bg-surface-elevated rounded-lg border border-border">
-               <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold">{progress.message || t('rightPanel.video.progress.processing')}</span>
-                  <span className="text-xs text-foreground-muted">{progress.progress}%</span>
-               </div>
-               <div className="w-full bg-surface-sunken rounded-full h-2 overflow-hidden">
-                  <div
-                     className="bg-foreground h-full transition-all duration-300"
-                     style={{ width: `${progress.progress}%` }}
-                  />
-               </div>
-               {progress.estimatedTimeRemaining && (
-                  <div className="text-[10px] text-foreground-muted mt-2">
-                     {t('rightPanel.video.progress.eta', { seconds: Math.ceil(progress.estimatedTimeRemaining) })}
-                  </div>
-               )}
-            </div>
-         )}
-
-         {/* 8. Output Preview & History */}
-         {video.generatedVideoUrl && !isGenerating && (
-            <div>
-               <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-                  {t('rightPanel.video.output.title')}
-               </label>
-               <div className="space-y-3">
-                  <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-border">
-                     <video
-                        src={video.generatedVideoUrl}
-                        controls
-                        className="w-full h-full"
-                     />
-                  </div>
-                  <button
-                     onClick={() => downloadFile(video.generatedVideoUrl!, `video-${Date.now()}.mp4`)}
-                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-foreground text-background rounded-lg font-bold text-xs hover:opacity-90 transition-opacity"
-                  >
-                     <Download size={14} />
-                     {t('rightPanel.video.output.download')}
-                  </button>
-               </div>
-            </div>
-         )}
-
-         {/* Generation History */}
-         {video.generationHistory.length > 0 && (
-            <div>
-               <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
-                  {t('rightPanel.video.output.recentGenerations')}
-               </label>
-               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {video.generationHistory.slice(-6).reverse().map((item) => (
-                     <div
-                        key={item.id}
-                        className="relative aspect-video bg-black rounded overflow-hidden border border-border cursor-pointer hover:border-foreground-muted transition-colors group"
-                        onClick={() => updateVideo({ generatedVideoUrl: item.url })}
-                     >
-                        <video src={item.url} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                           <div className="text-white text-[10px] font-bold">{t('rightPanel.video.output.load')}</div>
-                        </div>
-                     </div>
-                  ))}
-               </div>
-            </div>
-         )}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
-   );
+    </div>
+  );
+}
+
+// ── Toggle row ────────────────────────────────────────────────────────────────
+interface ToggleRowProps {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}
+function ToggleRow({ label, value, onChange }: ToggleRowProps) {
+  return (
+    <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-surface-elevated border border-border">
+      <span className="text-[11px] font-medium text-foreground">{label}</span>
+      <button
+        onClick={() => onChange(!value)}
+        className={cn(
+          'relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none',
+          value ? 'bg-foreground' : 'bg-surface-sunken border border-border'
+        )}
+      >
+        <span className={cn(
+          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200',
+          value ? 'translate-x-4' : 'translate-x-0.5'
+        )} />
+      </button>
+    </div>
+  );
+}
+
+// ── Video player ──────────────────────────────────────────────────────────────
+interface VideoPlayerProps {
+  src: string;
+  onDownload: () => void;
+}
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, onDownload }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Reload when src changes
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.load();
+  }, [src]);
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-border bg-black">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        className="w-full max-h-64 object-contain"
+        style={{ display: 'block' }}
+      />
+      <div className="px-3 py-2.5 bg-surface-elevated border-t border-border flex items-center gap-2">
+        <button
+          onClick={onDownload}
+          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-foreground text-background text-xs font-bold hover:opacity-90 transition-opacity"
+        >
+          <Download size={13} />
+          Download MP4
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ── History thumbnail ─────────────────────────────────────────────────────────
+interface HistoryItemProps {
+  url: string;
+  timestamp: number;
+  onClick: () => void;
+}
+const HistoryItem: React.FC<HistoryItemProps> = ({ url, timestamp, onClick }) => (
+  <button
+    onClick={onClick}
+    className="relative aspect-video rounded-lg overflow-hidden bg-black border border-border hover:border-foreground-muted transition-colors group"
+    title={new Date(timestamp).toLocaleTimeString()}
+  >
+    <video src={url} className="w-full h-full object-cover opacity-80" muted />
+    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+      <Play size={16} className="text-white" fill="white" />
+    </div>
+  </button>
+);
+
+// ── Main panel ────────────────────────────────────────────────────────────────
+export const VideoPanel = () => {
+  const { state, dispatch } = useAppStore();
+  const video = state.workflow.videoState;
+  const isLocked = !video.accessUnlocked;
+  const isGenerating = state.isGenerating;
+  const progress = video.generationProgress;
+
+  if (isLocked) return <VideoLockBanner compact />;
+
+  const updateVideo = (payload: Partial<typeof video>) =>
+    dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
+
+  // ── Veo constraints ──
+  const is4kLocked = video.resolution === '4k' && video.duration < 8;
+
+  return (
+    <div className="space-y-5">
+
+      {/* Header badge */}
+      <div className="flex items-center gap-2 pb-1 border-b border-border">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-elevated border border-border">
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <span className="text-[10px] font-bold tracking-wide text-foreground">Veo 3.1 Preview</span>
+        </div>
+        <span className="text-[9px] text-foreground-muted">Google DeepMind</span>
+      </div>
+
+      {/* ── Duration ── */}
+      <PillGroup
+        label="Duration"
+        value={video.duration}
+        onChange={(v) => updateVideo({ duration: v })}
+        options={[
+          { value: 4, label: '4s' },
+          { value: 6, label: '6s' },
+          { value: 8, label: '8s', hint: 'Required for 4K' },
+        ]}
+      />
+
+      {/* ── Aspect Ratio ── */}
+      <PillGroup
+        label="Aspect Ratio"
+        value={video.aspectRatio}
+        onChange={(v) => updateVideo({ aspectRatio: v as typeof video.aspectRatio })}
+        options={[
+          { value: '16:9', label: '16:9' },
+          { value: '9:16', label: '9:16' },
+        ]}
+      />
+
+      {/* ── Resolution ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Resolution</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {(['720p', '1080p', '4k'] as const).map((res) => {
+            const needs8s = res === '4k' && video.duration < 8;
+            const isActive = video.resolution === res;
+            return (
+              <button
+                key={res}
+                onClick={() => {
+                  if (needs8s) updateVideo({ resolution: res, duration: 8 });
+                  else updateVideo({ resolution: res });
+                }}
+                title={needs8s ? 'Will set duration to 8s' : undefined}
+                className={cn(
+                  'py-2 text-[11px] font-bold rounded-lg border transition-all',
+                  isActive
+                    ? 'bg-foreground text-background border-foreground'
+                    : needs8s
+                      ? 'bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted'
+                      : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+                )}
+              >
+                {res === '4k' ? '4K' : res.toUpperCase()}
+                {needs8s && <span className="block text-[8px] font-normal opacity-60 mt-0.5">needs 8s</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Toggles ── */}
+      <div className="space-y-2">
+        <ToggleRow
+          label="Generate Audio"
+          value={!!video.generateAudio}
+          onChange={(v) => updateVideo({ generateAudio: v })}
+        />
+      </div>
+
+      {/* ── Person Generation ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">People in Scene</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([
+            { value: 'dont_allow', label: 'None' },
+            { value: 'allow_adult', label: 'Adults' },
+            { value: 'allow_all', label: 'All' },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => updateVideo({ personGeneration: opt.value })}
+              className={cn(
+                'py-2 text-[11px] font-bold rounded-lg border transition-all',
+                (video.personGeneration ?? 'allow_adult') === opt.value
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Seed ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Seed</p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            value={video.seed}
+            onChange={(e) => updateVideo({ seed: parseInt(e.target.value) || 0 })}
+            disabled={!video.seedLocked}
+            className="flex-1 h-9 px-3 text-xs bg-surface-elevated border border-border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
+          />
+          <button
+            onClick={() => updateVideo({ seedLocked: !video.seedLocked })}
+            title={video.seedLocked ? 'Unlock seed (random)' : 'Lock seed (reproducible)'}
+            className={cn(
+              'w-9 h-9 flex items-center justify-center rounded-lg border transition-all',
+              video.seedLocked
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted'
+            )}
+          >
+            {video.seedLocked ? <Lock size={13} /> : <Unlock size={13} />}
+          </button>
+        </div>
+        {!video.seedLocked && (
+          <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">Random seed each generation</p>
+        )}
+      </div>
+
+      {/* ── Generation Progress ── */}
+      {isGenerating && progress && (
+        <div className="p-3.5 bg-surface-elevated rounded-xl border border-border space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground truncate pr-2">
+              {progress.message || 'Generating…'}
+            </span>
+            <span className="text-[10px] text-foreground-muted font-mono flex-shrink-0">
+              {Math.round(progress.progress)}%
+            </span>
+          </div>
+          <div className="w-full bg-surface-sunken rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-foreground h-full rounded-full transition-all duration-500"
+              style={{ width: `${progress.progress}%` }}
+            />
+          </div>
+          {progress.estimatedTimeRemaining != null && progress.estimatedTimeRemaining > 0 && (
+            <p className="text-[9px] text-foreground-muted">
+              ~{Math.ceil(progress.estimatedTimeRemaining)}s remaining
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Generated Video Output ── */}
+      {video.generatedVideoUrl && !isGenerating && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Output</p>
+          <VideoPlayer
+            src={video.generatedVideoUrl}
+            onDownload={() => downloadFile(video.generatedVideoUrl!, `veo-${Date.now()}.mp4`)}
+          />
+          <button
+            onClick={() => updateVideo({ generatedVideoUrl: null, generationProgress: null })}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-[10px] text-foreground-muted hover:text-foreground transition-colors"
+          >
+            <RotateCcw size={11} />
+            Clear & generate again
+          </button>
+        </div>
+      )}
+
+      {/* ── Generation History ── */}
+      {video.generationHistory.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">
+            History
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {video.generationHistory.slice(-6).reverse().map((item) => (
+              <HistoryItem
+                key={item.id}
+                url={item.url}
+                timestamp={item.timestamp}
+                onClick={() => updateVideo({ generatedVideoUrl: item.url })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
 };
