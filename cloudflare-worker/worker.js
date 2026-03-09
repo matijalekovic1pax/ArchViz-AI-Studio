@@ -9,7 +9,7 @@
  *
  * Secrets (set via `wrangler secret put`):
  *   JWT_SECRET, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
- *   GEMINI_API_KEY, VERTEX_AI_TOKEN, GOOGLE_PROJECT_ID,
+ *   GEMINI_API_KEY, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_PROJECT_ID,
  *   KLING_PIAPI_API_KEY, KLING_ULAZAI_API_KEY, KLING_WAVESPEEDAI_API_KEY,
  *   CONVERTAPI_SECRET, ILOVEPDF_PUBLIC_KEY
  */
@@ -97,6 +97,91 @@ function base64UrlDecode(str) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+// ─── Vertex AI Service Account Token ─────────────────────────────────────────
+
+// In-memory cache: survives for the lifetime of the worker instance
+let _vertexTokenCache = null; // { token: string, expiresAt: number }
+
+/** Decode standard base64 (not base64url) to Uint8Array */
+function base64Decode(str) {
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Mint a short-lived Google OAuth2 access token from a service account JSON key.
+ * Caches the result for 55 minutes (tokens last 60 min).
+ */
+async function getVertexAccessToken(env) {
+  // Return cached token if still valid
+  if (_vertexTokenCache && _vertexTokenCache.expiresAt > Date.now() + 60_000) {
+    return _vertexTokenCache.token;
+  }
+
+  if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY secret is not set');
+  }
+
+  const sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+  const now = Math.floor(Date.now() / 1000);
+
+  // Build JWT header + payload
+  const header  = base64UrlEncode(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const payload = base64UrlEncode(JSON.stringify({
+    iss:   sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  }));
+  const unsigned = `${header}.${payload}`;
+
+  // Import the RSA private key (PKCS8 PEM → DER bytes)
+  const pemBody = sa.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  const keyBytes = base64Decode(pemBody);
+
+  const rsaKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyBytes,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  // Sign
+  const sigBytes = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    rsaKey,
+    new TextEncoder().encode(unsigned)
+  );
+  const jwt = `${unsigned}.${base64UrlEncode(sigBytes)}`;
+
+  // Exchange JWT for access token
+  const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+
+  if (!tokenResp.ok) {
+    const err = await tokenResp.text();
+    throw new Error(`Service account token exchange failed (${tokenResp.status}): ${err}`);
+  }
+
+  const tokenData = await tokenResp.json();
+  _vertexTokenCache = {
+    token:     tokenData.access_token,
+    expiresAt: Date.now() + (tokenData.expires_in - 60) * 1000,
+  };
+
+  return _vertexTokenCache.token;
 }
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
@@ -311,43 +396,51 @@ async function handleVeoGenerate(request, env) {
       useVertexAi = false,
     } = body;
 
-    // Build instances — support single image, first+last frame interpolation
-    const instance = { prompt };
-    if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
-      // Frame interpolation mode: first and/or last frame
-      instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
-    }
-    if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
-      instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
-    }
-    if (!firstImage && !lastImage && image?.bytesBase64Encoded && image?.mimeType) {
-      // Single image-to-video (only when no interpolation frames provided)
-      instance.image = { bytesBase64Encoded: image.bytesBase64Encoded, mimeType: image.mimeType };
-    }
-
     const parameters = { durationSeconds, aspectRatio, resolution, personGeneration };
     if (seed !== undefined) parameters.seed = seed;
 
+    const instance = { prompt };
+
+    // Auto-route to Vertex AI when:
+    // 1. Service account key is configured, AND
+    // 2. Interpolation frames are provided (firstImage/lastImage), OR caller explicitly requests it
+    const hasInterpolation = !!(firstImage?.bytesBase64Encoded || lastImage?.bytesBase64Encoded);
+    const useVertex = (hasInterpolation || useVertexAi) && env.GOOGLE_SERVICE_ACCOUNT_KEY && env.GOOGLE_PROJECT_ID;
+
     let endpoint, reqHeaders;
 
-    if (useVertexAi && env.VERTEX_AI_TOKEN && env.GOOGLE_PROJECT_ID) {
-      // Vertex AI approach
+    if (useVertex) {
+      // ── Vertex AI path — full interpolation support ──
+      const accessToken = await getVertexAccessToken(env);
       parameters.generateAudio = generateAudio;
       if (numberOfVideos) parameters.sampleCount = numberOfVideos;
       endpoint = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.VERTEX_AI_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'x-goog-user-project': env.GOOGLE_PROJECT_ID,
       };
+      if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
+        instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
+      }
+      if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
+        instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
+      }
+      if (!hasInterpolation && image?.bytesBase64Encoded && image?.mimeType) {
+        instance.image = { bytesBase64Encoded: image.bytesBase64Encoded, mimeType: image.mimeType };
+      }
     } else {
-      // Gemini API approach (recommended)
+      // ── Gemini API path — single image only ──
       if (numberOfVideos) parameters.numberOfVideos = numberOfVideos;
       endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-preview:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
         'x-goog-api-key': env.GEMINI_API_KEY,
       };
+      const refImage = firstImage || image;
+      if (refImage?.bytesBase64Encoded && refImage?.mimeType) {
+        instance.image = { bytesBase64Encoded: refImage.bytesBase64Encoded, mimeType: refImage.mimeType };
+      }
     }
 
     const resp = await fetch(endpoint, {
@@ -409,7 +502,9 @@ async function handleVeoStatus(request, env) {
 /** Check a Veo operation status */
 async function checkVeoOperation(operationName, env, useVertexAi) {
   try {
-    if (useVertexAi) {
+    // Auto-detect Vertex AI operations by their name format (start with "projects/")
+    const isVertexOp = useVertexAi || operationName.startsWith('projects/');
+    if (isVertexOp) {
       return await checkVeoVertexOperation(operationName, env);
     }
     // Gemini API: GET the operation
@@ -434,7 +529,7 @@ async function checkVeoOperation(operationName, env, useVertexAi) {
   }
 }
 
-/** Check Vertex AI operation (legacy) */
+/** Check Vertex AI operation */
 async function checkVeoVertexOperation(operationName, env) {
   try {
     const projectMatch = operationName.match(/projects\/([^/]+)/);
@@ -443,12 +538,13 @@ async function checkVeoVertexOperation(operationName, env) {
     if (!projectMatch || !locationMatch || !modelMatch) {
       return { status: 'error', error: 'Could not parse operation name' };
     }
+    const accessToken = await getVertexAccessToken(env);
     const fetchUrl = `${VERTEX_AI_BASE}/projects/${projectMatch[1]}/locations/${locationMatch[1]}/publishers/google/models/${modelMatch[1]}:fetchPredictOperation`;
     const resp = await fetch(fetchUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.VERTEX_AI_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'x-goog-user-project': env.GOOGLE_PROJECT_ID,
       },
       body: JSON.stringify({ operationName }),
