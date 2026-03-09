@@ -208,9 +208,12 @@ export interface VeoGenerateRequest {
 export interface VeoStatusResult {
   status: 'complete' | 'processing' | 'error';
   videoUrl?: string;
+  videoBase64?: string; // base64-encoded video bytes (Vertex AI embedded response)
+  mimeType?: string;
   operationName?: string;
   expiresAt?: string;
   error?: string;
+  debug?: string;
 }
 
 export async function veoGenerate(request: VeoGenerateRequest): Promise<VeoStatusResult> {

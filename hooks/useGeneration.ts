@@ -1613,7 +1613,7 @@ export function useGeneration(): UseGenerationReturn {
               onProgress: onVideoProgress,
               abortSignal
             }),
-            { timeoutMs: 10 * 60 * 1000 }
+            { timeoutMs: 10 * 60 * 1000, maxRetries: 0 }
           );
           // Store result in video state
           dispatch({

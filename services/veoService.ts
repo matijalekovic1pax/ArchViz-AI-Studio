@@ -153,8 +153,15 @@ class VeoService {
       let rawVideoUrl: string | undefined;
 
       // If complete immediately
-      if (result.status === 'complete' && result.videoUrl) {
-        rawVideoUrl = result.videoUrl;
+      if (result.status === 'complete') {
+        if (result.videoUrl) {
+          rawVideoUrl = result.videoUrl;
+        } else if (result.videoBase64) {
+          // Vertex AI returned embedded base64 bytes — convert to blob URL
+          const mime = result.mimeType || 'video/mp4';
+          const bytes = Uint8Array.from(atob(result.videoBase64), c => c.charCodeAt(0));
+          rawVideoUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        }
       }
 
       // If still processing, poll for completion
@@ -249,8 +256,14 @@ class VeoService {
       try {
         const status = await veoCheckStatus(operationName);
 
-        if (status.status === 'complete' && status.videoUrl) {
-          return status.videoUrl;
+        if (status.status === 'complete') {
+          if (status.videoUrl) return status.videoUrl;
+          if (status.videoBase64) {
+            // Vertex AI embedded base64 bytes — convert to blob URL immediately
+            const mime = status.mimeType || 'video/mp4';
+            const bytes = Uint8Array.from(atob(status.videoBase64), c => c.charCodeAt(0));
+            return URL.createObjectURL(new Blob([bytes], { type: mime }));
+          }
         }
 
         if (status.status === 'error') {

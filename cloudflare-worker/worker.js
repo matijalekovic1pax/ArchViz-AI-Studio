@@ -555,7 +555,11 @@ async function checkVeoVertexOperation(operationName, env) {
       if (data.error) return { status: 'error', error: data.error.message || 'Failed' };
       const videoUrl = extractVertexVideoUrl(data.response);
       if (videoUrl) return { status: 'complete', videoUrl, expiresAt: new Date(Date.now() + 2 * 86400000).toISOString() };
-      return { status: 'error', error: 'No video URL found' };
+      // Fallback: video returned as embedded base64 bytes
+      const embedded = extractVertexVideoBase64(data.response);
+      if (embedded) return { status: 'complete', videoBase64: embedded.base64, mimeType: embedded.mimeType, expiresAt: new Date(Date.now() + 2 * 86400000).toISOString() };
+      // Return raw response in error so we can debug the actual structure
+      return { status: 'error', error: 'No video URL found in response', debug: JSON.stringify(data.response).slice(0, 500) };
     }
     return { status: 'processing', operationName };
   } catch (err) {
@@ -574,9 +578,21 @@ function extractGeminiVideoUrl(response) {
 function extractVertexVideoUrl(response) {
   if (response?.predictions?.[0]) {
     const p = response.predictions[0];
-    return p.videoUrl || p.videoUri || p.video_url || p.video?.url || p.video?.uri || null;
+    // Try all known URI field names (Vertex AI Veo uses various naming)
+    return p.videoUri || p.videoGcsUri || p.videoUrl || p.video_url
+      || p.video?.uri || p.video?.url || null;
   }
   if (response?.video?.url || response?.videoUrl) return response.video?.url || response.videoUrl;
+  return null;
+}
+
+function extractVertexVideoBase64(response) {
+  if (response?.predictions?.[0]) {
+    const p = response.predictions[0];
+    if (p.bytesBase64Encoded) {
+      return { base64: p.bytesBase64Encoded, mimeType: p.mimeType || 'video/mp4' };
+    }
+  }
   return null;
 }
 
@@ -602,10 +618,19 @@ async function handleVeoDownload(request, env) {
     fetchUrl = parsed.toString();
     fetchHeaders = { 'x-goog-api-key': env.GEMINI_API_KEY };
   } else if (videoUrl.startsWith('gs://')) {
-    // Convert gs:// to HTTPS storage URL
+    // Convert gs:// to HTTPS storage URL, auth via service account
     fetchUrl = videoUrl.replace('gs://', 'https://storage.googleapis.com/');
+    if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      const token = await getVertexAccessToken(env);
+      fetchHeaders = { 'Authorization': `Bearer ${token}` };
+    }
   } else if (videoUrl.startsWith('https://storage.googleapis.com/')) {
     fetchUrl = videoUrl;
+    // Vertex AI GCS videos need service account auth (private bucket)
+    if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      const token = await getVertexAccessToken(env);
+      fetchHeaders = { 'Authorization': `Bearer ${token}` };
+    }
   } else {
     return corsResponse(origin, { error: 'URL domain not allowed' }, { status: 403 });
   }
