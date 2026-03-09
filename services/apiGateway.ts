@@ -211,6 +211,7 @@ export interface VeoStatusResult {
   videoBase64?: string; // base64-encoded video bytes (Vertex AI embedded response)
   mimeType?: string;
   operationName?: string;
+  needsBinaryFetch?: boolean; // true when video is ready but needs /api/veo/video fetch
   expiresAt?: string;
   error?: string;
   debug?: string;
@@ -231,6 +232,15 @@ export async function veoDownloadVideo(videoUrl: string): Promise<string> {
   const params = new URLSearchParams({ url: videoUrl });
   const resp = await gatewayFetch(`/api/veo/download?${params}`, { timeoutMs: 180_000 });
   if (!resp.ok) throw new Error(`Video download failed (${resp.status})`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
+/** Fetch a completed Vertex AI Veo video by operation name, returned as a local blob URL */
+export async function veoFetchVideo(operationName: string): Promise<string> {
+  const params = new URLSearchParams({ op: operationName });
+  const resp = await gatewayFetch(`/api/veo/video?${params}`, { timeoutMs: 300_000 }); // 5 min for large videos
+  if (!resp.ok) throw new Error(`Video fetch failed (${resp.status})`);
   const blob = await resp.blob();
   return URL.createObjectURL(blob);
 }

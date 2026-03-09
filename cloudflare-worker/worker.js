@@ -406,6 +406,7 @@ async function handleVeoGenerate(request, env) {
     // 2. Interpolation frames are provided (firstImage/lastImage), OR caller explicitly requests it
     const hasInterpolation = !!(firstImage?.bytesBase64Encoded || lastImage?.bytesBase64Encoded);
     const useVertex = (hasInterpolation || useVertexAi) && env.GOOGLE_SERVICE_ACCOUNT_KEY && env.GOOGLE_PROJECT_ID;
+    console.log(`[veo-generate] hasInterpolation=${hasInterpolation} useVertex=${!!useVertex} project=${env.GOOGLE_PROJECT_ID || 'NOT SET'}`);
 
     let endpoint, reqHeaders;
 
@@ -457,8 +458,9 @@ async function handleVeoGenerate(request, env) {
     }
 
     const data = await resp.json();
+    console.log(`[veo-generate] response: name=${data.name} done=${data.done} error=${JSON.stringify(data.error)}`);
     if (!data.name) {
-      return corsResponse(origin, { status: 'error', error: 'No operation name returned' }, { status: 500 });
+      return corsResponse(origin, { status: 'error', error: 'No operation name returned', debug: JSON.stringify(data).slice(0, 300) }, { status: 500 });
     }
 
     // Quick-poll a few times
@@ -549,18 +551,22 @@ async function checkVeoVertexOperation(operationName, env) {
       },
       body: JSON.stringify({ operationName }),
     });
-    if (!resp.ok) return { status: 'error', error: `API returned ${resp.status}` };
-    const data = await resp.json();
+    const respText = await resp.text();
+    console.log(`[veo-status] fetchPredictOperation status=${resp.status} body=${respText.slice(0, 1000)}`);
+    if (!resp.ok) return { status: 'error', error: `API returned ${resp.status}: ${respText.slice(0, 200)}` };
+    const data = JSON.parse(respText);
     if (data.done) {
       if (data.error) return { status: 'error', error: data.error.message || 'Failed' };
+      const responseKeys = Object.keys(data.response || {});
+      console.log(`[veo-status] done=true response keys=${JSON.stringify(responseKeys)}`);
       const videoUrl = extractVertexVideoUrl(data.response);
       if (videoUrl) return { status: 'complete', videoUrl, expiresAt: new Date(Date.now() + 2 * 86400000).toISOString() };
-      // Fallback: video returned as embedded base64 bytes
-      const embedded = extractVertexVideoBase64(data.response);
-      if (embedded) return { status: 'complete', videoBase64: embedded.base64, mimeType: embedded.mimeType, expiresAt: new Date(Date.now() + 2 * 86400000).toISOString() };
-      // Return raw response in error so we can debug the actual structure
-      return { status: 'error', error: 'No video URL found in response', debug: JSON.stringify(data.response).slice(0, 500) };
+      // Base64 video: don't embed in JSON — return operationName so client can stream binary via /api/veo/video
+      const hasBase64 = !!(data.response?.videos?.[0]?.bytesBase64Encoded || data.response?.predictions?.[0]?.bytesBase64Encoded);
+      if (hasBase64) return { status: 'complete', operationName, needsBinaryFetch: true };
+      return { status: 'error', error: 'No video found in response', debug: JSON.stringify(responseKeys) };
     }
+    console.log(`[veo-status] done=false, still processing`);
     return { status: 'processing', operationName };
   } catch (err) {
     return { status: 'error', error: err.message };
@@ -576,22 +582,28 @@ function extractGeminiVideoUrl(response) {
 }
 
 function extractVertexVideoUrl(response) {
+  // Veo 3.1 actual format: response.videos[0]
+  if (response?.videos?.[0]) {
+    const v = response.videos[0];
+    return v.videoUri || v.videoGcsUri || v.videoUrl || null;
+  }
+  // Legacy predictions format
   if (response?.predictions?.[0]) {
     const p = response.predictions[0];
-    // Try all known URI field names (Vertex AI Veo uses various naming)
-    return p.videoUri || p.videoGcsUri || p.videoUrl || p.video_url
-      || p.video?.uri || p.video?.url || null;
+    return p.videoUri || p.videoGcsUri || p.videoUrl || p.video?.uri || p.video?.url || null;
   }
-  if (response?.video?.url || response?.videoUrl) return response.video?.url || response.videoUrl;
   return null;
 }
 
 function extractVertexVideoBase64(response) {
-  if (response?.predictions?.[0]) {
+  // Veo 3.1 actual format: response.videos[0].bytesBase64Encoded
+  if (response?.videos?.[0]?.bytesBase64Encoded) {
+    return { base64: response.videos[0].bytesBase64Encoded, mimeType: response.videos[0].mimeType || 'video/mp4' };
+  }
+  // Legacy predictions format
+  if (response?.predictions?.[0]?.bytesBase64Encoded) {
     const p = response.predictions[0];
-    if (p.bytesBase64Encoded) {
-      return { base64: p.bytesBase64Encoded, mimeType: p.mimeType || 'video/mp4' };
-    }
+    return { base64: p.bytesBase64Encoded, mimeType: p.mimeType || 'video/mp4' };
   }
   return null;
 }
@@ -1058,6 +1070,202 @@ async function handleFetchUrl(request, env) {
   }
 }
 
+// ─── Route: GET /api/veo/video?op=... (stream binary video from completed Vertex AI op) ─
+
+async function handleVeoVideo(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const operationName = new URL(request.url).searchParams.get('op');
+  if (!operationName) return corsResponse(origin, { error: 'Missing op parameter' }, { status: 400 });
+
+  try {
+    const accessToken = await getVertexAccessToken(env);
+    const projectMatch = operationName.match(/projects\/([^/]+)/);
+    const locationMatch = operationName.match(/locations\/([^/]+)/);
+    const modelMatch = operationName.match(/models\/([^/]+)/);
+    if (!projectMatch || !locationMatch || !modelMatch) {
+      return corsResponse(origin, { error: 'Invalid operation name format' }, { status: 400 });
+    }
+
+    const fetchUrl = `${VERTEX_AI_BASE}/projects/${projectMatch[1]}/locations/${locationMatch[1]}/publishers/google/models/${modelMatch[1]}:fetchPredictOperation`;
+    const resp = await fetch(fetchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'x-goog-user-project': env.GOOGLE_PROJECT_ID,
+      },
+      body: JSON.stringify({ operationName }),
+    });
+
+    if (!resp.ok) {
+      return corsResponse(origin, { error: `fetchPredictOperation failed (${resp.status})` }, { status: resp.status });
+    }
+
+    const data = await resp.json();
+    if (!data.done) return corsResponse(origin, { error: 'Operation not yet complete' }, { status: 202 });
+    if (data.error) return corsResponse(origin, { error: data.error.message || 'Operation failed' }, { status: 500 });
+
+    // Extract base64 bytes from the actual response format
+    const embedded = extractVertexVideoBase64(data.response);
+    if (!embedded) {
+      // Try URL-based response
+      const videoUrl = extractVertexVideoUrl(data.response);
+      if (videoUrl) {
+        // Redirect or proxy the URL
+        const dlResp = await fetch(videoUrl.replace('gs://', 'https://storage.googleapis.com/'), {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        return new Response(dlResp.body, {
+          headers: { ...getCorsHeaders(origin), 'Content-Type': 'video/mp4', 'Content-Disposition': 'inline' },
+        });
+      }
+      return corsResponse(origin, { error: 'No video data in response' }, { status: 500 });
+    }
+
+    // Decode base64 → binary and stream
+    const binaryStr = atob(embedded.base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        ...getCorsHeaders(origin),
+        'Content-Type': embedded.mimeType,
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'private, max-age=172800',
+      },
+    });
+  } catch (err) {
+    return corsResponse(origin, { error: err.message }, { status: 500 });
+  }
+}
+
+// ─── Route: GET /health/vertex/poll?op=... (poll a specific operation, no JWT) ─
+
+async function handleVertexPoll(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const opName = new URL(request.url).searchParams.get('op');
+  if (!opName) return corsResponse(origin, { error: 'Missing op param' }, { status: 400 });
+  try {
+    const accessToken = await getVertexAccessToken(env);
+    const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:fetchPredictOperation`;
+    const resp = await fetch(fetchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'x-goog-user-project': env.GOOGLE_PROJECT_ID,
+      },
+      body: JSON.stringify({ operationName: opName }),
+    });
+    const text = await resp.text();
+    // Don't parse if huge (base64 video) — just show first 2KB
+    const preview = text.slice(0, 2000);
+    const data = JSON.parse(text);
+    // If done, show structure but truncate huge base64 values
+    if (data.done && data.response?.predictions) {
+      const safe = JSON.parse(JSON.stringify(data));
+      safe.response.predictions = (safe.response.predictions || []).map(p => {
+        const copy = { ...p };
+        if (copy.bytesBase64Encoded) copy.bytesBase64Encoded = `[${copy.bytesBase64Encoded.length} chars base64]`;
+        return copy;
+      });
+      return corsResponse(origin, { status: resp.status, done: true, safe });
+    }
+    return corsResponse(origin, { status: resp.status, preview, done: data.done || false });
+  } catch (e) {
+    return corsResponse(origin, { error: e.message }, { status: 500 });
+  }
+}
+
+// ─── Route: GET /health/vertex (diagnostics, no JWT) ─────────────────────────
+
+async function handleVertexDiag(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const result = { steps: [] };
+
+  // Step 1: secrets present?
+  const hasKey = !!env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  const hasProject = !!env.GOOGLE_PROJECT_ID;
+  result.steps.push({ step: 'secrets', hasKey, hasProject, project: env.GOOGLE_PROJECT_ID || null });
+  if (!hasKey || !hasProject) {
+    return corsResponse(origin, { ...result, error: 'Missing secrets' });
+  }
+
+  // Step 2: parse service account JSON
+  let sa;
+  try {
+    sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    result.steps.push({ step: 'parse_sa', ok: true, client_email: sa.client_email, project_id: sa.project_id });
+  } catch (e) {
+    return corsResponse(origin, { ...result, error: 'Invalid GOOGLE_SERVICE_ACCOUNT_KEY JSON: ' + e.message });
+  }
+
+  // Step 3: mint access token
+  let accessToken;
+  try {
+    accessToken = await getVertexAccessToken(env);
+    result.steps.push({ step: 'mint_token', ok: true, tokenPrefix: accessToken.slice(0, 20) + '...' });
+  } catch (e) {
+    return corsResponse(origin, { ...result, error: 'Token mint failed: ' + e.message });
+  }
+
+  // Step 4: probe Vertex AI with a minimal predictLongRunning request
+  // We expect an error (no prompt), but the HTTP status tells us if auth + API + model are reachable
+  try {
+    const probeUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning`;
+    const resp = await fetch(probeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'x-goog-user-project': env.GOOGLE_PROJECT_ID,
+      },
+      body: JSON.stringify({ instances: [{ prompt: '__diag_test__' }], parameters: { durationSeconds: 4, aspectRatio: '16:9' } }),
+    });
+    const body = await resp.text();
+    result.steps.push({ step: 'vertex_predict_probe', status: resp.status, body: body.slice(0, 600) });
+    // 400 = reachable but bad request (expected for minimal payload) → Vertex AI is working
+    // 403 = permission denied (API not enabled or IAM missing)
+    // 404 = model not found / not available in this project
+    // 200/202 = it actually started (great!)
+    if (resp.status === 403 || resp.status === 404) {
+      return corsResponse(origin, { ...result, error: `Vertex AI returned ${resp.status} — see body` });
+    }
+
+    // Step 5: check status via fetchPredictOperation
+    let opName;
+    try { opName = JSON.parse(body).name; } catch {}
+    if (opName) {
+      await sleep(3000); // wait 3s so op has a chance to register
+      try {
+        const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:fetchPredictOperation`;
+        const statusResp = await fetch(fetchUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'x-goog-user-project': env.GOOGLE_PROJECT_ID,
+          },
+          body: JSON.stringify({ operationName: opName }),
+        });
+        const statusBody = await statusResp.text();
+        result.steps.push({ step: 'fetch_predict_operation', status: statusResp.status, body: statusBody.slice(0, 600) });
+        if (!statusResp.ok) {
+          return corsResponse(origin, { ...result, error: `fetchPredictOperation returned ${statusResp.status}` });
+        }
+      } catch (e) {
+        return corsResponse(origin, { ...result, error: 'fetchPredictOperation failed: ' + e.message });
+      }
+    }
+  } catch (e) {
+    return corsResponse(origin, { ...result, error: 'Vertex AI fetch failed: ' + e.message });
+  }
+
+  return corsResponse(origin, { ...result, ok: true });
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
@@ -1087,6 +1295,14 @@ export default {
       return corsResponse(origin, { status: 'ok', timestamp: new Date().toISOString() });
     }
 
+    // Vertex AI diagnostics (no auth required for easy testing)
+    if (path === '/health/vertex' && request.method === 'GET') {
+      return handleVertexDiag(request, env);
+    }
+    if (path === '/health/vertex/poll' && request.method === 'GET') {
+      return handleVertexPoll(request, env);
+    }
+
     // ── Protected routes (JWT required) ──
     const user = await authenticateRequest(request, env);
     if (!user) return unauthorized(origin);
@@ -1101,6 +1317,7 @@ export default {
     if (path === '/api/veo/generate' && request.method === 'POST') return handleVeoGenerate(request, env);
     if (path === '/api/veo/status' && request.method === 'GET') return handleVeoStatus(request, env);
     if (path === '/api/veo/download' && request.method === 'GET') return handleVeoDownload(request, env);
+    if (path === '/api/veo/video' && request.method === 'GET') return handleVeoVideo(request, env);
 
     // Kling video generation
     if (path === '/api/kling/generate' && request.method === 'POST') return handleKlingGenerate(request, env);

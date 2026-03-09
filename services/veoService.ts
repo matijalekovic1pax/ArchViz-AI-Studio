@@ -9,7 +9,7 @@
  */
 
 import type { VideoGenerationProgress, ImageData } from '../types';
-import { veoGenerate, veoCheckStatus, veoDownloadVideo } from './apiGateway';
+import { veoGenerate, veoCheckStatus, veoDownloadVideo, veoFetchVideo } from './apiGateway';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -156,8 +156,9 @@ class VeoService {
       if (result.status === 'complete') {
         if (result.videoUrl) {
           rawVideoUrl = result.videoUrl;
+        } else if (result.needsBinaryFetch && result.operationName) {
+          rawVideoUrl = await veoFetchVideo(result.operationName);
         } else if (result.videoBase64) {
-          // Vertex AI returned embedded base64 bytes — convert to blob URL
           const mime = result.mimeType || 'video/mp4';
           const bytes = Uint8Array.from(atob(result.videoBase64), c => c.charCodeAt(0));
           rawVideoUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
@@ -183,19 +184,15 @@ class VeoService {
         throw new VeoError('Unexpected response from API gateway');
       }
 
-      // Download through proxy to get a local blob URL for playback
-      onProgress?.({
-        phase: 'rendering',
-        progress: 92,
-        message: 'Downloading video...'
-      });
-
+      // Proxy-download if it's a remote URL (not already a blob://)
       let playableUrl = rawVideoUrl;
-      try {
-        playableUrl = await veoDownloadVideo(rawVideoUrl);
-      } catch {
-        // Fallback: use raw URL (may not be directly playable)
-        playableUrl = rawVideoUrl;
+      if (!rawVideoUrl.startsWith('blob:')) {
+        onProgress?.({ phase: 'rendering', progress: 92, message: 'Downloading video...' });
+        try {
+          playableUrl = await veoDownloadVideo(rawVideoUrl);
+        } catch {
+          playableUrl = rawVideoUrl;
+        }
       }
 
       onProgress?.({
@@ -258,8 +255,10 @@ class VeoService {
 
         if (status.status === 'complete') {
           if (status.videoUrl) return status.videoUrl;
+          if (status.needsBinaryFetch && status.operationName) {
+            return await veoFetchVideo(status.operationName);
+          }
           if (status.videoBase64) {
-            // Vertex AI embedded base64 bytes — convert to blob URL immediately
             const mime = status.mimeType || 'video/mp4';
             const bytes = Uint8Array.from(atob(status.videoBase64), c => c.charCodeAt(0));
             return URL.createObjectURL(new Blob([bytes], { type: mime }));
