@@ -559,8 +559,8 @@ export function useGeneration(): UseGenerationReturn {
         throw new DOMException('Request aborted', 'AbortError');
       }
 
-      // Build prompt from state or use provided prompt
-      let basePrompt = options.prompt || (
+      // Build prompt: use user-edited prompt (state.prompt) if set, else provided prompt, else auto-generate
+      let basePrompt = state.prompt?.trim() || options.prompt || (
         state.mode === 'material-validation'
           ? ''
           : generatePrompt(state)

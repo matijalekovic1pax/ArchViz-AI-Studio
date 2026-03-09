@@ -910,7 +910,8 @@ const initialState: AppState = {
 
 function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default' };
+    case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default', prompt: '' };
+    case 'SET_PROMPT': return { ...state, prompt: action.payload };
     case 'SET_STYLE': return { ...state, activeStyleId: action.payload };
     case 'SET_IMAGE': return { ...state, uploadedImage: action.payload };
     case 'SET_SOURCE_IMAGE': return { ...state, sourceImage: action.payload };

@@ -46,6 +46,11 @@ export const BottomPanel: React.FC = () => {
     }
   }, [isPromptEdited, prompt]);
 
+  // Reset edited state when mode changes
+  useEffect(() => {
+    setIsPromptEdited(false);
+  }, [state.mode]);
+
   const toggleHistorySelection = useCallback((id: string) => {
     setSelectedHistoryIds((prev) => {
       const next = new Set(prev);
@@ -95,6 +100,7 @@ export const BottomPanel: React.FC = () => {
               onChange={(event) => {
                 setEditablePrompt(event.target.value);
                 setIsPromptEdited(true);
+                dispatch({ type: 'SET_PROMPT', payload: event.target.value });
               }}
               className="w-full h-full resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground-secondary focus:outline-none"
             />
@@ -112,6 +118,7 @@ export const BottomPanel: React.FC = () => {
                 onClick={() => {
                   setEditablePrompt(prompt);
                   setIsPromptEdited(false);
+                  dispatch({ type: 'SET_PROMPT', payload: '' });
                 }}
               >
                 <RotateCcw size={14} />

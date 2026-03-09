@@ -1413,4 +1413,5 @@ export type Action =
   | { type: 'LOAD_PROJECT'; payload: AppState }
   | { type: 'RESET_PROJECT' }
   // Document Translation
-  | { type: 'UPDATE_DOCUMENT_TRANSLATE'; payload: Partial<DocumentTranslateState> };
+  | { type: 'UPDATE_DOCUMENT_TRANSLATE'; payload: Partial<DocumentTranslateState> }
+  | { type: 'SET_PROMPT'; payload: string };
