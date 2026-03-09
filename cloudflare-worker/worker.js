@@ -304,15 +304,24 @@ async function handleVeoGenerate(request, env) {
   try {
     const body = await request.json();
     const {
-      prompt, image, durationSeconds = 8, aspectRatio = '16:9',
+      prompt, image, firstImage, lastImage,
+      durationSeconds = 8, aspectRatio = '16:9',
       resolution = '1080p', generateAudio = false,
       personGeneration = 'allow_adult', seed, numberOfVideos,
       useVertexAi = false,
     } = body;
 
-    // Build instances
+    // Build instances — support single image, first+last frame interpolation
     const instance = { prompt };
-    if (image?.bytesBase64Encoded && image?.mimeType) {
+    if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
+      // Frame interpolation mode: first and/or last frame
+      instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
+    }
+    if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
+      instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
+    }
+    if (!firstImage && !lastImage && image?.bytesBase64Encoded && image?.mimeType) {
+      // Single image-to-video (only when no interpolation frames provided)
       instance.image = { bytesBase64Encoded: image.bytesBase64Encoded, mimeType: image.mimeType };
     }
 

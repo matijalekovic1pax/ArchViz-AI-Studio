@@ -1558,9 +1558,23 @@ export function useGeneration(): UseGenerationReturn {
           }
         }
 
+        // Prepare start/end frames for Veo interpolation (image-morph mode)
+        let startFrame: ImageData | undefined;
+        let endFrame: ImageData | undefined;
+        if (videoState.inputMode === 'image-morph' && videoState.model === 'veo-2') {
+          if (videoState.startFrame) {
+            const sf = dataUrlToImageData(videoState.startFrame);
+            if (sf) startFrame = { ...sf, dataUrl: videoState.startFrame };
+          }
+          if (videoState.endFrame) {
+            const ef = dataUrlToImageData(videoState.endFrame);
+            if (ef) endFrame = { ...ef, dataUrl: videoState.endFrame };
+          }
+        }
+
         // Prepare keyframes for multi-frame modes
         let keyframes: ImageData[] | undefined;
-        if (videoState.inputMode !== 'image-animate' && videoState.keyframes.length > 0) {
+        if (videoState.inputMode !== 'image-animate' && videoState.inputMode !== 'image-morph' && videoState.keyframes.length > 0) {
           keyframes = videoState.keyframes
             .map((kf) => dataUrlToImageData(kf.url))
             .filter((img): img is ImageData => img !== null);
@@ -1583,6 +1597,8 @@ export function useGeneration(): UseGenerationReturn {
               prompt: fullPrompt,
               inputImage,
               keyframes,
+              startFrame,
+              endFrame,
               duration: videoState.duration,
               resolution: videoState.resolution,
               fps: videoState.fps,

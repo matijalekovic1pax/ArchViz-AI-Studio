@@ -38,6 +38,8 @@ export interface VideoGenerationOptions {
   prompt: string;
   inputImage?: ImageData;
   keyframes?: ImageData[];
+  startFrame?: ImageData; // First frame for Veo interpolation
+  endFrame?: ImageData;   // Last frame for Veo interpolation
   duration: number;
   resolution: '720p' | '1080p' | '4k';
   fps: 24 | 30 | 60;
@@ -116,6 +118,8 @@ class VideoGenerationService {
     const veoOptions: VeoGenerationOptions = {
       prompt: options.prompt,
       inputImage: options.inputImage,
+      startFrame: options.startFrame,
+      endFrame: options.endFrame,
       duration: Math.min(options.duration, 8), // Veo max: 8s
       aspectRatio: options.aspectRatio,
       resolution: options.resolution,

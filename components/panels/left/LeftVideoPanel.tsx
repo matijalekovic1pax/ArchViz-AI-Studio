@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
@@ -9,7 +9,7 @@ import {
    Wand2, Camera, Layers, Film, Trash2, Plus,
    Linkedin, Instagram, Video as VideoIcon, Youtube, Globe,
    Zap, Wind, Sparkles, Star, Clapperboard,
-   Lock, Unlock, Eye
+   Lock, Unlock, Eye, Upload, X, ArrowRight
 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import type { SocialMediaPlatform, MotionStyle, SocialMediaPreset } from '../../../types';
@@ -19,7 +19,7 @@ const SOCIAL_PRESETS: SocialMediaPreset[] = [
    {
       platform: 'linkedin',
       aspectRatio: '16:9',
-      duration: 10,
+      duration: 8,
       resolution: '1080p',
       fps: 30,
       description: 'Professional horizontal video for posts'
@@ -27,7 +27,7 @@ const SOCIAL_PRESETS: SocialMediaPreset[] = [
    {
       platform: 'instagram-story',
       aspectRatio: '9:16',
-      duration: 15,
+      duration: 8,
       resolution: '1080p',
       fps: 30,
       description: 'Vertical story format'
@@ -35,7 +35,7 @@ const SOCIAL_PRESETS: SocialMediaPreset[] = [
    {
       platform: 'instagram-post',
       aspectRatio: '1:1',
-      duration: 15,
+      duration: 6,
       resolution: '1080p',
       fps: 30,
       description: 'Square feed post'
@@ -43,7 +43,7 @@ const SOCIAL_PRESETS: SocialMediaPreset[] = [
    {
       platform: 'tiktok',
       aspectRatio: '9:16',
-      duration: 15,
+      duration: 8,
       resolution: '1080p',
       fps: 30,
       description: 'Short-form vertical'
@@ -51,15 +51,15 @@ const SOCIAL_PRESETS: SocialMediaPreset[] = [
    {
       platform: 'youtube-shorts',
       aspectRatio: '9:16',
-      duration: 15,
+      duration: 8,
       resolution: '1080p',
       fps: 30,
       description: 'YouTube vertical'
    },
    {
       platform: 'website-hero',
-      aspectRatio: '21:9',
-      duration: 10,
+      aspectRatio: '16:9',
+      duration: 8,
       resolution: '1080p',
       fps: 24,
       description: 'Cinematic banner'
@@ -91,6 +91,97 @@ const getPlatformIcon = (platform: SocialMediaPlatform) => {
    }
 };
 
+// ── Frame Upload Drop Zone ────────────────────────────────────────────────────
+
+interface FrameUploadZoneProps {
+   label: string;
+   badge: string;
+   value: string | null;
+   onChange: (dataUrl: string | null) => void;
+   disabled?: boolean;
+}
+
+const FrameUploadZone: React.FC<FrameUploadZoneProps> = ({ label, badge, value, onChange, disabled }) => {
+   const inputRef = useRef<HTMLInputElement>(null);
+
+   const handleFile = useCallback((file: File) => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+         if (e.target?.result) onChange(e.target.result as string);
+      };
+      reader.readAsDataURL(file);
+   }, [onChange]);
+
+   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files?.[0]) handleFile(e.target.files[0]);
+      e.target.value = '';
+   };
+
+   const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      if (disabled) return;
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+   };
+
+   const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+   };
+
+   return (
+      <div className="flex-1 min-w-0">
+         <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">{label}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-sunken text-foreground-muted font-mono">{badge}</span>
+         </div>
+         <div
+            className={cn(
+               "relative aspect-video rounded-lg border-2 overflow-hidden transition-all cursor-pointer group",
+               value
+                  ? "border-foreground"
+                  : "border-dashed border-border hover:border-foreground-muted",
+               disabled && "opacity-40 cursor-not-allowed"
+            )}
+            onClick={() => !disabled && inputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+         >
+            {value ? (
+               <>
+                  <img src={value} alt={label} className="w-full h-full object-cover" />
+                  {/* Overlay with remove button */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
+                     <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onChange(null); }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 bg-red-500/90 text-white rounded-full transition-opacity hover:bg-red-600"
+                     >
+                        <X size={12} />
+                     </button>
+                  </div>
+               </>
+            ) : (
+               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-foreground-muted">
+                  <Upload size={16} />
+                  <span className="text-[9px] font-medium">Drop or click</span>
+               </div>
+            )}
+         </div>
+         <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleInputChange}
+            disabled={disabled}
+         />
+      </div>
+   );
+};
+
+// ── Main Panel ────────────────────────────────────────────────────────────────
+
 export const LeftVideoPanel = () => {
    const { state, dispatch } = useAppStore();
    const { t } = useTranslation();
@@ -99,6 +190,7 @@ export const LeftVideoPanel = () => {
    const updateVideo = (payload: Partial<typeof video>) => dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
    const updateCamera = (payload: Partial<typeof video.camera>) => dispatch({ type: 'UPDATE_VIDEO_CAMERA', payload });
    const fileInputRef = useRef<HTMLInputElement>(null);
+   const isVeo = video.model === 'veo-2';
 
    if (isLocked) {
       return <VideoLockBanner compact />;
@@ -143,6 +235,10 @@ export const LeftVideoPanel = () => {
       });
    };
 
+   const isInterpolationMode = video.inputMode === 'image-morph' && isVeo;
+   const hasStartFrame = !!video.startFrame;
+   const hasEndFrame = !!video.endFrame;
+
    return (
       <div className="space-y-6">
          {/* Social Media Presets */}
@@ -185,37 +281,94 @@ export const LeftVideoPanel = () => {
             </div>
          </div>
 
-         {/* Video Mode */}
+         {/* Video Input Mode */}
          <div>
             <SectionHeader title={t('rightPanel.video.inputMode.title')} />
             <div className="space-y-2">
                {[
                   {id: 'image-animate', label: t('rightPanel.video.inputMode.imageAnimate'), description: t('rightPanel.video.inputMode.descriptions.imageAnimate'), icon: Wand2},
+                  {id: 'image-morph', label: 'Frame Interpolation', description: isVeo ? 'Veo: morph between start & end frame' : 'Not supported by Kling', icon: Layers},
                   {id: 'camera-path', label: t('rightPanel.video.inputMode.cameraPath'), description: t('rightPanel.video.inputMode.descriptions.cameraPath'), icon: Camera},
-                  {id: 'image-morph', label: t('rightPanel.video.inputMode.imageMorph'), description: t('rightPanel.video.inputMode.descriptions.imageMorph'), icon: Layers},
                   {id: 'multi-shot', label: t('rightPanel.video.inputMode.multiShot'), description: t('rightPanel.video.inputMode.descriptions.multiShot'), icon: Film},
-               ].map(m => (
-                  <button
-                     key={m.id}
-                     onClick={() => updateVideo({ inputMode: m.id as any })}
-                     className={cn(
-                        "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
-                        video.inputMode === m.id
-                           ? "bg-surface-elevated border-foreground shadow-sm"
-                           : "bg-background-tertiary border-transparent hover:bg-surface-elevated hover:border-border"
-                     )}
-                  >
-                     <div className={cn("p-2 rounded-full", video.inputMode === m.id ? "bg-foreground text-background" : "bg-surface-sunken text-foreground-muted")}>
-                        <m.icon size={16} />
-                     </div>
-                     <div>
-                        <div className="text-xs font-bold">{m.label}</div>
-                        <div className="text-[10px] text-foreground-muted">{m.description}</div>
-                     </div>
-                  </button>
-               ))}
+               ].map(m => {
+                  const isDisabled = m.id === 'image-morph' && !isVeo;
+                  return (
+                     <button
+                        key={m.id}
+                        onClick={() => !isDisabled && updateVideo({ inputMode: m.id as any })}
+                        disabled={isDisabled}
+                        className={cn(
+                           "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                           video.inputMode === m.id
+                              ? "bg-surface-elevated border-foreground shadow-sm"
+                              : isDisabled
+                                 ? "bg-background-tertiary border-transparent opacity-40 cursor-not-allowed"
+                                 : "bg-background-tertiary border-transparent hover:bg-surface-elevated hover:border-border"
+                        )}
+                     >
+                        <div className={cn("p-2 rounded-full flex-shrink-0", video.inputMode === m.id ? "bg-foreground text-background" : "bg-surface-sunken text-foreground-muted")}>
+                           <m.icon size={16} />
+                        </div>
+                        <div className="min-w-0">
+                           <div className="text-xs font-bold">{m.label}</div>
+                           <div className="text-[10px] text-foreground-muted truncate">{m.description}</div>
+                        </div>
+                     </button>
+                  );
+               })}
             </div>
          </div>
+
+         {/* ── Frame Interpolation Upload (image-morph + Veo only) ── */}
+         {isInterpolationMode && (
+            <div>
+               <SectionHeader title="Start & End Frames" />
+
+               {/* Info banner */}
+               <div className="mb-3 p-2.5 rounded-lg bg-surface-elevated border border-border text-[10px] text-foreground-muted leading-relaxed">
+                  <strong className="text-foreground">Veo 3.1 Frame Interpolation</strong> — Upload a start frame and end frame. Veo will generate a smooth video transition between them.
+               </div>
+
+               {/* Two-column frame upload */}
+               <div className="flex gap-3 items-start mb-3">
+                  <FrameUploadZone
+                     label="Start Frame"
+                     badge="frame 1"
+                     value={video.startFrame}
+                     onChange={(url) => updateVideo({ startFrame: url })}
+                  />
+
+                  {/* Arrow between the two zones */}
+                  <div className="flex items-center justify-center pt-7 flex-shrink-0">
+                     <ArrowRight size={16} className="text-foreground-muted" />
+                  </div>
+
+                  <FrameUploadZone
+                     label="End Frame"
+                     badge="last frame"
+                     value={video.endFrame}
+                     onChange={(url) => updateVideo({ endFrame: url })}
+                  />
+               </div>
+
+               {/* Validation hint */}
+               {(!hasStartFrame || !hasEndFrame) && (
+                  <p className="text-[10px] text-foreground-muted bg-surface-sunken rounded p-2 text-center">
+                     {!hasStartFrame && !hasEndFrame
+                        ? 'Upload both frames to enable interpolation'
+                        : !hasStartFrame
+                           ? 'Upload a start frame'
+                           : 'Upload an end frame'}
+                  </p>
+               )}
+
+               {hasStartFrame && hasEndFrame && (
+                  <p className="text-[10px] text-green-500 bg-surface-sunken rounded p-2 text-center font-medium">
+                     Ready — both frames uploaded
+                  </p>
+               )}
+            </div>
+         )}
 
          {/* Motion Style Presets */}
          <div>
@@ -247,14 +400,14 @@ export const LeftVideoPanel = () => {
             </div>
          </div>
 
-         {/* Input Sequence (for non-image-animate modes) */}
-         {video.inputMode !== 'image-animate' && (
+         {/* Input Sequence (multi-shot and camera-path) */}
+         {(video.inputMode === 'multi-shot' || video.inputMode === 'camera-path') && (
             <div>
                <SectionHeader title={t('rightPanel.video.inputSequence.title')} />
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {video.keyframes.map((frame, i) => (
                      <div key={frame.id} className="relative group aspect-video bg-black rounded overflow-hidden border border-border">
-                        <img src={frame.url} className="w-full h-full object-cover opacity-80" />
+                        <img src={frame.url} className="w-full h-full object-cover opacity-80" alt={`Keyframe ${i+1}`} />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity">
                            <button
                               onClick={() => updateVideo({ keyframes: video.keyframes.filter(k => k.id !== frame.id) })}

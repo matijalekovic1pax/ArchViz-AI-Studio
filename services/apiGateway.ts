@@ -193,6 +193,8 @@ export async function geminiGetOperation(operationName: string): Promise<any> {
 export interface VeoGenerateRequest {
   prompt: string;
   image?: { bytesBase64Encoded: string; mimeType: string };
+  firstImage?: { bytesBase64Encoded: string; mimeType: string };
+  lastImage?: { bytesBase64Encoded: string; mimeType: string };
   durationSeconds?: number;
   aspectRatio?: string;
   resolution?: string;

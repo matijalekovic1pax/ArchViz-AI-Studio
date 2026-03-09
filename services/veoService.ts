@@ -30,6 +30,8 @@ export class VeoError extends Error {
 export interface VeoGenerationOptions {
   prompt: string;
   inputImage?: ImageData;
+  startFrame?: ImageData; // First frame for interpolation (image-morph mode)
+  endFrame?: ImageData;   // Last frame for interpolation (image-morph mode)
   duration?: number; // 5-8 seconds
   aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' | '21:9';
   resolution?: '720p' | '1080p' | '4k';
@@ -61,6 +63,8 @@ class VeoService {
     const {
       prompt,
       inputImage,
+      startFrame,
+      endFrame,
       duration = 8,
       aspectRatio = '16:9',
       resolution = '1080p',
@@ -72,17 +76,21 @@ class VeoService {
       abortSignal
     } = options;
 
+    const isInterpolation = !!(startFrame || endFrame);
+
     onProgress?.({
       phase: 'initializing',
       progress: 0,
-      message: 'Initializing Veo 3.1 video generation...'
+      message: isInterpolation
+        ? 'Initializing Veo 3.1 frame interpolation...'
+        : 'Initializing Veo 3.1 video generation...'
     });
 
     try {
       // Validate and adjust duration
       let validDuration: number;
-      if (inputImage) {
-        // Image-to-video: snap to nearest valid duration (4, 6, or 8)
+      if (inputImage || isInterpolation) {
+        // Image-to-video / interpolation: snap to nearest valid duration (4, 6, or 8)
         if (duration <= 5) validDuration = 4;
         else if (duration <= 7) validDuration = 6;
         else validDuration = 8;
@@ -91,26 +99,30 @@ class VeoService {
         validDuration = Math.min(Math.max(4, duration), 8);
       }
 
-      // Prepare image data for the gateway
-      let imageData: { bytesBase64Encoded: string; mimeType: string } | undefined;
-      if (inputImage) {
+      /** Helper: convert an ImageData to { bytesBase64Encoded, mimeType } */
+      const toApiImage = (img: ImageData): { bytesBase64Encoded: string; mimeType: string } | undefined => {
         let base64Data: string | undefined;
         let mimeType: string | undefined;
 
-        if (inputImage.dataUrl) {
-          const match = inputImage.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (img.dataUrl) {
+          const match = img.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
           if (match) {
             [, mimeType, base64Data] = match;
           }
-        } else if (inputImage.base64 && inputImage.mimeType) {
-          base64Data = inputImage.base64;
-          mimeType = inputImage.mimeType;
+        } else if (img.base64 && img.mimeType) {
+          base64Data = img.base64;
+          mimeType = img.mimeType;
         }
 
         if (base64Data && mimeType) {
-          imageData = { bytesBase64Encoded: base64Data, mimeType };
+          return { bytesBase64Encoded: base64Data, mimeType };
         }
-      }
+      };
+
+      // Prepare image data for the gateway
+      const imageData = inputImage ? toApiImage(inputImage) : undefined;
+      const firstImageData = startFrame ? toApiImage(startFrame) : undefined;
+      const lastImageData = endFrame ? toApiImage(endFrame) : undefined;
 
       onProgress?.({
         phase: 'processing',
@@ -122,6 +134,8 @@ class VeoService {
       const result = await veoGenerate({
         prompt,
         image: imageData,
+        firstImage: firstImageData,
+        lastImage: lastImageData,
         durationSeconds: validDuration,
         aspectRatio,
         resolution,

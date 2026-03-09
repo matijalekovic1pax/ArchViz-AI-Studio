@@ -32,6 +32,9 @@ export const VideoPanel = () => {
    const isKling = video.model === 'kling-2.6';
    const maxDuration = isVeo ? 8 : 10;
    const supportsCameraControls = isKling;
+   const isInterpolationMode = isVeo && video.inputMode === 'image-morph';
+   const hasStartFrame = !!video.startFrame;
+   const hasEndFrame = !!video.endFrame;
 
    // Duration options based on model
    // Veo 3.1: Supports 4, 6, or 8 seconds (8 seconds for high-fidelity 720p/1080p/4K)
@@ -97,8 +100,8 @@ export const VideoPanel = () => {
                         : "bg-background-tertiary border-border hover:bg-surface-elevated"
                   )}
                >
-                  <div className="text-xs font-bold mb-0.5">{t('rightPanel.video.model.veo.name')}</div>
-                  <div className="text-[10px] text-foreground-muted">{t('rightPanel.video.model.veo.description')}</div>
+                  <div className="text-xs font-bold mb-0.5">Veo 3.1</div>
+                  <div className="text-[10px] text-foreground-muted">Google · 4K · 8s · Audio</div>
                </button>
                <button
                   onClick={() => updateVideo({ model: 'kling-2.6' })}
@@ -423,6 +426,29 @@ export const VideoPanel = () => {
                </div>
             )}
          </div>
+
+         {/* Frame Interpolation status */}
+         {isInterpolationMode && (
+            <div className={cn(
+               "p-3 rounded-lg border text-[10px] leading-snug",
+               hasStartFrame && hasEndFrame
+                  ? "bg-surface-elevated border-foreground text-foreground"
+                  : "bg-surface-sunken border-border text-foreground-muted"
+            )}>
+               <div className="font-bold mb-1">Frame Interpolation</div>
+               <div className="flex items-center gap-2">
+                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", hasStartFrame ? "bg-green-500" : "bg-border")} />
+                  <span>Start frame {hasStartFrame ? '✓' : '— not uploaded'}</span>
+               </div>
+               <div className="flex items-center gap-2 mt-1">
+                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", hasEndFrame ? "bg-green-500" : "bg-border")} />
+                  <span>End frame {hasEndFrame ? '✓' : '— not uploaded'}</span>
+               </div>
+               {!(hasStartFrame && hasEndFrame) && (
+                  <p className="mt-2 opacity-70">Upload both frames in the left panel to enable interpolation.</p>
+               )}
+            </div>
+         )}
 
          {/* 7. Generation Progress */}
          {isGenerating && progress && (
