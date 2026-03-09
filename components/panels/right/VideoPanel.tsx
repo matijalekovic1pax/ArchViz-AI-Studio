@@ -52,21 +52,27 @@ interface ToggleRowProps {
 }
 function ToggleRow({ label, value, onChange }: ToggleRowProps) {
   return (
-    <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-surface-elevated border border-border">
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg bg-surface-elevated border border-border hover:border-foreground/30 transition-colors"
+    >
       <span className="text-[11px] font-medium text-foreground">{label}</span>
-      <button
-        onClick={() => onChange(!value)}
+      {/* Toggle pill */}
+      <span
         className={cn(
-          'relative w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none',
-          value ? 'bg-foreground' : 'bg-surface-sunken border border-border'
+          'flex-shrink-0 inline-flex items-center w-10 h-[22px] rounded-full border transition-colors duration-200',
+          value ? 'bg-foreground border-foreground' : 'bg-surface-sunken border-border'
         )}
       >
-        <span className={cn(
-          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-          value ? 'translate-x-4' : 'translate-x-0.5'
-        )} />
-      </button>
-    </div>
+        <span
+          className={cn(
+            'w-[18px] h-[18px] rounded-full bg-white shadow transition-transform duration-200',
+            value ? 'translate-x-[21px]' : 'translate-x-[1px]'
+          )}
+        />
+      </span>
+    </button>
   );
 }
 

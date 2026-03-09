@@ -276,9 +276,16 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   // Video mode validation
   const videoReady = isVideoMode
-    ? (state.workflow.videoState.inputMode === 'image-animate'
-        ? !!state.uploadedImage
-        : state.workflow.videoState.keyframes.length > 0)
+    ? (() => {
+        const vs = state.workflow.videoState;
+        if (vs.inputMode === 'image-animate') {
+          return !!(vs.videoInputImage || state.uploadedImage);
+        }
+        if (vs.inputMode === 'image-morph') {
+          return !!(vs.startFrame && vs.endFrame);
+        }
+        return vs.keyframes.length > 0;
+      })()
     : true;
 
   const isDisabled = state.mode === 'material-validation'
