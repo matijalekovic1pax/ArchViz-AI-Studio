@@ -405,39 +405,54 @@ async function handleVeoGenerate(request, env) {
     // 1. Service account key is configured, AND
     // 2. Interpolation frames are provided (firstImage/lastImage), OR caller explicitly requests it
     const hasInterpolation = !!(firstImage?.bytesBase64Encoded || lastImage?.bytesBase64Encoded);
-    const useVertex = (hasInterpolation || useVertexAi) && env.GOOGLE_SERVICE_ACCOUNT_KEY && env.GOOGLE_PROJECT_ID;
-    console.log(`[veo-generate] hasInterpolation=${hasInterpolation} useVertex=${!!useVertex} project=${env.GOOGLE_PROJECT_ID || 'NOT SET'}`);
+    const hasImage       = !!(image?.bytesBase64Encoded);
+    const hasVertexCreds = !!(env.GOOGLE_SERVICE_ACCOUNT_KEY && env.GOOGLE_PROJECT_ID);
+
+    // Route to Vertex AI when:
+    //  - Frame interpolation (firstImage + lastImage) → needs veo-2-generate-preview
+    //  - Single image animate → veo-3.1-generate-preview on Vertex AI
+    //  - Caller explicitly requests Vertex AI
+    const useVertex = (hasInterpolation || hasImage || useVertexAi) && hasVertexCreds;
+
+    // Use Veo 3.1 for all modes (veo-2-generate-preview requires separate project access)
+    const vertexModel = 'veo-3.1-generate-preview';
+
+    console.log(`[veo-generate] hasInterpolation=${hasInterpolation} hasImage=${hasImage} useVertex=${!!useVertex} model=${useVertex ? vertexModel : 'gemini/veo-3.1'} firstImageBytes=${firstImage?.bytesBase64Encoded?.length || 0} lastImageBytes=${lastImage?.bytesBase64Encoded?.length || 0} imageBytes=${image?.bytesBase64Encoded?.length || 0}`);
 
     let endpoint, reqHeaders;
 
     if (useVertex) {
-      // ── Vertex AI path — full interpolation support ──
+      // ── Vertex AI path ──
       const accessToken = await getVertexAccessToken(env);
       parameters.generateAudio = generateAudio;
       if (numberOfVideos) parameters.sampleCount = numberOfVideos;
-      endpoint = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning`;
+      endpoint = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/${vertexModel}:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
         'x-goog-user-project': env.GOOGLE_PROJECT_ID,
       };
-      if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
-        instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
-      }
-      if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
-        instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
-      }
-      if (!hasInterpolation && image?.bytesBase64Encoded && image?.mimeType) {
+      if (hasInterpolation) {
+        // Frame interpolation: firstImage → frame 1, lastImage → frame N
+        if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
+          instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
+        }
+        if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
+          instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
+        }
+      } else if (hasImage) {
+        // Single image animation
         instance.image = { bytesBase64Encoded: image.bytesBase64Encoded, mimeType: image.mimeType };
       }
     } else {
-      // ── Gemini API path — single image only ──
+      // ── Gemini API path (text-to-video fallback) ──
       if (numberOfVideos) parameters.numberOfVideos = numberOfVideos;
       endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-preview:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
         'x-goog-api-key': env.GEMINI_API_KEY,
       };
+      // Single image if provided
       const refImage = firstImage || image;
       if (refImage?.bytesBase64Encoded && refImage?.mimeType) {
         instance.image = { bytesBase64Encoded: refImage.bytesBase64Encoded, mimeType: refImage.mimeType };
@@ -1211,10 +1226,16 @@ async function handleVertexDiag(request, env) {
     return corsResponse(origin, { ...result, error: 'Token mint failed: ' + e.message });
   }
 
-  // Step 4: probe Vertex AI with a minimal predictLongRunning request
-  // We expect an error (no prompt), but the HTTP status tells us if auth + API + model are reachable
+  // Step 4: probe Veo model — optionally test with firstImage/lastImage
+  const modelToProbe = new URL(request.url).searchParams.get('model') || 'veo-3.1-generate-preview';
+  const testInterp = new URL(request.url).searchParams.get('interp') === '1';
+  // 1×1 white JPEG in base64 (minimal valid image for testing)
+  const TINY_JPEG_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEA/8QAIhAAAQMEAgMAAAAAAAAAAAAAAQIDBAUREiExQVH/2gAIAQEAAD8AqGmQyuPvIxlxhRt1kNaKMfEQEEGh3Pn9n//Z';
   try {
-    const probeUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning`;
+    const instance = testInterp
+      ? { prompt: '__diag_interp_test__', firstImage: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' }, lastImage: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' } }
+      : { prompt: '__diag_test__' };
+    const probeUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/${modelToProbe}:predictLongRunning`;
     const resp = await fetch(probeUrl, {
       method: 'POST',
       headers: {
@@ -1222,7 +1243,7 @@ async function handleVertexDiag(request, env) {
         'Authorization': `Bearer ${accessToken}`,
         'x-goog-user-project': env.GOOGLE_PROJECT_ID,
       },
-      body: JSON.stringify({ instances: [{ prompt: '__diag_test__' }], parameters: { durationSeconds: 4, aspectRatio: '16:9' } }),
+      body: JSON.stringify({ instances: [instance], parameters: { durationSeconds: 4, aspectRatio: '16:9' } }),
     });
     const body = await resp.text();
     result.steps.push({ step: 'vertex_predict_probe', status: resp.status, body: body.slice(0, 600) });
