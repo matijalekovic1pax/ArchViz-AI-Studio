@@ -51,6 +51,7 @@ export interface VideoGenerationOptions {
   seed?: number;
   generateAudio?: boolean;
   personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
+  negativePrompt?: string;
   klingProvider: KlingProvider;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
@@ -126,6 +127,7 @@ class VideoGenerationService {
       seed: options.seed,
       generateAudio: options.generateAudio,
       personGeneration: options.personGeneration,
+      negativePrompt: options.negativePrompt,
       responseCount: 1,
       onProgress: options.onProgress,
       abortSignal: options.abortSignal

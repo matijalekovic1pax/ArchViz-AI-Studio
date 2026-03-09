@@ -829,8 +829,9 @@ export interface VideoState {
   seedLocked: boolean;
 
   // Veo 3.1 Specific Parameters
-  generateAudio?: boolean; // Whether to generate audio (default: false)
-  personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all'; // Person generation setting (default: allow_adult)
+  generateAudio?: boolean;
+  personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
+  negativePrompt?: string;
 
   // Veo input images
   videoInputImage: string | null; // base64 data URL for image-animate mode

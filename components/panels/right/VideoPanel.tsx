@@ -231,21 +231,22 @@ export const VideoPanel = () => {
         <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">People in Scene</p>
         <div className="grid grid-cols-3 gap-1.5">
           {([
-            { value: 'dont_allow', label: 'None' },
-            { value: 'allow_adult', label: 'Adults' },
-            { value: 'allow_all', label: 'All' },
+            { value: 'dont_allow',  label: 'Off',              sub: 'no people' },
+            { value: 'allow_adult', label: 'Animate',          sub: 'existing' },
+            { value: 'allow_all',   label: 'Add new',          sub: 'people' },
           ] as const).map((opt) => (
             <button
               key={opt.value}
               onClick={() => updateVideo({ personGeneration: opt.value })}
               className={cn(
-                'py-2 text-[11px] font-bold rounded-lg border transition-all',
+                'py-2 px-1 text-[11px] font-bold rounded-lg border transition-all flex flex-col items-center gap-0.5',
                 (video.personGeneration ?? 'allow_adult') === opt.value
                   ? 'bg-foreground text-background border-foreground'
                   : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
               )}
             >
-              {opt.label}
+              <span>{opt.label}</span>
+              <span className="text-[9px] font-normal opacity-60">{opt.sub}</span>
             </button>
           ))}
         </div>

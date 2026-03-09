@@ -92,8 +92,10 @@ export const BottomPanel: React.FC = () => {
     }
 
     if (!isGenerateTextMode && resolvedBottomTab === 'prompt') {
+      const isVideoMode = state.mode === 'video';
+      const negativePrompt = state.workflow.videoState?.negativePrompt ?? '';
       return (
-        <div className="absolute inset-0 p-4 flex flex-col">
+        <div className="absolute inset-0 p-4 flex flex-col gap-2">
           <div className="relative flex-1 group">
             <textarea
               value={editablePrompt}
@@ -125,6 +127,18 @@ export const BottomPanel: React.FC = () => {
               </button>
             </div>
           </div>
+          {isVideoMode && (
+            <div className="shrink-0 flex items-center gap-2 border-t border-border pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted whitespace-nowrap">Negative</span>
+              <input
+                type="text"
+                value={negativePrompt}
+                placeholder="e.g. blur, watermark, people, text..."
+                onChange={(e) => dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { negativePrompt: e.target.value } })}
+                className="flex-1 h-7 px-2 text-xs bg-transparent font-mono text-foreground-secondary focus:outline-none border border-border rounded placeholder:text-foreground-muted/40"
+              />
+            </div>
+          )}
         </div>
       );
     }

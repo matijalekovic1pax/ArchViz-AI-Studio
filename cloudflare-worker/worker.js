@@ -392,7 +392,7 @@ async function handleVeoGenerate(request, env) {
       prompt, image, firstImage, lastImage,
       durationSeconds = 8, aspectRatio = '16:9',
       resolution = '1080p', generateAudio = false,
-      personGeneration = 'allow_adult', seed, numberOfVideos,
+      personGeneration = 'allow_adult', negativePrompt, seed, numberOfVideos,
       useVertexAi = false,
     } = body;
 
@@ -400,6 +400,7 @@ async function handleVeoGenerate(request, env) {
     if (seed !== undefined) parameters.seed = seed;
 
     const instance = { prompt };
+    if (negativePrompt) instance.negativePrompt = negativePrompt;
 
     // Auto-route to Vertex AI when:
     // 1. Service account key is configured, AND
@@ -433,12 +434,12 @@ async function handleVeoGenerate(request, env) {
         'x-goog-user-project': env.GOOGLE_PROJECT_ID,
       };
       if (hasInterpolation) {
-        // Frame interpolation: firstImage → frame 1, lastImage → frame N
+        // Frame interpolation: Veo API uses `image` for the first frame and `lastFrame` for the last frame
         if (firstImage?.bytesBase64Encoded && firstImage?.mimeType) {
-          instance.firstImage = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
+          instance.image = { bytesBase64Encoded: firstImage.bytesBase64Encoded, mimeType: firstImage.mimeType };
         }
         if (lastImage?.bytesBase64Encoded && lastImage?.mimeType) {
-          instance.lastImage = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
+          instance.lastFrame = { bytesBase64Encoded: lastImage.bytesBase64Encoded, mimeType: lastImage.mimeType };
         }
       } else if (hasImage) {
         // Single image animation
@@ -1233,7 +1234,7 @@ async function handleVertexDiag(request, env) {
   const TINY_JPEG_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEA/8QAIhAAAQMEAgMAAAAAAAAAAAAAAQIDBAUREiExQVH/2gAIAQEAAD8AqGmQyuPvIxlxhRt1kNaKMfEQEEGh3Pn9n//Z';
   try {
     const instance = testInterp
-      ? { prompt: '__diag_interp_test__', firstImage: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' }, lastImage: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' } }
+      ? { prompt: '__diag_interp_test__', image: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' }, lastFrame: { bytesBase64Encoded: TINY_JPEG_B64, mimeType: 'image/jpeg' } }
       : { prompt: '__diag_test__' };
     const probeUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/${modelToProbe}:predictLongRunning`;
     const resp = await fetch(probeUrl, {

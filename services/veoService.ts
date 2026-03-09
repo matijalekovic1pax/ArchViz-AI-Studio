@@ -39,6 +39,7 @@ export interface VeoGenerationOptions {
   responseCount?: number; // 1-4
   generateAudio?: boolean;
   personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
+  negativePrompt?: string;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -72,6 +73,7 @@ class VeoService {
       responseCount = 1,
       generateAudio = false,
       personGeneration = 'allow_adult',
+      negativePrompt,
       onProgress,
       abortSignal
     } = options;
@@ -141,6 +143,7 @@ class VeoService {
         resolution,
         generateAudio,
         personGeneration,
+        negativePrompt: negativePrompt || undefined,
         seed,
         numberOfVideos: responseCount > 1 ? Math.min(Math.max(1, responseCount), 4) : undefined,
       });

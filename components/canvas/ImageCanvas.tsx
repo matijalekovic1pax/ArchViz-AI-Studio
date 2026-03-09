@@ -1291,6 +1291,13 @@ const StandardCanvas: React.FC = () => {
     a.click();
   }, [state.workflow.videoState.generatedVideoUrl]);
 
+  // Reload video element when blob URL changes (React doesn't auto-reload <video> on src change)
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !state.workflow.videoState.generatedVideoUrl) return;
+    el.load();
+  }, [state.workflow.videoState.generatedVideoUrl]);
+
   useEffect(() => {
     if (!state.uploadedImage) {
       updateActiveSelection(null);

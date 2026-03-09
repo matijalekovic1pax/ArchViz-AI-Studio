@@ -200,6 +200,7 @@ export interface VeoGenerateRequest {
   resolution?: string;
   generateAudio?: boolean;
   personGeneration?: string;
+  negativePrompt?: string;
   seed?: number;
   numberOfVideos?: number;
   useVertexAi?: boolean;

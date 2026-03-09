@@ -1589,6 +1589,15 @@ export function useGeneration(): UseGenerationReturn {
           updateProgress(progress.progress);
         };
 
+        // Assign a fresh random seed for this generation (unless the seed is locked)
+        const activeSeed = videoState.seedLocked
+          ? videoState.seed
+          : (() => {
+              const newSeed = Math.floor(Math.random() * 2147483647);
+              dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { seed: newSeed } });
+              return newSeed;
+            })();
+
         try {
           const videoResult = await runWithRetry(
             'video generation',
@@ -1606,9 +1615,10 @@ export function useGeneration(): UseGenerationReturn {
               camera: videoState.camera,
               quality: 'standard',
               transitionEffect: 'none',
-              seed: videoState.seedLocked ? videoState.seed : undefined,
+              seed: activeSeed,
               generateAudio: videoState.generateAudio,
               personGeneration: videoState.personGeneration,
+              negativePrompt: videoState.negativePrompt || undefined,
               klingProvider: 'piapi',
               onProgress: onVideoProgress,
               abortSignal
