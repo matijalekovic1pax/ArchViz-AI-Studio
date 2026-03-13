@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
@@ -162,6 +162,18 @@ const initialPdfCompression: PdfCompressionState = {
   outputs: [],
   remainingFiles: undefined,
   remainingCredits: undefined
+};
+
+const initialHeadshot: HeadshotSettings = {
+  leftImage: null,
+  frontImage: null,
+  rightImage: null,
+  style: 'professional',
+  colorMode: 'color',
+  activityPrompt: '',
+  background: 'studio-grey',
+  quality: 'standard',
+  generatedItems: [],
 };
 
 const initialWorkflow: WorkflowSettings = {
@@ -716,6 +728,9 @@ const initialWorkflow: WorkflowSettings = {
 
   // 14. PDF Compression
   pdfCompression: initialPdfCompression,
+
+  // 15. Headshot Generator
+  headshot: initialHeadshot,
 };
 
 const initialMaterialValidation: MaterialValidationState = {

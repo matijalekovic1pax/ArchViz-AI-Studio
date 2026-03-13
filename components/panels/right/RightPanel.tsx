@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings,
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -21,6 +21,7 @@ import { VideoPanel } from './VideoPanel';
 import { ValidationPanel } from './ValidationPanel';
 import { DocumentTranslatePanel } from './DocumentTranslatePanel';
 import { PdfCompressionPanel } from './PdfCompressionPanel';
+import { HeadshotPanel } from './HeadshotPanel';
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -166,8 +167,14 @@ export const RightPanel: React.FC = () => {
           panelMeta = parts.length > 0 ? parts.join(' / ') : null;
         }
         break;
-      default: 
-        panelTitle = t('rightPanel.settings.title'); 
+      case 'headshot':
+        panelTitle = 'Headshot Studio';
+        PanelIcon = UserCircle;
+        panelDescription = 'Generate professional and custom team headshots from reference photos.';
+        panelContent = <HeadshotPanel />;
+        break;
+      default:
+        panelTitle = t('rightPanel.settings.title');
         panelContent = <div className="p-4 text-center text-xs text-foreground-muted">{t('rightPanel.selectWorkflow')}</div>;
   }
 

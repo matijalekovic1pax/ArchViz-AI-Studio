@@ -215,7 +215,8 @@
     "upscale": "Image Upscaler",
     "imgToCad": "Image to CAD",
     "imgTo3d": "Image to 3D",
-    "video": "Video Studio"
+    "video": "Video Studio",
+    "headshot": "Headshot Studio"
   },
   "leftSidebar": {
     "collapse": "Collapse Sidebar",
@@ -805,6 +806,10 @@
     "pdfCompression": {
       "title": "PDF Compression",
       "description": "Queue PDFs, preview pages, and download compressed outputs."
+    },
+    "headshot": {
+      "title": "Headshot Studio",
+      "description": "Generate professional and custom team headshots from reference photos using AI."
     }
   },
   "pdfCompression": {

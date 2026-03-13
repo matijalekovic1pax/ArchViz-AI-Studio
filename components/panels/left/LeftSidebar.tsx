@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
-  ChevronsLeft, ChevronsRight, Languages, FileDown
+  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -24,6 +24,7 @@ import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from './LeftDocumentTranslatePanel';
 import { LeftPdfCompressionPanel } from './LeftPdfCompressionPanel';
+import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 
 // --- Workflow Navigation ---
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
@@ -43,6 +44,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'img-to-cad', labelKey: 'workflows.imgToCad', icon: PenTool },
   { id: 'img-to-3d', labelKey: 'workflows.imgTo3d', icon: Cuboid },
   { id: 'video', labelKey: 'workflows.video', icon: Video },
+  { id: 'headshot', labelKey: 'workflows.headshot', icon: UserCircle },
 ];
 
 const GenerateTextPanel = () => null;
@@ -72,6 +74,7 @@ export const LeftSidebar: React.FC = () => {
       case 'img-to-cad': return <LeftImageToCADPanel />;
       case 'img-to-3d': return <LeftImageTo3DPanel />;
       case 'video': return <LeftVideoPanel />;
+      case 'headshot': return <LeftHeadshotPanel />;
       default: return <LeftRender3DPanel />;
     }
   };

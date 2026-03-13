@@ -574,13 +574,21 @@ async function checkVeoVertexOperation(operationName, env) {
     if (data.done) {
       if (data.error) return { status: 'error', error: data.error.message || 'Failed' };
       const responseKeys = Object.keys(data.response || {});
-      console.log(`[veo-status] done=true response keys=${JSON.stringify(responseKeys)}`);
+      const video0 = data.response?.videos?.[0] || data.response?.predictions?.[0];
+      console.log(`[veo-status] done=true response keys=${JSON.stringify(responseKeys)} video0 keys=${JSON.stringify(Object.keys(video0 || {}))}`);
+      // RAI content filter blocked the generation
+      if (data.response?.raiMediaFilteredCount > 0) {
+        const reasons = data.response.raiMediaFilteredReasons || [];
+        const reasonStr = reasons.length ? ': ' + reasons.join(', ') : '';
+        console.log(`[veo-status] RAI filter blocked video${reasonStr}`);
+        return { status: 'error', error: `Video blocked by content safety filters${reasonStr}. Try a different prompt or image.` };
+      }
       const videoUrl = extractVertexVideoUrl(data.response);
       if (videoUrl) return { status: 'complete', videoUrl, expiresAt: new Date(Date.now() + 2 * 86400000).toISOString() };
       // Base64 video: don't embed in JSON — return operationName so client can stream binary via /api/veo/video
       const hasBase64 = !!(data.response?.videos?.[0]?.bytesBase64Encoded || data.response?.predictions?.[0]?.bytesBase64Encoded);
       if (hasBase64) return { status: 'complete', operationName, needsBinaryFetch: true };
-      return { status: 'error', error: 'No video found in response', debug: JSON.stringify(responseKeys) };
+      return { status: 'error', error: 'No video found in response', debug: `response keys=${JSON.stringify(responseKeys)} video0 keys=${JSON.stringify(Object.keys(video0 || {}))}` };
     }
     console.log(`[veo-status] done=false, still processing`);
     return { status: 'processing', operationName };
@@ -601,12 +609,13 @@ function extractVertexVideoUrl(response) {
   // Veo 3.1 actual format: response.videos[0]
   if (response?.videos?.[0]) {
     const v = response.videos[0];
-    return v.videoUri || v.videoGcsUri || v.videoUrl || null;
+    // All known field names for GCS / HTTP video URLs
+    return v.gcsUri || v.videoUri || v.videoGcsUri || v.uri || v.videoUrl || v.url || null;
   }
   // Legacy predictions format
   if (response?.predictions?.[0]) {
     const p = response.predictions[0];
-    return p.videoUri || p.videoGcsUri || p.videoUrl || p.video?.uri || p.video?.url || null;
+    return p.gcsUri || p.videoUri || p.videoGcsUri || p.uri || p.videoUrl || p.video?.uri || p.video?.url || null;
   }
   return null;
 }

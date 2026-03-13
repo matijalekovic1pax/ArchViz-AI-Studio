@@ -3687,48 +3687,7 @@ export const VisualEditPanel = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-foreground mb-2 block">Target Aspect Ratio</label>
-                <SegmentedControl
-                  value={wf.visualExtend.targetAspectRatio}
-                  onChange={(value) => handleRatioChange(value)}
-                  options={[
-                    { label: '16:9', value: '16:9' },
-                    { label: '21:9', value: '21:9' },
-                    { label: '4:3', value: '4:3' },
-                    { label: '1:1', value: '1:1' },
-                    { label: '9:16', value: '9:16' },
-                    { label: 'Custom', value: 'custom' },
-                  ]}
-                />
-              </div>
-
-              {wf.visualExtend.targetAspectRatio === 'custom' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    value={wf.visualExtend.customRatio.width}
-                    onChange={(event) =>
-                      updateExtend({ customRatio: { ...wf.visualExtend.customRatio, width: Number(event.target.value) } })
-                    }
-                    className="h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-                    placeholder="Width"
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    value={wf.visualExtend.customRatio.height}
-                    onChange={(event) =>
-                      updateExtend({ customRatio: { ...wf.visualExtend.customRatio, height: Number(event.target.value) } })
-                    }
-                    className="h-8 bg-surface-elevated border border-border rounded text-xs px-2"
-                    placeholder="Height"
-                  />
-                </div>
-              )}
-
-              <div className="rounded-lg border border-border bg-surface-sunken p-3 text-[10px] text-foreground-muted space-y-1">
+<div className="rounded-lg border border-border bg-surface-sunken p-3 text-[10px] text-foreground-muted space-y-1">
                 <div className="flex justify-between">
                   <span>Current</span>
                   <span className="font-mono">
@@ -3756,8 +3715,7 @@ export const VisualEditPanel = () => {
                 max={200}
                 step={1}
                 unit="%"
-                disabled={wf.visualExtend.targetAspectRatio !== 'custom'}
-                onChange={(value) => updateExtend({ amount: value })}
+onChange={(value) => updateExtend({ amount: value })}
               />
 
               <div className="space-y-2">

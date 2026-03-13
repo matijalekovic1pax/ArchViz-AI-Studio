@@ -674,6 +674,24 @@ export function useGeneration(): UseGenerationReturn {
       const isVisualEditMode = state.mode === 'visual-edit';
       const isVideoMode = state.mode === 'video';
       const isPdfCompressionMode = state.mode === 'pdf-compression';
+      const isHeadshotMode = state.mode === 'headshot';
+
+      // Add headshot reference images (front first as primary, then left, then right)
+      if (isHeadshotMode) {
+        const { leftImage, frontImage, rightImage } = state.workflow.headshot;
+        for (const refUrl of [frontImage, leftImage, rightImage]) {
+          if (refUrl) {
+            const imgData = dataUrlToImageData(refUrl);
+            if (imgData) images.push(imgData);
+          }
+        }
+      }
+
+      // Headshot aspect ratio override
+      const headshotAspectRatio: ImageConfig['aspectRatio'] | undefined =
+        isHeadshotMode
+          ? (state.workflow.headshot.style === 'website-custom' ? '16:9' : '3:4')
+          : undefined;
 
       if (isPdfCompressionMode) {
         updateProgress(5);
@@ -915,7 +933,7 @@ export function useGeneration(): UseGenerationReturn {
       };
 
       // Build generation config
-      const generationConfig = buildGenerationConfig(state, aspectRatioOverride);
+      const generationConfig = buildGenerationConfig(state, headshotAspectRatio ?? aspectRatioOverride);
       const generationConfigWithAbort: GenerationConfig = {
         ...generationConfig,
         abortSignal
@@ -1760,6 +1778,28 @@ export function useGeneration(): UseGenerationReturn {
 
         // If multiple images were generated, we could store them elsewhere
         // For now, the first one is the main result
+
+        // Store headshot results in workflow state
+        if (isHeadshotMode) {
+          const newItems = result.images.map(img => ({
+            id: nanoid(),
+            url: img.dataUrl || '',
+            style: state.workflow.headshot.style,
+            colorMode: state.workflow.headshot.colorMode,
+            createdAt: Date.now(),
+          })).filter(item => item.url);
+          if (newItems.length > 0) {
+            dispatch({
+              type: 'UPDATE_WORKFLOW',
+              payload: {
+                headshot: {
+                  ...state.workflow.headshot,
+                  generatedItems: [...state.workflow.headshot.generatedItems, ...newItems],
+                }
+              }
+            });
+          }
+        }
       } else if (result.text) {
         // Text-only result - add as chat message if in text mode
         if (state.mode === 'generate-text') {

@@ -15,7 +15,8 @@ export type GenerationMode =
   | 'video'
   | 'material-validation'
   | 'document-translate'
-  | 'pdf-compression';
+  | 'pdf-compression'
+  | 'headshot';
 
 export interface StyleConfiguration {
   id: string;
@@ -757,6 +758,42 @@ export interface WorkflowSettings {
 
   // 14. PDF Compression
   pdfCompression: PdfCompressionState;
+
+  // 15. Headshot Generator
+  headshot: HeadshotSettings;
+}
+
+export interface HeadshotGeneratedItem {
+  id: string;
+  url: string;
+  style: 'professional' | 'website-custom';
+  colorMode: 'color' | 'black-and-white';
+  createdAt: number;
+}
+
+export interface HeadshotSettings {
+  // Reference images (up to 3 angles)
+  leftImage: string | null;
+  frontImage: string | null;
+  rightImage: string | null;
+
+  // Style
+  style: 'professional' | 'website-custom';
+
+  // Color treatment
+  colorMode: 'color' | 'black-and-white';
+
+  // For website-custom: describes the activity/context
+  activityPrompt: string;
+
+  // Background (professional only)
+  background: 'studio-white' | 'studio-grey' | 'studio-dark' | 'blurred-office' | 'gradient';
+
+  // Quality
+  quality: 'standard' | 'high';
+
+  // Generated results
+  generatedItems: HeadshotGeneratedItem[];
 }
 
 // Video Studio Types
