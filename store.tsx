@@ -170,7 +170,7 @@ const initialHeadshot: HeadshotSettings = {
   rightImage: null,
   style: 'professional',
   colorMode: 'color',
-  activityPrompt: '',
+  role: '',
   background: 'studio-grey',
   quality: 'standard',
   generatedItems: [],

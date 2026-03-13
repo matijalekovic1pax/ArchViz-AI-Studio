@@ -68,13 +68,16 @@ export const LeftHeadshotPanel: React.FC = () => {
             return (
               <div key={key}>
                 {imageUrl ? (
-                  <div className="relative rounded-lg overflow-hidden border border-border group" style={{ height: '96px' }}>
-                    <img
-                      src={imageUrl}
-                      alt={label}
-                      className="w-full h-full object-cover block"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <div
+                    className="relative rounded-lg overflow-hidden border border-border group"
+                    style={{
+                      height: '96px',
+                      backgroundImage: `url(${imageUrl})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button
                         type="button"
                         onClick={() => handleRemove(key)}
@@ -156,9 +159,10 @@ export const LeftHeadshotPanel: React.FC = () => {
                     : 'bg-surface-elevated border-border hover:border-foreground/40'
                 )}
               >
-                <div className="w-10 h-10 rounded bg-surface-sunken overflow-hidden shrink-0">
-                  <img src={item.url} alt={`Headshot ${index + 1}`} className="w-full h-full object-cover" />
-                </div>
+                <div
+                  className="w-10 h-10 rounded bg-surface-sunken overflow-hidden shrink-0"
+                  style={{ backgroundImage: `url(${item.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium truncate capitalize">
                     {item.style === 'website-custom' ? 'Website Custom' : 'Professional'} #{index + 1}

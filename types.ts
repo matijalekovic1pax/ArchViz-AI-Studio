@@ -783,8 +783,8 @@ export interface HeadshotSettings {
   // Color treatment
   colorMode: 'color' | 'black-and-white';
 
-  // For website-custom: describes the activity/context
-  activityPrompt: string;
+  // For website-custom: employee role drives the activity shown
+  role: string;
 
   // Background (professional only)
   background: 'studio-white' | 'studio-grey' | 'studio-dark' | 'blurred-office' | 'gradient';
