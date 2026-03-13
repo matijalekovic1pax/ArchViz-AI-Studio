@@ -7,22 +7,6 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <h3 className="text-[10px] font-bold text-foreground-muted mb-2 uppercase tracking-widest">{children}</h3>
 );
 
-const ROLES = [
-  { value: 'architect',          label: 'Architect',           activity: 'studying architectural plans' },
-  { value: 'senior-architect',   label: 'Senior Architect',    activity: 'reviewing construction drawings' },
-  { value: 'project-manager',    label: 'Project Manager',     activity: 'managing project documents' },
-  { value: 'interior-designer',  label: 'Interior Designer',   activity: 'reviewing material samples' },
-  { value: 'urban-planner',      label: 'Urban Planner',       activity: 'analysing city-scale plans' },
-  { value: 'structural-engineer',label: 'Structural Engineer', activity: 'reviewing engineering calculations' },
-  { value: 'landscape-architect',label: 'Landscape Architect', activity: 'sketching landscape designs' },
-  { value: 'bim-manager',        label: 'BIM Manager',         activity: 'working on 3D building models' },
-  { value: 'designer',           label: 'Designer',            activity: 'sketching design concepts' },
-  { value: 'technician',         label: 'Technician',          activity: 'reviewing technical drawings' },
-  { value: 'consultant',         label: 'Consultant',          activity: 'reviewing professional reports' },
-  { value: 'director',           label: 'Director',            activity: 'studying strategic plans' },
-  { value: 'associate',          label: 'Associate',           activity: 'working through project drawings' },
-  { value: 'intern',             label: 'Intern',              activity: 'studying blueprints and learning' },
-];
 
 export const HeadshotPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -31,8 +15,6 @@ export const HeadshotPanel: React.FC = () => {
 
   const updateHs = (updates: Partial<typeof hs>) =>
     dispatch({ type: 'UPDATE_WORKFLOW', payload: { headshot: { ...hs, ...updates } } });
-
-  const selectedRole = ROLES.find(r => r.value === hs.role);
 
   return (
     <div className="space-y-5 p-1">
@@ -86,38 +68,17 @@ export const HeadshotPanel: React.FC = () => {
       {/* Role (Website Custom only) */}
       {hs.style === 'website-custom' && (
         <div>
-          <SectionTitle>Employee Role</SectionTitle>
+          <SectionTitle>Role Description</SectionTitle>
           <p className="text-[10px] text-foreground-muted mb-2 leading-relaxed">
-            Select the person's role. The scene will show them engaged in role-specific work.
+            Describe the person's role. The scene will show them immersed in role-specific work.
           </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {ROLES.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => updateHs({ role: value })}
-                className={cn(
-                  'px-2 py-1.5 rounded-md border text-left text-[11px] font-medium transition-all leading-tight',
-                  hs.role === value
-                    ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border bg-surface-elevated text-foreground-muted hover:border-foreground-muted hover:text-foreground hover:bg-surface-sunken'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {selectedRole && (
-            <div className="mt-2 px-3 py-2 rounded-md bg-surface-sunken border border-border-subtle">
-              <p className="text-[10px] text-foreground-muted">
-                <span className="font-semibold text-foreground">Scene: </span>
-                {selectedRole.activity}
-              </p>
-            </div>
-          )}
-          {!hs.role && (
-            <p className="mt-1.5 text-[10px] text-foreground-muted/60 text-center">Select a role to define the scene activity.</p>
-          )}
+          <input
+            type="text"
+            value={hs.role}
+            onChange={(e) => updateHs({ role: e.target.value })}
+            placeholder="e.g. Senior Architect, Urban Planner, BIM Manager..."
+            className="w-full h-9 bg-surface-elevated border border-border rounded-md text-xs text-foreground placeholder-foreground-muted/50 px-3 focus:outline-none focus:border-accent"
+          />
         </div>
       )}
 

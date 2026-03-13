@@ -4117,24 +4117,10 @@ function generateHeadshotPrompt(state: AppState): string {
     parts.push('Use the provided reference photographs to accurately reproduce the person\'s facial features, hair color, hair style, and general appearance.');
   } else {
     // website-custom — derive activity from role
-    const roleActivityMap: Record<string, string> = {
-      'architect': 'studying architectural plans spread across a desk, pencil in hand, deeply focused on the drawings',
-      'senior-architect': 'reviewing detailed construction drawings and technical specifications with concentration',
-      'project-manager': 'analysing project documents and timelines, focused on coordinating complex deliverables',
-      'interior-designer': 'examining material samples and colour palettes, absorbed in creative design decisions',
-      'urban-planner': 'carefully studying large-scale city maps and site plans laid out on a table',
-      'structural-engineer': 'reviewing structural calculations and engineering drawings with intense focus',
-      'landscape-architect': 'sketching landscape design concepts, surrounded by site plans and plant references',
-      'bim-manager': 'working intently on a building information model on screen, navigating complex 3D geometry',
-      'designer': 'sketching design concepts by hand in a notebook, fully immersed in creative thought',
-      'technician': 'examining precise technical drawings and construction details with focused attention',
-      'consultant': 'reviewing professional reports and documents, engaged in deep analytical thought',
-      'director': 'thoughtfully studying strategic plans and high-level project overviews',
-      'associate': 'working through architectural drawings and project documents with careful attention',
-      'intern': 'eagerly studying blueprints and technical drawings, learning with focused curiosity',
-    };
-    const role = hs.role?.trim().toLowerCase() || '';
-    const activity = roleActivityMap[role] || (role ? `engaged in ${role}-specific professional work, deeply focused and immersed` : 'studying architectural drawings and blueprints spread across a desk');
+    const role = hs.role?.trim() || '';
+    const activity = role
+      ? `engaged in their role as ${role} — deeply focused and immersed in their specific work`
+      : 'studying architectural drawings and blueprints spread across a desk';
 
     parts.push('Generate a cinematic, editorial team portrait photograph in a wide rectangular landscape format (approximately 16:9 aspect ratio or wider).');
     parts.push('The subject is photographed from the side — a 3/4 or full side profile angle, close-up from roughly chest or shoulder height upward.');
