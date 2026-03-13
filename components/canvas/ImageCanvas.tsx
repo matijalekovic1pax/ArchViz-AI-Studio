@@ -56,8 +56,11 @@ const PromptBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isHistoryOpen]);
 
+  const isHeadshotReady = state.mode === 'headshot' &&
+    Boolean(state.workflow.headshot.leftImage || state.workflow.headshot.frontImage || state.workflow.headshot.rightImage);
+
   const handleGenerate = async () => {
-    if ((!inputText.trim() && attachments.length === 0) || state.isGenerating) return;
+    if ((!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating) return;
 
     const promptText = inputText;
     const promptAttachments = attachments.slice();
@@ -230,10 +233,10 @@ const PromptBar: React.FC = () => {
                     
                     <button 
                         onClick={handleGenerate}
-                        disabled={(!inputText.trim() && attachments.length === 0) || state.isGenerating}
+                        disabled={(!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating}
                         className={cn(
                         "p-3 rounded-full transition-all shrink-0 flex items-center justify-center relative overflow-hidden group",
-                            (!inputText.trim() && attachments.length === 0) || state.isGenerating
+                            (!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating
                                 ? "bg-transparent text-foreground-muted"
                                 : "bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
                         )}
@@ -242,7 +245,7 @@ const PromptBar: React.FC = () => {
                             <RefreshCw size={20} className="animate-spin" />
                         ) : (
                             <div className="relative">
-                                <Sparkles size={20} className={cn((inputText || attachments.length > 0) && "text-accent fill-accent animate-pulse-subtle")} />
+                                <Sparkles size={20} className={cn((inputText || attachments.length > 0 || isHeadshotReady) && "text-accent fill-accent animate-pulse-subtle")} />
                             </div>
                         )}
                     </button>

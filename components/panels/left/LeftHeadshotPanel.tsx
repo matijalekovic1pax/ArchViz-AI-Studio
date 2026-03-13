@@ -23,6 +23,10 @@ export const LeftHeadshotPanel: React.FC = () => {
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
         dispatch({ type: 'UPDATE_WORKFLOW', payload: { headshot: { ...hs, [key]: dataUrl } } });
+        // Mirror the front image to the main canvas so it's visible
+        if (key === 'frontImage') {
+          dispatch({ type: 'SET_IMAGE', payload: dataUrl });
+        }
       };
       reader.readAsDataURL(file);
     },
@@ -64,11 +68,11 @@ export const LeftHeadshotPanel: React.FC = () => {
             return (
               <div key={key}>
                 {imageUrl ? (
-                  <div className="relative rounded-lg overflow-hidden border border-border group">
+                  <div className="relative rounded-lg overflow-hidden border border-border group" style={{ height: '96px' }}>
                     <img
                       src={imageUrl}
                       alt={label}
-                      className="w-full h-24 object-cover"
+                      className="w-full h-full object-cover block"
                     />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                       <button
