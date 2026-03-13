@@ -4122,8 +4122,10 @@ function generateHeadshotPrompt(state: AppState): string {
       ? `engaged in their role as ${role} — deeply focused and immersed in their specific work`
       : 'studying architectural drawings and blueprints spread across a desk';
 
+    const facingDir = hs.facing === 'left' ? 'facing left, profile oriented to the left side of the frame' : 'facing right, profile oriented to the right side of the frame';
+
     parts.push('Generate a cinematic, editorial team portrait photograph in a wide rectangular landscape format (approximately 16:9 aspect ratio or wider).');
-    parts.push('The subject is photographed from the side — a 3/4 or full side profile angle, close-up from roughly chest or shoulder height upward.');
+    parts.push(`The subject is photographed from the side — a close-up side profile, ${facingDir}, from roughly chest or shoulder height upward.`);
     parts.push(`The person appears completely absorbed and immersed in their work: ${activity}.`);
     parts.push('The composition is tight and close-up, showing the face in profile with the subject\'s gaze directed at their work, not the camera.');
     parts.push('The background should be softly blurred (shallow depth of field), suggesting a professional architectural or creative workspace.');

@@ -171,6 +171,7 @@ const initialHeadshot: HeadshotSettings = {
   style: 'professional',
   colorMode: 'color',
   role: '',
+  facing: 'right',
   background: 'studio-grey',
   quality: 'standard',
   generatedItems: [],

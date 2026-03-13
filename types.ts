@@ -786,6 +786,9 @@ export interface HeadshotSettings {
   // For website-custom: employee role drives the activity shown
   role: string;
 
+  // For website-custom: which direction the person faces
+  facing: 'left' | 'right';
+
   // Background (professional only)
   background: 'studio-white' | 'studio-grey' | 'studio-dark' | 'blurred-office' | 'gradient';
 

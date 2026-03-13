@@ -79,6 +79,31 @@ export const HeadshotPanel: React.FC = () => {
             placeholder="e.g. Senior Architect, Urban Planner, BIM Manager..."
             className="w-full h-9 bg-surface-elevated border border-border rounded-md text-xs text-foreground placeholder-foreground-muted/50 px-3 focus:outline-none focus:border-accent"
           />
+
+          <div className="mt-3">
+            <SectionTitle>Facing Direction</SectionTitle>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'left',  label: '← Face Left',  sub: 'Profile looks left' },
+                { value: 'right', label: 'Face Right →', sub: 'Profile looks right' },
+              ] as const).map(({ value, label, sub }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => updateHs({ facing: value })}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-center transition-all',
+                    hs.facing === value
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-surface-elevated hover:border-foreground-muted'
+                  )}
+                >
+                  <span className={cn('text-xs font-semibold', hs.facing === value ? 'text-accent' : 'text-foreground')}>{label}</span>
+                  <span className="text-[9px] text-foreground-muted">{sub}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
