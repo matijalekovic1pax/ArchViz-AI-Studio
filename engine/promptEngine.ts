@@ -4093,23 +4093,44 @@ function generateHeadshotPrompt(state: AppState): string {
     ? 'Full natural color photography with accurate skin tones and lifelike detail.'
     : 'Black and white photography with rich tonal contrast, deep shadows, and luminous highlights.';
 
+  // Tone → attire + expression
+  const toneMap: Record<string, { attire: string; expression: string }> = {
+    'formal':       { attire: 'formal business attire — suit, tie or formal blouse', expression: 'composed, confident, and serious' },
+    'smart-casual': { attire: 'smart casual attire — collared shirt, blazer, or polished business-casual outfit', expression: 'warm, approachable, and professionally friendly' },
+    'casual':       { attire: 'everyday casual clothing — relaxed and natural', expression: 'genuinely friendly and approachable, with a natural easy smile' },
+    'creative':     { attire: 'expressive, individualistic attire that reflects their creative personality', expression: 'confident, distinctive, and full of personality' },
+  };
+  const tone = toneMap[hs.tone] ?? toneMap['smart-casual'];
+
+  // Purpose → framing + contextual note
+  const purposeMap: Record<string, string> = {
+    'linkedin':     'The photo is for a LinkedIn profile or professional bio — polished, career-oriented, and business-ready.',
+    'student-card': 'The photo is for a student ID card — clear face visibility, simple background, relaxed and youthful feel.',
+    'team-page':    'The photo is for a company team page — personable, professional, and inviting.',
+    'social-media': 'The photo is for a social media profile — vibrant, engaging, and reflective of personality.',
+    'id-document':  'The photo is for an official ID document — strict frontal framing, neutral expression, plain uncluttered background.',
+    'portfolio':    'The photo is for a personal portfolio or creative website — memorable, brand-aligned, and distinctively styled.',
+  };
+  const purposeNote = purposeMap[hs.purpose] ?? purposeMap['linkedin'];
+
   if (hs.style === 'professional') {
     const bgMap: Record<string, string> = {
-      'studio-white': 'clean white studio backdrop',
-      'studio-grey': 'neutral mid-grey studio backdrop',
-      'studio-dark': 'deep charcoal studio backdrop',
+      'studio-white':   'clean white studio backdrop',
+      'studio-grey':    'neutral mid-grey studio backdrop',
+      'studio-dark':    'deep charcoal studio backdrop',
       'blurred-office': 'subtly blurred corporate office environment with soft depth-of-field',
-      'gradient': 'smooth soft-gradient background blending warm and cool tones',
+      'gradient':       'smooth soft-gradient background blending warm and cool tones',
     };
     const bg = bgMap[hs.background] || 'neutral studio backdrop';
 
-    parts.push('Generate a professional corporate headshot portrait photograph.');
-    parts.push('The subject is photographed straight-on, facing the camera directly with a confident, approachable expression.');
+    parts.push('Generate a portrait headshot photograph.');
+    parts.push(`The subject is dressed in ${tone.attire}. Their expression is ${tone.expression}.`);
+    parts.push('The subject is photographed straight-on, facing the camera directly.');
     parts.push(`Background: ${bg}.`);
     parts.push('Lighting: professional studio lighting with soft key light, subtle fill light, and gentle rim light for depth.');
     parts.push('Framing: head and shoulders, centered composition, slightly above eye-level camera angle.');
-    parts.push('The photo should look like a polished corporate LinkedIn profile photo or executive team bio photo.');
     parts.push('Skin should appear natural and professionally retouched — no heavy filters.');
+    parts.push(purposeNote);
     parts.push(colorDesc);
     if (hs.quality === 'high') {
       parts.push('Ultra-high resolution, fine skin texture, tack-sharp focus, broadcast-quality photography.');
@@ -4125,13 +4146,13 @@ function generateHeadshotPrompt(state: AppState): string {
     const facingDir = hs.facing === 'left' ? 'facing left, profile oriented to the left side of the frame' : 'facing right, profile oriented to the right side of the frame';
 
     parts.push('Generate a cinematic, editorial team portrait photograph in a wide rectangular landscape format (approximately 16:9 aspect ratio or wider).');
+    parts.push(`The subject is dressed in ${tone.attire} with an ${tone.expression} demeanor.`);
     parts.push(`The subject is photographed from the side — a close-up side profile, ${facingDir}, from roughly chest or shoulder height upward.`);
     parts.push(`The person appears completely absorbed and immersed in their work: ${activity}.`);
     parts.push('The composition is tight and close-up, showing the face in profile with the subject\'s gaze directed at their work, not the camera.');
-    parts.push('The background should be softly blurred (shallow depth of field), suggesting a professional architectural or creative workspace.');
+    parts.push('The background should be softly blurred (shallow depth of field), suggesting a professional workspace.');
     parts.push('Lighting: dramatic cinematic side-lighting or window light that sculpts the face and creates depth.');
-    parts.push('The overall mood is focused, intelligent, and deeply professional — editorial documentary style.');
-    parts.push('The image should feel like a high-end architectural firm team page photograph or a magazine editorial portrait.');
+    parts.push(purposeNote);
     parts.push(colorDesc);
     if (hs.quality === 'high') {
       parts.push('Ultra-high resolution, cinematic grain texture, shallow depth of field, magazine-quality photography.');

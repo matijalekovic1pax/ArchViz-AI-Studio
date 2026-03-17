@@ -169,6 +169,8 @@ const initialHeadshot: HeadshotSettings = {
   frontImage: null,
   rightImage: null,
   style: 'professional',
+  tone: 'smart-casual',
+  purpose: 'linkedin',
   colorMode: 'color',
   role: '',
   facing: 'right',
