@@ -780,6 +780,12 @@ export interface HeadshotSettings {
   // Style
   style: 'professional' | 'website-custom';
 
+  // Tone — controls formality of attire and expression
+  tone: 'formal' | 'smart-casual' | 'casual' | 'creative';
+
+  // Purpose — intended use of the headshot
+  purpose: 'linkedin' | 'student-card' | 'team-page' | 'social-media' | 'id-document' | 'portfolio';
+
   // Color treatment
   colorMode: 'color' | 'black-and-white';
 

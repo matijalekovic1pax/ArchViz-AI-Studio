@@ -65,6 +65,64 @@ export const HeadshotPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Tone */}
+      <div>
+        <SectionTitle>Tone</SectionTitle>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { value: 'formal',       label: 'Formal',       sub: 'Suit, serious' },
+            { value: 'smart-casual', label: 'Smart Casual', sub: 'Polished, warm' },
+            { value: 'casual',       label: 'Casual',       sub: 'Relaxed, friendly' },
+            { value: 'creative',     label: 'Creative',     sub: 'Expressive, bold' },
+          ] as const).map(({ value, label, sub }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => updateHs({ tone: value })}
+              className={cn(
+                'flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-center transition-all',
+                hs.tone === value
+                  ? 'border-accent bg-accent/10'
+                  : 'border-border bg-surface-elevated hover:border-foreground-muted'
+              )}
+            >
+              <span className={cn('text-xs font-semibold', hs.tone === value ? 'text-accent' : 'text-foreground')}>{label}</span>
+              <span className="text-[9px] text-foreground-muted">{sub}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Purpose */}
+      <div>
+        <SectionTitle>Purpose</SectionTitle>
+        <div className="space-y-1">
+          {([
+            { value: 'linkedin',     label: 'LinkedIn / Bio',    sub: 'Career profile' },
+            { value: 'student-card', label: 'Student Card',      sub: 'ID, relaxed vibe' },
+            { value: 'team-page',    label: 'Team Page',         sub: 'Company website' },
+            { value: 'social-media', label: 'Social Media',      sub: 'Instagram / X' },
+            { value: 'id-document',  label: 'ID Document',       sub: 'Passport / official' },
+            { value: 'portfolio',    label: 'Portfolio',         sub: 'Personal website' },
+          ] as const).map(({ value, label, sub }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => updateHs({ purpose: value })}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2 rounded-md border text-left text-xs transition-all',
+                hs.purpose === value
+                  ? 'border-accent bg-accent/10 text-foreground'
+                  : 'border-border bg-surface-elevated hover:border-foreground-muted hover:bg-surface-sunken text-foreground-muted hover:text-foreground'
+              )}
+            >
+              <span className="font-medium">{label}</span>
+              <span className="text-[10px] text-foreground-muted">{sub}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Role (Website Custom only) */}
       {hs.style === 'website-custom' && (
         <div>
