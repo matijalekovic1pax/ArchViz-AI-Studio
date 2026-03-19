@@ -5,10 +5,12 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
-  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle
+  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Lock
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
+import { useAuth } from '../../auth/AuthGate';
+import { PROFESSIONAL_ONLY_MODES } from '../../../lib/stripePrices';
 import { LeftRender3DPanel } from './LeftRender3DPanel';
 import { LeftRenderCADPanel } from './LeftRenderCADPanel';
 import { LeftMasterplanPanel } from './LeftMasterplanPanel';
@@ -52,7 +54,19 @@ const GenerateTextPanel = () => null;
 export const LeftSidebar: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { leftSidebarOpen } = state;
+
+  // Determine which modes are locked for this user
+  const userPlan = user?.org?.plan ?? user?.plan ?? 'unsubscribed';
+  const isProfessionalOrHigher = userPlan === 'professional' || userPlan === 'studio' || userPlan === 'enterprise';
+  const hasSubscription = userPlan !== 'unsubscribed';
+
+  const isModeLocked = (modeId: GenerationMode): boolean => {
+    if (PROFESSIONAL_ONLY_MODES.includes(modeId as any) && !isProfessionalOrHigher) return true;
+    // Unsubscribed users can only browse; generation is gated server-side
+    return false;
+  };
   const isGenerateTextMode = state.mode === 'generate-text';
   const showPanel = !isGenerateTextMode;
 
@@ -88,25 +102,37 @@ export const LeftSidebar: React.FC = () => {
         {WORKFLOWS.map((workflow) => {
           const Icon = workflow.icon;
           const isActive = state.mode === workflow.id;
+          const locked = isModeLocked(workflow.id);
           return (
             <button
               key={workflow.id}
-              onClick={() => dispatch({ type: 'SET_MODE', payload: workflow.id })}
+              onClick={() => {
+                if (locked) {
+                  dispatch({ type: 'SHOW_UPGRADE_MODAL', payload: true });
+                } else {
+                  dispatch({ type: 'SET_MODE', payload: workflow.id });
+                }
+              }}
               className={cn(
                 "w-full h-10 flex items-center px-3 rounded-xl transition-all duration-200 relative shrink-0 overflow-hidden",
-                isActive 
-                  ? "bg-surface-sunken text-foreground" 
+                isActive
+                  ? "bg-surface-sunken text-foreground"
+                  : locked
+                  ? "text-foreground-muted/50 hover:bg-background-secondary hover:text-foreground-muted"
                   : "text-foreground-muted hover:bg-background-secondary hover:text-foreground"
               )}
-              title={t(workflow.labelKey)}
+              title={locked ? `${t(workflow.labelKey)} — Professional plan required` : t(workflow.labelKey)}
             >
-              <div className="min-w-[24px] flex items-center justify-center">
+              <div className="min-w-[24px] flex items-center justify-center relative">
                 <Icon size={20} strokeWidth={1.5} />
+                {locked && (
+                  <Lock size={9} className="absolute -bottom-0.5 -right-0.5 text-foreground-muted" />
+                )}
               </div>
               <span className="text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 ml-3 transition-opacity duration-200 delay-75">
                 {t(workflow.labelKey)}
               </span>
-              
+
               {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent rounded-r-full" />}
             </button>
           );

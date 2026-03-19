@@ -1903,7 +1903,17 @@ export function useGeneration(): UseGenerationReturn {
         return;
       }
       resetUpscaleProcessing();
+      const errorCode = (error as any)?.code;
       const errorMessage = error instanceof Error ? error.message : '';
+
+      // Billing errors — show upgrade modal instead of an alert
+      if (errorCode === 'INSUFFICIENT_CREDITS' || errorCode === 'ACCESS_DENIED') {
+        dispatch({ type: 'SHOW_UPGRADE_MODAL', payload: true });
+        dispatch({ type: 'SET_GENERATING', payload: false });
+        dispatch({ type: 'SET_PROGRESS', payload: 0 });
+        return;
+      }
+
       const lowerMessage = errorMessage.toLowerCase();
       const isServiceUnavailable =
         lowerMessage.includes('503') ||

@@ -116,18 +116,10 @@ export function initializeGoogleSignIn(
 
     window.google.accounts.id.initialize({
       client_id: clientId,
-      callback: async (response: GoogleCredentialResponse) => {
-        try {
-          // Exchange Google ID token for gateway JWT (server-side verified)
-          const { verifyAuth } = await import('../services/apiGateway');
-          const authResult = await verifyAuth(response.credential);
-          const user: AuthUser = authResult.user;
-
-          saveAuthSession(user);
-          onSuccess(user);
-        } catch (error: any) {
-          onError(error.message || 'Authentication failed. Please try again.');
-        }
+      callback: async (_response: GoogleCredentialResponse) => {
+        // Legacy Google Sign-In callback — auth now handled via Supabase OAuth.
+        // This path is no longer reachable in the current UI.
+        onError('Please use the sign-in page to authenticate.');
       },
       auto_select: false,
       cancel_on_tap_outside: true,

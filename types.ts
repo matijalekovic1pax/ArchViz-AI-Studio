@@ -1412,6 +1412,7 @@ export interface AppState {
   
   history: HistoryItem[];
   appAlert: AppAlert | null;
+  showUpgradeModal: boolean;
 
   leftSidebarWidth: number;
   rightPanelWidth: number;
@@ -1457,6 +1458,7 @@ export type Action =
   | { type: 'TOGGLE_RIGHT_PANEL' }
   | { type: 'ADD_HISTORY'; payload: HistoryItem }
   | { type: 'SET_APP_ALERT'; payload: AppAlert | null }
+  | { type: 'SHOW_UPGRADE_MODAL'; payload: boolean }
   | { type: 'LOAD_PROJECT'; payload: AppState }
   | { type: 'RESET_PROJECT' }
   // Document Translation

@@ -915,7 +915,8 @@ const initialState: AppState = {
   canvas: initialCanvas,
   history: [],
   appAlert: null,
-  
+  showUpgradeModal: false,
+
   leftSidebarWidth: 280,
   rightPanelWidth: 320,
   leftSidebarOpen: true,
@@ -978,6 +979,7 @@ function appReducer(state: AppState, action: Action): AppState {
 
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
+    case 'SHOW_UPGRADE_MODAL': return { ...state, showUpgradeModal: action.payload };
     case 'LOAD_PROJECT': return { 
       ...action.payload,
       sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,

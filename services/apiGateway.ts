@@ -3,93 +3,52 @@
  *
  * All vendor API calls go through the Cloudflare Worker gateway.
  * The gateway adds API keys server-side — no secrets in the client.
+ *
+ * Auth: Supabase session access_token is used as the Bearer token.
+ * The Worker verifies it against SUPABASE_JWT_SECRET.
  */
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+import { supabase } from '../lib/supabaseClient';
 
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
 
-// JWT stored in memory only (not localStorage/sessionStorage)
-let _jwt: string | null = null;
-let _jwtExpiresAt: number = 0;
 let _onSessionExpired: (() => void) | null = null;
 
-// ─── Token Management ────────────────────────────────────────────────────────
-
-export function setGatewayToken(token: string, expiresIn: number): void {
-  _jwt = token;
-  _jwtExpiresAt = Date.now() + expiresIn * 1000;
-}
-
-export function getGatewayToken(): string | null {
-  if (_jwt && Date.now() < _jwtExpiresAt) return _jwt;
-  _jwt = null;
-  return null;
-}
-
-export function clearGatewayToken(): void {
-  _jwt = null;
-  _jwtExpiresAt = 0;
-}
-
-export function isGatewayAuthenticated(): boolean {
-  return getGatewayToken() !== null;
-}
-
-/** Returns the timestamp (ms) when the current token expires, or 0 if none. */
-export function getTokenExpiresAt(): number {
-  return _jwtExpiresAt;
-}
-
-/** Register a callback invoked when a 401 or token expiry is detected. */
+/** Register a callback invoked on 401 from the gateway. */
 export function setOnSessionExpired(callback: (() => void) | null): void {
   _onSessionExpired = callback;
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-export interface GatewayAuthResult {
-  token: string;
-  expiresIn: number;
-  user: {
-    email: string;
-    name: string;
-    picture: string;
-    domain: string;
-  };
+/** Returns true if a Supabase session exists. */
+export function isGatewayAuthenticated(): boolean {
+  // Supabase manages the session; we check synchronously via the cached session.
+  // The AuthGate ensures this is only called when a session exists.
+  return true;
 }
 
-/** Exchange a Google ID token for a gateway JWT */
-export async function verifyAuth(idToken: string): Promise<GatewayAuthResult> {
-  const resp = await fetchWithTimeout(`${GATEWAY_URL}/auth/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
-    timeoutMs: 15_000,
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: 'Auth failed' }));
-    throw new Error(err.error || `Auth failed (${resp.status})`);
-  }
-  const result: GatewayAuthResult = await resp.json();
-  setGatewayToken(result.token, result.expiresIn);
-  return result;
-}
+/** No-op kept for backwards compatibility — Supabase manages its own tokens. */
+export function clearGatewayToken(): void {}
+export function getTokenExpiresAt(): number { return 0; }
 
 // ─── Generic Request Helper ──────────────────────────────────────────────────
 
 async function gatewayFetch(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; generationMode?: string } = {},
 ): Promise<Response> {
-  const token = getGatewayToken();
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
   if (!token) throw new Error('Not authenticated. Please sign in.');
 
-  const { timeoutMs, ...restInit } = init;
+  const { timeoutMs, generationMode, ...restInit } = init;
   const headers = new Headers(restInit.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {
     headers.set('Content-Type', 'application/json');
+  }
+  if (generationMode) {
+    headers.set('X-Generation-Mode', generationMode);
   }
 
   const resp = await fetchWithTimeout(`${GATEWAY_URL}${path}`, {
@@ -99,9 +58,19 @@ async function gatewayFetch(
   });
 
   if (resp.status === 401) {
-    clearGatewayToken();
+    await supabase.auth.signOut();
     _onSessionExpired?.();
     throw new Error('Session expired. Please sign in again.');
+  }
+
+  if (resp.status === 402) {
+    const err = await resp.json().catch(() => ({ error: 'Insufficient credits' }));
+    throw Object.assign(new Error(err.error || 'Insufficient credits'), { code: 'INSUFFICIENT_CREDITS' });
+  }
+
+  if (resp.status === 403) {
+    const err = await resp.json().catch(() => ({ error: 'Access denied' }));
+    throw Object.assign(new Error(err.error || 'Access denied'), { code: 'ACCESS_DENIED' });
   }
 
   return resp;
@@ -143,13 +112,14 @@ export async function geminiRequest(
   model: string,
   action: string,
   body: any,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; generationMode?: string }
 ): Promise<any> {
   const resp = await gatewayFetch(`/api/gemini/models/${model}:${action}`, {
     method: 'POST',
     body: JSON.stringify(body),
     signal: options?.signal,
     timeoutMs: 120_000,
+    generationMode: options?.generationMode,
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -356,4 +326,127 @@ export interface FetchUrlResult {
 
 export async function fetchUrlViaGateway(url: string): Promise<FetchUrlResult> {
   return gatewayGet<FetchUrlResult>(`/api/fetch-url?url=${encodeURIComponent(url)}`, { timeoutMs: 15_000 });
+}
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+export async function createCheckoutSession(priceId: string): Promise<{ url: string }> {
+  return gatewayPost('/billing/checkout', {
+    priceId,
+    successUrl: `${window.location.origin}?checkout=success`,
+    cancelUrl: window.location.href,
+  }, { timeoutMs: 15_000 });
+}
+
+export async function createPortalSession(): Promise<{ url: string }> {
+  return gatewayPost('/billing/portal', {
+    returnUrl: window.location.href,
+  }, { timeoutMs: 15_000 });
+}
+
+export async function purchaseCredits(packId: 'credits-500' | 'credits-2000'): Promise<{ url: string }> {
+  return gatewayPost('/billing/credits', {
+    packId,
+    successUrl: `${window.location.origin}?credits=purchased`,
+    cancelUrl: window.location.href,
+  }, { timeoutMs: 15_000 });
+}
+
+export async function createVideoCharge(params: {
+  model: string;
+  durationSeconds: number;
+  orgId?: string;
+}): Promise<{ clientSecret: string; videoChargeId: string; amountCents: number }> {
+  return gatewayPost('/api/video/charge', params, { timeoutMs: 15_000 });
+}
+
+// ─── Team Management ─────────────────────────────────────────────────────────
+
+export async function inviteTeamMember(orgId: string, email: string, role: 'admin' | 'member'): Promise<void> {
+  await gatewayPost('/team/invite', { orgId, email, role }, { timeoutMs: 15_000 });
+}
+
+export async function acceptTeamInvite(token: string): Promise<void> {
+  await gatewayPost('/team/accept-invite', { token }, { timeoutMs: 15_000 });
+}
+
+export async function removeTeamMember(orgId: string, userId: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const t = session?.access_token;
+  if (!t) throw new Error('Not authenticated');
+  const resp = await fetch(`${GATEWAY_URL}/team/member`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orgId, userId }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error);
+  }
+}
+
+export async function updateTeamMemberRole(orgId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const t = session?.access_token;
+  if (!t) throw new Error('Not authenticated');
+  const resp = await fetch(`${GATEWAY_URL}/team/member/role`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orgId, userId, role }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: 'Failed' }));
+    throw new Error(err.error);
+  }
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export async function adminGetUsers(params?: { page?: number; search?: string; plan?: string }): Promise<any> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.search) q.set('search', params.search);
+  if (params?.plan) q.set('plan', params.plan);
+  return gatewayGet(`/admin/users?${q}`, { timeoutMs: 15_000 });
+}
+
+export async function adminGetUser(userId: string): Promise<any> {
+  return gatewayGet(`/admin/users/${userId}`, { timeoutMs: 15_000 });
+}
+
+export async function adminUpdateUser(userId: string, updates: { plan?: string; suspended?: boolean }): Promise<any> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const t = session?.access_token;
+  if (!t) throw new Error('Not authenticated');
+  const resp = await fetch(`${GATEWAY_URL}/admin/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!resp.ok) throw new Error('Failed');
+  return resp.json();
+}
+
+export async function adminAdjustCredits(entityType: 'user' | 'org', entityId: string, amount: number, reason: string): Promise<void> {
+  const path = entityType === 'user' ? `/admin/users/${entityId}/credits` : `/admin/orgs/${entityId}/credits`;
+  await gatewayPost(path, { amount, reason }, { timeoutMs: 15_000 });
+}
+
+export async function adminGetOrgs(params?: { page?: number; search?: string }): Promise<any> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.search) q.set('search', params.search);
+  return gatewayGet(`/admin/orgs?${q}`, { timeoutMs: 15_000 });
+}
+
+export async function adminGetOrg(orgId: string): Promise<any> {
+  return gatewayGet(`/admin/orgs/${orgId}`, { timeoutMs: 15_000 });
+}
+
+export async function adminGetRevenue(): Promise<any> {
+  return gatewayGet('/admin/revenue', { timeoutMs: 15_000 });
+}
+
+export async function adminGetAnalytics(): Promise<any> {
+  return gatewayGet('/admin/analytics', { timeoutMs: 15_000 });
 }

@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, Zap } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -9,6 +9,8 @@ import { VisualSelectionShape } from '../../types';
 import { useGeneration } from '../../hooks/useGeneration';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
+import { PLAN_LABELS } from '../../lib/stripePrices';
+import { CreditCard, Users, Settings } from 'lucide-react';
 import { MobilePanelType } from './mobile/MobilePanels';
 
 const drawSelectionOverlay = (
@@ -175,7 +177,10 @@ const drawSelectionOverlay = (
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
   const { t, i18n } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlsMenuRef = useRef<HTMLDivElement>(null);
   const controlsButtonRef = useRef<HTMLButtonElement>(null);
@@ -596,6 +601,18 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLanguageMenu]);
 
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (userMenuRef.current?.contains(target)) return;
+      if (userMenuButtonRef.current?.contains(target)) return;
+      setShowUserMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUserMenu]);
+
   const getLanguageLabel = () => {
     const lang = (i18n.language || 'en').split('-')[0];
     switch (lang) {
@@ -753,10 +770,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                 )}
               </div>
 
-              {/* User Profile & Logout (Mobile) */}
-              {user?.picture && (
+              {/* Credits + User Profile & Logout (Mobile) */}
+              {user && (
+                <button
+                  onClick={() => dispatch({ type: 'SHOW_UPGRADE_MODAL', payload: true })}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-sunken border border-border text-xs font-semibold text-foreground shrink-0"
+                >
+                  <Zap size={11} className="text-accent" />
+                  {(user.org?.credits ?? user.credits).toLocaleString()}
+                </button>
+              )}
+              {user?.avatar_url && (
                 <img
-                  src={user.picture}
+                  src={user.avatar_url}
                   alt={user.name || ''}
                   referrerPolicy="no-referrer"
                   className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
@@ -1731,23 +1757,89 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           )}
         </div>
 
-        {/* User Profile & Logout */}
+        {/* Credits & User Menu */}
         <div className="flex items-center gap-2 pl-2 border-l border-border-subtle shrink-0">
-          {user?.picture && (
-            <img
-              src={user.picture}
-              alt={user.name || ''}
-              referrerPolicy="no-referrer"
-              className="w-7 h-7 rounded-full object-cover border border-border"
-            />
+          {/* Credit balance */}
+          {user && (
+            <button
+              onClick={() => dispatch({ type: 'SHOW_UPGRADE_MODAL', payload: true })}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-sunken border border-border hover:border-accent/60 transition-colors"
+              title="View plans"
+            >
+              <Zap size={12} className="text-accent" />
+              <span className="text-xs font-semibold text-foreground">
+                {(user.org?.credits ?? user.credits).toLocaleString()}
+              </span>
+              <span className="text-[10px] text-foreground-muted hidden xl:inline">
+                {PLAN_LABELS[user.org?.plan ?? user.plan] ?? 'Free Trial'}
+              </span>
+            </button>
           )}
-          <button
-            onClick={() => logout()}
-            className="p-1.5 text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-            title="Sign out"
-          >
-            <LogOut size={15} />
-          </button>
+
+          {/* User avatar button → dropdown */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              ref={userMenuButtonRef}
+              onClick={() => setShowUserMenu(v => !v)}
+              className="flex items-center gap-1.5 p-1 rounded-full hover:bg-surface-sunken transition-colors"
+            >
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.name || ''}
+                  referrerPolicy="no-referrer"
+                  className="w-7 h-7 rounded-full object-cover border border-border"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-bold">
+                  {user?.name?.[0]?.toUpperCase() ?? '?'}
+                </div>
+              )}
+            </button>
+
+            {showUserMenu && (
+              <div className="absolute right-0 top-full mt-2 w-52 bg-surface-elevated rounded-xl shadow-elevated border border-border z-50 animate-fade-in overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-border-subtle">
+                  <p className="text-xs font-semibold text-foreground truncate">{user?.name}</p>
+                  <p className="text-[11px] text-foreground-muted truncate">{user?.email}</p>
+                </div>
+                <div className="p-1.5 space-y-0.5">
+                  <a
+                    href="/billing"
+                    onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
+                  >
+                    <CreditCard size={13} /> Billing & Credits
+                  </a>
+                  {user?.org && (user.org.role === 'owner' || user.org.role === 'admin') && (
+                    <a
+                      href="/team"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
+                    >
+                      <Users size={13} /> Team Dashboard
+                    </a>
+                  )}
+                  {isSuperAdmin && (
+                    <a
+                      href="/admin"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors"
+                    >
+                      <Settings size={13} /> Admin Panel
+                    </a>
+                  )}
+                  <div className="h-px bg-border-subtle my-1" />
+                  <button
+                    onClick={() => { setShowUserMenu(false); logout(); }}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={13} /> Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       </div>

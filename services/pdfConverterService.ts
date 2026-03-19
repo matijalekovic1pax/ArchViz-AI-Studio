@@ -4,7 +4,7 @@
  * Auth: includes gateway JWT in requests so Vercel functions can verify identity
  */
 
-import { getGatewayToken } from './apiGateway';
+import { supabase } from '../lib/supabaseClient';
 
 let customApiUrl: string | null = null;
 let bypassToken: string | null = null;
@@ -53,15 +53,15 @@ function getApiUrl(): string {
 /**
  * Get headers for API requests (including JWT auth + bypass token if configured)
  */
-function getHeaders(): HeadersInit {
+async function getHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
-  // Add gateway JWT for Vercel function auth
-  const token = getGatewayToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Add Supabase session token for Vercel function auth
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
   }
 
   // Add Vercel bypass token as header if configured
@@ -117,7 +117,7 @@ export async function convertPdfToDocx(
     // Call custom API
     const response = await fetch(`${apiUrl}/api/pdf-to-docx`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify({
         pdf_base64: base64Data
       }),
@@ -200,7 +200,7 @@ export async function convertDocxToPdf(
     // Call custom API
     const response = await fetch(`${apiUrl}/api/docx-to-pdf`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify({
         docx_base64: base64Data
       }),

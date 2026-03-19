@@ -17,6 +17,13 @@ import { GenerationMode } from './types';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
 import { MobilePanels, MobilePanelType } from './components/panels/mobile/MobilePanels';
+import { UpgradeModal } from './components/billing/UpgradeModal';
+import { BillingPage } from './components/billing/BillingPage';
+import { TeamDashboard } from './components/billing/TeamDashboard';
+import { AdminPanel } from './components/admin/AdminPanel';
+import { acceptTeamInvite } from './services/apiGateway';
+import { useAuth } from './components/auth/AuthGate';
+import { nanoid } from 'nanoid';
 
 const ShortcutsListener: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -179,11 +186,71 @@ const Layout: React.FC = () => {
   );
 };
 
+function InviteHandler() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (!token) return;
+    params.delete('invite');
+    const newUrl = params.toString() ? `${window.location.pathname}?${params}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+    acceptTeamInvite(token).catch(() => {});
+  }, []);
+  return null;
+}
+
+function CheckoutHandler() {
+  const { dispatch } = useAppStore();
+  const { refreshUser } = useAuth();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get('checkout');
+    const credits = params.get('credits');
+    if (!checkout && !credits) return;
+    params.delete('checkout');
+    params.delete('credits');
+    const newUrl = params.toString() ? `${window.location.pathname}?${params}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+    refreshUser().catch(() => {});
+    if (checkout === 'success') {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'info', message: 'Subscription activated! Your credits have been added.' }
+      });
+    }
+    if (credits === 'purchased') {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'info', message: 'Credits purchased! They have been added to your balance.' }
+      });
+    }
+  }, []);
+  return null;
+}
+
+function AppRouter() {
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  if (path === '/billing') return <BillingPage />;
+  if (path === '/team') return <TeamDashboard />;
+  if (path === '/admin') return <AdminPanel />;
+  return <Layout />;
+}
+
 export default function App() {
   return (
     <AuthGate>
       <AppProvider>
-        <Layout />
+        <InviteHandler />
+        <CheckoutHandler />
+        <AppRouter />
+        <UpgradeModal />
       </AppProvider>
     </AuthGate>
   );
