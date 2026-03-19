@@ -365,6 +365,19 @@ export async function createVideoCharge(params: {
   return gatewayPost('/api/video/charge', params, { timeoutMs: 15_000 });
 }
 
+/** Create a Stripe Checkout session for a one-time video generation. Returns { url }. */
+export async function createVideoCheckout(params: {
+  model: string;
+  durationSeconds: number;
+  orgId?: string;
+}): Promise<{ url: string }> {
+  return gatewayPost('/api/video/checkout', {
+    ...params,
+    successUrl: `${window.location.origin}?video=paid`,
+    cancelUrl:  window.location.href,
+  }, { timeoutMs: 15_000 });
+}
+
 // ─── Team Management ─────────────────────────────────────────────────────────
 
 export async function inviteTeamMember(orgId: string, email: string, role: 'admin' | 'member'): Promise<void> {

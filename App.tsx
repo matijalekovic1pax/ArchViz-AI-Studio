@@ -256,6 +256,21 @@ function CheckoutHandler() {
         payload: { id: nanoid(), tone: 'info', message: 'Credits purchased! They have been added to your balance.' }
       });
     }
+    const video = params.get('video');
+    if (video) {
+      params.delete('video');
+      const videoUrl = params.toString() ? `${window.location.pathname}?${params}` : window.location.pathname;
+      window.history.replaceState({}, '', videoUrl);
+      if (video === 'paid') {
+        // Unlock video mode and switch to it
+        dispatch({ type: 'UPDATE_VIDEO_STATE', payload: { accessUnlocked: true } });
+        dispatch({ type: 'SET_MODE', payload: 'video' });
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: { id: nanoid(), tone: 'info', message: 'Payment confirmed! Video generation is now unlocked.' }
+        });
+      }
+    }
   }, []);
   return null;
 }

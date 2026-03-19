@@ -819,6 +819,92 @@ async function handleVideoCharge(request, env, user) {
   }
 }
 
+// ─── Route: POST /api/video/checkout ─────────────────────────────────────────
+// Creates a Stripe Checkout session for a one-time video generation payment.
+// Returns { url } to redirect the browser to Stripe-hosted checkout.
+
+async function handleVideoCheckout(request, env, user) {
+  const origin = request.headers.get('Origin') || '';
+  try {
+    const { model, durationSeconds, orgId, successUrl, cancelUrl } = await request.json();
+    if (!model || !durationSeconds || !successUrl || !cancelUrl) {
+      return corsResponse(origin, { error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Determine price
+    const priceKey = `${model === 'veo-2' ? 'veo' : 'kling'}-standard-${durationSeconds}`;
+    const amountCents = VIDEO_PRICES[priceKey] || VIDEO_PRICES[`${model === 'veo-2' ? 'veo' : 'kling'}-standard-8`] || 399;
+
+    // Get or create Stripe customer
+    const userResp = await supabaseQuery(env, `users?id=eq.${user.userId}&select=email,stripe_customer_id`, { method: 'GET' });
+    const users = userResp.ok ? await userResp.json() : [];
+    let stripeCustomerId = users?.[0]?.stripe_customer_id;
+    const userEmail = users?.[0]?.email || '';
+
+    if (!stripeCustomerId) {
+      const custResp = await stripeRequest(env, 'customers', 'POST',
+        toFormData({ email: userEmail, metadata: { user_id: user.userId } })
+      );
+      if (custResp.ok) {
+        const cust = await custResp.json();
+        stripeCustomerId = cust.id;
+        await supabaseQuery(env, `users?id=eq.${user.userId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ stripe_customer_id: stripeCustomerId }),
+        });
+      }
+    }
+
+    // Create Checkout Session for one-time payment
+    const csParams = {
+      'mode':                             'payment',
+      'line_items[0][quantity]':          '1',
+      'line_items[0][price_data][currency]':           'usd',
+      'line_items[0][price_data][unit_amount]':        String(amountCents),
+      'line_items[0][price_data][product_data][name]': `AVAS Video (${model}, ${durationSeconds}s)`,
+      'payment_intent_data[metadata][user_id]':        user.userId,
+      'payment_intent_data[metadata][model]':          model,
+      'payment_intent_data[metadata][duration_s]':     String(durationSeconds),
+      'payment_intent_data[metadata][org_id]':         orgId || '',
+      'metadata[type]':                                'video_generation',
+      'metadata[model]':                               model,
+      'metadata[duration_s]':                          String(durationSeconds),
+      'metadata[user_id]':                             user.userId,
+      'success_url':                                   successUrl,
+      'cancel_url':                                    cancelUrl,
+    };
+    if (stripeCustomerId) csParams['customer'] = stripeCustomerId;
+
+    const csResp = await stripeRequest(env, 'checkout/sessions', 'POST', toFormData(csParams));
+    if (!csResp.ok) {
+      const err = await csResp.text();
+      return corsResponse(origin, { error: 'Failed to create checkout session: ' + err }, { status: 500 });
+    }
+    const cs = await csResp.json();
+
+    // Pre-create video_charges row in pending state
+    await supabaseQuery(env, 'video_charges', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id:                   user.userId,
+        org_id:                    orgId || null,
+        stripe_payment_intent_id:  cs.payment_intent || cs.id,
+        model,
+        duration_seconds:          durationSeconds,
+        amount_cents:              amountCents,
+        status:                    'pending',
+        created_at:                new Date().toISOString(),
+        updated_at:                new Date().toISOString(),
+      }),
+    });
+
+    return corsResponse(origin, { url: cs.url });
+  } catch (err) {
+    console.error('[video/checkout] error:', err.message);
+    return corsResponse(origin, { error: err.message }, { status: 500 });
+  }
+}
+
 // ─── Route: POST /billing/checkout ───────────────────────────────────────────
 
 async function handleBillingCheckout(request, env, user) {
@@ -2449,7 +2535,8 @@ export default {
     if (path === '/api/user/welcome' && request.method === 'POST') return handleUserWelcome(request, env, user);
 
     // ── Video pre-auth ──
-    if (path === '/api/video/charge' && request.method === 'POST') return handleVideoCharge(request, env, user);
+    if (path === '/api/video/charge'    && request.method === 'POST') return handleVideoCharge(request, env, user);
+    if (path === '/api/video/checkout'  && request.method === 'POST') return handleVideoCheckout(request, env, user);
 
     // ── Billing ──
     if (path.startsWith('/billing/')) {
