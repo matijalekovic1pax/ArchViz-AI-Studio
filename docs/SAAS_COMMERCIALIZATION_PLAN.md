@@ -21,9 +21,6 @@ tasks in the previous phase are marked done.
 | Video | Kling 2.6 Standard | $0.20 (5s) / $0.40 (10s) |
 | Video | Kling 2.6 Pro | $0.33 (5s) / $0.66 (10s) |
 
-> ⚠️ `gemini-2.0-flash-preview-image-generation` is deprecated — shuts down **June 1, 2026**.
-> Must migrate to `gemini-2.5-flash` or Imagen 4 before Phase 1 is complete.
-
 ### Subscription Tiers
 | Tier | Price | Credits/mo | Seats | Rollover |
 |------|-------|-----------|-------|----------|
@@ -350,12 +347,6 @@ $$;
   - Only proxy to Veo/Kling after receiving `payment_intent.succeeded` webhook
 - [ ] Add Worker secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
 
-### 1.4 Gemini Model Migration
-- [ ] Audit all references to `gemini-2.0-flash-preview-image-generation` in `services/geminiService.ts` and `engine/promptEngine.ts`
-- [ ] Replace with `gemini-2.5-flash` (or Imagen 4 where applicable)
-- [ ] Test all 18 generation modes still produce correct output after migration
-- [ ] Deadline: before June 1, 2026
-
 ---
 
 ## Phase 2 — Authentication & Onboarding
@@ -638,9 +629,7 @@ $$;
 - [ ] GDPR data export: user can download all their data as JSON
 - [ ] Do not store uploaded reference images beyond the generation session (headshots especially — GDPR sensitive)
 
-### 9.4 Performance
-- [ ] Lazy-load `ImageCanvas.tsx` (94KB Three.js component) for non-3D modes
-- [ ] Split Zustand store into smaller slices (current single store has 30+ sub-objects)
+### 9.4 Infrastructure Performance
 - [ ] CDN for generated outputs (Supabase Storage CDN or Cloudflare R2)
 
 ---
