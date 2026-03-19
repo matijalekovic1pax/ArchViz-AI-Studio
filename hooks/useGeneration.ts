@@ -615,8 +615,8 @@ export function useGeneration(): UseGenerationReturn {
       const images: ImageData[] = [];
       const attachments: AttachmentData[] = [];
 
-      // Add uploaded image if available (skip for material validation)
-      if (baseImage && state.mode !== 'material-validation') {
+      // Add uploaded image if available (skip for material validation and headshot — headshot adds its own reference images below)
+      if (baseImage && state.mode !== 'material-validation' && state.mode !== 'headshot') {
         const imgData = dataUrlToImageData(baseImage);
         if (imgData) {
           images.push(imgData);
