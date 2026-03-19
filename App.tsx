@@ -1,6 +1,6 @@
 
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Info, X, Layers, SlidersHorizontal } from 'lucide-react';
 import { AppProvider, useAppStore } from './store';
 import { AuthGate } from './components/auth/AuthGate';
@@ -24,6 +24,8 @@ import { AdminPanel } from './components/admin/AdminPanel';
 import { acceptTeamInvite } from './services/apiGateway';
 import { useAuth } from './components/auth/AuthGate';
 import { nanoid } from 'nanoid';
+import { saveGeneration } from './services/generationStorageService';
+import { CREDITS_PER_MODE } from './lib/stripePrices';
 
 const ShortcutsListener: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -186,6 +188,36 @@ const Layout: React.FC = () => {
   );
 };
 
+/**
+ * Watches the history array and fire-and-forgets new items to Supabase Storage.
+ * Only persists real output images (not 'source' kind entries, not text-only modes).
+ */
+function GenerationPersister() {
+  const { state } = useAppStore();
+  const { user } = useAuth();
+  const persisted = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    for (const item of state.history) {
+      if (persisted.current.has(item.id)) continue;
+      if (item.settings?.kind === 'source') continue;
+      if (!item.thumbnail?.startsWith('data:image/')) continue;
+      persisted.current.add(item.id);
+      saveGeneration({
+        userId:       user.id,
+        orgId:        user.org?.id ?? null,
+        mode:         item.mode,
+        imageDataUrl: item.thumbnail,
+        prompt:       item.prompt ?? undefined,
+        creditsUsed:  CREDITS_PER_MODE[item.mode] ?? 4,
+      }).catch(() => {}); // fire-and-forget — failure is non-fatal
+    }
+  }, [state.history, user]);
+
+  return null;
+}
+
 function InviteHandler() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -249,6 +281,7 @@ export default function App() {
       <AppProvider>
         <InviteHandler />
         <CheckoutHandler />
+        <GenerationPersister />
         <AppRouter />
         <UpgradeModal />
       </AppProvider>

@@ -1906,9 +1906,20 @@ export function useGeneration(): UseGenerationReturn {
       const errorCode = (error as any)?.code;
       const errorMessage = error instanceof Error ? error.message : '';
 
-      // Billing errors — show upgrade modal instead of an alert
+      // Billing errors — show upgrade modal
       if (errorCode === 'INSUFFICIENT_CREDITS' || errorCode === 'ACCESS_DENIED') {
         dispatch({ type: 'SHOW_UPGRADE_MODAL', payload: true });
+        dispatch({ type: 'SET_GENERATING', payload: false });
+        dispatch({ type: 'SET_PROGRESS', payload: 0 });
+        return;
+      }
+
+      // Rate limit — show warning alert
+      if (errorCode === 'RATE_LIMITED') {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: { id: nanoid(), tone: 'warning', message: errorMessage || 'Too many requests. Please wait a moment.' }
+        });
         dispatch({ type: 'SET_GENERATING', payload: false });
         dispatch({ type: 'SET_PROGRESS', payload: 0 });
         return;

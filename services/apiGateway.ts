@@ -73,6 +73,11 @@ async function gatewayFetch(
     throw Object.assign(new Error(err.error || 'Access denied'), { code: 'ACCESS_DENIED' });
   }
 
+  if (resp.status === 429) {
+    const err = await resp.json().catch(() => ({ error: 'Too many requests' }));
+    throw Object.assign(new Error(err.error || 'Too many requests. Please wait a moment.'), { code: 'RATE_LIMITED' });
+  }
+
   return resp;
 }
 
@@ -449,4 +454,15 @@ export async function adminGetRevenue(): Promise<any> {
 
 export async function adminGetAnalytics(): Promise<any> {
   return gatewayGet('/admin/analytics', { timeoutMs: 15_000 });
+}
+
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+
+/** Send welcome email on first login (idempotent — Worker checks welcome_email_sent flag). */
+export async function triggerWelcomeEmail(): Promise<void> {
+  try {
+    await gatewayPost('/api/user/welcome', {}, { timeoutMs: 10_000 });
+  } catch {
+    // Non-fatal — welcome email failure should never block the app
+  }
 }

@@ -95,6 +95,37 @@ const VIDEO_PRICES = {
   'veo-standard-8':    399,
 };
 
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+// Uses Cloudflare Cache API as a lightweight rate limiter.
+// Key: `rate-limit:{userId}:{window}` (window = floor(now / windowMs))
+
+const RATE_LIMITS = {
+  gemini:  { maxRequests: 30, windowMs: 60_000 },  // 30 image gens / min per user
+  billing: { maxRequests: 10, windowMs: 60_000 },  // 10 billing ops / min
+  admin:   { maxRequests: 60, windowMs: 60_000 },  // 60 admin queries / min
+};
+
+async function checkRateLimit(userId, bucket) {
+  const limit = RATE_LIMITS[bucket];
+  if (!limit) return true; // no limit defined → allow
+  try {
+    const window = Math.floor(Date.now() / limit.windowMs);
+    const cacheKey = `https://rate-limit.internal/${userId}/${bucket}/${window}`;
+    const cache = caches.default;
+    const cached = await cache.match(new Request(cacheKey));
+    const count = cached ? parseInt(await cached.text()) : 0;
+    if (count >= limit.maxRequests) return false;
+    // Store updated count
+    const resp = new Response(String(count + 1), {
+      headers: { 'Cache-Control': `max-age=${Math.ceil(limit.windowMs / 1000)}` },
+    });
+    await cache.put(new Request(cacheKey), resp);
+    return true;
+  } catch {
+    return true; // fail open — don't block on cache errors
+  }
+}
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sleep(ms) {
@@ -410,6 +441,30 @@ async function checkAndDeductCredits(env, userId, mode, qualityHint) {
       const errText = await deductResp.text();
       console.error('[credits] deduct_credits failed:', deductResp.status, errText);
       return { ok: false, error: 'Failed to deduct credits', status: 500 };
+    }
+
+    // Step 6: Fire-and-forget low-credits warning email
+    const creditsAfter = ((pool.org_id ? pool.credits : pool.credits) || 0) - cost;
+    const LOW_CREDITS_THRESHOLD = 50;
+    if (creditsAfter <= LOW_CREDITS_THRESHOLD && creditsAfter >= 0 && plan !== 'unsubscribed') {
+      // Fetch user email for notification
+      const userResp = await supabaseQuery(env, `users?id=eq.${userId}&select=email,name`, { method: 'GET' });
+      if (userResp.ok) {
+        const userRows = await userResp.json();
+        const userEmail = userRows?.[0]?.email;
+        const userName = userRows?.[0]?.name || 'there';
+        if (userEmail) {
+          sendEmail(env, {
+            to: userEmail,
+            subject: 'Running low on AVAS credits',
+            html: `<p>Hi ${userName},</p>
+<p>You only have <strong>${creditsAfter} credits</strong> remaining on AVAS.</p>
+<p>Top up your credits or upgrade your plan to keep generating.</p>
+<p><a href="https://app.avas.ai/billing">Manage Billing →</a></p>
+<p>The AVAS Team</p>`,
+          }).catch(() => {}); // fire-and-forget
+        }
+      }
     }
 
     return { ok: true, creditsUsed: cost, orgId: pool.org_id || null };
@@ -1284,12 +1339,59 @@ async function handleAdminAnalytics(request, env) {
   }
 }
 
+// ─── Route: POST /api/user/welcome ───────────────────────────────────────────
+// Sends welcome email on first login. Idempotent (checks welcome_email_sent flag).
+
+async function handleUserWelcome(request, env, user) {
+  const origin = request.headers.get('Origin') || '';
+  try {
+    // Fetch user record
+    const resp = await supabaseQuery(env, `users?id=eq.${user.userId}&select=email,name,welcome_email_sent`, { method: 'GET' });
+    if (!resp.ok) return corsResponse(origin, { error: 'User not found' }, { status: 404 });
+    const rows = await resp.json();
+    const u = rows?.[0];
+    if (!u) return corsResponse(origin, { error: 'User not found' }, { status: 404 });
+
+    // Already sent — skip
+    if (u.welcome_email_sent) return corsResponse(origin, { ok: true, skipped: true });
+
+    // Mark as sent first to prevent duplicates on concurrent requests
+    await supabaseQuery(env, `users?id=eq.${user.userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ welcome_email_sent: true }),
+    });
+
+    // Send welcome email
+    await sendEmail(env, {
+      to: u.email,
+      subject: 'Welcome to AVAS — your 20 free credits are ready',
+      html: `<p>Hi ${u.name || 'there'},</p>
+<p>Welcome to <strong>AVAS</strong> — the AI studio built for architects.</p>
+<p>You have <strong>20 free credits</strong> to try 3D rendering and CAD rendering modes.</p>
+<p>When you're ready to unlock more modes and credits, check out our plans:</p>
+<p><a href="https://app.avas.ai/billing">View Plans →</a></p>
+<p>Happy rendering,<br/>The AVAS Team</p>`,
+    });
+
+    return corsResponse(origin, { ok: true });
+  } catch (err) {
+    console.error('[welcome] error:', err.message);
+    return corsResponse(origin, { error: err.message }, { status: 500 });
+  }
+}
+
 // ─── Route: /api/gemini/* (passthrough proxy with credit check) ───────────────
 
 async function handleGeminiProxy(request, env, subpath, user) {
   const origin = request.headers.get('Origin') || '';
 
-  // Credit check
+  // Rate limit: 30 Gemini requests per minute per user
+  const allowed = await checkRateLimit(user.userId, 'gemini');
+  if (!allowed) {
+    return corsResponse(origin, { error: 'Too many requests. Please wait a moment and try again.' }, { status: 429 });
+  }
+
+  // Credit check + deduction
   const mode = request.headers.get('X-Generation-Mode') || 'render-3d';
   const qualityHint = request.headers.get('X-Quality-Hint') || '';
   const creditResult = await checkAndDeductCredits(env, user.userId, mode, qualityHint);
@@ -1302,19 +1404,38 @@ async function handleGeminiProxy(request, env, subpath, user) {
   const headers = new Headers();
   headers.set('x-goog-api-key', env.GEMINI_API_KEY);
 
-  // Forward content-type
   const ct = request.headers.get('Content-Type');
   if (ct) headers.set('Content-Type', ct);
 
-  const upstreamResp = await fetch(url, {
-    method: request.method,
-    headers,
-    body: request.method !== 'GET' ? request.body : undefined,
-  });
+  let upstreamResp;
+  try {
+    upstreamResp = await fetch(url, {
+      method: request.method,
+      headers,
+      body: request.method !== 'GET' ? request.body : undefined,
+    });
+  } catch (fetchErr) {
+    // Network error → refund credits
+    await supabaseRpc(env, 'add_credits', {
+      p_entity_type: creditResult.orgId ? 'org' : 'user',
+      p_entity_id:   creditResult.orgId || user.userId,
+      p_amount:      creditResult.creditsUsed || 0,
+    }).catch(() => {});
+    console.error('[gemini] fetch error, credits refunded:', fetchErr.message);
+    return corsResponse(origin, { error: 'Upstream service unavailable. Credits refunded.' }, { status: 503 });
+  }
 
-  // Log usage on success
-  if (upstreamResp.ok || upstreamResp.status < 500) {
-    // Fire-and-forget usage logging
+  // On upstream 5xx, refund credits
+  if (upstreamResp.status >= 500) {
+    await supabaseRpc(env, 'add_credits', {
+      p_entity_type: creditResult.orgId ? 'org' : 'user',
+      p_entity_id:   creditResult.orgId || user.userId,
+      p_amount:      creditResult.creditsUsed || 0,
+    }).catch(() => {});
+  }
+
+  // Log usage on success (non-blocking)
+  if (upstreamResp.ok) {
     logUsage(env, {
       userId:      user.userId,
       orgId:       creditResult.orgId || null,
@@ -2324,10 +2445,18 @@ export default {
     // ── URL fetch proxy (material validation link fetching) ──
     if (path === '/api/fetch-url' && request.method === 'GET') return handleFetchUrl(request, env);
 
+    // ── User onboarding ──
+    if (path === '/api/user/welcome' && request.method === 'POST') return handleUserWelcome(request, env, user);
+
     // ── Video pre-auth ──
     if (path === '/api/video/charge' && request.method === 'POST') return handleVideoCharge(request, env, user);
 
     // ── Billing ──
+    if (path.startsWith('/billing/')) {
+      if (!await checkRateLimit(user.userId, 'billing')) {
+        return corsResponse(origin, { error: 'Too many billing requests. Please wait.' }, { status: 429 });
+      }
+    }
     if (path === '/billing/checkout' && request.method === 'POST') return handleBillingCheckout(request, env, user);
     if (path === '/billing/portal'   && request.method === 'POST') return handleBillingPortal(request, env, user);
     if (path === '/billing/credits'  && request.method === 'POST') return handleBillingCredits(request, env, user);

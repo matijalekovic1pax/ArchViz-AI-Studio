@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabaseClient';
 import { fetchAppUser, signOut } from '../../lib/supabaseAuth';
 import type { AppUser } from '../../lib/supabaseAuth';
 import { LoginPage } from './LoginPage';
-import { setOnSessionExpired } from '../../services/apiGateway';
+import { LandingPage } from '../landing/LandingPage';
+import { setOnSessionExpired, triggerWelcomeEmail } from '../../services/apiGateway';
 
 interface AuthContextValue {
   user: AppUser | null;
@@ -48,9 +49,13 @@ export function AuthGate({ children }: PropsWithChildren) {
 
   // Listen for auth state changes (login / logout / token refresh)
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         loadUser(session.user.id);
+        // Trigger welcome email on first sign-in (Worker is idempotent)
+        if (event === 'SIGNED_IN') {
+          triggerWelcomeEmail();
+        }
       } else {
         setUser(null);
       }
@@ -78,7 +83,11 @@ export function AuthGate({ children }: PropsWithChildren) {
   }
 
   if (!user) {
-    return <LoginPage />;
+    // Show sign-in page directly for special flows (password reset, invites)
+    const params = new URLSearchParams(window.location.search);
+    const isSpecialFlow = params.has('reset') || params.has('invite') || params.has('login');
+    if (isSpecialFlow) return <LoginPage />;
+    return <LandingPage />;
   }
 
   return (
