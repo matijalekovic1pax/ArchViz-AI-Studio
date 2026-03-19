@@ -15,7 +15,11 @@ tasks in the previous phase are marked done.
 ### API Cost Reality Check
 | Operation | Model | API Cost |
 |-----------|-------|---------|
-| Image generation | Gemini 2.5 Flash | $0.039/image |
+| Image generation — standard (1K res) | gemini-3.1-flash-image-preview | $0.067/image |
+| Image generation — high (2K res) | gemini-3.1-flash-image-preview | $0.101/image |
+| Text generation | gemini-3-pro-preview | $2.00/$12.00 per 1M tokens in/out |
+| Document translation — fast | gemini-2.5-flash | $0.30/$2.50 per 1M tokens in/out |
+| Document translation — professional | gemini-3-flash-preview | $0.50/$3.00 per 1M tokens in/out |
 | Video | Veo 3.1 Fast | $0.15/sec → 5s = $0.75 |
 | Video | Veo 3.1 Standard | $0.40/sec → 8s = $3.20 |
 | Video | Kling 2.6 Standard | $0.20 (5s) / $0.40 (10s) |
@@ -34,11 +38,13 @@ tasks in the previous phase are marked done.
 ### Credit Costs Per Operation (1 credit = $0.05)
 | Operation | Credits | API Cost | Price | Margin |
 |-----------|---------|---------|-------|--------|
-| Image render (all modes) | 2 | $0.039 | $0.10 | 61% |
-| Upscale | 1 | $0.020 | $0.05 | 60% |
+| Image render — standard quality | 4 | $0.067 | $0.20 | 67% |
+| Image render — high quality | 5 | $0.101 | $0.25 | 60% |
+| Upscale | 3 | $0.067 | $0.15 | 55% |
 | PDF compression | 1 | $0.005 | $0.05 | 90% |
-| Document translation | 5 | $0.100 | $0.25 | 60% |
-| Material validation | 8 | $0.150 | $0.40 | 62% |
+| Document translation — fast | 8 | ~$0.05 | $0.40 | 88% |
+| Document translation — professional | 12 | ~$0.12 | $0.60 | 80% |
+| Material validation | 12 | ~$0.15 | $0.60 | 75% |
 
 ### Video Pricing (Pay-Per-Generation via Stripe)
 | Model | Duration | API Cost | Charge | Margin |
