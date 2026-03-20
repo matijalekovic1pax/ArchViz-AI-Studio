@@ -26,8 +26,8 @@ const btnSecondaryClass =
 /** Reusable form card — used both standalone and inside the LandingPage modal */
 export function LoginForm() {
   const [view, setView] = useState<AuthView>('sign-in');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('matija.lekovic@gmail.com');
+  const [password, setPassword] = useState('1234');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
