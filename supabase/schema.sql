@@ -1,5 +1,5 @@
 -- =============================================================================
--- AVAS — Full database schema + seed
+-- ArchViz AI Studio — Full database schema + seed
 -- Paste this into Supabase SQL Editor and run once on a fresh project.
 -- Safe to re-run: uses CREATE TABLE IF NOT EXISTS, CREATE OR REPLACE, etc.
 -- =============================================================================

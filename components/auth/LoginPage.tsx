@@ -81,7 +81,7 @@ export function LoginForm() {
       <div className="space-y-5">
         <div>
           <h2 className="text-lg font-bold text-foreground">Welcome back</h2>
-          <p className="text-xs text-foreground-muted mt-0.5">Sign in to your AVAS account</p>
+          <p className="text-xs text-foreground-muted mt-0.5">Sign in to your ArchViz AI Studio account</p>
         </div>
 
         <button type="button" onClick={handleGoogleSignIn} disabled={loading} className={btnSecondaryClass}>
@@ -223,7 +223,7 @@ export function LoginPage() {
 
         {/* Top wordmark */}
         <div className="relative z-10">
-          <span className="text-white text-sm font-bold tracking-tight">AVAS</span>
+          <span className="text-white text-sm font-bold tracking-tight">ArchViz <span className="font-normal opacity-50">AI Studio</span></span>
         </div>
 
         {/* Center content */}
@@ -251,7 +251,7 @@ export function LoginPage() {
 
         {/* Bottom */}
         <div className="relative z-10">
-          <p className="text-white/25 text-[10px]">© {new Date().getFullYear()} AVAS</p>
+          <p className="text-white/25 text-[10px]">© {new Date().getFullYear()} ArchViz AI Studio</p>
         </div>
       </div>
 
@@ -260,7 +260,7 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile wordmark */}
           <div className="lg:hidden text-center mb-10">
-            <h1 className="text-2xl font-extrabold text-foreground tracking-tight">AVAS</h1>
+            <h1 className="text-2xl font-extrabold text-foreground tracking-tight">ArchViz AI Studio</h1>
             <p className="text-foreground-muted text-xs mt-1">Architecture Visualisation AI Studio</p>
           </div>
 

@@ -20,6 +20,9 @@ export interface AppUser {
   } | null;
 }
 
+// Owner account — always superadmin regardless of what the DB row says
+const OWNER_EMAIL = 'matija.lekovic@gmail.com';
+
 /** Fetch full user profile from public.users + org membership */
 export async function fetchAppUser(userId: string): Promise<AppUser | null> {
   const { data: user, error } = await supabase
@@ -39,14 +42,17 @@ export async function fetchAppUser(userId: string): Promise<AppUser | null> {
 
   const org = membership?.organizations as any;
 
+  // Hardcoded owner privileges — client-side guarantee regardless of DB state
+  const isOwner = user.email === OWNER_EMAIL;
+
   return {
     id: user.id,
     email: user.email,
     name: user.name || user.email.split('@')[0],
     avatar_url: user.avatar_url || '',
-    role: user.role as AppUser['role'],
-    plan: user.plan as AppUser['plan'],
-    credits: user.credits,
+    role: (isOwner ? 'superadmin' : user.role) as AppUser['role'],
+    plan: (isOwner ? 'professional' : user.plan) as AppUser['plan'],
+    credits: isOwner ? Math.max(user.credits, 10000) : user.credits,
     signup_bonus_remaining: user.signup_bonus_remaining,
     org: org
       ? {
