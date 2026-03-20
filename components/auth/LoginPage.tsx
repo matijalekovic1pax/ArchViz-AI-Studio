@@ -232,7 +232,7 @@ export function LoginPage() {
             <p className="text-white/40 text-[10px] uppercase tracking-[0.25em] mb-4">Architecture Visualisation AI Studio</p>
             <h2 className="text-white text-4xl font-extrabold tracking-tight leading-[1.1]">
               From sketch<br />to render.<br />
-              <span style={{ color: '#C9B99A' }}>In seconds.</span>
+              <span style={{ color: '#16A34A' }}>In seconds.</span>
             </h2>
           </div>
           <p className="text-white/50 text-sm leading-relaxed max-w-xs">
