@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
 import * as XLSX from 'xlsx';
+import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -194,12 +195,8 @@ export const DocumentTranslateView: React.FC = () => {
     // PDF Preview (only for original PDF before translation)
     if (!showAsDocx && sourceDocument.type === 'pdf' && documentPreviewUrl) {
       return (
-        <div className="absolute inset-0 overflow-hidden">
-          <iframe
-            src={documentPreviewUrl}
-            className="w-full h-full border-0"
-            title="Document Preview"
-          />
+        <div className="absolute inset-0">
+          <PdfCanvasViewer dataUrl={documentPreviewUrl} className="h-full w-full" />
         </div>
       );
     }
