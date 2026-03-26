@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
 
 export const PdfCompressionView: React.FC = () => {
   const { state } = useAppStore();
@@ -32,12 +33,8 @@ export const PdfCompressionView: React.FC = () => {
 
   return (
     <div className="flex-1 bg-background h-full relative">
-      <div className="absolute inset-0 overflow-hidden">
-        <iframe
-          src={previewDoc.dataUrl}
-          className="w-full h-full border-0"
-          title={t('pdfCompression.previewTitle')}
-        />
+      <div className="absolute inset-0">
+        <PdfCanvasViewer dataUrl={previewDoc.dataUrl} className="h-full w-full" />
       </div>
     </div>
   );
