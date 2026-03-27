@@ -33,7 +33,7 @@ import { compressPdfBatch } from '../lib/pdfCompression';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
-const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'generate-text'];
+const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
 // Initialize Gemini service if gateway is authenticated
 const ensureServiceInitialized = (): boolean => {
