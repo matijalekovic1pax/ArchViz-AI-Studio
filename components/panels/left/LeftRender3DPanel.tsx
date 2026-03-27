@@ -12,7 +12,8 @@ import {
   getGeminiService,
   initGeminiService,
   isGeminiServiceInitialized,
-  ImageUtils
+  ImageUtils,
+  TEXT_MODEL
 } from '../../../services/geminiService';
 import { isGatewayAuthenticated } from '../../../services/apiGateway';
 
@@ -25,7 +26,7 @@ export const LeftRender3DPanel = () => {
   const analyzingRef = useRef(false);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const wf = state.workflow;
-  const PREPROCESS_MODEL = 'gemini-3-flash-preview';
+  const PREPROCESS_MODEL = TEXT_MODEL;
   const PREPROCESS_TIMEOUT_MS = 60000;
 
   const availableStyles = useMemo(

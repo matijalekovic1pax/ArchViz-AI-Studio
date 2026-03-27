@@ -33,7 +33,7 @@ import { compressPdfBatch } from '../lib/pdfCompression';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
-const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
+const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'generate-text'];
 
 // Initialize Gemini service if gateway is authenticated
 const ensureServiceInitialized = (): boolean => {
@@ -456,19 +456,9 @@ export function useGeneration(): UseGenerationReturn {
       '21:9': '21:9',
     };
 
-    const resolutionMap: Record<string, '1K' | '2K' | '4K'> = {
-      '720p': '1K',
-      '1080p': '2K',
-      '1440p': '2K',
-      '2k': '2K',
-      '4k': '4K',
-      '8k': '4K',
-    };
-
     return {
       imageConfig: {
         aspectRatio: aspectRatioOverride || aspectRatioMap[output.aspectRatio] || '16:9',
-        imageSize: resolutionMap[output.resolution] || '2K',
       }
     };
   }, []);
@@ -1107,8 +1097,6 @@ export function useGeneration(): UseGenerationReturn {
             });
 
         // Log the current resolution being used
-        const currentConfig = buildGenerationConfig(state, aspectRatioOverride);
-        const currentResolution = currentConfig.imageConfig?.imageSize || '2K';
         const outputs: Array<{ id: string; name: string; url: string }> = [];
         const imagesOut: GeneratedImage[] = [];
         const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
