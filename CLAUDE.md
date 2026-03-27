@@ -68,9 +68,12 @@ Each generation deducts credits from `CREDITS_PER_MODE` in `lib/stripePrices.ts`
 ### Key Data Flow
 1. User uploads image or enters settings → dispatched to Zustand store
 2. `engine/promptEngine.ts` (4000+ lines) generates specialized prompts based on mode + settings
-3. `services/apiGateway.ts` routes to Cloudflare Worker gateway (adds API keys server-side, verifies Supabase JWT)
-4. Results returned to store, rendered in `components/canvas/ImageCanvas.tsx` (Three.js, 94KB)
-5. `services/generationStorageService.ts` persists result to Supabase
+3. `hooks/useGeneration.ts` - central orchestrator that wires store state → prompt engine → API calls → result dispatch. This is the main hook to read when tracing a generation end-to-end.
+4. `services/apiGateway.ts` routes to Cloudflare Worker gateway (adds API keys server-side, verifies Supabase JWT)
+5. Results returned to store, rendered in `components/canvas/ImageCanvas.tsx` (Three.js, 94KB)
+6. `services/generationStorageService.ts` persists result to Supabase
+
+Modes `material-validation` and `document-translate` are `TEXT_ONLY_MODES` — they don't require an uploaded image and use different code paths in `useGeneration.ts`.
 
 ### Services Layer (`services/`)
 - `geminiService.ts` - Google Gemini API client (image/text generation)
@@ -86,11 +89,13 @@ Each generation deducts credits from `CREDITS_PER_MODE` in `lib/stripePrices.ts`
 ### UI Layout
 Three-panel workspace:
 - `components/panels/TopBar.tsx` - Mode selector and header
-- `components/panels/left/LeftSidebar.tsx` - Mode-specific controls
-- `components/panels/right/RightPanel.tsx` - Settings/adjustments
+- `components/panels/left/LeftSidebar.tsx` - Mode-specific controls (delegates to `Left<Mode>Panel.tsx`)
+- `components/panels/right/RightPanel.tsx` - Settings/adjustments (delegates to `<Mode>Panel.tsx` in `right/`)
 - `components/panels/bottom/BottomPanel.tsx` - History and tools
 - `components/canvas/ImageCanvas.tsx` - Three.js canvas (main viewport)
 - `components/panels/mobile/MobilePanels.tsx` - Mobile-responsive panel layout
+
+Each generation mode has two dedicated panel components: `left/Left<Mode>Panel.tsx` (inputs/controls) and `right/<Mode>Panel.tsx` (output settings). When adding a new mode, both are required. `SharedLeftComponents.tsx` and `SharedRightComponents.tsx` contain reusable panel primitives.
 
 ### Path Alias
 `@/` maps to the repository root (configured in both `vite.config.ts` and `tsconfig.json`).
