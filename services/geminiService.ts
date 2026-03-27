@@ -271,7 +271,8 @@ export class GeminiService {
   async generateText(request: GeminiRequest): Promise<string> {
     const contents = this.buildContents(request);
     const model = request.model || TEXT_MODEL;
-    const baseConfig = { ...request.generationConfig, responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'> };
+    const { imageConfig: _ic, ...configWithoutImage } = request.generationConfig || {};
+    const baseConfig = { ...configWithoutImage, responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'> };
     const normalized = this.normalizeThinkingConfig(model, baseConfig);
     const generationConfig = this.buildGenerationConfig(normalized, ['TEXT']);
 
@@ -435,8 +436,9 @@ export class GeminiService {
 
     const src = requests.map((request) => {
       const contents = this.buildContents(request);
+      const { imageConfig: _ic, ...configWithoutImage } = request.generationConfig || {};
       const normalized = this.normalizeThinkingConfig(TEXT_MODEL, {
-        ...request.generationConfig,
+        ...configWithoutImage,
         responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'>
       });
       const config = this.buildGenerationConfig(normalized, ['TEXT']);
