@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, BookOpen } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -762,6 +762,15 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
                 />
               )}
+              <a
+                href="/docs/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
+                title="User Manual"
+              >
+                <BookOpen size={16} />
+              </a>
               <button
                 onClick={() => logout()}
                 className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
@@ -1741,6 +1750,15 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               className="w-7 h-7 rounded-full object-cover border border-border"
             />
           )}
+          <a
+            href="/docs/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-elevated rounded-full transition-colors"
+            title="User Manual"
+          >
+            <BookOpen size={15} />
+          </a>
           <button
             onClick={() => logout()}
             className="p-1.5 text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
