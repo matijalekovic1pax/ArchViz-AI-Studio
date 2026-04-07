@@ -411,12 +411,12 @@ async function handleVeoGenerate(request, env) {
 
     // Route to Vertex AI when:
     //  - Frame interpolation (firstImage + lastImage) → needs veo-2-generate-preview
-    //  - Single image animate → veo-3.1-generate-preview on Vertex AI
+    //  - Single image animate → veo-3.1-generate-001 on Vertex AI
     //  - Caller explicitly requests Vertex AI
     const useVertex = (hasInterpolation || hasImage || useVertexAi) && hasVertexCreds;
 
-    // Use Veo 3.1 for all modes (veo-2-generate-preview requires separate project access)
-    const vertexModel = 'veo-3.1-generate-preview';
+    // Use Veo 3.1 for all modes
+    const vertexModel = 'veo-3.1-generate-001';
 
     console.log(`[veo-generate] hasInterpolation=${hasInterpolation} hasImage=${hasImage} useVertex=${!!useVertex} model=${useVertex ? vertexModel : 'gemini/veo-3.1'} firstImageBytes=${firstImage?.bytesBase64Encoded?.length || 0} lastImageBytes=${lastImage?.bytesBase64Encoded?.length || 0} imageBytes=${image?.bytesBase64Encoded?.length || 0}`);
 
@@ -448,7 +448,7 @@ async function handleVeoGenerate(request, env) {
     } else {
       // ── Gemini API path (text-to-video fallback) ──
       if (numberOfVideos) parameters.numberOfVideos = numberOfVideos;
-      endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-preview:predictLongRunning`;
+      endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-001:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
         'x-goog-api-key': env.GEMINI_API_KEY,
@@ -1174,7 +1174,7 @@ async function handleVertexPoll(request, env) {
   if (!opName) return corsResponse(origin, { error: 'Missing op param' }, { status: 400 });
   try {
     const accessToken = await getVertexAccessToken(env);
-    const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:fetchPredictOperation`;
+    const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-001:fetchPredictOperation`;
     const resp = await fetch(fetchUrl, {
       method: 'POST',
       headers: {
@@ -1237,7 +1237,7 @@ async function handleVertexDiag(request, env) {
   }
 
   // Step 4: probe Veo model — optionally test with firstImage/lastImage
-  const modelToProbe = new URL(request.url).searchParams.get('model') || 'veo-3.1-generate-preview';
+  const modelToProbe = new URL(request.url).searchParams.get('model') || 'veo-3.1-generate-001';
   const testInterp = new URL(request.url).searchParams.get('interp') === '1';
   // 1×1 white JPEG in base64 (minimal valid image for testing)
   const TINY_JPEG_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEA/8QAIhAAAQMEAgMAAAAAAAAAAAAAAQIDBAUREiExQVH/2gAIAQEAAD8AqGmQyuPvIxlxhRt1kNaKMfEQEEGh3Pn9n//Z';
@@ -1271,7 +1271,7 @@ async function handleVertexDiag(request, env) {
     if (opName) {
       await sleep(3000); // wait 3s so op has a chance to register
       try {
-        const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:fetchPredictOperation`;
+        const fetchUrl = `${VERTEX_AI_BASE}/projects/${env.GOOGLE_PROJECT_ID}/locations/us-central1/publishers/google/models/veo-3.1-generate-001:fetchPredictOperation`;
         const statusResp = await fetch(fetchUrl, {
           method: 'POST',
           headers: {

@@ -55,7 +55,7 @@ VITE_STRIPE_CREDITS_2000_PRICE_ID=        # Stripe price ID for 2000 credit top-
 Each generation deducts credits from `CREDITS_PER_MODE` in `lib/stripePrices.ts`. Plans: `unsubscribed` (free trial, bonus modes only), `starter` (600 cr/mo), `professional` (2000 cr/mo), `studio` (6000 cr/mo, org). Video is pay-per-generation via Stripe (not credits). `PROFESSIONAL_ONLY_MODES` lists modes requiring Professional+.
 
 ### State Management
-`store.tsx` - Zustand store with dispatch-based reducer pattern. `AppState` contains:
+`store.tsx` - React Context + `useReducer` pattern (not Zustand despite the file name). Access via `useAppStore()` which returns `{ state, dispatch }`. `AppState` contains:
 - `mode` - Current generation mode (17 modes total)
 - `uploadedImage` - Input image
 - `isGenerating` - Loading state
@@ -97,8 +97,11 @@ Three-panel workspace:
 
 Each generation mode has two dedicated panel components: `left/Left<Mode>Panel.tsx` (inputs/controls) and `right/<Mode>Panel.tsx` (output settings). When adding a new mode, both are required. `SharedLeftComponents.tsx` and `SharedRightComponents.tsx` contain reusable panel primitives.
 
+### Deployment
+Deployed to Cloudflare Workers with SPA fallback (`not_found_handling: "single-page-application"` in `wrangler.jsonc`). Static assets in `public/` are included in the build output via Vite.
+
 ### Path Alias
-`@/` maps to the repository root (configured in both `vite.config.ts` and `tsconfig.json`).
+`@/` maps to the repository root (not `src/`), configured in both `vite.config.ts` and `tsconfig.json`.
 
 ### External Infrastructure
 
@@ -108,6 +111,21 @@ Each generation mode has two dedicated panel components: `left/Left<Mode>Panel.t
 
 ### Internationalization
 i18next with browser language detection. Translation files in `locales/` (en, es, fr). localStorage key: `i18nextLng`.
+
+### Keyboard Shortcuts
+Defined in `App.tsx` via `ShortcutsListener`:
+- `Cmd/Ctrl + Enter` - Trigger generation
+- `Cmd/Ctrl + 1-9` - Switch between first 9 generation modes
+
+### Adding a New Generation Mode
+1. Add the mode string to `GenerationMode` union in `types.ts`
+2. Add workflow settings type and initial state in `store.tsx`
+3. Add prompt generation logic in `engine/promptEngine.ts`
+4. Create `components/panels/left/Left<Mode>Panel.tsx` (inputs/controls)
+5. Create `components/panels/right/<Mode>Panel.tsx` (output settings)
+6. Register in `LeftSidebar.tsx` and `RightPanel.tsx` switch statements
+7. Add credit cost in `lib/stripePrices.ts` (`CREDITS_PER_MODE`)
+8. Handle in `hooks/useGeneration.ts` if it needs special logic (like `TEXT_ONLY_MODES`)
 
 ### Types
 `types.ts` (2700+ lines) is the authoritative source for all TypeScript interfaces. Check here before creating new types. Supabase table types are in `lib/supabaseClient.ts`.

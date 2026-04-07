@@ -257,7 +257,7 @@ async function handleInitiateGeneration(request) {
     };
 
     // Make initial request to Vertex AI
-    const endpoint = `${VERTEX_AI_BASE_URL}/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.1-generate-preview:predictLongRunning`;
+    const endpoint = `${VERTEX_AI_BASE_URL}/projects/${projectId}/locations/us-central1/publishers/google/models/veo-3.1-generate-001:predictLongRunning`;
 
     const response = await fetch(endpoint, {
       method: 'POST',
