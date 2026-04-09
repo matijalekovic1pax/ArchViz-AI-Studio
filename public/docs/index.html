@@ -3,2384 +3,1210 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AVAS — User Manual</title>
-  <meta name="description" content="Complete user guide for AVAS — AI-powered architectural visualization platform. Learn all features, workflows, modes, and settings.">
+  <title>ArcVisAI Studio — User Manual</title>
+  <meta name="description" content="Complete user guide for ArcVisAI Studio — AI-powered architectural visualization platform.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Sora:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:          #0b0b0d;
-      --bg2:         #111114;
-      --bg3:         #181820;
-      --bg4:         #1f1f28;
-      --border:      rgba(255,255,255,0.07);
-      --border2:     rgba(255,255,255,0.12);
-      --text:        #f0ebe3;
-      --text2:       #9b9590;
-      --text3:       #5a564f;
-      --gold:        #c89b3a;
-      --gold-soft:   rgba(200,155,58,0.14);
-      --gold-glow:   rgba(200,155,58,0.06);
-      --teal:        #42b8a6;
-      --teal-soft:   rgba(66,184,166,0.12);
-      --rose:        #d46a6a;
-      --rose-soft:   rgba(212,106,106,0.12);
-      --violet:      #8a7ec8;
-      --violet-soft: rgba(138,126,200,0.12);
-      --sidebar-w:   280px;
-      --header-h:    64px;
-      --radius:      10px;
-      --radius-sm:   6px;
-      --font-display:'Cormorant', Georgia, serif;
-      --font-body:   'Sora', sans-serif;
-      --font-mono:   'IBM Plex Mono', monospace;
-      --transition:  220ms cubic-bezier(.4,0,.2,1);
+      --bg:            #FAFAF8;
+      --bg-secondary:  #F5F5F3;
+      --bg-tertiary:   #EEEDE9;
+      --surface:       #FFFFFF;
+      --surface-sunken:#F0F0EC;
+      --fg:            #1A1A1A;
+      --fg-secondary:  #4A4A4A;
+      --fg-muted:      #8A8A8A;
+      --fg-subtle:     #B0B0B0;
+      --border:        #E5E5E0;
+      --border-subtle: #EFEFEA;
+      --border-strong: #D0D0C8;
+      --accent:        #C9B99A;
+      --accent-hover:  #B8A687;
+      --accent-muted:  #E8E0D0;
+      --sidebar-w:     260px;
+      --header-h:      56px;
+      --font:          'Inter', system-ui, sans-serif;
+      --mono:          'JetBrains Mono', monospace;
+      --radius:        8px;
+      --radius-lg:     12px;
+      --shadow-subtle: 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-elevated: 0 8px 32px rgba(0,0,0,0.10);
+      --transition:    160ms cubic-bezier(.4,0,.2,1);
     }
 
-    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 24px); }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 20px); }
+
     body {
       background: var(--bg);
-      color: var(--text);
-      font-family: var(--font-body);
-      font-size: 15px;
-      line-height: 1.7;
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+    /* Layout */
+    .app-shell {
+      display: grid;
+      grid-template-rows: var(--header-h) 1fr;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-areas: "header header" "sidebar main";
       min-height: 100vh;
-      overflow-x: hidden;
     }
 
-    /* ── SCROLLBAR ── */
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
-
-    /* ── HEADER ── */
-    header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    /* Header */
+    .header {
+      grid-area: header;
       height: var(--header-h);
-      background: rgba(11,11,13,.88);
-      backdrop-filter: blur(16px) saturate(1.4);
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: 24px;
-      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: var(--shadow-subtle);
     }
-    .logo {
-      font-family: var(--font-display); font-size: 22px; font-weight: 500;
-      letter-spacing: .06em; color: var(--text);
-      text-decoration: none; white-space: nowrap; flex-shrink: 0;
-    }
-    .logo em { font-style: italic; color: var(--gold); }
-    .logo-tag {
-      font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .12em;
-      color: var(--text3); border: 1px solid var(--border2);
-      padding: 2px 7px; border-radius: 999px; margin-left: 10px;
+
+    .header-left { display: flex; align-items: center; gap: 10px; }
+
+    .logo-mark {
+      width: 32px; height: 32px;
+      background: var(--fg);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.18);
     }
+    .logo-mark span { color: var(--surface); font-weight: 700; font-size: 11px; letter-spacing: -0.3px; }
 
-    /* ── SEARCH ── */
-    .search-wrap {
-      flex: 1; max-width: 520px; position: relative;
-    }
-    .search-icon {
-      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-      pointer-events: none;
-    }
-    .search-icon svg { display: block; }
-    #search {
-      width: 100%; height: 38px;
-      background: var(--bg3); border: 1px solid var(--border2);
-      border-radius: var(--radius); padding: 0 16px 0 40px;
-      font-family: var(--font-body); font-size: 14px; color: var(--text);
-      outline: none; transition: border-color var(--transition), box-shadow var(--transition);
-    }
-    #search::placeholder { color: var(--text3); }
-    #search:focus {
-      border-color: var(--gold);
-      box-shadow: 0 0 0 3px var(--gold-glow);
-    }
-    .search-clear {
-      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; cursor: pointer; padding: 4px;
-      color: var(--text3); display: none; transition: color var(--transition);
-    }
-    .search-clear:hover { color: var(--text); }
-    .search-clear.visible { display: flex; }
-    .search-count {
-      position: absolute; right: 36px; top: 50%; transform: translateY(-50%);
-      font-family: var(--font-mono); font-size: 11px; color: var(--gold);
-      pointer-events: none;
-    }
+    .logo-text { display: flex; flex-direction: column; }
+    .logo-name { font-size: 12px; font-weight: 700; color: var(--fg); line-height: 1.2; }
+    .logo-sub  { font-size: 10px; color: var(--fg-muted); line-height: 1.2; }
 
-    /* ── LAYOUT ── */
-    .layout {
-      display: flex; padding-top: var(--header-h);
-    }
+    .header-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 
-    /* ── SIDEBAR ── */
-    .sidebar {
-      width: var(--sidebar-w); flex-shrink: 0;
-      position: sticky; top: var(--header-h);
-      height: calc(100vh - var(--header-h));
-      overflow-y: auto; overflow-x: hidden;
-      padding: 28px 0 40px;
-      border-right: 1px solid var(--border);
-    }
-    .sidebar::-webkit-scrollbar { width: 3px; }
-    .nav-section { margin-bottom: 4px; }
-    .nav-heading {
-      font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .14em;
-      color: var(--text3); padding: 10px 24px 6px;
-    }
-    .nav-link {
-      display: flex; align-items: center; gap: 9px;
-      padding: 7px 24px; font-size: 13.5px; font-weight: 400; color: var(--text2);
-      text-decoration: none; border-left: 2px solid transparent;
-      transition: color var(--transition), background var(--transition), border-color var(--transition);
-      cursor: pointer;
-    }
-    .nav-link:hover { color: var(--text); background: var(--bg3); }
-    .nav-link.active {
-      color: var(--gold); border-left-color: var(--gold);
-      background: var(--gold-glow); font-weight: 500;
-    }
-    .nav-dot {
-      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-    }
-    .nav-hidden { display: none !important; }
-
-    /* ── MAIN CONTENT ── */
-    main {
-      flex: 1; min-width: 0;
-      padding: 52px 60px 100px 64px;
-      max-width: 960px;
-    }
-
-    /* ── SEARCH NO RESULTS ── */
-    #no-results {
-      display: none; padding: 80px 0; text-align: center;
-    }
-    #no-results.visible { display: block; }
-    .no-results-icon { font-size: 48px; margin-bottom: 16px; }
-    .no-results-text { font-size: 18px; color: var(--text2); font-family: var(--font-display); font-style: italic; }
-    .no-results-sub { font-size: 13px; color: var(--text3); margin-top: 8px; }
-
-    /* ── SECTIONS ── */
-    .section {
-      margin-bottom: 72px;
-      transition: opacity var(--transition);
-    }
-    .section.hidden { display: none; }
-
-    /* ── SECTION HEADERS ── */
-    .section-eyebrow {
-      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .14em; color: var(--gold);
-      margin-bottom: 10px;
-    }
-    .section-title {
-      font-family: var(--font-display); font-size: 44px; font-weight: 500;
-      line-height: 1.1; color: var(--text); margin-bottom: 16px;
-      letter-spacing: -.01em;
-    }
-    .section-title em { font-style: italic; color: var(--gold); }
-    .section-lead {
-      font-size: 17px; line-height: 1.75; color: var(--text2);
-      max-width: 660px; margin-bottom: 36px;
-    }
-    .subsection-title {
-      font-family: var(--font-display); font-size: 28px; font-weight: 500;
-      color: var(--text); margin: 48px 0 16px; letter-spacing: -.005em;
-    }
-    .subsection-title em { font-style: italic; color: var(--gold); }
-    h4 {
-      font-family: var(--font-body); font-size: 13px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .1em; color: var(--text2);
-      margin: 28px 0 12px;
-    }
-
-    /* ── DIVIDER ── */
-    .divider {
-      height: 1px; background: var(--border);
-      margin: 64px 0;
-    }
-
-    /* ── HERO ── */
-    .hero {
-      padding: 20px 0 56px;
-      position: relative;
-    }
-    .hero::before {
-      content: ''; position: absolute; top: -52px; right: -60px;
-      width: 500px; height: 500px;
-      background: radial-gradient(ellipse at top right, rgba(200,155,58,.07) 0%, transparent 65%);
-      pointer-events: none;
-    }
-    .hero-kicker {
-      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .15em; color: var(--gold);
-      margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
-    }
-    .hero-kicker::before {
-      content: ''; display: block; width: 28px; height: 1px; background: var(--gold);
-    }
-    .hero-title {
-      font-family: var(--font-display); font-size: 72px; font-weight: 500;
-      line-height: 1.02; letter-spacing: -.02em; color: var(--text);
-      margin-bottom: 8px;
-    }
-    .hero-title em { font-style: italic; color: var(--gold); }
-    .hero-subtitle {
-      font-family: var(--font-display); font-size: 26px; font-weight: 400;
-      font-style: italic; color: var(--text2); margin-bottom: 28px;
-    }
-    .hero-desc {
-      font-size: 16px; line-height: 1.8; color: var(--text2); max-width: 580px; margin-bottom: 40px;
-    }
-    .hero-stats {
-      display: flex; gap: 40px; flex-wrap: wrap;
-    }
-    .hero-stat-num {
-      font-family: var(--font-display); font-size: 36px; font-weight: 500;
-      color: var(--gold); line-height: 1;
-    }
-    .hero-stat-label {
-      font-size: 12px; color: var(--text3); text-transform: uppercase;
-      letter-spacing: .09em; font-weight: 500; margin-top: 4px;
-    }
-
-    /* ── MODE GRID ── */
-    .mode-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;
-      margin-bottom: 12px;
-    }
-    .mode-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 18px 18px 16px;
-      cursor: pointer; transition: border-color var(--transition), background var(--transition), transform var(--transition);
-      text-decoration: none; display: block;
-    }
-    .mode-card:hover {
-      border-color: var(--border2); background: var(--bg3);
-      transform: translateY(-2px);
-    }
-    .mode-card-icon {
-      width: 34px; height: 34px; border-radius: var(--radius-sm);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; margin-bottom: 11px;
-    }
-    .mode-card-name {
-      font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 5px;
-    }
-    .mode-card-desc {
-      font-size: 12px; color: var(--text2); line-height: 1.5;
-    }
-    .mode-card-tag {
-      display: inline-block; margin-top: 10px;
-      font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .1em;
-      padding: 2px 7px; border-radius: 999px;
-    }
-
-    /* mode card colors */
-    .c-render { background: rgba(200,155,58,.12); }
-    .c-render .mode-card-icon { background: rgba(200,155,58,.15); }
-    .c-render .mode-card-tag { background: rgba(200,155,58,.1); color: var(--gold); }
-    .c-edit { background: rgba(66,184,166,.1); }
-    .c-edit .mode-card-icon { background: rgba(66,184,166,.14); }
-    .c-edit .mode-card-tag { background: rgba(66,184,166,.1); color: var(--teal); }
-    .c-video { background: rgba(212,106,106,.1); }
-    .c-video .mode-card-icon { background: rgba(212,106,106,.14); }
-    .c-video .mode-card-tag { background: rgba(212,106,106,.1); color: var(--rose); }
-    .c-doc { background: rgba(138,126,200,.1); }
-    .c-doc .mode-card-icon { background: rgba(138,126,200,.14); }
-    .c-doc .mode-card-tag { background: rgba(138,126,200,.1); color: var(--violet); }
-
-    /* ── INFO CARDS / CALLOUTS ── */
-    .callout {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-left: 3px solid var(--gold);
-      border-radius: 0 var(--radius) var(--radius) 0;
-      padding: 16px 20px; margin: 24px 0; font-size: 14px; color: var(--text2);
-    }
-    .callout.teal { border-left-color: var(--teal); }
-    .callout.rose { border-left-color: var(--rose); }
-    .callout strong { color: var(--text); font-weight: 600; }
-
-    /* ── FEATURE CARD ── */
-    .feature-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 24px 28px;
-      margin-bottom: 12px; transition: border-color var(--transition);
-    }
-    .feature-card:hover { border-color: var(--border2); }
-    .feature-card-header {
-      display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px;
-    }
-    .feature-icon {
-      width: 40px; height: 40px; border-radius: var(--radius-sm);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 19px; flex-shrink: 0; margin-top: 1px;
-    }
-    .feature-card-title {
-      font-family: var(--font-display); font-size: 22px; font-weight: 500;
-      color: var(--text); line-height: 1.2; margin-bottom: 4px;
-    }
-    .feature-card-subtitle {
-      font-size: 12.5px; color: var(--text2);
-      font-family: var(--font-mono);
-    }
-    .feature-card-body { font-size: 14.5px; color: var(--text2); line-height: 1.75; }
-    .feature-card-body p { margin-bottom: 10px; }
-
-    /* ── TAGS / BADGES ── */
-    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
-    .tag {
-      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-      padding: 3px 9px; border-radius: 999px;
-      background: rgba(255,255,255,.05); color: var(--text2);
+    .header-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px;
+      background: var(--surface-sunken);
       border: 1px solid var(--border);
+      border-radius: 99px;
+      font-size: 10px; font-weight: 600; color: var(--fg-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
     }
-    .tag.gold { background: var(--gold-soft); color: var(--gold); border-color: rgba(200,155,58,.25); }
-    .tag.teal { background: var(--teal-soft); color: var(--teal); border-color: rgba(66,184,166,.25); }
-    .tag.rose { background: var(--rose-soft); color: var(--rose); border-color: rgba(212,106,106,.25); }
-    .tag.violet { background: var(--violet-soft); color: var(--violet); border-color: rgba(138,126,200,.25); }
 
-    /* ── SETTINGS TABLE ── */
-    .settings-group {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden; margin-bottom: 12px;
+    .header-right { display: flex; align-items: center; gap: 8px; }
+
+    .search-wrap { position: relative; }
+
+    .search-input {
+      width: 220px; height: 32px;
+      background: var(--surface-sunken);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 0 12px 0 32px;
+      font-family: var(--font); font-size: 12px; color: var(--fg);
+      outline: none;
+      transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
     }
-    .settings-group-header {
-      padding: 14px 20px; background: var(--bg3);
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: 10px; cursor: pointer;
+    .search-input:focus {
+      border-color: var(--accent);
+      background: var(--surface);
+      box-shadow: 0 0 0 3px rgba(201,185,154,0.15);
+    }
+    .search-input::placeholder { color: var(--fg-muted); }
+
+    .search-icon {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--fg-muted); pointer-events: none;
+    }
+
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 0 12px; height: 32px;
+      background: var(--surface-sunken);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      font-size: 12px; font-weight: 500; color: var(--fg-secondary);
+      text-decoration: none;
+      transition: all var(--transition);
+    }
+    .back-btn:hover { background: var(--surface); border-color: var(--border-strong); color: var(--fg); }
+
+    /* Sidebar */
+    .sidebar {
+      grid-area: sidebar;
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      overflow-y: auto;
+      padding: 16px 0;
+    }
+
+    .nav-section-label {
+      font-size: 9.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--fg-muted);
+      padding: 8px 20px 4px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px;
+      margin: 0 8px;
+      border-radius: var(--radius);
+      font-size: 12.5px; font-weight: 500; color: var(--fg-secondary);
+      text-decoration: none;
+      transition: all var(--transition);
+    }
+    .nav-item:hover { background: var(--surface-sunken); color: var(--fg); }
+    .nav-item.active { background: var(--accent-muted); color: var(--fg); }
+    .nav-item.active .nav-dot { background: var(--accent-hover); }
+
+    .nav-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--border-strong); flex-shrink: 0;
       transition: background var(--transition);
     }
-    .settings-group-header:hover { background: var(--bg4); }
-    .settings-group-title {
-      font-size: 13.5px; font-weight: 600; color: var(--text);
-      flex: 1;
+
+    .nav-divider { height: 1px; background: var(--border-subtle); margin: 8px 12px; }
+
+    .nav-mode-tag {
+      margin-left: auto;
+      font-size: 9px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 2px 6px; border-radius: 99px; flex-shrink: 0;
     }
-    .settings-group-chevron {
-      color: var(--text3); transition: transform var(--transition);
-      font-size: 12px;
-    }
-    .settings-group.open .settings-group-chevron { transform: rotate(180deg); }
-    .settings-group-body { display: none; }
-    .settings-group.open .settings-group-body { display: block; }
-    .settings-row {
-      display: flex; align-items: flex-start; gap: 20px;
-      padding: 12px 20px; border-bottom: 1px solid var(--border);
-      font-size: 13.5px;
-    }
-    .settings-row:last-child { border-bottom: none; }
-    .settings-row:hover { background: rgba(255,255,255,.02); }
-    .settings-label {
-      width: 180px; flex-shrink: 0; font-weight: 500; color: var(--text);
-    }
-    .settings-type {
-      width: 100px; flex-shrink: 0;
-      font-family: var(--font-mono); font-size: 11px; color: var(--teal);
-    }
-    .settings-desc { flex: 1; color: var(--text2); line-height: 1.6; }
-    .settings-values {
-      font-family: var(--font-mono); font-size: 11.5px; color: var(--gold);
+    .tag-pro  { background: #FEF3C7; color: #92400E; }
+    .tag-free { background: var(--surface-sunken); color: var(--fg-muted); border: 1px solid var(--border); }
+
+    /* Main */
+    .main { grid-area: main; padding: 32px 40px 80px; max-width: 820px; }
+
+    .doc-section { margin-bottom: 48px; }
+
+    .section-eyebrow {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--fg-muted); margin-bottom: 5px;
     }
 
-    /* ── LIST STYLES ── */
-    ul.clean, ol.clean {
-      margin: 12px 0 12px 18px; color: var(--text2); font-size: 14.5px;
+    .section-title {
+      font-size: 21px; font-weight: 700; color: var(--fg);
+      line-height: 1.25; margin-bottom: 8px; letter-spacing: -0.4px;
     }
-    ul.clean li, ol.clean li { margin-bottom: 6px; line-height: 1.65; }
-    ul.clean li::marker { color: var(--gold); }
-    ol.clean li::marker { color: var(--gold); font-family: var(--font-mono); font-size: 12px; }
 
-    /* ── STEP LIST ── */
-    .steps { counter-reset: step; display: flex; flex-direction: column; gap: 8px; margin: 20px 0; }
-    .step {
-      counter-increment: step;
+    .section-lead {
+      font-size: 14px; color: var(--fg-secondary);
+      line-height: 1.7; margin-bottom: 20px; max-width: 580px;
+    }
+
+    /* Hero */
+    .hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      margin-bottom: 40px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: 0; right: 0;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle at top right, rgba(201,185,154,0.16) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px;
+      background: var(--accent-muted);
+      border: 1px solid var(--accent);
+      border-radius: 99px;
+      font-size: 10px; font-weight: 600; color: var(--accent-hover);
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 14px;
+    }
+    .hero h1 {
+      font-size: 26px; font-weight: 700; letter-spacing: -0.5px;
+      line-height: 1.2; margin-bottom: 10px; color: var(--fg);
+    }
+    .hero p {
+      font-size: 14px; color: var(--fg-secondary); line-height: 1.7;
+      max-width: 500px; margin-bottom: 20px;
+    }
+    .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+    .hero-stat { display: flex; flex-direction: column; gap: 1px; }
+    .hero-stat-num { font-size: 18px; font-weight: 700; color: var(--fg); letter-spacing: -0.3px; }
+    .hero-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-muted); }
+
+    /* Cards */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+      gap: 10px; margin-bottom: 12px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-subtle); }
+    .card-icon {
+      width: 32px; height: 32px;
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 10px; font-size: 14px;
+    }
+    .card-title { font-size: 12.5px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+    .card-desc  { font-size: 11.5px; color: var(--fg-muted); line-height: 1.5; }
+
+    /* Mode header */
+    .mode-header {
       display: flex; align-items: flex-start; gap: 14px;
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px 18px;
-      transition: border-color var(--transition);
+      padding: 18px 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); margin-bottom: 16px;
     }
-    .step:hover { border-color: var(--border2); }
-    .step::before {
-      content: counter(step, decimal-leading-zero);
-      font-family: var(--font-mono); font-size: 13px; font-weight: 500;
-      color: var(--gold); flex-shrink: 0; padding-top: 1px;
+    .mode-icon-lg {
+      width: 42px; height: 42px;
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 19px; flex-shrink: 0;
     }
-    .step-content { font-size: 14px; color: var(--text2); line-height: 1.65; }
-    .step-content strong { color: var(--text); }
+    .mode-meta { flex: 1; }
+    .mode-title { font-size: 16px; font-weight: 700; color: var(--fg); letter-spacing: -0.2px; margin-bottom: 3px; }
+    .mode-desc  { font-size: 13px; color: var(--fg-secondary); line-height: 1.55; }
 
-    /* ── TWO COLUMN ── */
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+    .mode-badge {
+      font-size: 9.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 3px 8px; border-radius: 99px; flex-shrink: 0; white-space: nowrap;
+    }
+    .badge-free { background: var(--surface-sunken); border: 1px solid var(--border); color: var(--fg-muted); }
+    .badge-pro  { background: #FEF3C7; border: 1px solid #FDE68A; color: #92400E; }
 
-    /* ── PLAN CARDS ── */
-    .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 28px 0; }
+    /* Prose */
+    .prose h3 { font-size: 12.5px; font-weight: 700; color: var(--fg); margin: 18px 0 6px; }
+    .prose p   { font-size: 13.5px; color: var(--fg-secondary); line-height: 1.7; margin-bottom: 10px; }
+    .prose ul  { list-style: none; padding: 0; margin-bottom: 12px; }
+    .prose ul li {
+      font-size: 13px; color: var(--fg-secondary);
+      padding: 3px 0 3px 16px; position: relative; line-height: 1.55;
+    }
+    .prose ul li::before {
+      content: ''; position: absolute; left: 4px; top: 10px;
+      width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+    }
+
+    /* Table */
+    .settings-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12.5px; margin-bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .settings-table th {
+      text-align: left; padding: 8px 14px;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-muted);
+      background: var(--surface-sunken); border-bottom: 1px solid var(--border);
+    }
+    .settings-table td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--fg-secondary); vertical-align: top;
+    }
+    .settings-table tr:last-child td { border-bottom: none; }
+    .settings-table td:first-child { font-weight: 600; color: var(--fg); }
+    .settings-table td code {
+      font-family: var(--mono); font-size: 11px;
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 5px; color: var(--fg-secondary);
+    }
+
+    /* Info boxes */
+    .info-box {
+      display: flex; gap: 10px;
+      padding: 11px 14px; border-radius: var(--radius); border: 1px solid;
+      margin-bottom: 12px; font-size: 13px; line-height: 1.55;
+    }
+    .info-box.tip  { background: rgba(201,185,154,0.10); border-color: var(--accent);             color: var(--fg-secondary); }
+    .info-box.note { background: rgba(59,130,246,0.05);  border-color: rgba(59,130,246,0.22);     color: var(--fg-secondary); }
+    .info-box.warn { background: rgba(245,158,11,0.06);  border-color: rgba(245,158,11,0.28);     color: var(--fg-secondary); }
+    .info-icon { font-size: 14px; flex-shrink: 0; line-height: 1.4; }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+    .step {
+      display: flex; gap: 12px; padding: 11px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); align-items: flex-start;
+    }
+    .step-num {
+      width: 20px; height: 20px;
+      background: var(--fg); color: var(--surface);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    .step-title { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 2px; }
+    .step-desc  { font-size: 12.5px; color: var(--fg-muted); line-height: 1.5; }
+
+    /* Shortcuts */
+    .shortcut-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px;
+    }
+    .shortcut-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 12px;
+    }
+    .shortcut-label { color: var(--fg-secondary); }
+    .kbd-combo { display: flex; align-items: center; gap: 3px; }
+    kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 20px; padding: 0 5px;
+      background: var(--surface-sunken);
+      border: 1px solid var(--border-strong); border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--fg-secondary);
+    }
+
+    /* Plans */
+    .plans-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 10px; margin-bottom: 16px;
+    }
     .plan-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 24px 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px 16px;
     }
     .plan-card.featured {
-      border-color: var(--gold); background: linear-gradient(135deg, var(--bg2) 0%, rgba(200,155,58,.05) 100%);
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(201,185,154,0.07) 0%, var(--surface) 100%);
     }
-    .plan-name {
-      font-family: var(--font-display); font-size: 22px; font-weight: 500;
-      color: var(--text); margin-bottom: 4px;
-    }
-    .plan-price {
-      font-family: var(--font-mono); font-size: 13px; color: var(--gold);
-      margin-bottom: 16px;
-    }
-    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-    .plan-features li {
-      font-size: 13px; color: var(--text2); display: flex; gap: 8px; align-items: flex-start;
-    }
-    .plan-features li::before { content: '✓'; color: var(--teal); flex-shrink: 0; font-weight: 600; }
+    .plan-name    { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-muted); margin-bottom: 5px; }
+    .plan-price   { font-size: 22px; font-weight: 700; color: var(--fg); letter-spacing: -0.5px; margin-bottom: 2px; }
+    .plan-price span { font-size: 12px; font-weight: 500; color: var(--fg-muted); letter-spacing: 0; }
+    .plan-credits { font-size: 11.5px; color: var(--fg-secondary); margin-bottom: 10px; }
+    .plan-features { list-style: none; padding: 0; }
+    .plan-features li { font-size: 11.5px; color: var(--fg-secondary); padding: 2px 0 2px 14px; position: relative; }
+    .plan-features li::before { content: '✓'; position: absolute; left: 0; color: var(--accent-hover); font-size: 10px; font-weight: 700; }
 
-    /* ── TIP CARDS ── */
-    .tip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 24px 0; }
-    .tip-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 22px 20px;
-      transition: border-color var(--transition), transform var(--transition);
+    /* Tips */
+    .tip-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+    .tip-item {
+      display: flex; gap: 12px; padding: 11px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); align-items: flex-start;
+      transition: border-color var(--transition);
     }
-    .tip-card:hover { border-color: var(--border2); transform: translateY(-2px); }
-    .tip-card-icon { font-size: 26px; margin-bottom: 12px; }
-    .tip-card-title { font-size: 14.5px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-    .tip-card-body { font-size: 13.5px; color: var(--text2); line-height: 1.65; }
+    .tip-item:hover { border-color: var(--border-strong); }
+    .tip-bullet { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .tip-text { font-size: 13px; color: var(--fg-secondary); line-height: 1.55; }
+    .tip-text strong { color: var(--fg); font-weight: 600; }
 
-    /* ── SHORTCUT TABLE ── */
-    .shortcut-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 20px 0; }
-    .shortcut-row {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); padding: 12px 16px;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .shortcut-action { font-size: 13px; color: var(--text2); }
-    .kbd {
-      font-family: var(--font-mono); font-size: 11px; color: var(--text);
-      background: var(--bg4); border: 1px solid var(--border2);
-      border-bottom-width: 2px; border-radius: 4px; padding: 2px 7px;
-    }
+    /* Divider */
+    .section-divider { height: 1px; background: var(--border); margin: 32px 0; }
 
-    /* ── MARK (search highlight) ── */
-    mark {
-      background: rgba(200,155,58,.3); color: var(--text);
-      border-radius: 2px; padding: 0 1px;
+    /* Interface diagram */
+    .interface-diagram {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px; margin-bottom: 18px;
     }
-
-    /* ── MODE DETAIL SECTION ── */
-    .mode-detail {
-      scroll-margin-top: calc(var(--header-h) + 24px);
+    .diagram-inner {
+      display: grid;
+      grid-template-columns: 76px 1fr 76px;
+      grid-template-rows: 30px 130px 38px;
+      gap: 4px;
+      font-size: 9.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .mode-header {
-      display: flex; align-items: flex-start; gap: 18px; margin-bottom: 20px;
-    }
-    .mode-big-icon {
-      width: 52px; height: 52px; border-radius: 12px;
+    .diag-cell {
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-radius: 6px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 24px; flex-shrink: 0;
+      color: var(--fg-muted); text-align: center;
+      padding: 4px; line-height: 1.3;
     }
-    .mode-title-wrap {}
-    .mode-title {
-      font-family: var(--font-display); font-size: 36px; font-weight: 500;
-      color: var(--text); line-height: 1.1; margin-bottom: 6px;
-    }
-    .mode-title em { font-style: italic; color: var(--gold); }
-    .mode-meta {
-      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    }
-    .mode-desc { font-size: 15px; color: var(--text2); line-height: 1.75; margin-bottom: 24px; max-width: 680px; }
+    .diag-header { grid-column: 1 / -1; background: var(--bg-tertiary); border-color: var(--border-strong); color: var(--fg-secondary); }
+    .diag-bottom { grid-column: 1 / -1; background: var(--bg-tertiary); border-color: var(--border-strong); color: var(--fg-secondary); }
+    .diag-canvas { background: var(--bg-secondary); border-style: dashed; color: var(--fg-secondary); }
 
-    /* ── INLINE CODE ── */
-    code {
-      font-family: var(--font-mono); font-size: 12px;
-      background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 4px; padding: 1px 6px; color: var(--teal);
+    /* Search results */
+    .search-results {
+      display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated);
+      max-height: 320px; overflow-y: auto; z-index: 100;
     }
+    .search-results.open { display: block; }
+    .search-result-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; cursor: pointer;
+      transition: background var(--transition);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover { background: var(--surface-sunken); }
+    .search-result-item mark { background: var(--accent-muted); color: var(--fg); border-radius: 2px; padding: 0 2px; }
+    .result-icon {
+      width: 26px; height: 26px;
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0;
+    }
+    .result-info { flex: 1; overflow: hidden; }
+    .result-title   { font-size: 12.5px; font-weight: 600; color: var(--fg); }
+    .result-section { font-size: 11px; color: var(--fg-muted); }
+    .no-results { padding: 20px; text-align: center; font-size: 13px; color: var(--fg-muted); }
 
-    /* ── TWO-PANEL COMPARISON ── */
-    .comparison {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
-      background: var(--border); border-radius: var(--radius);
-      overflow: hidden; margin: 20px 0;
-    }
-    .comparison-side {
-      background: var(--bg2); padding: 20px 22px;
-    }
-    .comparison-label {
-      font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
-      letter-spacing: .1em; margin-bottom: 10px; font-weight: 500;
-    }
-
-    /* ── RESPONSIVE ── */
-    @media (max-width: 1100px) {
-      main { padding: 48px 40px 80px 48px; }
-    }
-    @media (max-width: 860px) {
-      .sidebar { display: none; }
-      main { padding: 40px 24px 80px; max-width: 100%; }
-      .hero-title { font-size: 52px; }
-      .section-title { font-size: 36px; }
-      .mode-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-      .two-col { grid-template-columns: 1fr; }
-      .shortcut-grid { grid-template-columns: 1fr; }
-      .comparison { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 520px) {
-      header { gap: 12px; padding: 0 16px; }
-      .logo-tag { display: none; }
+    /* Highlight on jump */
+    .highlight-target { animation: highlight-flash 1.2s ease-out; border-radius: var(--radius-lg); }
+    @keyframes highlight-flash {
+      0%   { box-shadow: 0 0 0 3px rgba(201,185,154,0.5); }
+      100% { box-shadow: 0 0 0 0px rgba(201,185,154,0); }
     }
 
-    /* ── FADE IN ANIMATION ── */
-    .fade-in { animation: fadeInUp .5s ease both; }
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(16px); }
+    /* Load animation */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(6px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .section { animation: fadeInUp .4s ease both; }
+    .hero    { animation: fade-up 260ms ease-out both; }
+    .sidebar { animation: fade-up 180ms ease-out both; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .app-shell { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
+      .sidebar { display: none; }
+      .main { padding: 20px 16px 60px; }
+      .search-input { width: 150px; }
+      .shortcut-grid { grid-template-columns: 1fr; }
+      .plans-grid { grid-template-columns: 1fr 1fr; }
+    }
   </style>
 </head>
 <body>
+<div class="app-shell">
 
-<!-- ══════════ HEADER ══════════ -->
-<header>
-  <a class="logo" href="#">AVAS<em>.</em></a>
-  <span class="logo-tag">User Manual</span>
-  <div class="search-wrap">
-    <span class="search-icon">
-      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.35 10.06A4.5 4.5 0 1 1 10.06 9.35L13.35 12.65L12.65 13.35L9.35 10.06Z" fill="#5a564f" fill-rule="evenodd" clip-rule="evenodd"/>
-      </svg>
-    </span>
-    <input type="text" id="search" placeholder="Search features, modes, settings…" autocomplete="off" spellcheck="false">
-    <span class="search-count" id="search-count"></span>
-    <button class="search-clear" id="search-clear" aria-label="Clear search">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
-</header>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-mark"><span>AV</span></div>
+      <div class="logo-text">
+        <div class="logo-name">ArcVisAI Studio</div>
+        <div class="logo-sub">User Manual</div>
+      </div>
+      <div class="header-divider"></div>
+      <div class="header-badge">
+        <svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="#22C55E"/></svg>
+        v2.0
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="search-wrap" id="searchWrap">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" class="search-input" id="searchInput" placeholder="Search manual…" autocomplete="off" spellcheck="false"/>
+        <div class="search-results" id="searchResults"></div>
+      </div>
+      <a href="/" class="back-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+        Back to app
+      </a>
+    </div>
+  </header>
 
-<!-- ══════════ LAYOUT ══════════ -->
-<div class="layout">
-
-  <!-- ── SIDEBAR ── -->
+  <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
-    <div class="nav-section">
-      <div class="nav-heading">Start here</div>
-      <a class="nav-link" href="#overview">
-        <span class="nav-dot" style="background:var(--gold)"></span> Overview
-      </a>
-      <a class="nav-link" href="#getting-started">
-        <span class="nav-dot" style="background:var(--gold)"></span> Getting Started
-      </a>
-      <a class="nav-link" href="#interface">
-        <span class="nav-dot" style="background:var(--gold)"></span> The Interface
-      </a>
-    </div>
+    <div class="nav-section-label">Getting started</div>
+    <a class="nav-item active" href="#overview"><span class="nav-dot"></span>Overview</a>
+    <a class="nav-item" href="#getting-started"><span class="nav-dot"></span>Quick start</a>
+    <a class="nav-item" href="#interface"><span class="nav-dot"></span>Interface layout</a>
 
-    <div class="nav-section">
-      <div class="nav-heading">Rendering</div>
-      <a class="nav-link" href="#render-3d">
-        <span class="nav-dot" style="background:var(--gold)"></span> 3D Rendering
-      </a>
-      <a class="nav-link" href="#render-cad">
-        <span class="nav-dot" style="background:var(--gold)"></span> CAD to Render
-      </a>
-      <a class="nav-link" href="#render-sketch">
-        <span class="nav-dot" style="background:var(--gold)"></span> Sketch to Render
-      </a>
-      <a class="nav-link" href="#generate-text">
-        <span class="nav-dot" style="background:var(--gold)"></span> Generate from Text
-      </a>
-    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Generation modes</div>
+    <a class="nav-item" href="#mode-render-3d"><span class="nav-dot"></span>3D Rendering<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-render-cad"><span class="nav-dot"></span>CAD to Render<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-render-sketch"><span class="nav-dot"></span>Sketch to Render<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-generate-text"><span class="nav-dot"></span>Generate from Text<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-masterplan"><span class="nav-dot"></span>Masterplan<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-visual-edit"><span class="nav-dot"></span>Visual Edit<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-exploded"><span class="nav-dot"></span>Exploded View<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-section"><span class="nav-dot"></span>Section Render<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-multi-angle"><span class="nav-dot"></span>Multi-Angle<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-upscale"><span class="nav-dot"></span>Upscale<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-img-to-cad"><span class="nav-dot"></span>Image to CAD<span class="nav-mode-tag tag-pro">Pro</span></a>
+    <a class="nav-item" href="#mode-img-to-3d"><span class="nav-dot"></span>Image to 3D<span class="nav-mode-tag tag-pro">Pro</span></a>
+    <a class="nav-item" href="#mode-headshot"><span class="nav-dot"></span>Headshot Studio<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-video"><span class="nav-dot"></span>Video Studio<span class="nav-mode-tag tag-pro">Pro</span></a>
+    <a class="nav-item" href="#mode-material"><span class="nav-dot"></span>Material Validation<span class="nav-mode-tag tag-pro">Pro</span></a>
+    <a class="nav-item" href="#mode-translate"><span class="nav-dot"></span>Document Translate<span class="nav-mode-tag tag-pro">Pro</span></a>
+    <a class="nav-item" href="#mode-pdf"><span class="nav-dot"></span>PDF Compression<span class="nav-mode-tag tag-free">Free</span></a>
 
-    <div class="nav-section">
-      <div class="nav-heading">Design Tools</div>
-      <a class="nav-link" href="#masterplan">
-        <span class="nav-dot" style="background:var(--teal)"></span> Masterplan
-      </a>
-      <a class="nav-link" href="#visual-edit">
-        <span class="nav-dot" style="background:var(--teal)"></span> Visual Edit
-      </a>
-      <a class="nav-link" href="#exploded">
-        <span class="nav-dot" style="background:var(--teal)"></span> Exploded View
-      </a>
-      <a class="nav-link" href="#section">
-        <span class="nav-dot" style="background:var(--teal)"></span> Section Render
-      </a>
-      <a class="nav-link" href="#multi-angle">
-        <span class="nav-dot" style="background:var(--teal)"></span> Multi-Angle
-      </a>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-heading">Convert & Enhance</div>
-      <a class="nav-link" href="#upscale">
-        <span class="nav-dot" style="background:var(--teal)"></span> Upscale
-      </a>
-      <a class="nav-link" href="#img-to-cad">
-        <span class="nav-dot" style="background:var(--teal)"></span> Image to CAD
-      </a>
-      <a class="nav-link" href="#img-to-3d">
-        <span class="nav-dot" style="background:var(--teal)"></span> Image to 3D
-      </a>
-      <a class="nav-link" href="#headshot">
-        <span class="nav-dot" style="background:var(--teal)"></span> Headshot Studio
-      </a>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-heading">Video</div>
-      <a class="nav-link" href="#video">
-        <span class="nav-dot" style="background:var(--rose)"></span> Video Studio
-      </a>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-heading">Documents</div>
-      <a class="nav-link" href="#material-validation">
-        <span class="nav-dot" style="background:var(--violet)"></span> Material Validation
-      </a>
-      <a class="nav-link" href="#document-translate">
-        <span class="nav-dot" style="background:var(--violet)"></span> Document Translate
-      </a>
-      <a class="nav-link" href="#pdf-compression">
-        <span class="nav-dot" style="background:var(--violet)"></span> PDF Compression
-      </a>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-heading">Reference</div>
-      <a class="nav-link" href="#settings">
-        <span class="nav-dot" style="background:var(--text3)"></span> Render Settings
-      </a>
-      <a class="nav-link" href="#styles">
-        <span class="nav-dot" style="background:var(--text3)"></span> Styles
-      </a>
-      <a class="nav-link" href="#plans">
-        <span class="nav-dot" style="background:var(--text3)"></span> Plans & Credits
-      </a>
-      <a class="nav-link" href="#shortcuts">
-        <span class="nav-dot" style="background:var(--text3)"></span> Shortcuts
-      </a>
-      <a class="nav-link" href="#tips">
-        <span class="nav-dot" style="background:var(--text3)"></span> Tips
-      </a>
-    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Reference</div>
+    <a class="nav-item" href="#settings"><span class="nav-dot"></span>Render settings</a>
+    <a class="nav-item" href="#styles"><span class="nav-dot"></span>Architectural styles</a>
+    <a class="nav-item" href="#plans"><span class="nav-dot"></span>Plans &amp; credits</a>
+    <a class="nav-item" href="#shortcuts"><span class="nav-dot"></span>Keyboard shortcuts</a>
+    <a class="nav-item" href="#tips"><span class="nav-dot"></span>Tips &amp; tricks</a>
   </nav>
 
-  <!-- ── MAIN ── -->
-  <main id="main-content">
+  <!-- Main -->
+  <main class="main" id="main">
 
-    <!-- NO RESULTS -->
-    <div id="no-results">
-      <div class="no-results-icon">◎</div>
-      <div class="no-results-text">No results found</div>
-      <div class="no-results-sub">Try different keywords — e.g. "upscale", "video", "translate", "credits"</div>
-    </div>
-
-    <!-- ══ HERO ══ -->
-    <div id="overview" class="section" data-search="overview introduction what is avas architectural visualization ai tool platform features capabilities getting started welcome">
-      <div class="hero">
-        <div class="hero-kicker">Official User Manual</div>
-        <h1 class="hero-title">AVAS<em>.</em></h1>
-        <p class="hero-subtitle">AI Architectural Visualization Studio</p>
-        <p class="hero-desc">
-          AVAS is your team's AI-powered platform for creating photorealistic architectural visualizations, editing images, generating videos, translating documents, and much more — all from a single browser window, with no software to install.
-        </p>
-        <div class="hero-stats">
-          <div>
-            <div class="hero-stat-num">17</div>
-            <div class="hero-stat-label">AI Modes</div>
-          </div>
-          <div>
-            <div class="hero-stat-num">16+</div>
-            <div class="hero-stat-label">Built-in Styles</div>
-          </div>
-          <div>
-            <div class="hero-stat-num">13</div>
-            <div class="hero-stat-label">Languages</div>
-          </div>
-          <div>
-            <div class="hero-stat-num">4K</div>
-            <div class="hero-stat-label">Max Resolution</div>
-          </div>
-        </div>
+    <!-- Hero -->
+    <div class="hero" id="overview">
+      <div class="hero-tag">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        User Manual
       </div>
-
-      <div class="divider"></div>
-
-      <!-- QUICK MODE GRID -->
-      <div class="section-eyebrow">All 17 Modes at a Glance</div>
-      <h2 class="section-title">What can <em>AVAS</em> do?</h2>
-      <p class="section-lead">Click any mode below to jump to its full documentation, or use the search bar above to find a specific feature.</p>
-
-      <div class="mode-grid">
-        <a href="#render-3d" class="mode-card c-render">
-          <div class="mode-card-icon">🏛️</div>
-          <div class="mode-card-name">3D Rendering</div>
-          <div class="mode-card-desc">Turn 3D model files into photorealistic renders</div>
-          <span class="mode-card-tag">Rendering</span>
-        </a>
-        <a href="#render-cad" class="mode-card c-render">
-          <div class="mode-card-icon">📐</div>
-          <div class="mode-card-name">CAD to Render</div>
-          <div class="mode-card-desc">Convert CAD drawings to photorealistic images</div>
-          <span class="mode-card-tag">Rendering</span>
-        </a>
-        <a href="#render-sketch" class="mode-card c-render">
-          <div class="mode-card-icon">✏️</div>
-          <div class="mode-card-name">Sketch to Render</div>
-          <div class="mode-card-desc">Bring hand-drawn sketches to life</div>
-          <span class="mode-card-tag">Rendering</span>
-        </a>
-        <a href="#generate-text" class="mode-card c-render">
-          <div class="mode-card-icon">💬</div>
-          <div class="mode-card-name">Generate from Text</div>
-          <div class="mode-card-desc">Create architecture renders from text descriptions</div>
-          <span class="mode-card-tag">Rendering</span>
-        </a>
-        <a href="#masterplan" class="mode-card c-edit">
-          <div class="mode-card-icon">🗺️</div>
-          <div class="mode-card-name">Masterplan</div>
-          <div class="mode-card-desc">Visualize urban and site plans with zones</div>
-          <span class="mode-card-tag">Design</span>
-        </a>
-        <a href="#visual-edit" class="mode-card c-edit">
-          <div class="mode-card-icon">🖌️</div>
-          <div class="mode-card-name">Visual Edit</div>
-          <div class="mode-card-desc">AI-powered selective image editing</div>
-          <span class="mode-card-tag">Design</span>
-        </a>
-        <a href="#exploded" class="mode-card c-edit">
-          <div class="mode-card-icon">💥</div>
-          <div class="mode-card-name">Exploded View</div>
-          <div class="mode-card-desc">Axonometric diagrams showing building layers</div>
-          <span class="mode-card-tag">Design</span>
-        </a>
-        <a href="#section" class="mode-card c-edit">
-          <div class="mode-card-icon">🔪</div>
-          <div class="mode-card-name">Section Render</div>
-          <div class="mode-card-desc">Render architectural sections in 3D</div>
-          <span class="mode-card-tag">Design</span>
-        </a>
-        <a href="#multi-angle" class="mode-card c-edit">
-          <div class="mode-card-icon">🔄</div>
-          <div class="mode-card-name">Multi-Angle</div>
-          <div class="mode-card-desc">Generate up to 8 camera angles at once</div>
-          <span class="mode-card-tag">Design</span>
-        </a>
-        <a href="#upscale" class="mode-card c-edit">
-          <div class="mode-card-icon">🔍</div>
-          <div class="mode-card-name">Upscale</div>
-          <div class="mode-card-desc">Enlarge images without quality loss</div>
-          <span class="mode-card-tag">Enhance</span>
-        </a>
-        <a href="#img-to-cad" class="mode-card c-edit">
-          <div class="mode-card-icon">📏</div>
-          <div class="mode-card-name">Image to CAD</div>
-          <div class="mode-card-desc">Extract CAD guidance from photos or renders</div>
-          <span class="mode-card-tag">Convert</span>
-        </a>
-        <a href="#img-to-3d" class="mode-card c-edit">
-          <div class="mode-card-icon">🧊</div>
-          <div class="mode-card-name">Image to 3D</div>
-          <div class="mode-card-desc">Reconstruct 3D models from photos</div>
-          <span class="mode-card-tag">Convert</span>
-        </a>
-        <a href="#headshot" class="mode-card c-edit">
-          <div class="mode-card-icon">👤</div>
-          <div class="mode-card-name">Headshot Studio</div>
-          <div class="mode-card-desc">Professional AI headshots for the team</div>
-          <span class="mode-card-tag">Studio</span>
-        </a>
-        <a href="#video" class="mode-card c-video">
-          <div class="mode-card-icon">🎬</div>
-          <div class="mode-card-name">Video Studio</div>
-          <div class="mode-card-desc">Animate images into cinematic videos</div>
-          <span class="mode-card-tag">Video</span>
-        </a>
-        <a href="#material-validation" class="mode-card c-doc">
-          <div class="mode-card-icon">✅</div>
-          <div class="mode-card-name">Material Validation</div>
-          <div class="mode-card-desc">Cross-check specs against bill of quantities</div>
-          <span class="mode-card-tag">Documents</span>
-        </a>
-        <a href="#document-translate" class="mode-card c-doc">
-          <div class="mode-card-icon">🌐</div>
-          <div class="mode-card-name">Document Translate</div>
-          <div class="mode-card-desc">Translate PDFs, Word, and Excel files</div>
-          <span class="mode-card-tag">Documents</span>
-        </a>
-        <a href="#pdf-compression" class="mode-card c-doc">
-          <div class="mode-card-icon">🗜️</div>
-          <div class="mode-card-name">PDF Compression</div>
-          <div class="mode-card-desc">Shrink PDF file sizes in bulk</div>
-          <span class="mode-card-tag">Documents</span>
-        </a>
+      <h1>ArcVisAI Studio</h1>
+      <p>AI-powered architectural visualization — from concept sketch to photorealistic render, CAD drawing, video walkthrough, and more. Everything you need to get the most out of the platform.</p>
+      <div class="hero-stats">
+        <div class="hero-stat"><div class="hero-stat-num">17</div><div class="hero-stat-label">Generation modes</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">3</div><div class="hero-stat-label">Plan tiers</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">30+</div><div class="hero-stat-label">Arch. styles</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">4K</div><div class="hero-stat-label">Max resolution</div></div>
       </div>
     </div>
 
-    <!-- ══ GETTING STARTED ══ -->
-    <div id="getting-started" class="section" data-search="getting started first time login sign in account onboarding setup workflow how to use upload image begin new user">
-      <div class="section-eyebrow">First Steps</div>
-      <h2 class="section-title">Getting <em>Started</em></h2>
-      <p class="section-lead">New to AVAS? This section walks you through your first generation in under 5 minutes.</p>
-
-      <div class="callout">
-        <strong>No software needed.</strong> AVAS runs entirely in your browser. Sign in with your company account and you're ready to go — no downloads, no installations.
+    <!-- What it does -->
+    <div class="doc-section">
+      <div class="section-eyebrow">Platform overview</div>
+      <div class="section-title">What ArcVisAI Studio can do</div>
+      <div class="section-lead">A full visualization pipeline in one tool — generate, edit, translate, and export without leaving the browser.</div>
+      <div class="card-grid">
+        <div class="card"><div class="card-icon">🏛️</div><div class="card-title">Photo-quality renders</div><div class="card-desc">Transform 3D models, sketches, and CAD files into atmospheric renders.</div></div>
+        <div class="card"><div class="card-icon">✏️</div><div class="card-title">AI visual editing</div><div class="card-desc">Brush over any part of your image and describe the change.</div></div>
+        <div class="card"><div class="card-icon">🎬</div><div class="card-title">Video walkthroughs</div><div class="card-desc">Generate fly-through videos from a single still render.</div></div>
+        <div class="card"><div class="card-icon">📐</div><div class="card-title">CAD output</div><div class="card-desc">Extract SVG/DXF technical drawings from any photograph.</div></div>
+        <div class="card"><div class="card-icon">🌍</div><div class="card-title">Document translation</div><div class="card-desc">Translate full DOCX / Excel files preserving all formatting.</div></div>
+        <div class="card"><div class="card-icon">🔬</div><div class="card-title">Material validation</div><div class="card-desc">AI compliance check against your design specification.</div></div>
       </div>
+    </div>
 
-      <h3 class="subsection-title">Your First <em>Render</em></h3>
+    <div class="section-divider"></div>
+
+    <!-- Quick start -->
+    <div class="doc-section" id="getting-started">
+      <div class="section-eyebrow">Quick start</div>
+      <div class="section-title">Your first render in 60 seconds</div>
+      <div class="section-lead">From sign-up to rendered image in four steps.</div>
       <div class="steps">
-        <div class="step">
-          <div class="step-content"><strong>Log in</strong> at your AVAS URL using your company credentials.</div>
-        </div>
-        <div class="step">
-          <div class="step-content"><strong>Select a mode</strong> from the top bar. For your first try, choose <strong>3D Rendering</strong>.</div>
-        </div>
-        <div class="step">
-          <div class="step-content"><strong>Upload an image</strong> by dragging it onto the central canvas, or clicking the upload area in the left sidebar. You can use a screenshot of a 3D model, a render, or a photo.</div>
-        </div>
-        <div class="step">
-          <div class="step-content">Optionally, <strong>pick a style</strong> in the left panel (e.g. "Contemporary Minimalist" or "Neo-Brutalist").</div>
-        </div>
-        <div class="step">
-          <div class="step-content">Press the <strong>Generate</strong> button (or <kbd class="kbd">⌘ Enter</kbd>) and wait — typically 10–30 seconds.</div>
-        </div>
-        <div class="step">
-          <div class="step-content">Your result appears on the canvas. <strong>Download it</strong> using the download button in the top-right corner.</div>
-        </div>
+        <div class="step"><div class="step-num">1</div><div><div class="step-title">Sign in</div><div class="step-desc">Log in with your Google account. No installation needed — everything runs in the browser.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div><div class="step-title">Choose a mode</div><div class="step-desc">Select a generation mode from the top bar. Start with <strong>3D Rendering</strong> or <strong>Generate from Text</strong>.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div><div class="step-title">Upload &amp; configure</div><div class="step-desc">Drag your image onto the canvas. Set style, lighting, and camera angle in the left panel. Click Generate.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div><div class="step-title">Download or iterate</div><div class="step-desc">Save as PNG or JPG from the top bar, or pass the result into another mode to keep refining.</div></div></div>
       </div>
-
-      <div class="callout teal">
-        <strong>Tip:</strong> You can always undo and redo using the arrows in the top bar, and your generation history is always visible in the bottom panel under the "History" tab.
-      </div>
-
-      <h3 class="subsection-title">Understanding <em>Credits</em></h3>
-      <p class="section-lead" style="margin-bottom:16px">AVAS uses a credit system. Each generation consumes a small number of credits. Higher quality settings and more complex modes cost slightly more.</p>
-      <ul class="clean">
-        <li>Your remaining credits are shown in the top bar.</li>
-        <li>When you run low, you'll see a warning before generating.</li>
-        <li>Credits reset monthly according to your plan.</li>
-        <li>Batch operations (Upscale, PDF Compression) offer ~30% savings vs. individual processing.</li>
-      </ul>
+      <div class="info-box tip"><span class="info-icon">💡</span><span>New accounts receive a free credit allowance. No credit card required to try the platform.</span></div>
     </div>
 
-    <!-- ══ INTERFACE ══ -->
-    <div id="interface" class="section" data-search="interface ui layout panels sidebar canvas top bar bottom panel toolbar navigation workspace prompt history undo redo zoom pan download">
-      <div class="section-eyebrow">The Workspace</div>
-      <h2 class="section-title">The <em>Interface</em></h2>
-      <p class="section-lead">AVAS has a five-panel workspace. Here's what each part does.</p>
+    <div class="section-divider"></div>
 
-      <div class="feature-card">
-        <div class="feature-card-header">
-          <div class="feature-icon" style="background:rgba(200,155,58,.12)">🔝</div>
-          <div>
-            <div class="feature-card-title">Top Bar</div>
-            <div class="feature-card-subtitle">Navigation & mode selection</div>
-          </div>
-        </div>
-        <div class="feature-card-body">
-          <p>The top bar lets you switch between all 17 modes, access the download menu, change the interface language, undo/redo recent actions, and manage your account.</p>
-          <div class="tags">
-            <span class="tag">Mode Selector</span>
-            <span class="tag">Download</span>
-            <span class="tag">Undo / Redo</span>
-            <span class="tag">Language</span>
-            <span class="tag">Account</span>
-          </div>
+    <!-- Interface -->
+    <div class="doc-section" id="interface">
+      <div class="section-eyebrow">Interface</div>
+      <div class="section-title">Workspace layout</div>
+      <div class="section-lead">Five zones, consistent across all modes.</div>
+      <div class="interface-diagram">
+        <div class="diagram-inner">
+          <div class="diag-cell diag-header">Top bar — mode selector · undo/redo · download · settings</div>
+          <div class="diag-cell">Left sidebar<br>Mode controls<br>&amp; inputs</div>
+          <div class="diag-cell diag-canvas">Canvas<br>Three.js viewport</div>
+          <div class="diag-cell">Right panel<br>Output settings<br>&amp; adjustments</div>
+          <div class="diag-cell diag-bottom">History panel — past generations, quick re-run</div>
         </div>
       </div>
-
-      <div class="feature-card">
-        <div class="feature-card-header">
-          <div class="feature-icon" style="background:rgba(200,155,58,.12)">◀️</div>
-          <div>
-            <div class="feature-card-title">Left Sidebar — Workflow</div>
-            <div class="feature-card-subtitle">Mode-specific inputs and controls</div>
-          </div>
-        </div>
-        <div class="feature-card-body">
-          <p>The left sidebar changes based on the active mode. Here you upload images, configure workflow-specific settings, run AI analysis tools, and build up your generation inputs. Every mode has its own left panel with relevant controls.</p>
-        </div>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-card-header">
-          <div class="feature-icon" style="background:rgba(200,155,58,.12)">🖼️</div>
-          <div>
-            <div class="feature-card-title">Central Canvas</div>
-            <div class="feature-card-subtitle">Main viewport for images and video</div>
-          </div>
-        </div>
-        <div class="feature-card-body">
-          <p>The canvas displays your uploaded image and generated results. You can <strong>zoom</strong> using the scroll wheel, <strong>pan</strong> by holding Spacebar and dragging, and use the zoom controls in the corner. In Visual Edit mode, selection tools are drawn directly on the canvas.</p>
-          <div class="tags">
-            <span class="tag">Zoom</span>
-            <span class="tag">Pan</span>
-            <span class="tag">Split View (before/after)</span>
-            <span class="tag">Selection Drawing</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-card-header">
-          <div class="feature-icon" style="background:rgba(200,155,58,.12)">▶️</div>
-          <div>
-            <div class="feature-card-title">Right Panel — Settings</div>
-            <div class="feature-card-subtitle">Output quality, style, and render parameters</div>
-          </div>
-        </div>
-        <div class="feature-card-body">
-          <p>The right panel gives you control over how the output is generated — choose your resolution, aspect ratio, quality level, style, lighting, camera, materials, and more. You don't need to touch all these settings; the defaults produce excellent results for most use cases.</p>
-        </div>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-card-header">
-          <div class="feature-icon" style="background:rgba(200,155,58,.12)">🔽</div>
-          <div>
-            <div class="feature-card-title">Bottom Panel</div>
-            <div class="feature-card-subtitle">Prompt, history, and tools</div>
-          </div>
-        </div>
-        <div class="feature-card-body">
-          <p>The bottom panel has several tabs depending on the mode:</p>
-          <ul class="clean" style="margin-top:10px">
-            <li><strong>Prompt</strong> — View and edit the AI prompt. AVAS auto-generates a prompt from your settings, but you can also type your own.</li>
-            <li><strong>History</strong> — A thumbnail grid of all previous generations in this session. Click any to restore it.</li>
-            <li><strong>Timeline</strong> (Video & Exploded) — Playback controls and keyframe editor.</li>
-            <li><strong>Legend</strong> (Masterplan) — Zone color key.</li>
-          </ul>
-        </div>
-      </div>
+      <table class="settings-table">
+        <thead><tr><th>Zone</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Top bar</td><td>Switch modes, undo/redo selection masks, download output, project and language settings</td></tr>
+          <tr><td>Left sidebar</td><td>Mode-specific inputs: image upload, text prompts, style picker, camera controls</td></tr>
+          <tr><td>Canvas</td><td>Main viewport. Drag to pan, scroll to zoom. Paint selection masks for visual editing</td></tr>
+          <tr><td>Right panel</td><td>Output parameters: aspect ratio, resolution, lighting, render quality</td></tr>
+          <tr><td>History panel</td><td>Log of every generation this session. Click any thumbnail to restore it</td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="divider"></div>
+    <div class="section-divider"></div>
 
-    <!-- ══════════════════════════════════ -->
-    <!-- RENDERING MODES                    -->
-    <!-- ══════════════════════════════════ -->
+    <div class="doc-section">
+      <div class="section-eyebrow">Generation modes</div>
+      <div class="section-title">All 17 modes</div>
+      <div class="section-lead">Each mode is a specialized pipeline with its own inputs, controls, and output type.</div>
+    </div>
 
-    <!-- ══ RENDER 3D ══ -->
-    <div id="render-3d" class="section mode-detail" data-search="render 3d three dimensional model revit rhino sketchup blender 3ds max archicad cinema 4d photorealistic visualization rendering geometry lighting camera materials atmosphere style problem area analysis prioritization edge mode LOD level of detail smoothing displacement scenery people trees cars background reference contemporary minimalist neo-brutalist brutalist parametric scandinavian biophilic mid-century bauhaus">
+    <!-- 3D Rendering -->
+    <div class="doc-section" id="mode-render-3d">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(200,155,58,.12)">🏛️</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">3D <em>Rendering</em></h2>
-          <div class="mode-meta">
-            <span class="tag gold">Most Used</span>
-            <span class="tag">Requires uploaded image</span>
-            <span class="tag">Up to 4K</span>
-          </div>
+        <div class="mode-icon-lg">🏛️</div>
+        <div class="mode-meta"><div class="mode-title">3D Rendering</div><div class="mode-desc">Transforms a raw 3D model screenshot into a photorealistic architectural render.</div></div>
+        <span class="mode-badge badge-free">Free</span>
+      </div>
+      <div class="prose">
+        <h3>Input</h3>
+        <p>A screenshot from Blender, SketchUp, Rhino, Revit, or any 3D tool. Wireframe, clay, or textured views all work. White-background clay renders give the best geometry extraction.</p>
+        <h3>Key settings</h3>
+        <table class="settings-table">
+          <thead><tr><th>Setting</th><th>Options</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td>Architectural style</td><td>30+ styles</td><td>Sets the visual language — materials, detailing, era</td></tr>
+            <tr><td>Camera angle</td><td>Eye-level · Bird's-eye · Worm's-eye · Aerial · Interior</td><td>Determines perspective</td></tr>
+            <tr><td>Time of day</td><td>Golden hour · Midday · Dusk · Night · Overcast</td><td>Controls lighting mood</td></tr>
+            <tr><td>Environment</td><td>Urban · Suburban · Coastal · Forest · Desert…</td><td>Sets surrounding context</td></tr>
+            <tr><td>Resolution</td><td>1K · 2K · 4K</td><td>Output pixel density</td></tr>
+          </tbody>
+        </table>
+        <div class="tip-list">
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Consistent camera.</strong> Match the camera angle in your 3D tool with the mode setting for the most predictable result.</div></div>
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Problem-area tool.</strong> Mark messy geometry sections before generating — the engine compensates in its preprocessing pass.</div></div>
         </div>
       </div>
-
-      <p class="mode-desc">Transform a 3D model screenshot — from Revit, Rhino, SketchUp, Blender, 3ds Max, ArchiCAD, Cinema 4D, or any other 3D software — into a photorealistic architectural render. AVAS analyzes your model and applies lighting, materials, atmosphere, and style based on your settings.</p>
-
-      <div class="callout">
-        <strong>What to upload:</strong> A screenshot or exported image of your 3D model — it can be a shaded viewport, a clay render, or an existing render you want to improve. The higher quality your input, the better the output.
-      </div>
-
-      <h4>Step-by-Step</h4>
-      <div class="steps">
-        <div class="step"><div class="step-content"><strong>Upload your 3D model screenshot</strong> by dragging it onto the canvas.</div></div>
-        <div class="step"><div class="step-content">Click <strong>Analyze Problem Areas</strong> in the left sidebar to let AVAS auto-detect complex zones (optional but recommended for detailed models).</div></div>
-        <div class="step"><div class="step-content"><strong>Choose an architectural style</strong> from the style grid — hover over any style to preview it.</div></div>
-        <div class="step"><div class="step-content">Optionally adjust <strong>rendering mode</strong>, <strong>lighting</strong>, <strong>camera</strong>, and <strong>resolution</strong> in the right panel.</div></div>
-        <div class="step"><div class="step-content">Press <strong>Generate</strong>.</div></div>
-      </div>
-
-      <h4>Rendering Modes</h4>
-      <div class="two-col">
-        <div class="feature-card" style="margin:0">
-          <div class="feature-card-body">
-            <p><strong>Enhance</strong> — Improves your model while maintaining photorealism. Best for clean 3D models.</p>
-            <p><strong>Stylize</strong> — Applies a strong artistic interpretation. Great for concept presentations.</p>
-            <p><strong>Hybrid</strong> — Balanced between realism and style. The most versatile option.</p>
-          </div>
-        </div>
-        <div class="feature-card" style="margin:0">
-          <div class="feature-card-body">
-            <p><strong>Strict Realism</strong> — Maximum photorealism, minimal artistic license. For client presentations.</p>
-            <p><strong>Concept-Push</strong> — Strong conceptual interpretation. For early design stages.</p>
-          </div>
-        </div>
-      </div>
-
-      <h4>Problem Area Analysis</h4>
-      <p style="color:var(--text2);font-size:14.5px;line-height:1.75;margin-bottom:14px">AVAS can scan your uploaded image and automatically flag areas that might be challenging to render — such as thin elements, complex glass surfaces, or intricate details. This helps you decide where to apply extra care.</p>
-      <div class="tags">
-        <span class="tag">Structural issues</span>
-        <span class="tag">Envelope complexity</span>
-        <span class="tag">Interior zones</span>
-        <span class="tag">Site elements</span>
-        <span class="tag">Confidence scoring</span>
-      </div>
-
-      <h4>Background Reference</h4>
-      <p style="color:var(--text2);font-size:14.5px;line-height:1.75">Upload a photo of a real location or environment in the left sidebar. AVAS will use it as context for the background — placing your building in a specific urban or natural setting.</p>
     </div>
 
-    <!-- ══ CAD TO RENDER ══ -->
-    <div id="render-cad" class="section mode-detail" data-search="CAD drawing floor plan elevation section site plan convert render visualization layers wall window door stairs dimensions text scale room context ceiling door type background reference orientation north compass 1:100 1:200 1:500 autocad drawing type">
+    <!-- CAD to Render -->
+    <div class="doc-section" id="mode-render-cad">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(200,155,58,.12)">📐</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">CAD to <em>Render</em></h2>
-          <div class="mode-meta">
-            <span class="tag">Floor plans, elevations, sections</span>
-            <span class="tag">Auto layer detection</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">📐</div>
+        <div class="mode-meta"><div class="mode-title">CAD to Render</div><div class="mode-desc">Turns flat CAD drawings, floor plans, and section cuts into photorealistic renders.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Convert any architectural CAD drawing — floor plan, elevation, section, or site plan — into a photorealistic rendered visualization. AVAS auto-detects the layers in your drawing and uses them to generate accurate materials and spatial depth.</p>
-
-      <div class="callout">
-        <strong>Supported input:</strong> Export your CAD file as a PNG or JPG (screenshot or rendered view) and upload it directly. Clean black-and-white line drawings produce the best results.
-      </div>
-
-      <h4>Key Settings</h4>
-      <div class="settings-group open">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">CAD Settings</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Drawing Type</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc">Plan, section, elevation, or site. Tells AVAS how to interpret the geometry.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Scale</span>
-            <span class="settings-type">Select / Text</span>
-            <span class="settings-desc settings-values">1:50 · 1:100 · 1:200 · 1:500 · 1:1000 · custom</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Auto Layer Detection</span>
-            <span class="settings-type">Button</span>
-            <span class="settings-desc">AI scans your drawing and categorizes layers by type (walls, windows, doors, stairs, dimensions, annotations).</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Room Context</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc">Choose the room type (office, lobby, residence, retail, etc.) from 70+ options to give the AI spatial context.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Ceiling Type</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Flat · Coffered · Beams · Vaulted</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">North Orientation</span>
-            <span class="settings-type">Compass</span>
-            <span class="settings-desc">Rotate the compass to match your drawing orientation so lighting matches the real sun angle.</span>
-          </div>
-        </div>
+      <div class="prose">
+        <p>Upload a CAD export (PNG or JPG). The AI reads the line-work and renders it in full 3D. Works with floor plans, elevations, and sections.</p>
+        <table class="settings-table">
+          <thead><tr><th>Setting</th><th>Options</th></tr></thead>
+          <tbody>
+            <tr><td>Drawing type</td><td>Floor plan · Elevation · Section · Axonometric</td></tr>
+            <tr><td>Output view</td><td>Exterior · Interior · Aerial</td></tr>
+            <tr><td>Style</td><td>All 30+ architectural styles</td></tr>
+          </tbody>
+        </table>
+        <div class="info-box note"><span class="info-icon">ℹ️</span><span>Clean, high-contrast line-work on white produces significantly better results than scanned sketches with noise.</span></div>
       </div>
     </div>
 
-    <!-- ══ RENDER SKETCH ══ -->
-    <div id="render-sketch" class="section mode-detail" data-search="sketch hand-drawn drawing perspective 1-point 2-point 3-point isometric axonometric freehand vanishing points line quality completeness material palette mood lighting sketch to render">
+    <!-- Sketch to Render -->
+    <div class="doc-section" id="mode-render-sketch">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(200,155,58,.12)">✏️</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Sketch to <em>Render</em></h2>
-          <div class="mode-meta">
-            <span class="tag">Hand-drawn or digital sketches</span>
-            <span class="tag">Perspective auto-detection</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">✏️</div>
+        <div class="mode-meta"><div class="mode-title">Sketch to Render</div><div class="mode-desc">Takes a hand-drawn or digital concept sketch and generates a photorealistic render.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Upload a hand-drawn or digital sketch and AVAS will transform it into a finished architectural render. It automatically analyzes the perspective type, drawing quality, and vanishing points to produce an accurate result.</p>
-
-      <h4>Automatic Sketch Analysis</h4>
-      <p style="color:var(--text2);font-size:14.5px;line-height:1.75;margin-bottom:16px">Upload your sketch and AVAS will automatically detect:</p>
-      <ul class="clean">
-        <li><strong>Perspective type</strong> — 1-point, 2-point, 3-point, isometric, axonometric, or freehand</li>
-        <li><strong>Vanishing points</strong> — displayed as overlays on the canvas</li>
-        <li><strong>Line quality</strong> — a 0-100 score for how clean your linework is</li>
-        <li><strong>Completeness</strong> — how much of the design is drawn in</li>
-      </ul>
-
-      <h4>Material Palettes</h4>
-      <div class="two-col" style="margin:14px 0">
-        <div class="feature-card" style="margin:0;padding:16px 18px">
-          <div class="feature-card-body">
-            <p><strong>Concrete & Glass</strong> — modern, urban</p>
-            <p><strong>Wood & Brick</strong> — warm, traditional</p>
-            <p><strong>Stone & Metal</strong> — industrial, monumental</p>
-          </div>
-        </div>
-        <div class="feature-card" style="margin:0;padding:16px 18px">
-          <div class="feature-card-body">
-            <p><strong>Plaster & Timber</strong> — Mediterranean</p>
-            <p><strong>Corten & Concrete</strong> — contemporary</p>
-            <p><strong>Brick & Glass</strong> — adaptive reuse</p>
-          </div>
-        </div>
-      </div>
-
-      <h4>Mood Presets</h4>
-      <div class="tags">
-        <span class="tag">Soft Daylight</span>
-        <span class="tag">Golden Hour</span>
-        <span class="tag">Overcast</span>
-        <span class="tag">Moody</span>
-        <span class="tag">Night</span>
-        <span class="tag">Studio</span>
+      <div class="prose">
+        <p>For early design-phase ideation. Even rough pencil sketches produce useful results. The less detail, the more creative freedom the AI takes.</p>
+        <div class="info-box tip"><span class="info-icon">💡</span><span>Enable <strong>Structure adherence: High</strong> in the right panel for fidelity to your sketch. Set to <strong>Low</strong> for creative interpretation.</span></div>
       </div>
     </div>
 
-    <!-- ══ GENERATE TEXT ══ -->
-    <div id="generate-text" class="section mode-detail" data-search="generate from text text to image text prompt description no model required AI generation write describe architectural concept image generation chat">
+    <!-- Generate from Text -->
+    <div class="doc-section" id="mode-generate-text">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(200,155,58,.12)">💬</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Generate from <em>Text</em></h2>
-          <div class="mode-meta">
-            <span class="tag">No image required</span>
-            <span class="tag">Chat-style interface</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">💬</div>
+        <div class="mode-meta"><div class="mode-title">Generate from Text</div><div class="mode-desc">No image needed — describe a building or space and get a render.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Don't have a 3D model? Just describe what you want. Type a description of your architectural concept in the prompt bar at the bottom and AVAS will generate a photorealistic image from your words alone.</p>
-
-      <div class="callout">
-        <strong>Example prompt:</strong> "A minimalist concrete house on a hillside with floor-to-ceiling glass, surrounded by olive trees, golden hour lighting, Mediterranean setting."
+      <div class="prose">
+        <p>Type a description into the prompt box. The more context you provide (materials, lighting, surroundings, era), the more specific the result.</p>
+        <table class="settings-table">
+          <thead><tr><th>Style</th><th>Example prompt</th></tr></thead>
+          <tbody>
+            <tr><td>Brief</td><td><code>a brutalist library in a city square</code></td></tr>
+            <tr><td>Detailed</td><td><code>a Japanese minimalist wooden pavilion, exposed cedar beams, courtyard with bamboo, late afternoon light</code></td></tr>
+            <tr><td>Concept</td><td><code>a biophilic office tower where every floor has hanging gardens, tropical canopy through floor-to-ceiling glass</code></td></tr>
+          </tbody>
+        </table>
       </div>
-
-      <h4>Tips for Better Results</h4>
-      <ul class="clean">
-        <li>Describe <strong>materials</strong> specifically: "exposed concrete", "aged oak", "weathered steel"</li>
-        <li>Include <strong>lighting conditions</strong>: "golden hour", "overcast sky", "interior night lighting"</li>
-        <li>Mention <strong>surrounding context</strong>: "urban street", "forest clearing", "coastal cliff"</li>
-        <li>Specify <strong>camera angle</strong>: "street-level perspective", "aerial view", "interior shot"</li>
-        <li>All 16 architectural styles and right panel settings apply equally here</li>
-      </ul>
     </div>
 
-    <div class="divider"></div>
-
-    <!-- ══ MASTERPLAN ══ -->
-    <div id="masterplan" class="section mode-detail" data-search="masterplan site plan urban zoning massing density zones residential commercial office retail industrial green space water parking infrastructure location picker boundary north orientation auto detect zones hectares area custom scale">
+    <!-- Masterplan -->
+    <div class="doc-section" id="mode-masterplan">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🗺️</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Masterplan</h2>
-          <div class="mode-meta">
-            <span class="tag teal">Design</span>
-            <span class="tag">Site & urban plans</span>
-            <span class="tag">Zone detection</span>
-          </div>
+        <div class="mode-icon-lg">🗺️</div>
+        <div class="mode-meta"><div class="mode-title">Masterplan</div><div class="mode-desc">Generates a photorealistic aerial masterplan render from a satellite image or site diagram.</div></div>
+        <span class="mode-badge badge-free">Free</span>
+      </div>
+      <div class="prose">
+        <p>Upload a base satellite map or hand-drawn site plan. Draw a polygon boundary on the canvas to define your development zone. The AI renders the area with the specified program type and density.</p>
+        <div class="tip-list">
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Polygon tool.</strong> Click to place vertices. Double-click to close. Ctrl+Z undoes the last point.</div></div>
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Full-image mode.</strong> Skip the boundary tool to render the entire image as a masterplan.</div></div>
         </div>
-      </div>
-
-      <p class="mode-desc">Generate photorealistic or diagrammatic visualizations of large-scale site plans, masterplans, and urban strategies. Upload your site plan and AVAS will detect zones, calculate areas, and render the plan with accurate landscaping, density, and context.</p>
-
-      <h4>Plan Types</h4>
-      <div class="tags" style="margin-bottom:20px">
-        <span class="tag teal">Site Plan</span>
-        <span class="tag teal">Urban Plan</span>
-        <span class="tag teal">Zoning</span>
-        <span class="tag teal">Massing</span>
-      </div>
-
-      <h4>Zone Types (Auto-Detected)</h4>
-      <div class="two-col">
-        <ul class="clean">
-          <li>Residential — Low / Medium / High Density</li>
-          <li>Commercial</li>
-          <li>Retail</li>
-          <li>Office</li>
-          <li>Industrial</li>
-          <li>Mixed-Use</li>
-          <li>Green Space</li>
-        </ul>
-        <ul class="clean">
-          <li>Water</li>
-          <li>Infrastructure</li>
-          <li>Institutional</li>
-          <li>Civic</li>
-          <li>Parking</li>
-          <li>Future Development</li>
-        </ul>
-      </div>
-
-      <h4>Workflow</h4>
-      <div class="steps">
-        <div class="step"><div class="step-content">Upload a site plan image (aerial photo, map, or CAD export).</div></div>
-        <div class="step"><div class="step-content">Click <strong>Auto-Detect Zones</strong> — AVAS identifies boundaries, zones, and areas in hectares.</div></div>
-        <div class="step"><div class="step-content">Customize zones: add, edit, or delete them. Assign zone types and colors.</div></div>
-        <div class="step"><div class="step-content">Set the <strong>scale</strong>, <strong>north rotation</strong>, and optionally pin a <strong>real-world location</strong> for context.</div></div>
-        <div class="step"><div class="step-content">Generate the masterplan visualization.</div></div>
       </div>
     </div>
 
-    <!-- ══ VISUAL EDIT ══ -->
-    <div id="visual-edit" class="section mode-detail" data-search="visual edit selection material lighting object people sky remove adjust extend background brush lasso rectangle tool inpaint outpaint style transfer enhance replace remove fill mask edit image change modify selective edit">
+    <!-- Visual Edit -->
+    <div class="doc-section" id="mode-visual-edit">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🖌️</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Visual <em>Edit</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Design</span>
-            <span class="tag">Selection-based editing</span>
-            <span class="tag">9 tools</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🖌️</div>
+        <div class="mode-meta"><div class="mode-title">Visual Edit</div><div class="mode-desc">Paint a selection mask, describe the change, and the AI re-renders only that region.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Make targeted AI edits to any part of an image. Select a region using the brush, rectangle, or lasso tool, then choose what to do with it — change materials, adjust lighting, remove elements, add people, replace the sky, and more.</p>
-
-      <h4>How It Works</h4>
-      <ol class="clean">
-        <li>Upload the image you want to edit.</li>
-        <li>Choose a <strong>selection tool</strong> (rectangle, brush, or lasso) and draw over the area you want to change.</li>
-        <li>Choose an <strong>operation</strong> from the left toolbar.</li>
-        <li>Add a description in the prompt if needed (e.g. "replace with aged oak panels").</li>
-        <li>Generate.</li>
-      </ol>
-
-      <h4>Operation Tools</h4>
-      <div class="two-col">
-        <div class="feature-card" style="margin:0">
-          <div class="feature-card-body">
-            <p>🎨 <strong>Material</strong> — Change any surface finish. Select a wall and replace it with a different material.</p>
-            <p>💡 <strong>Lighting</strong> — Modify how light falls on the selected area.</p>
-            <p>📦 <strong>Object</strong> — Replace architectural elements (windows, doors, furniture).</p>
-            <p>🧑 <strong>People</strong> — Add, reposition, or remove human figures.</p>
-            <p>☁️ <strong>Sky</strong> — Change sky condition, clouds, time of day.</p>
-          </div>
-        </div>
-        <div class="feature-card" style="margin:0">
-          <div class="feature-card-body">
-            <p>🗑️ <strong>Remove</strong> — Delete unwanted elements; background fills in automatically.</p>
-            <p>🎚️ <strong>Adjust</strong> — Fine-tune colors, brightness, and saturation in a region.</p>
-            <p>↔️ <strong>Extend</strong> — Expand the image canvas beyond its original boundaries.</p>
-            <p>🌆 <strong>Background</strong> — Replace the surroundings while keeping the subject.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="callout teal">
-        <strong>Auto-Select:</strong> In the "Select" tool, you can type what you want to select (e.g. "all windows") and AVAS will automatically detect and outline those elements for you.
+      <div class="prose">
+        <table class="settings-table">
+          <thead><tr><th>Tool</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td>Brush</td><td>Irregular regions: foliage, curved walls</td></tr>
+            <tr><td>Rectangle</td><td>Windows, panels, rectangular facades</td></tr>
+            <tr><td>Polygon</td><td>Complex but crisp shapes</td></tr>
+          </tbody>
+        </table>
+        <div class="prose"><ul>
+          <li>Swap cladding: <em>"Replace with dark brushed steel panels"</em></li>
+          <li>Change landscape: <em>"Replace lawn with gravel courtyard and low hedges"</em></li>
+          <li>Update glazing: <em>"Floor-to-ceiling glass with thin aluminium frames"</em></li>
+          <li>Add greenery: <em>"Hanging planters and climbing plants"</em></li>
+        </ul></div>
+        <div class="info-box tip"><span class="info-icon">💡</span><span>Keep selections tight to the target area. Overly large masks can alter regions you didn't intend to change.</span></div>
       </div>
     </div>
 
-    <!-- ══ EXPLODED VIEW ══ -->
-    <div id="exploded" class="section mode-detail" data-search="exploded view axonometric diagram building layers components structure envelope interior MEP mechanical electrical plumbing site explode separate animation auto detect components assembly disassembly">
+    <!-- Exploded View -->
+    <div class="doc-section" id="mode-exploded">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">💥</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Exploded <em>View</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Design</span>
-            <span class="tag">Building system diagrams</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">💥</div>
+        <div class="mode-meta"><div class="mode-title">Exploded View</div><div class="mode-desc">Generates a technical exploded axonometric diagram revealing structural layers.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Create architectural exploded axonometric diagrams that show the different systems and layers of a building separated and floating apart. AVAS automatically identifies the components from your image.</p>
-
-      <h4>Component Categories</h4>
-      <div class="tags">
-        <span class="tag teal">Structure</span>
-        <span class="tag teal">Envelope</span>
-        <span class="tag teal">Interior</span>
-        <span class="tag teal">MEP</span>
-        <span class="tag teal">Site</span>
-      </div>
-
-      <h4>Workflow</h4>
-      <div class="steps">
-        <div class="step"><div class="step-content">Upload a 3D model image or existing render.</div></div>
-        <div class="step"><div class="step-content">Click <strong>Detect Components</strong> — AVAS identifies and lists structural systems.</div></div>
-        <div class="step"><div class="step-content">Review and edit the component list: add descriptions, reorder, or remove items.</div></div>
-        <div class="step"><div class="step-content">Generate the exploded diagram.</div></div>
+      <div class="prose">
+        <p>Separates the building into labelled layers (foundation, frame, envelope, interior, roof) with connecting guide lines. Best from isometric or axonometric model views.</p>
       </div>
     </div>
 
-    <!-- ══ SECTION ══ -->
-    <div id="section" class="section mode-detail" data-search="section render architectural section cut spatial zones program area reveal style cross section building interior depth">
+    <!-- Section Render -->
+    <div class="doc-section" id="mode-section">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🔪</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Section <em>Render</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Design</span>
-            <span class="tag">Architectural sections</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">✂️</div>
+        <div class="mode-meta"><div class="mode-title">Section Render</div><div class="mode-desc">Takes a flat section drawing and renders it as a dimensional architectural section perspective.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Transform a flat architectural section drawing into a rendered visualization with depth, materials, and spatial atmosphere. AVAS detects the program areas visible in the section and renders each zone accordingly.</p>
-
-      <h4>Area Detection</h4>
-      <p style="color:var(--text2);font-size:14.5px;line-height:1.75">Click <strong>Detect Areas</strong> and AVAS will scan the section and list all major spatial zones (living areas, circulation, mechanical, etc.). You can edit, toggle, and add descriptions to each zone before generating.</p>
+      <div class="prose">
+        <p>Upload a 2D section cut. The AI adds depth, materials, interior details, lighting, and human scale figures. Best with clearly drawn cut lines and poché on cut elements.</p>
+      </div>
     </div>
 
-    <!-- ══ MULTI-ANGLE ══ -->
-    <div id="multi-angle" class="section mode-detail" data-search="multi angle multiple views camera angles batch generation 4 6 8 views facade front back side aerial elevation view grid download all azimuth elevation rotation orbit">
+    <!-- Multi-Angle -->
+    <div class="doc-section" id="mode-multi-angle">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🔄</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Multi-<em>Angle</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Design</span>
-            <span class="tag">Up to 8 views in one generation</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🔄</div>
+        <div class="mode-meta"><div class="mode-title">Multi-Angle</div><div class="mode-desc">Generates several views of the same building simultaneously from a single input image.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Generate up to 8 views of your building from different camera angles all at once — front, back, sides, aerial, and custom angles — delivered as a single organized grid image.</p>
-
-      <h4>View Configuration</h4>
-      <ul class="clean">
-        <li><strong>View Count</strong> — Choose how many angles to generate (typically 4, 6, or 8).</li>
-        <li><strong>Azimuth Range</strong> — Set the horizontal sweep range (0° = front, 90° = right, 180° = rear).</li>
-        <li><strong>Elevation Range</strong> — Set the vertical tilt (0° = eye level, 45° = elevated, 90° = top-down).</li>
-        <li><strong>Manual Angles</strong> — Specify exact angles if needed.</li>
-      </ul>
-
-      <div class="callout teal">
-        <strong>Output:</strong> All views are delivered as a single grid image. You can download the complete grid or select individual panels.
+      <div class="prose">
+        <p>Select angles (front, side, rear, aerial, interior) using checkboxes in the left panel. All views share the same style settings for a consistent presentation package.</p>
       </div>
     </div>
 
-    <div class="divider"></div>
-
-    <!-- ══ UPSCALE ══ -->
-    <div id="upscale" class="section mode-detail" data-search="upscale enlarge increase resolution quality image enhancement batch 4x bigger higher resolution download retry queue failed processing">
+    <!-- Upscale -->
+    <div class="doc-section" id="mode-upscale">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🔍</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Upscale</h2>
-          <div class="mode-meta">
-            <span class="tag teal">Enhance</span>
-            <span class="tag">Batch up to 20 images</span>
-            <span class="tag">Up to 4× resolution</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🔍</div>
+        <div class="mode-meta"><div class="mode-title">Upscale</div><div class="mode-desc">Increases resolution and sharpens fine detail without unwanted changes.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Enlarge images up to 4× their original resolution while maintaining — or improving — quality. AVAS uses AI upscaling to add fine detail rather than simply stretching pixels. Process up to 20 images at once.</p>
-
-      <h4>How to Batch Upscale</h4>
-      <div class="steps">
-        <div class="step"><div class="step-content">Go to <strong>Upscale</strong> mode and click <strong>+ Add Images</strong> in the left sidebar.</div></div>
-        <div class="step"><div class="step-content">Select up to 20 images. They'll be added to the queue.</div></div>
-        <div class="step"><div class="step-content">Click <strong>Generate</strong> to start processing. Images process sequentially.</div></div>
-        <div class="step"><div class="step-content">Download completed images as they finish, or batch download all at the end.</div></div>
-      </div>
-
-      <div class="callout">
-        <strong>Cost saving:</strong> Processing images in a batch costs approximately 30% less than processing them individually.
+      <div class="prose">
+        <table class="settings-table">
+          <thead><tr><th>Mode</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td>Conservative</td><td>Adds sharpness only — stays very close to the original</td></tr>
+            <tr><td>Enhanced</td><td>Adds material texture and enriches lighting — slight reinterpretation</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- ══ IMG TO CAD ══ -->
-    <div id="img-to-cad" class="section mode-detail" data-search="image to CAD convert photo render to CAD drawing linework tracing guidance geometry edges symmetry openings scale CAD guidance AI preprocessing">
+    <!-- Image to CAD -->
+    <div class="doc-section" id="mode-img-to-cad">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">📏</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Image to <em>CAD</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Convert</span>
-            <span class="tag">AI-guided CAD tracing</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">📏</div>
+        <div class="mode-meta"><div class="mode-title">Image to CAD</div><div class="mode-desc">Reverse-engineers a photograph into a structured architectural line drawing (SVG / DXF).</div></div>
+        <span class="mode-badge badge-pro">Professional+</span>
       </div>
-
-      <p class="mode-desc">Upload any architectural photo or render and AVAS will analyze it to produce specific CAD tracing guidance — identifying key geometry, edges, symmetry lines, openings, and scale cues to assist your CAD drafter.</p>
-
-      <div class="callout">
-        <strong>Note:</strong> This mode produces <em>guidance</em> for CAD tracing, not a direct CAD file. The AI identifies what to trace and how, which your team then follows in their CAD software.
+      <div class="prose">
+        <p>Traces walls, openings, columns, and major structural elements into clean vector geometry, organized by layer. Importable directly into AutoCAD, Rhino, or Illustrator.</p>
+        <div class="info-box warn"><span class="info-icon">⚠️</span><span>Output is an AI interpretation, not a precise measurement. Always verify dimensions against original drawings before use in construction documentation.</span></div>
       </div>
     </div>
 
-    <!-- ══ IMG TO 3D ══ -->
-    <div id="img-to-3d" class="section mode-detail" data-search="image to 3D reconstruct 3D model from photo multiple views front side back reference photos 3D output mesh gltf">
+    <!-- Image to 3D -->
+    <div class="doc-section" id="mode-img-to-3d">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">🧊</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Image to <em>3D</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Convert</span>
-            <span class="tag">Multi-view input</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🧊</div>
+        <div class="mode-meta"><div class="mode-title">Image to 3D</div><div class="mode-desc">Generates orthographic reference views from a single architectural photograph for 3D reconstruction.</div></div>
+        <span class="mode-badge badge-pro">Professional+</span>
       </div>
-
-      <p class="mode-desc">Reconstruct a 3D model from one or more reference photographs. Upload multiple views of a building (front, side, rear) and AVAS will generate a 3D model suitable for further development.</p>
-
-      <h4>Input Tips</h4>
-      <ul class="clean">
-        <li>Upload at least a front view. Side and rear views improve accuracy.</li>
-        <li>Designate one image as the "primary" reference view.</li>
-        <li>Photos should be clear, well-lit, and show as much of the building as possible.</li>
-      </ul>
+      <div class="prose">
+        <p>Produces front, side, and top reference views for use when rebuilding a model from a photograph. Useful for massing studies and site modelling.</p>
+      </div>
     </div>
 
-    <!-- ══ HEADSHOT ══ -->
-    <div id="headshot" class="section mode-detail" data-search="headshot professional photo portrait LinkedIn corporate team photo studio background color black white formal smart casual creative role upload front left right reference">
+    <!-- Headshot -->
+    <div class="doc-section" id="mode-headshot">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(66,184,166,.14)">👤</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Headshot <em>Studio</em></h2>
-          <div class="mode-meta">
-            <span class="tag teal">Studio</span>
-            <span class="tag">Professional team photos</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">👤</div>
+        <div class="mode-meta"><div class="mode-title">Headshot Studio</div><div class="mode-desc">Generates professional headshots for proposals, CVs, and team pages.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Generate professional headshots for team members from everyday photos. Upload 1-3 reference photos and AVAS will produce polished, consistent professional portraits suitable for the company website, LinkedIn, and internal profiles.</p>
-
-      <h4>Photo Upload</h4>
-      <ul class="clean">
-        <li><strong>Front view</strong> (primary) — face forward, neutral expression</li>
-        <li><strong>Left profile</strong> (90° side view) — optional, improves consistency</li>
-        <li><strong>Right profile</strong> (90° side view) — optional, improves consistency</li>
-      </ul>
-
-      <h4>Style Options</h4>
-      <div class="settings-group open">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">Headshot Settings</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Style</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Professional · Website Custom</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Tone</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Smart Casual · Formal · Creative</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Purpose</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">LinkedIn · Corporate · Personal Branding</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Color Mode</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc settings-values">Color · Black & White</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Background</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Studio Grey · White · Custom</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Facing Direction</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Left · Center · Right</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Role (optional)</span>
-            <span class="settings-type">Text</span>
-            <span class="settings-desc">Job title used as context for the headshot style (e.g. "Architect", "Director").</span>
-          </div>
-        </div>
+      <div class="prose">
+        <table class="settings-table">
+          <thead><tr><th>Setting</th><th>Options</th></tr></thead>
+          <tbody>
+            <tr><td>Format</td><td>Square (1:1) · Portrait (3:4) · Wide (16:9)</td></tr>
+            <tr><td>Background</td><td>Studio white · Neutral grey · Office · Outdoor · Abstract</td></tr>
+            <tr><td>Style</td><td>Corporate · Editorial · Creative</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="divider"></div>
-
-    <!-- ══ VIDEO ══ -->
-    <div id="video" class="section mode-detail" data-search="video animation animate image video studio generate video camera motion cinematic pan zoom orbit dolly duration resolution fps aspect ratio social media instagram linkedin youtube tiktok seed audio music motion style smooth dynamic interpolation morph start end frame">
+    <!-- Video -->
+    <div class="doc-section" id="mode-video">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(212,106,106,.14)">🎬</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Video <em>Studio</em></h2>
-          <div class="mode-meta">
-            <span class="tag rose">Video</span>
-            <span class="tag">Image → Video</span>
-            <span class="tag">Frame Interpolation</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🎬</div>
+        <div class="mode-meta"><div class="mode-title">Video Studio</div><div class="mode-desc">Creates cinematic video walkthroughs from a single still render using Veo 2 or Kling AI.</div></div>
+        <span class="mode-badge badge-pro">Pay-per-clip</span>
       </div>
-
-      <p class="mode-desc">Turn any architectural render or photo into a cinematic video. AVAS animates a still image with realistic camera movement, or smoothly morphs between two images using frame interpolation.</p>
-
-      <h4>Input Modes</h4>
-      <div class="comparison">
-        <div class="comparison-side">
-          <div class="comparison-label" style="color:var(--rose)">Image Animate</div>
-          <p style="font-size:14px;color:var(--text2);line-height:1.65">Upload a single image. AVAS adds camera movement and environmental animation (clouds, people, water, trees) to create an 8-second video.</p>
-        </div>
-        <div class="comparison-side">
-          <div class="comparison-label" style="color:var(--teal)">Frame Interpolation</div>
-          <p style="font-size:14px;color:var(--text2);line-height:1.65">Upload a start frame and end frame. AVAS generates a smooth transition between them — great for showing before/after or design evolution.</p>
-        </div>
-      </div>
-
-      <h4>Video Settings</h4>
-      <div class="settings-group open">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">Output Settings</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Duration</span>
-            <span class="settings-type">Number</span>
-            <span class="settings-desc">Video length in seconds. Default is 8 seconds.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Aspect Ratio</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">16:9 · 4:3 · 3:2 · 1:1 · 21:9 · 9:16</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Camera Type</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Static · Pan · Zoom · Orbit · Dolly</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Motion Style</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Smooth · Dynamic · Cinematic</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Motion Amount</span>
-            <span class="settings-type">Slider (0–10)</span>
-            <span class="settings-desc">Controls how much the camera moves. 0 = nearly static, 10 = very dynamic.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Generate Audio</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Optionally add AI-generated ambient background music to the video.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Social Media Preset</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc">Automatically sets aspect ratio and duration for Instagram, TikTok, YouTube, or LinkedIn.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Seed</span>
-            <span class="settings-type">Number + Toggle</span>
-            <span class="settings-desc">Lock the seed to reproduce the exact same video motion on subsequent generations.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Negative Prompt</span>
-            <span class="settings-type">Text</span>
-            <span class="settings-desc">Describe things to exclude from the video (e.g. "blur, people, text, watermark").</span>
-          </div>
-        </div>
+      <div class="prose">
+        <p>Video is charged per clip via Stripe, not from your credit balance. Generation runs asynchronously (2–4 min) and delivers a notification when ready.</p>
+        <table class="settings-table">
+          <thead><tr><th>Motion preset</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Fly-through</td><td>Camera pushes forward into the scene</td></tr>
+            <tr><td>Orbit</td><td>Camera rotates around the central subject</td></tr>
+            <tr><td>Pull-back</td><td>Camera retreats to reveal surrounding context</td></tr>
+            <tr><td>Crane up</td><td>Vertical rise to aerial perspective</td></tr>
+            <tr><td>Custom</td><td>Describe the camera motion in natural language</td></tr>
+          </tbody>
+        </table>
+        <div class="info-box tip"><span class="info-icon">💡</span><span>Upscale your still before generating video — clip quality is directly proportional to input render quality.</span></div>
       </div>
     </div>
 
-    <div class="divider"></div>
-
-    <!-- ══ MATERIAL VALIDATION ══ -->
-    <div id="material-validation" class="section mode-detail" data-search="material validation specifications bill of quantities BoQ cross reference verify check materials spec document PDF excel CSV technical standards compliance architecture construction">
+    <!-- Material Validation -->
+    <div class="doc-section" id="mode-material">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(138,126,200,.14)">✅</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Material <em>Validation</em></h2>
-          <div class="mode-meta">
-            <span class="tag violet">Documents</span>
-            <span class="tag">PDF · Excel · CSV</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🔬</div>
+        <div class="mode-meta"><div class="mode-title">Material Validation</div><div class="mode-desc">Upload a materials schedule and get an AI compliance check with flagged issues.</div></div>
+        <span class="mode-badge badge-pro">Professional+</span>
       </div>
-
-      <p class="mode-desc">Upload your material specification documents and bill of quantities (BoQ) and AVAS will automatically cross-reference them — flagging discrepancies, missing items, and items that don't meet specifications.</p>
-
-      <h4>How to Use</h4>
-      <div class="steps">
-        <div class="step"><div class="step-content">Go to <strong>Material Validation</strong> mode.</div></div>
-        <div class="step"><div class="step-content">Upload your documents — you can add multiple files (PDFs, Excel sheets, CSVs).</div></div>
-        <div class="step"><div class="step-content">The AI will classify each document (specification, BoQ, etc.) automatically.</div></div>
-        <div class="step"><div class="step-content">Click <strong>Run Validation</strong> to start the cross-reference analysis.</div></div>
-        <div class="step"><div class="step-content">Review the AI summary highlighting discrepancies and issues.</div></div>
-      </div>
-
-      <div class="callout">
-        <strong>Supported formats:</strong> PDF, XLSX, CSV. Best results come from clearly structured specification documents alongside a BoQ.
+      <div class="prose">
+        <p>No image required. Paste or upload a materials schedule (PDF, DOCX, or plain text) and describe the design spec. The AI flags non-compliant, mismatched, or problematic materials.</p>
+        <div class="prose"><ul>
+          <li><strong>Compliant items</strong> — confirmed with no issues</li>
+          <li><strong>Flagged items</strong> — requiring verification or substitution</li>
+          <li><strong>Suggested alternatives</strong> — compliant replacements for flagged items</li>
+          <li><strong>Summary</strong> — overall assessment and priority actions</li>
+        </ul></div>
       </div>
     </div>
 
-    <!-- ══ DOCUMENT TRANSLATE ══ -->
-    <div id="document-translate" class="section mode-detail" data-search="document translate translation PDF DOCX Word Excel XLSX language Spanish French German Italian Portuguese Chinese Japanese Korean Arabic Russian Serbian auto detect preserve formatting headers footnotes translation quality fast standard high quality">
+    <!-- Document Translate -->
+    <div class="doc-section" id="mode-translate">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(138,126,200,.14)">🌐</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">Document <em>Translate</em></h2>
-          <div class="mode-meta">
-            <span class="tag violet">Documents</span>
-            <span class="tag">13 languages</span>
-            <span class="tag">PDF · DOCX · XLSX</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🌍</div>
+        <div class="mode-meta"><div class="mode-title">Document Translate</div><div class="mode-desc">Translates DOCX and Excel files preserving all formatting, tables, styles, and layout.</div></div>
+        <span class="mode-badge badge-pro">Professional+</span>
       </div>
-
-      <p class="mode-desc">Translate entire architectural documents while preserving their original formatting — page layout, tables, headings, and footnotes remain intact. Supports PDF, Word, and Excel files.</p>
-
-      <h4>Supported Languages</h4>
-      <div class="tags">
-        <span class="tag">English</span><span class="tag">Spanish</span><span class="tag">French</span>
-        <span class="tag">German</span><span class="tag">Italian</span><span class="tag">Portuguese</span>
-        <span class="tag">Chinese</span><span class="tag">Japanese</span><span class="tag">Korean</span>
-        <span class="tag">Arabic</span><span class="tag">Russian</span><span class="tag">Serbian</span>
-        <span class="tag">Auto-detect</span>
-      </div>
-
-      <h4>Options</h4>
-      <div class="settings-group open">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">Translation Settings</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Translation Quality</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Fast · Standard · High Quality</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Preserve Formatting</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Keep the original document's layout and formatting intact in the translated version.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Translate Headers</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Include or skip document headers and titles in the translation.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Translate Footnotes</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Include or skip footnotes and annotations.</span>
-          </div>
-        </div>
+      <div class="prose">
+        <p>Designed for architectural specifications, tender documents, and technical reports. Preserves exact document structure — paragraph styles, tables, headers, footers — in the output.</p>
+        <div class="prose"><ul>
+          <li>DOCX — full formatting preservation</li>
+          <li>XLSX — cell content translated, formulas preserved</li>
+          <li>PDF — converted to DOCX first, then translated (minor formatting loss)</li>
+        </ul></div>
       </div>
     </div>
 
-    <!-- ══ PDF COMPRESSION ══ -->
-    <div id="pdf-compression" class="section mode-detail" data-search="PDF compression compress reduce file size smaller PDF batch upload image quality metadata strip remove large files bandwidth">
+    <!-- PDF Compression -->
+    <div class="doc-section" id="mode-pdf">
       <div class="mode-header">
-        <div class="mode-big-icon" style="background:rgba(138,126,200,.14)">🗜️</div>
-        <div class="mode-title-wrap">
-          <h2 class="mode-title">PDF <em>Compression</em></h2>
-          <div class="mode-meta">
-            <span class="tag violet">Documents</span>
-            <span class="tag">Batch up to 20 PDFs</span>
-          </div>
-        </div>
+        <div class="mode-icon-lg">🗜️</div>
+        <div class="mode-meta"><div class="mode-title">PDF Compression</div><div class="mode-desc">Compresses large architectural PDF sets for email submission or portal upload.</div></div>
+        <span class="mode-badge badge-free">Free</span>
       </div>
-
-      <p class="mode-desc">Reduce PDF file sizes in bulk — perfect for large drawing sets, presentation packages, or specification documents that need to be emailed or uploaded. Process up to 20 PDFs at once.</p>
-
-      <h4>Compression Options</h4>
-      <div class="settings-group open">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">Compression Settings</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Compression Level</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Light · Balanced · Maximum</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Image Quality</span>
-            <span class="settings-type">Slider (1–100%)</span>
-            <span class="settings-desc">Controls the quality of embedded images. 70% is the recommended default for a good size/quality balance.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Remove Metadata</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Strips non-essential document metadata (author info, creation dates, comments) to further reduce file size.</span>
-          </div>
-        </div>
+      <div class="prose">
+        <p>Upload any PDF and select a compression level: Low (max quality), Medium (balanced), or High (minimum file size). Typical architectural drawing sets see 40–70% reduction at Medium.</p>
       </div>
     </div>
 
-    <div class="divider"></div>
+    <div class="section-divider"></div>
 
-    <!-- ══ SETTINGS REFERENCE ══ -->
-    <div id="settings" class="section" data-search="render settings geometry lighting camera materials atmosphere scenery format resolution aspect ratio quality edge mode LOD detail smoothing displacement sun shadow ambient occlusion lens depth of field aperture focus reflectivity roughness weathering fog bloom temperature mood people trees cars draft preview production ultra">
-      <div class="section-eyebrow">Full Reference</div>
-      <h2 class="section-title">Render <em>Settings</em></h2>
-      <p class="section-lead">The right panel in 3D Rendering and CAD to Render modes gives you granular control over every aspect of the output. Here's a full reference.</p>
+    <!-- Render Settings -->
+    <div class="doc-section" id="settings">
+      <div class="section-eyebrow">Reference</div>
+      <div class="section-title">Render settings</div>
+      <div class="section-lead">All output parameters available in the right panel.</div>
+      <table class="settings-table">
+        <thead><tr><th>Setting</th><th>Values</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Aspect ratio</td><td>1:1 · 4:3 · 3:2 · 16:9 · 9:16 · 3:4</td><td>Landscape ratios suit exteriors; portrait suits tall buildings and social media</td></tr>
+          <tr><td>Resolution</td><td>1K · 2K · 4K</td><td>Use 1K for iteration, 4K for final delivery</td></tr>
+          <tr><td>Lighting preset</td><td>Golden hour · Midday · Dusk · Night · Overcast · Studio</td><td>Affects shadow direction, colour temperature, and mood</td></tr>
+          <tr><td>Rendering style</td><td>Photorealistic · Sketch · Watercolour · Technical · Diagram</td><td>Non-photorealistic styles use fewer credits</td></tr>
+          <tr><td>Detail level</td><td>Draft · Standard · High · Ultra</td><td>Ultra adds micro-detail at extra credit cost</td></tr>
+          <tr><td>People</td><td>None · Sparse · Populated</td><td>Adds human scale figures to the scene</td></tr>
+          <tr><td>Vegetation</td><td>None · Minimal · Lush</td><td>Controls trees, planting, and groundcover</td></tr>
+          <tr><td>Weather</td><td>Clear · Partly cloudy · Overcast · Rain · Snow</td><td>Overcast + midday = soft, even, shadowless light</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-      <div class="callout">
-        <strong>You don't need to change everything.</strong> AVAS's defaults produce excellent results. Only adjust settings when you have a specific look in mind.
-      </div>
+    <div class="section-divider"></div>
 
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">📐 Geometry</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Edge Mode</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Soft · Medium · Sharp — controls how the AI defines edges and outlines.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Strict Preservation</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">When on, AVAS stays very close to the uploaded geometry. When off, a Geometry Freedom slider lets the AI make creative modifications.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Detail Level (LOD)</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Low · Medium · High — plus toggles for Ornaments, Moldings, and Trim preservation.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Smoothing</span>
-            <span class="settings-type">Toggle + Slider</span>
-            <span class="settings-desc">Smooths curved surfaces. Intensity 0–100%. Option to preserve hard edges above a threshold angle.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Displacement</span>
-            <span class="settings-type">Toggle + Controls</span>
-            <span class="settings-desc">Adds texture depth to materials. Strength 0–100%, scale (Fine / Medium / Coarse), material-adaptive mode.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">💡 Lighting</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Sun Azimuth</span>
-            <span class="settings-type">Slider (0–360°)</span>
-            <span class="settings-desc">Horizontal direction of the sun. 0° = north, 90° = east, 180° = south, 270° = west.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Sun Elevation</span>
-            <span class="settings-type">Slider (0–90°)</span>
-            <span class="settings-desc">Height of the sun above the horizon. 0° = sunset, 45° = mid-afternoon, 90° = overhead.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Sun Intensity</span>
-            <span class="settings-type">Slider (0–100%)</span>
-            <span class="settings-desc">How strong the direct sunlight is.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Color Temperature</span>
-            <span class="settings-type">Slider</span>
-            <span class="settings-desc">Warm (3000K) to cool (8000K). Affects the overall color cast of the lighting.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Shadow Intensity</span>
-            <span class="settings-type">Slider (0–100%)</span>
-            <span class="settings-desc">How dark the shadows are. Lower values produce softer, more diffused shadows.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Ambient Occlusion</span>
-            <span class="settings-type">Slider (0–100%)</span>
-            <span class="settings-desc">Darkens corners and crevices for more grounded depth. Essential for realistic results.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Mood Presets</span>
-            <span class="settings-type">Buttons</span>
-            <span class="settings-desc settings-values">Golden Hour · Soft Daylight · Overcast · Moody · Night · Studio</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">📷 Camera</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Lens</span>
-            <span class="settings-type">Slider</span>
-            <span class="settings-desc settings-values">20mm (ultra-wide) to 100mm (telephoto). 35–50mm = natural human vision.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Auto-Correct</span>
-            <span class="settings-type">Toggle</span>
-            <span class="settings-desc">Fixes converging verticals for more natural-looking architectural photography.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Depth of Field</span>
-            <span class="settings-type">Toggle + Controls</span>
-            <span class="settings-desc">Blurs foreground and background for a photography look. Aperture: f/1.4 to f/16. Focus distance: 0–100m.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">🧱 Materials</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Material Emphasis</span>
-            <span class="settings-type">10 Sliders</span>
-            <span class="settings-desc">Individual emphasis controls for: Concrete, Wood, Metal, Glass, Stone, Brick, Tile, Fabric, Paint, Flooring. Higher values = that material is more prominent.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Reflectivity</span>
-            <span class="settings-type">Slider (0–100%)</span>
-            <span class="settings-desc">Global reflectivity of all surfaces.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Roughness</span>
-            <span class="settings-type">Slider (0–100%)</span>
-            <span class="settings-desc">Global surface roughness — lower = more polished, higher = matte.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Weathering</span>
-            <span class="settings-type">Toggle + Slider</span>
-            <span class="settings-desc">Adds wear, patina, and aging effects to materials. Great for making renders look lived-in.</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">🌫️ Atmosphere</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Mood</span>
-            <span class="settings-type">Text</span>
-            <span class="settings-desc">Free-text mood description. Example: "dreamy", "melancholic", "vibrant urban morning".</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Fog</span>
-            <span class="settings-type">Toggle + Slider</span>
-            <span class="settings-desc">Adds atmospheric haze. Density 0–100%.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Bloom</span>
-            <span class="settings-type">Toggle + Slider</span>
-            <span class="settings-desc">Adds a soft glow around bright light sources. Intensity 0–100%.</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Temperature</span>
-            <span class="settings-type">Slider (-50 to +50)</span>
-            <span class="settings-desc">Shifts the overall image from cool/blue (-50) to warm/amber (+50).</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">🌳 Scenery</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">People</span>
-            <span class="settings-type">Toggle + Count</span>
-            <span class="settings-desc">Add pedestrians and figures. Control the count (0–50+).</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Trees</span>
-            <span class="settings-type">Toggle + Count</span>
-            <span class="settings-desc">Add trees and greenery. Control the count (0–100+).</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Cars</span>
-            <span class="settings-type">Toggle + Count</span>
-            <span class="settings-desc">Add vehicles. Control the count (0–20+).</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <div class="settings-group-header" onclick="toggleGroup(this)">
-          <span class="settings-group-title">🖨️ Output Format</span>
-          <span class="settings-group-chevron">▾</span>
-        </div>
-        <div class="settings-group-body">
-          <div class="settings-row">
-            <span class="settings-label">Resolution</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">720p · 1080p · 2K · 4K</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Aspect Ratio</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">16:9 · 4:3 · 3:2 · 1:1 · 21:9 · 9:16 · 3:4 · 4:5 · 5:4 · 2:3</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">Quality</span>
-            <span class="settings-type">Select</span>
-            <span class="settings-desc settings-values">Draft (fast) · Preview · Production · Ultra (best quality)</span>
-          </div>
-        </div>
+    <!-- Styles -->
+    <div class="doc-section" id="styles">
+      <div class="section-eyebrow">Reference</div>
+      <div class="section-title">Architectural styles</div>
+      <div class="section-lead">Available across all rendering modes. The free-text field lets you go beyond these presets.</div>
+      <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
+        <div class="card"><div class="card-title">Contemporary</div><div class="card-desc">Clean lines, mixed materials, restrained detailing</div></div>
+        <div class="card"><div class="card-title">Minimalist</div><div class="card-desc">White plaster, large voids, extreme restraint</div></div>
+        <div class="card"><div class="card-title">Brutalist</div><div class="card-desc">Raw concrete, bold massing, sculptural form</div></div>
+        <div class="card"><div class="card-title">Industrial</div><div class="card-desc">Steel, glass, exposed structure</div></div>
+        <div class="card"><div class="card-title">Scandinavian</div><div class="card-desc">Light wood, pitched roofs, cosy restraint</div></div>
+        <div class="card"><div class="card-title">Japanese</div><div class="card-desc">Timber, rock gardens, negative space</div></div>
+        <div class="card"><div class="card-title">Mediterranean</div><div class="card-desc">White render, terracotta, arches</div></div>
+        <div class="card"><div class="card-title">Art Deco</div><div class="card-desc">Geometric ornament, stepped forms, gilding</div></div>
+        <div class="card"><div class="card-title">Biophilic</div><div class="card-desc">Living walls, natural light, organic materials</div></div>
+        <div class="card"><div class="card-title">Parametric</div><div class="card-desc">Algorithmic form, complex curves</div></div>
+        <div class="card"><div class="card-title">Deconstructivist</div><div class="card-desc">Fragmented geometry, tilted planes</div></div>
+        <div class="card"><div class="card-title">Neo-Classical</div><div class="card-desc">Columns, pediments, symmetry</div></div>
+        <div class="card"><div class="card-title">Bauhaus</div><div class="card-desc">Primary colours, functional forms, no ornament</div></div>
+        <div class="card"><div class="card-title">Tropical</div><div class="card-desc">Open-plan, lush greenery, deep overhangs</div></div>
+        <div class="card"><div class="card-title">Mid-Century</div><div class="card-desc">Clerestories, flat roofs, post-war optimism</div></div>
+        <div class="card"><div class="card-title">Vernacular</div><div class="card-desc">Local materials and craft, regional tradition</div></div>
       </div>
     </div>
 
-    <!-- ══ STYLES ══ -->
-    <div id="styles" class="section" data-search="styles architectural style contemporary minimalist neo-brutalist brutalist parametric fluidity modern vernacular scandinavian industrial loft biophilic mid-century japanese zen cyberpunk bauhaus tropical alpine desert art deco beaux arts custom style create">
-      <div class="section-eyebrow">Visual Identity</div>
-      <h2 class="section-title">Architectural <em>Styles</em></h2>
-      <p class="section-lead">AVAS includes 16 built-in architectural style presets, each defining a complete visual language for your renders. You can also create and save custom styles.</p>
+    <div class="section-divider"></div>
 
-      <div class="mode-grid">
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Contemporary Minimalist</div>
-          <div class="mode-card-desc">Clean lines, open plan, glass, white plaster, refined simplicity</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Neo-Brutalist</div>
-          <div class="mode-card-desc">Massive exposed concrete forms, dramatic shadows, imposing presence</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Parametric Fluidity</div>
-          <div class="mode-card-desc">Organic curves, flowing geometry, futuristic and ethereal</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Modern Vernacular</div>
-          <div class="mode-card-desc">Gabled roofs, brick and stone, golden hour, inviting and contextual</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Scandinavian</div>
-          <div class="mode-card-desc">Simple forms, pine wood, bright interiors, hygge atmosphere</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Industrial Loft</div>
-          <div class="mode-card-desc">Adaptive reuse, exposed brick and steel, raw urban character</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Biophilic Design</div>
-          <div class="mode-card-desc">Vertical gardens, living walls, lush greenery, restorative spaces</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Mid-Century Modern</div>
-          <div class="mode-card-desc">Cantilevered planes, teak, glass, warm nostalgic palette</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Japanese Zen</div>
-          <div class="mode-card-desc">Engawa, shoji screens, raked gravel, profound minimalism</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Cyberpunk</div>
-          <div class="mode-card-desc">High-tech, neon, dense urban, dystopian, cinematic drama</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Bauhaus</div>
-          <div class="mode-card-desc">Geometric forms, primary colors, functional elegance</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Tropical Modernism</div>
-          <div class="mode-card-desc">Open plan, natural materials, lush vegetation, warm climate</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Alpine Chalet</div>
-          <div class="mode-card-desc">Pitched roofs, heavy timber, cozy, mountain context</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Desert Modernism</div>
-          <div class="mode-card-desc">Adobe walls, minimalist forms, arid landscaping, earthy palette</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Art Deco</div>
-          <div class="mode-card-desc">Geometric ornament, luxurious materials, glamorous interwar aesthetic</div>
-        </div>
-        <div class="mode-card" style="cursor:default">
-          <div class="mode-card-name">Beaux-Arts</div>
-          <div class="mode-card-desc">Classical proportions, ornamental details, monumental grandeur</div>
-        </div>
-      </div>
-
-      <div class="callout teal">
-        <strong>Custom Styles:</strong> Click the <code>+</code> icon in the style browser to create your own style bundle. You can define your own materials, lighting preferences, camera bias, and atmosphere — saved and reusable across all your projects.
-      </div>
-    </div>
-
-    <!-- ══ PLANS & CREDITS ══ -->
-    <div id="plans" class="section" data-search="plans pricing credits subscription starter professional studio billing upgrade team organization credits per month top up purchase buy credits usage limit">
-      <div class="section-eyebrow">Subscription & Billing</div>
-      <h2 class="section-title">Plans & <em>Credits</em></h2>
-      <p class="section-lead">AVAS uses a monthly credit system. Each generation deducts a small number of credits. Your balance is always visible in the top bar.</p>
-
-      <div class="plan-grid">
+    <!-- Plans & Credits -->
+    <div class="doc-section" id="plans">
+      <div class="section-eyebrow">Billing</div>
+      <div class="section-title">Plans &amp; credits</div>
+      <div class="section-lead">Credits are consumed per generation. Video is pay-per-clip via Stripe. Credits do not roll over.</div>
+      <div class="plans-grid">
         <div class="plan-card">
-          <div class="plan-name">Free Trial</div>
-          <div class="plan-price">Starter credits included</div>
+          <div class="plan-name">Free</div>
+          <div class="plan-price">€0<span>/mo</span></div>
+          <div class="plan-credits">Trial credits included</div>
           <ul class="plan-features">
-            <li>Access to bonus modes</li>
-            <li>Limited monthly credits</li>
-            <li>Standard resolution</li>
+            <li>All basic modes</li>
+            <li>Up to 1K resolution</li>
+            <li>Watermarked output</li>
           </ul>
         </div>
-        <div class="plan-card">
+        <div class="plan-card featured">
           <div class="plan-name">Starter</div>
-          <div class="plan-price">600 credits / month</div>
+          <div class="plan-price">€19<span>/mo</span></div>
+          <div class="plan-credits">600 credits / month</div>
           <ul class="plan-features">
-            <li>All core rendering modes</li>
+            <li>All basic modes</li>
             <li>Up to 2K resolution</li>
-            <li>History & downloads</li>
+            <li>No watermark</li>
+            <li>Persistent history</li>
           </ul>
         </div>
         <div class="plan-card featured">
           <div class="plan-name">Professional</div>
-          <div class="plan-price">2,000 credits / month</div>
+          <div class="plan-price">€49<span>/mo</span></div>
+          <div class="plan-credits">2,000 credits / month</div>
           <ul class="plan-features">
             <li>All 17 modes</li>
             <li>Up to 4K resolution</li>
-            <li>Priority processing</li>
-            <li>Advanced modes (Video, Multi-Angle, Headshot)</li>
+            <li>Priority generation</li>
+            <li>Video Studio access</li>
           </ul>
         </div>
         <div class="plan-card">
           <div class="plan-name">Studio</div>
-          <div class="plan-price">6,000 credits / month</div>
+          <div class="plan-price">€149<span>/mo</span></div>
+          <div class="plan-credits">6,000 credits / month</div>
           <ul class="plan-features">
-            <li>All Professional features</li>
-            <li>Team management</li>
+            <li>Everything in Pro</li>
+            <li>Team dashboard</li>
             <li>Shared credit pool</li>
-            <li>Admin dashboard</li>
+            <li>Admin controls</li>
           </ul>
         </div>
       </div>
-
-      <div class="callout">
-        <strong>Video generation</strong> is billed separately per video via Stripe, and does not consume monthly credits.
-      </div>
-      <div class="callout teal">
-        <strong>Credit top-ups</strong> are available at any time in packs of 500 or 2,000 credits from your billing settings.
-      </div>
+      <div class="info-box note"><span class="info-icon">ℹ️</span><span>Credit top-ups (500 or 2,000 credits) are available in the Billing page at any time without changing your plan tier.</span></div>
     </div>
 
-    <!-- ══ SHORTCUTS ══ -->
-    <div id="shortcuts" class="section" data-search="keyboard shortcuts hotkeys generate undo redo zoom pan reset ctrl cmd enter spacebar">
-      <div class="section-eyebrow">Quick Reference</div>
-      <h2 class="section-title">Keyboard <em>Shortcuts</em></h2>
+    <div class="section-divider"></div>
 
+    <!-- Shortcuts -->
+    <div class="doc-section" id="shortcuts">
+      <div class="section-eyebrow">Reference</div>
+      <div class="section-title">Keyboard shortcuts</div>
       <div class="shortcut-grid">
-        <div class="shortcut-row">
-          <span class="shortcut-action">Generate</span>
-          <span class="kbd">⌘ Enter</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Undo</span>
-          <span class="kbd">⌘ Z</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Redo</span>
-          <span class="kbd">⌘ ⇧ Z</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Pan canvas</span>
-          <span class="kbd">Space + Drag</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Zoom in/out</span>
-          <span class="kbd">Scroll wheel</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Fit to screen</span>
-          <span class="kbd">R</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Download</span>
-          <span class="kbd">⌘ S</span>
-        </div>
-        <div class="shortcut-row">
-          <span class="shortcut-action">Cancel generation</span>
-          <span class="kbd">Esc</span>
-        </div>
+        <div class="shortcut-row"><span class="shortcut-label">Generate</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>↵</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Cancel generation</span><div class="kbd-combo"><kbd>Esc</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Undo selection</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>Z</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Redo selection</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Z</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Zoom in</span><div class="kbd-combo"><kbd>+</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Zoom out</span><div class="kbd-combo"><kbd>−</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Fit to canvas</span><div class="kbd-combo"><kbd>F</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Download output</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>S</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Clear canvas</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>⌫</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Toggle left panel</span><div class="kbd-combo"><kbd>[</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Toggle right panel</span><div class="kbd-combo"><kbd>]</kbd></div></div>
+        <div class="shortcut-row"><span class="shortcut-label">Pan canvas</span><div class="kbd-combo"><kbd>Space</kbd> + drag</div></div>
       </div>
     </div>
 
-    <!-- ══ TIPS ══ -->
-    <div id="tips" class="section" data-search="tips tricks best practices workflow quality improve results troubleshooting help advice performance speed">
-      <div class="section-eyebrow">Best Practices</div>
-      <h2 class="section-title">Tips & <em>Tricks</em></h2>
+    <div class="section-divider"></div>
 
-      <div class="tip-grid">
-        <div class="tip-card">
-          <div class="tip-card-icon">🎯</div>
-          <div class="tip-card-title">Start with defaults</div>
-          <div class="tip-card-body">AVAS's default settings are carefully tuned. Unless you need something specific, generate with defaults first — the results are often excellent without any adjustment.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">🔬</div>
-          <div class="tip-card-title">Use Problem Area Analysis</div>
-          <div class="tip-card-body">In 3D Rendering mode, always run the Problem Area Analysis for complex models. It only takes a few seconds and significantly improves output for detailed geometry.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">📐</div>
-          <div class="tip-card-title">Clean inputs = better outputs</div>
-          <div class="tip-card-body">A clear, well-lit screenshot of your 3D model will produce better renders than a blurry or low-contrast input. Take the time to export a clean viewport capture.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">📦</div>
-          <div class="tip-card-title">Batch to save credits</div>
-          <div class="tip-card-body">For upscaling and PDF compression, always use batch mode. You'll save approximately 30% of credits compared to processing files one by one.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">💾</div>
-          <div class="tip-card-title">Use the History panel</div>
-          <div class="tip-card-body">Every generation is saved in the History tab. You can always go back and download an earlier version — you never permanently lose a generation within a session.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">🎨</div>
-          <div class="tip-card-title">Combine modes</div>
-          <div class="tip-card-body">Generate a render in 3D Rendering mode, then use Visual Edit to fine-tune the sky, people, or materials. These modes work beautifully in sequence.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">⚡</div>
-          <div class="tip-card-title">Draft mode for quick tests</div>
-          <div class="tip-card-body">When exploring settings, use "Draft" quality in the right panel. It generates faster and costs fewer credits — save "Production" or "Ultra" for your final deliverable.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">🌐</div>
-          <div class="tip-card-title">Background reference anchors the render</div>
-          <div class="tip-card-body">In 3D Rendering mode, uploading a background reference photo of the real site dramatically improves how well the building fits its context in the final render.</div>
-        </div>
-        <div class="tip-card">
-          <div class="tip-card-icon">🔒</div>
-          <div class="tip-card-title">Lock the seed for video</div>
-          <div class="tip-card-body">In Video mode, lock the seed number after a generation you like. This lets you re-generate with different quality settings while keeping the same camera movement.</div>
-        </div>
+    <!-- Tips -->
+    <div class="doc-section" id="tips">
+      <div class="section-eyebrow">Best practices</div>
+      <div class="section-title">Tips &amp; tricks</div>
+      <div class="tip-list">
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Chain modes together.</strong> 3D Rendering → Visual Edit → Upscale. Results compound significantly at each step.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Draft at 1K, deliver at 4K.</strong> Iterate cheaply at 1K until you're happy with composition and style, then re-run at 4K for the final output.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Describe the photo, not just the building.</strong> "Late afternoon golden light, street-level 35mm shot, slight lens flare" produces more atmosphere than a pure architectural description.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>White clay renders = best 3D results.</strong> Export with no textures on a white background. The AI reads geometry most accurately from clean clay models.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Tight masks for Visual Edit.</strong> Constrain selections to exactly the area you want changed — loose masks give the AI too much latitude.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>16:9 for boards, 3:4 for social.</strong> Match your aspect ratio to the destination — widescreen for presentations, portrait for Instagram and LinkedIn.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Upscale before video.</strong> The richer the input still, the more convincing the camera motion in Video Studio.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Use History to A/B test styles.</strong> Run the same prompt with two different styles back-to-back, then compare thumbnails in the History panel.</div></div>
       </div>
-
-      <div class="divider"></div>
-
-      <h3 class="subsection-title">Common <em>Questions</em></h3>
-      <div class="feature-card">
-        <div class="feature-card-body">
-          <p><strong>Why is my render not matching my model closely?</strong><br>Try setting Rendering Mode to "Strict Realism" and enabling "Strict Preservation" in the Geometry settings. Also run Problem Area Analysis to identify challenging zones.</p>
-        </div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card-body">
-          <p><strong>The generation seems to take a long time — is this normal?</strong><br>Generation time depends on resolution and quality settings. 4K Ultra can take 30–60 seconds. Try "Draft" mode for faster exploration, and switch to "Production" or "Ultra" for final outputs.</p>
-        </div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card-body">
-          <p><strong>Can I edit the AI prompt manually?</strong><br>Yes — the Prompt tab in the bottom panel shows the full prompt AVAS generated from your settings. You can edit it freely. Click "Revert" to restore the auto-generated prompt.</p>
-        </div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card-body">
-          <p><strong>How do I share a result with my team?</strong><br>Download the image using the Download button in the top-right, and share it via your usual channels (email, Slack, Teams, etc.). AVAS does not have a built-in sharing feature at this time.</p>
-        </div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card-body">
-          <p><strong>I ran out of credits — what now?</strong><br>You can purchase a credit top-up (500 or 2,000 credits) from your Billing settings without waiting for your monthly reset. Contact your administrator if you're on a Studio plan.</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-    <div style="text-align:center;padding:40px 0 20px;color:var(--text3);font-size:13px;font-family:var(--font-mono)">
-      AVAS User Manual · Internal Document · All Rights Reserved
     </div>
 
   </main>
 </div>
 
 <script>
-  // ══ SEARCH ENGINE ══
-  const synonyms = {
-    'render': ['rendering', 'visualize', 'visualization', 'photorealistic', 'generate image'],
-    '3d': ['three dimensional', 'revit', 'rhino', 'sketchup', 'blender', 'archicad', 'model'],
-    'cad': ['drawing', 'floor plan', 'elevation', 'autocad', 'linework'],
-    'sketch': ['hand drawn', 'freehand', 'drawing', 'pencil'],
-    'edit': ['modify', 'change', 'adjust', 'replace', 'remove', 'fix'],
-    'video': ['animate', 'animation', 'movie', 'clip', 'motion'],
-    'translate': ['translation', 'language', 'convert document'],
-    'pdf': ['document', 'compress', 'file'],
-    'upscale': ['enlarge', 'enhance', 'bigger', 'resolution', 'upres'],
-    'headshot': ['portrait', 'photo', 'professional photo', 'team photo', 'profile picture'],
-    'masterplan': ['site plan', 'urban', 'zones', 'planning'],
-    'material': ['texture', 'finish', 'concrete', 'wood', 'glass', 'metal'],
-    'lighting': ['light', 'sun', 'shadow', 'ambient', 'illumination'],
-    'style': ['aesthetic', 'look', 'theme', 'architectural style'],
-    'credits': ['billing', 'payment', 'subscription', 'plan', 'pricing'],
-    'quality': ['resolution', '4k', '2k', '1080p', 'draft', 'ultra'],
-  };
+  // Search index
+  const searchIndex = [
+    { id: 'overview',           icon: '🏛️', title: 'Overview',             section: 'Getting started',  kw: 'overview platform arcvisai what is' },
+    { id: 'getting-started',    icon: '🚀', title: 'Quick start',           section: 'Getting started',  kw: 'quick start first render login sign in upload' },
+    { id: 'interface',          icon: '🖥️', title: 'Interface layout',      section: 'Getting started',  kw: 'interface layout sidebar topbar canvas panel zones workspace' },
+    { id: 'mode-render-3d',     icon: '🏛️', title: '3D Rendering',          section: 'Modes',            kw: '3d render model screenshot blender sketchup rhino revit clay' },
+    { id: 'mode-render-cad',    icon: '📐', title: 'CAD to Render',         section: 'Modes',            kw: 'cad drawing floor plan elevation section technical linework' },
+    { id: 'mode-render-sketch', icon: '✏️', title: 'Sketch to Render',      section: 'Modes',            kw: 'sketch hand drawn concept pencil freehand' },
+    { id: 'mode-generate-text', icon: '💬', title: 'Generate from Text',    section: 'Modes',            kw: 'text prompt describe no image generate text concept' },
+    { id: 'mode-masterplan',    icon: '🗺️', title: 'Masterplan',            section: 'Modes',            kw: 'masterplan aerial site satellite boundary polygon' },
+    { id: 'mode-visual-edit',   icon: '🖌️', title: 'Visual Edit',           section: 'Modes',            kw: 'visual edit brush selection mask paint inpaint region facade material change' },
+    { id: 'mode-exploded',      icon: '💥', title: 'Exploded View',         section: 'Modes',            kw: 'exploded axonometric diagram layer structural' },
+    { id: 'mode-section',       icon: '✂️', title: 'Section Render',        section: 'Modes',            kw: 'section cut drawing elevation interior detail' },
+    { id: 'mode-multi-angle',   icon: '🔄', title: 'Multi-Angle',           section: 'Modes',            kw: 'multi angle multiple views front side rear aerial interior' },
+    { id: 'mode-upscale',       icon: '🔍', title: 'Upscale',               section: 'Modes',            kw: 'upscale resolution enhance sharpen detail quality' },
+    { id: 'mode-img-to-cad',    icon: '📏', title: 'Image to CAD',          section: 'Modes',            kw: 'image to cad vector line drawing svg dxf reverse engineer' },
+    { id: 'mode-img-to-3d',     icon: '🧊', title: 'Image to 3D',           section: 'Modes',            kw: 'image to 3d model orthographic massing' },
+    { id: 'mode-headshot',      icon: '👤', title: 'Headshot Studio',       section: 'Modes',            kw: 'headshot portrait professional photo cv team' },
+    { id: 'mode-video',         icon: '🎬', title: 'Video Studio',          section: 'Modes',            kw: 'video walkthrough animation fly through orbit crane veo kling' },
+    { id: 'mode-material',      icon: '🔬', title: 'Material Validation',   section: 'Modes',            kw: 'material validation compliance schedule specification check' },
+    { id: 'mode-translate',     icon: '🌍', title: 'Document Translate',    section: 'Modes',            kw: 'translate translation docx excel word language document' },
+    { id: 'mode-pdf',           icon: '🗜️', title: 'PDF Compression',       section: 'Modes',            kw: 'pdf compress reduce file size' },
+    { id: 'settings',           icon: '⚙️', title: 'Render settings',       section: 'Reference',        kw: 'settings aspect ratio resolution lighting style detail people vegetation weather' },
+    { id: 'styles',             icon: '🎨', title: 'Architectural styles',  section: 'Reference',        kw: 'style contemporary minimalist brutalist industrial scandinavian japanese' },
+    { id: 'plans',              icon: '💳', title: 'Plans & credits',       section: 'Billing',          kw: 'plan credits billing price starter professional studio cost' },
+    { id: 'shortcuts',          icon: '⌨️', title: 'Keyboard shortcuts',    section: 'Reference',        kw: 'keyboard shortcut hotkey generate cancel undo zoom download' },
+    { id: 'tips',               icon: '💡', title: 'Tips & tricks',         section: 'Best practices',   kw: 'tips tricks best practice chain modes quality advice workflow' },
+  ];
 
-  const expandQuery = (q) => {
-    const words = [q];
-    const ql = q.toLowerCase();
-    for (const [key, vals] of Object.entries(synonyms)) {
-      if (ql.includes(key) || vals.some(v => ql.includes(v))) {
-        words.push(key, ...vals);
-      }
-    }
-    return [...new Set(words.join(' ').split(' ').filter(Boolean))];
-  };
-
-  const searchInput = document.getElementById('search');
-  const searchClear = document.getElementById('search-clear');
-  const searchCount = document.getElementById('search-count');
-  const noResults   = document.getElementById('no-results');
-  const sections    = document.querySelectorAll('.section');
-  const navLinks    = document.querySelectorAll('.nav-link');
-
-  let searchTimeout;
-
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(doSearch, 120);
-  });
-
-  searchClear.addEventListener('click', () => {
-    searchInput.value = '';
-    doSearch();
-    searchInput.focus();
-  });
-
-  function doSearch() {
-    const raw = searchInput.value.trim();
-    searchClear.classList.toggle('visible', raw.length > 0);
-
-    if (!raw) {
-      sections.forEach(s => { s.classList.remove('hidden'); clearHighlights(s); });
-      navLinks.forEach(l => l.classList.remove('nav-hidden'));
-      noResults.classList.remove('visible');
-      searchCount.textContent = '';
-      return;
-    }
-
-    const terms = expandQuery(raw);
-    let visibleCount = 0;
-
-    sections.forEach(section => {
-      const text  = (section.textContent + ' ' + (section.dataset.search || '')).toLowerCase();
-      const match = terms.some(t => t && text.includes(t.toLowerCase()));
-      section.classList.toggle('hidden', !match);
-      if (match) { visibleCount++; clearHighlights(section); highlightTerms(section, raw); }
-      else clearHighlights(section);
-    });
-
-    // sync nav
-    navLinks.forEach(link => {
-      const href = link.getAttribute('href');
-      if (!href) return;
-      const target = document.querySelector(href);
-      link.classList.toggle('nav-hidden', target ? target.classList.contains('hidden') : false);
-    });
-
-    noResults.classList.toggle('visible', visibleCount === 0);
-    searchCount.textContent = visibleCount > 0 ? `${visibleCount}` : '';
+  function esc(t) { return t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+  function mark(text, q) {
+    if (!q) return text;
+    return text.replace(new RegExp(`(${esc(q)})`,'gi'),'<mark>$1</mark>');
   }
 
-  function highlightTerms(el, query) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const p = node.parentElement;
-        if (!p) return NodeFilter.FILTER_REJECT;
-        const tag = p.tagName;
-        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    const nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    nodes.forEach(node => {
-      if (!re.test(node.textContent)) return;
-      re.lastIndex = 0;
-      const span = document.createElement('span');
-      span.innerHTML = node.textContent.replace(re, '<mark>$1</mark>');
-      node.parentNode.replaceChild(span, node);
-    });
-  }
+  const input   = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+  const wrap    = document.getElementById('searchWrap');
 
-  function clearHighlights(el) {
-    el.querySelectorAll('mark').forEach(m => {
-      const text = document.createTextNode(m.textContent);
-      m.parentNode.replaceChild(text, m);
-    });
-    el.querySelectorAll('span').forEach(s => {
-      if (s.querySelector('mark') === null && s.parentNode) {
-        // already cleaned
-      }
-    });
-  }
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { results.innerHTML = ''; results.classList.remove('open'); return; }
 
-  // ══ SETTINGS GROUP TOGGLE ══
-  function toggleGroup(header) {
-    const group = header.parentElement;
-    group.classList.toggle('open');
-  }
+    const hits = searchIndex.filter(i =>
+      i.title.toLowerCase().includes(q) ||
+      i.kw.toLowerCase().includes(q) ||
+      i.section.toLowerCase().includes(q)
+    ).slice(0, 8);
 
-  // ══ ACTIVE NAV ON SCROLL ══
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const id = entry.target.id;
-        navLinks.forEach(l => {
-          l.classList.toggle('active', l.getAttribute('href') === `#${id}`);
+    if (!hits.length) {
+      results.innerHTML = `<div class="no-results">No results for "<strong>${q}</strong>"</div>`;
+    } else {
+      results.innerHTML = hits.map(i => `
+        <div class="search-result-item" data-id="${i.id}">
+          <div class="result-icon">${i.icon}</div>
+          <div class="result-info">
+            <div class="result-title">${mark(i.title, input.value.trim())}</div>
+            <div class="result-section">${i.section}</div>
+          </div>
+        </div>`).join('');
+
+      results.querySelectorAll('.search-result-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const t = document.getElementById(el.dataset.id);
+          if (t) {
+            results.classList.remove('open');
+            input.value = '';
+            t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            t.classList.add('highlight-target');
+            t.addEventListener('animationend', () => t.classList.remove('highlight-target'), { once: true });
+          }
         });
-      }
-    });
-  }, { rootMargin: '-20% 0px -60% 0px', threshold: 0 });
-
-  sections.forEach(s => { if (s.id) observer.observe(s); });
-
-  // ══ STAGGERED FADE IN ══
-  const fadeObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.style.animationPlayState = 'running';
-        fadeObserver.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.05 });
-
-  sections.forEach((s, i) => {
-    s.style.animationDelay = `${i * 0.04}s`;
-    s.style.animationPlayState = 'paused';
-    fadeObserver.observe(s);
+      });
+    }
+    results.classList.add('open');
   });
 
-  // Smooth scroll for mode cards
+  document.addEventListener('click', e => { if (!wrap.contains(e.target)) results.classList.remove('open'); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { results.classList.remove('open'); input.blur(); } });
+
+  // Active nav highlight on scroll
+  const allSections = Array.from(document.querySelectorAll('[id]'));
+  const navLinks    = Array.from(document.querySelectorAll('.nav-item'));
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(n => n.classList.remove('active'));
+        const a = navLinks.find(n => n.getAttribute('href') === '#' + e.target.id);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  allSections.forEach(s => { if (s.id) obs.observe(s); });
+
+  // Smooth scroll
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
-      const target = document.querySelector(a.getAttribute('href'));
-      if (target) {
-        e.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      const t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
   });
-
-  // Open all settings groups by default for better readability
-  document.querySelectorAll('.settings-group').forEach(g => {
-    if (!g.classList.contains('open')) g.classList.add('open');
-  });
-  document.querySelectorAll('.settings-group-body').forEach(b => b.style.display = 'block');
 </script>
-
 </body>
 </html>
