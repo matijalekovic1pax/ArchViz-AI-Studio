@@ -268,9 +268,9 @@ export function LoginPage() {
 
           <p className="mt-8 text-center text-[10px] text-foreground-muted">
             By continuing you agree to our{' '}
-            <a href="#" className="underline hover:text-foreground transition-colors">Terms</a>
+            <a href="/terms" className="underline hover:text-foreground transition-colors">Terms</a>
             {' '}and{' '}
-            <a href="#" className="underline hover:text-foreground transition-colors">Privacy Policy</a>
+            <a href="/terms#privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</a>
           </p>
         </div>
       </div>

@@ -1,659 +1,1018 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRight, Check, ChevronDown, X, Zap,
-  Layers, FileText, Video, User, Building, Globe, Pencil,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  FileText,
+  PlayCircle,
+  Sparkles,
+  Wand2,
+  X,
 } from 'lucide-react';
 import { LoginForm } from '../auth/LoginPage';
-import { PLAN_PRICES_USD, PLAN_CREDITS } from '../../lib/stripePrices';
+import { PLAN_CREDITS, PLAN_PRICES_USD, VIDEO_PRICES_CENTS } from '../../lib/stripePrices';
 import { cn } from '../../lib/utils';
 
-// ── Nav ───────────────────────────────────────────────────────────────────────
-const NAV_LINKS = [
-  { id: 'features',  label: 'Features' },
-  { id: 'workflow',  label: 'How It Works' },
-  { id: 'use-cases', label: 'Use Cases' },
-  { id: 'pricing',   label: 'Pricing' },
-  { id: 'faq',       label: 'FAQ' },
+type PublicRoute = 'home' | 'pricing' | 'terms';
+
+type Plan = {
+  id: 'starter' | 'professional' | 'studio';
+  label: string;
+  price: number;
+  credits: number;
+  tagline: string;
+  highlight?: boolean;
+  features: string[];
+};
+
+const NAV_ITEMS: Array<{ label: string; route: PublicRoute }> = [
+  { label: 'Home', route: 'home' },
+  { label: 'Pricing', route: 'pricing' },
+  { label: 'Terms', route: 'terms' },
 ];
 
-// ── Hero mode preview ─────────────────────────────────────────────────────────
-const MODE_PREVIEW = [
-  { label: '3D Render',     sub: 'Photorealistic' },
-  { label: 'CAD → Render',  sub: 'Vector to visual' },
-  { label: 'Masterplan',    sub: 'Site layout' },
-  { label: 'Visual Edit',   sub: 'AI editing' },
-  { label: 'Doc Translate', sub: '50+ languages' },
-  { label: 'Headshot',      sub: 'Professional' },
-];
-
-// ── Features ──────────────────────────────────────────────────────────────────
-const FEATURE_TABS = [
+const FEATURE_COLUMNS = [
   {
-    id: 'renders', label: 'Renders', Icon: Layers,
+    title: 'Generate',
+    subtitle: 'From concept to polished outputs',
+    icon: Sparkles,
     items: [
-      { title: '3D Architectural Render', badge: '', desc: 'Photorealistic renders from sketches, floor plans, or reference photos. Any style, any material palette.' },
-      { title: 'CAD to Render', badge: '', desc: 'Upload CAD drawings and visualise design intent instantly. Iterate on finishes without re-modelling.' },
-      { title: 'Masterplan Generator', badge: '', desc: 'Site plans and urban layouts from a single reference image or written prompt.' },
-      { title: 'Render Sketch', badge: '', desc: 'Turn pencil sketches and hand-drawn line art into polished architectural renders in seconds.' },
-      { title: 'Multi-angle Views', badge: '', desc: 'Spatially-consistent renders from elevation, section, and perspective viewpoints in one session.' },
-      { title: 'AI Upscale', badge: '', desc: '4× resolution upscaling with AI detail enhancement. Export at print or billboard resolution.' },
+      '3D Render, CAD to Render, Masterplan, and Sketch to Render',
+      'Consistent multi-angle generation and AI upscale for delivery assets',
+      'Fast iterations with style, material, and camera control',
     ],
   },
   {
-    id: 'editing', label: 'Editing', Icon: Pencil,
+    title: 'Edit',
+    subtitle: 'Precise control after generation',
+    icon: Wand2,
     items: [
-      { title: 'Visual Edit', badge: '', desc: 'Erase, replace, and precisely modify specific elements in any architectural image using natural language.' },
-      { title: 'Section View', badge: '', desc: 'Generate accurate cross-section cuts through any building elevation or rendered scene.' },
-      { title: 'Exploded View', badge: '', desc: 'Structural and assembly diagrams from elevations and reference photographs.' },
-      { title: 'img-to-CAD', badge: 'Pro+', desc: 'Convert photos and renders back into CAD-ready geometry. Export as DXF.' },
-      { title: 'img-to-3D', badge: 'Pro+', desc: 'Reconstruct spatial 3D models from 2D architectural images and photographs.' },
+      'Visual Edit for object-level removal, replacement, and enhancement',
+      'Exploded and Section views for technical communication',
+      'Headshot mode for team profile assets in the same visual system',
     ],
   },
   {
-    id: 'documents', label: 'Documents', Icon: FileText,
+    title: 'Deliver',
+    subtitle: 'Production-ready outputs',
+    icon: FileText,
     items: [
-      { title: 'Document Translate', badge: 'Pro+', desc: 'Translate architectural specifications, tender documents, and reports across 50+ languages whilst preserving formatting.' },
-      { title: 'Material Validation', badge: 'Pro+', desc: 'AI-powered material schedule and Bill of Quantities validation for compliance and accuracy.' },
-      { title: 'PDF Compression', badge: 'Pro+', desc: 'Reduce PDF size by up to 90% without perceptible quality loss. Batch-compatible.' },
-    ],
-  },
-  {
-    id: 'video', label: 'Video', Icon: Video,
-    items: [
-      { title: 'Kling 2.6', badge: 'Pay/gen', desc: '5–10 second architectural walkthroughs from a single still render. Fluid, realistic camera motion.' },
-      { title: 'Veo 3.1', badge: 'Pay/gen', desc: "Cinema-quality video with Google's Veo 3.1 model. Up to 8 seconds of photorealistic output." },
-      { title: 'Pay-per-generation', badge: '', desc: 'Video is billed separately — not from your credit balance. No subscription lock-in.' },
-    ],
-  },
-  {
-    id: 'headshots', label: 'Headshots', Icon: User,
-    items: [
-      { title: 'Professional Headshots', badge: '', desc: 'Polished, studio-quality headshots for your whole team — generated in minutes.' },
-      { title: 'Role-aware Context', badge: '', desc: 'Architect, engineer, consultant — AI tailors attire, setting, and tone to the role.' },
-      { title: 'Batch Generation', badge: '', desc: 'Generate headshots for multiple team members in one session with consistent style.' },
+      'Document Translate and PDF Compression for project handoff',
+      'Material Validation for schedule and compliance checks',
+      'Video generation via Kling and Veo, billed pay-per-generation',
     ],
   },
 ];
 
-// ── How it works ──────────────────────────────────────────────────────────────
-const STEPS = [
-  { n: '01', title: 'Upload your file', desc: 'Drag in a sketch, floor plan, CAD export, photo, or PDF. We accept PNG, JPG, PDF, DOCX, XLSX, and more.' },
-  { n: '02', title: 'Choose your mode', desc: 'Select from 18 generation modes — 3D render, masterplan, document translate, headshot, video, and more.' },
-  { n: '03', title: 'Configure the output', desc: 'Set style, materials, camera angle, language, or quality level. Each mode has intelligent defaults.' },
-  { n: '04', title: 'Download your result', desc: 'AI processes your file in under 30 seconds. Download high-res output or iterate with one click.' },
-];
-
-// ── Use cases ─────────────────────────────────────────────────────────────────
-const USE_CASES = [
+const WORKFLOW_STEPS = [
   {
-    Icon: User, persona: 'Solo Practitioner',
-    headline: 'From sketch to client presentation in minutes.',
-    desc: 'Generate photorealistic renders during the meeting — not after it. No 3D software required.',
-    points: ['600 credits / month on Starter', 'All core render modes', 'Headshot generator included'],
-    plan: 'Starter', featured: false,
+    title: 'Upload source',
+    description: 'Bring in sketches, CAD exports, plans, renders, or documents.',
   },
   {
-    Icon: Building, persona: 'Architecture Studio',
-    headline: 'Team credits, shared history, multiple seats.',
-    desc: 'Run your whole practice on a single shared credit pool with admin controls and usage tracking.',
-    points: ['Up to 5 seats on Studio plan', 'Shared 6,000 credit pool', 'Admin dashboard + usage log'],
-    plan: 'Studio', featured: true,
+    title: 'Choose mode',
+    description: 'Pick the exact workflow for rendering, editing, translation, or video.',
   },
   {
-    Icon: Globe, persona: 'Developer / Real Estate',
-    headline: 'Marketing visuals from planning drawings.',
-    desc: 'Turn bare planning submissions into compelling marketing renders before construction begins.',
-    points: ['Masterplan generator', 'img-to-3D reconstruction', 'Document translate for international projects'],
-    plan: 'Professional', featured: false,
+    title: 'Tune output',
+    description: 'Set materials, style, camera, language, and output quality.',
+  },
+  {
+    title: 'Generate and iterate',
+    description: 'Download, refine, and regenerate in seconds from the same workspace.',
   },
 ];
 
-// ── Pricing ───────────────────────────────────────────────────────────────────
-const PLANS = [
+const FAQ_ITEMS = [
   {
-    id: 'starter', label: 'Starter',
-    price: PLAN_PRICES_USD.starter, credits: PLAN_CREDITS.starter,
-    desc: 'For solo architects and independent practitioners.',
-    features: [`${PLAN_CREDITS.starter} credits / month`, 'All core render modes', 'Headshot generator', 'Video (pay-per-gen)', 'Email support'],
-    highlight: false, cta: 'Start with Starter',
+    q: 'How do credits work?',
+    a: 'Credits are consumed per generation mode. Most render modes are 4 credits per run, upscale is 3, and PDF compression is 1.',
   },
   {
-    id: 'professional', label: 'Professional',
-    price: PLAN_PRICES_USD.professional, credits: PLAN_CREDITS.professional,
-    desc: 'For practices that need the full toolkit.',
-    features: [`${PLAN_CREDITS.professional} credits / month`, 'Everything in Starter', 'img-to-CAD & img-to-3D', 'Document translate', 'Material validation', 'PDF compression', '50% credit rollover'],
-    highlight: true, cta: 'Start with Professional',
+    q: 'Is video included in monthly credits?',
+    a: 'No. Video is billed separately by generation through Stripe, so you pay only when you run video jobs.',
   },
   {
-    id: 'studio', label: 'Studio',
-    price: 199, credits: PLAN_CREDITS.studio,
-    desc: 'For teams sharing a single credit pool.',
-    features: [`${PLAN_CREDITS.studio} credits / month`, 'Everything in Professional', 'Up to 5 team seats', 'Shared credit pool', 'Team admin dashboard', 'Priority support'],
-    highlight: false, cta: 'Start with Studio',
+    q: 'Can outputs be used commercially?',
+    a: 'Yes. Generated outputs are intended for commercial architectural and marketing workflows.',
+  },
+  {
+    q: 'Do teams share usage?',
+    a: 'Studio plan supports shared credits and team seats with role-based management in the dashboard.',
   },
 ];
 
-// ── FAQ ───────────────────────────────────────────────────────────────────────
-const FAQ = [
-  { q: 'What are credits and how do they work?', a: '1 credit = $0.05 USD. Each generation deducts credits based on the mode — most renders cost 4 credits (~$0.20). Upscaling costs 3, PDF compression costs 1. Credits are included in your monthly plan.' },
-  { q: 'Do unused credits roll over?', a: 'On Professional and Studio plans, up to 50% of unused credits carry over to the next billing period. On Starter, credits reset each month.' },
-  { q: 'What file formats can I upload?', a: 'PNG, JPG, WEBP for images — PDF for documents and plans — DOCX for Word documents — XLSX for spreadsheets. Maximum file size is 20 MB.' },
-  { q: 'How is video generation charged?', a: "Video is pay-per-generation via Stripe, billed separately from your credit balance. Prices range from $0.25 (Kling 5s) to $3.99 (Veo 8s). No subscription required." },
-  { q: 'Can I use outputs commercially?', a: 'Yes. All generated images, documents, and videos are yours to use commercially with no royalty fees or licensing restrictions.' },
-  { q: 'How accurate are the renders?', a: 'Render quality scales with input quality. Clear, well-lit floor plans consistently produce photorealistic output. The AI follows your material and style instructions closely.' },
-  { q: 'Can I add team members?', a: 'Team features are available on the Studio plan — up to 5 seats sharing a single credit pool. Contact us for Enterprise pricing with larger teams.' },
+const PLANS: Plan[] = [
+  {
+    id: 'starter',
+    label: 'Starter',
+    price: PLAN_PRICES_USD.starter,
+    credits: PLAN_CREDITS.starter,
+    tagline: 'For independent architects and small studios.',
+    features: [
+      `${PLAN_CREDITS.starter} credits per month`,
+      'Core image generation modes',
+      'Headshot mode included',
+      'Video pay-per-generation enabled',
+      'Email support',
+    ],
+  },
+  {
+    id: 'professional',
+    label: 'Professional',
+    price: PLAN_PRICES_USD.professional,
+    credits: PLAN_CREDITS.professional,
+    tagline: 'For teams needing full production workflows.',
+    highlight: true,
+    features: [
+      `${PLAN_CREDITS.professional} credits per month`,
+      'Everything in Starter',
+      'img-to-CAD and img-to-3D',
+      'Document Translate and Material Validation',
+      'PDF Compression and advanced workflows',
+      '50% monthly rollover',
+    ],
+  },
+  {
+    id: 'studio',
+    label: 'Studio',
+    price: PLAN_PRICES_USD.studio,
+    credits: PLAN_CREDITS.studio,
+    tagline: 'For commercial teams sharing one workspace.',
+    features: [
+      `${PLAN_CREDITS.studio} credits per month`,
+      'Everything in Professional',
+      'Up to 5 team seats',
+      'Shared credit pool',
+      'Team admin controls',
+      'Priority support',
+    ],
+  },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
-export function LandingPage() {
-  const [showAuth, setShowAuth] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [activeSection, setActiveSection] = useState('');
-  const [activeTab, setActiveTab] = useState('renders');
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+const TERMS_SECTIONS: Array<{ id: string; title: string; paragraphs: string[] }> = [
+  {
+    id: 'acceptance',
+    title: '1. Acceptance of Terms',
+    paragraphs: [
+      'By accessing or using ArchViz AI Studio, you agree to these Terms of Service. If you do not agree, do not use the service.',
+      'You represent that you have authority to accept these terms on your own behalf or on behalf of the entity you represent.',
+    ],
+  },
+  {
+    id: 'accounts',
+    title: '2. Accounts and Eligibility',
+    paragraphs: [
+      'You are responsible for maintaining the security of your account credentials and for all activity that occurs under your account.',
+      'You must provide accurate registration and billing details and keep them current.',
+    ],
+  },
+  {
+    id: 'billing',
+    title: '3. Subscriptions, Credits, and Billing',
+    paragraphs: [
+      'Paid plans are billed in advance on a recurring monthly cycle unless otherwise agreed in writing.',
+      'Credits are consumed according to active mode pricing. Video generations are billed separately on a pay-per-generation basis.',
+      'Fees are non-refundable except where required by law or explicitly stated by ArchViz AI Studio.',
+    ],
+  },
+  {
+    id: 'use',
+    title: '4. Acceptable Use',
+    paragraphs: [
+      'You may not use the service for unlawful, abusive, or deceptive activities, including infringement of third-party rights.',
+      'You may not attempt to reverse engineer, disrupt, overload, or bypass security controls of the platform.',
+    ],
+  },
+  {
+    id: 'content',
+    title: '5. Content and Intellectual Property',
+    paragraphs: [
+      'You retain ownership of the source files and materials you submit to the service.',
+      'Subject to these Terms and applicable law, outputs generated for your account are licensed to you for commercial use.',
+      'You grant ArchViz AI Studio a limited right to process submitted content solely to operate, secure, and improve the service.',
+    ],
+  },
+  {
+    id: 'privacy',
+    title: '6. Privacy and Data Handling',
+    paragraphs: [
+      'We process personal and project data to provide account access, generation workflows, billing, and support operations.',
+      'You are responsible for ensuring you have rights and permissions for any content you upload or process through the platform.',
+    ],
+  },
+  {
+    id: 'availability',
+    title: '7. Service Availability and Changes',
+    paragraphs: [
+      'We may update, change, or discontinue features at any time to improve reliability, performance, or security.',
+      'We do not guarantee uninterrupted availability and are not liable for downtime caused by third-party infrastructure providers.',
+    ],
+  },
+  {
+    id: 'liability',
+    title: '8. Disclaimer and Limitation of Liability',
+    paragraphs: [
+      'The service is provided on an “as is” and “as available” basis without warranties of any kind, express or implied.',
+      'To the maximum extent permitted by law, ArchViz AI Studio is not liable for indirect, incidental, special, consequential, or punitive damages.',
+    ],
+  },
+  {
+    id: 'termination',
+    title: '9. Termination',
+    paragraphs: [
+      'You may stop using the service at any time. We may suspend or terminate access for material breach, abuse, or unlawful use.',
+      'Sections that by nature should survive termination remain in effect, including payment, liability, and intellectual property terms.',
+    ],
+  },
+  {
+    id: 'law',
+    title: '10. Governing Law and Contact',
+    paragraphs: [
+      'These terms are governed by the laws applicable in the jurisdiction where ArchViz AI Studio operates, without regard to conflict of law rules.',
+      'For legal and account questions, contact hello@archviz.ai.',
+    ],
+  },
+];
 
-  // Let page scroll (body has overflow-hidden from app shell)
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'auto';
-    document.body.style.overflowX = 'hidden';
-    return () => { document.body.style.overflow = prev || 'hidden'; };
-  }, []);
+function routeFromPath(pathname: string): PublicRoute {
+  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+  if (normalizedPath === '/pricing') return 'pricing';
+  if (normalizedPath === '/terms') return 'terms';
+  return 'home';
+}
 
-  useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 20);
-      let current = '';
-      for (const { id } of NAV_LINKS) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= 80) current = id;
-      }
-      setActiveSection(current);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+function pathFromRoute(route: PublicRoute): string {
+  if (route === 'pricing') return '/pricing';
+  if (route === 'terms') return '/terms';
+  return '/';
+}
 
-  const scrollTo = useCallback((id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  const currentTab = FEATURE_TABS.find(t => t.id === activeTab) ?? FEATURE_TABS[0];
-
+function Brand() {
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
+    <span className="text-sm font-bold tracking-tight text-foreground">
+      ArchViz <span className="font-normal text-foreground-muted">AI Studio</span>
+    </span>
+  );
+}
 
-      {/* ── NAV ─────────────────────────────────────────────────────────────── */}
-      <nav className={cn(
-        'sticky top-0 z-40 h-14 transition-all duration-200',
+type SiteHeaderProps = {
+  route: PublicRoute;
+  scrolled: boolean;
+  onNavigate: (route: PublicRoute) => void;
+  onOpenAuth: () => void;
+};
+
+function SiteHeader({ route, scrolled, onNavigate, onOpenAuth }: SiteHeaderProps) {
+  return (
+    <header
+      className={cn(
+        'sticky top-0 z-50 border-b transition-all duration-300',
         scrolled
-          ? 'bg-background/90 backdrop-blur-md border-b border-border shadow-subtle'
-          : 'bg-background border-b border-transparent'
-      )}>
-        <div className="max-w-6xl mx-auto px-6 h-full flex items-center justify-between">
-          {/* Wordmark */}
+          ? 'bg-background/90 backdrop-blur-lg border-border shadow-subtle'
+          : 'bg-background/70 backdrop-blur-sm border-border/60'
+      )}
+    >
+      <div className="max-w-6xl mx-auto h-16 px-5 sm:px-6 flex items-center justify-between gap-4">
+        <button
+          type="button"
+          onClick={() => onNavigate('home')}
+          className="inline-flex items-center hover:opacity-85 transition-opacity"
+          aria-label="Go to homepage"
+        >
+          <Brand />
+        </button>
+
+        <nav className="hidden md:flex items-center gap-1">
+          {NAV_ITEMS.map((item) => (
+            <a
+              key={item.route}
+              href={pathFromRoute(item.route)}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(item.route);
+              }}
+              className={cn(
+                'px-3.5 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors',
+                route === item.route
+                  ? 'text-foreground bg-surface-sunken'
+                  : 'text-foreground-muted hover:text-foreground hover:bg-surface-sunken'
+              )}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="text-sm font-bold tracking-tight text-foreground hover:opacity-80 transition-opacity"
+            type="button"
+            onClick={onOpenAuth}
+            className="h-9 px-3.5 text-xs font-semibold text-foreground-muted hover:text-foreground transition-colors"
           >
-            ArchViz <span className="font-normal text-foreground-muted">AI Studio</span>
+            Sign in
           </button>
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-semibold hover:bg-foreground/90 transition-colors"
+          >
+            Start free
+            <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
 
-          {/* Nav links */}
-          <div className="hidden md:flex items-center gap-0.5">
-            {NAV_LINKS.map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => scrollTo(id)}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                  activeSection === id
-                    ? 'bg-surface-sunken text-foreground'
-                    : 'text-foreground-muted hover:text-foreground hover:bg-surface-sunken'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+type SiteFooterProps = {
+  onNavigate: (route: PublicRoute) => void;
+};
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAuth(true)}
-              className="px-3.5 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground transition-colors"
+function SiteFooter({ onNavigate }: SiteFooterProps) {
+  return (
+    <footer className="border-t border-border bg-surface-sunken/50">
+      <div className="max-w-6xl mx-auto px-5 sm:px-6 py-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Brand />
+          <p className="mt-2 text-xs text-foreground-muted max-w-sm">
+            Commercial AI workspace for architecture teams: generate, edit, and deliver visual assets faster.
+          </p>
+          <p className="mt-3 text-[11px] text-foreground-muted">© {new Date().getFullYear()} ArchViz AI Studio</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+          <a
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('home');
+            }}
+            className="text-foreground-muted hover:text-foreground transition-colors"
+          >
+            Home
+          </a>
+          <a
+            href="/pricing"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('pricing');
+            }}
+            className="text-foreground-muted hover:text-foreground transition-colors"
+          >
+            Pricing
+          </a>
+          <a
+            href="/terms"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('terms');
+            }}
+            className="text-foreground-muted hover:text-foreground transition-colors"
+          >
+            Terms
+          </a>
+          <a href="mailto:hello@archviz.ai" className="text-foreground-muted hover:text-foreground transition-colors">
+            Contact
+          </a>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+type HomePageProps = {
+  heroReady: boolean;
+  scrollY: number;
+  onNavigatePricing: () => void;
+  onOpenAuth: () => void;
+  openFaq: number | null;
+  setOpenFaq: (value: number | null) => void;
+};
+
+function HomePage({
+  heroReady,
+  scrollY,
+  onNavigatePricing,
+  onOpenAuth,
+  openFaq,
+  setOpenFaq,
+}: HomePageProps) {
+  return (
+    <>
+      <section className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(22,163,74,0.16),transparent_44%),radial-gradient(circle_at_76%_22%,rgba(26,26,26,0.09),transparent_36%),linear-gradient(to_bottom,#fafaf8,#f5f5f3)]" />
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{ transform: `translateY(${Math.min(scrollY * 0.08, 36)}px)` }}
+          aria-hidden
+        >
+          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="hero-grid" width="44" height="44" patternUnits="userSpaceOnUse">
+                <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#d8d8d2" strokeWidth="1" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#hero-grid)" />
+          </svg>
+        </div>
+
+        <div className="relative max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-16 lg:pt-24 lg:pb-20">
+          <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-10 items-end">
+            <div
+              className={cn(
+                'transition-all duration-700 ease-out',
+                heroReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'
+              )}
             >
-              Sign in
-            </button>
-            <button
-              onClick={() => setShowAuth(true)}
-              className="flex items-center gap-1.5 h-8 px-4 bg-foreground text-background text-xs font-semibold rounded-lg hover:bg-foreground/90 transition-colors"
-            >
-              Get started <ArrowRight size={11} />
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── HERO ────────────────────────────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-6 pt-20 pb-20">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-16">
-
-          {/* Left: copy */}
-          <div className="flex-1 min-w-0">
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-accent border border-accent/20 bg-accent/5 px-3 py-1.5 rounded-full mb-7">
-              <Zap size={10} />
-              20 free credits on signup · no card required
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.08] text-foreground mb-5">
-              Architecture visuals,<br />
-              generated by{' '}
-              <span className="text-accent">AI.</span>
-            </h1>
-
-            <p className="text-base text-foreground-secondary leading-relaxed max-w-md mb-8">
-              Upload a sketch, floor plan, or CAD file. Choose from 18 generation modes.
-              Download a photorealistic render in under 30 seconds — no 3D software needed.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 mb-10">
-              <button
-                onClick={() => setShowAuth(true)}
-                className="flex items-center gap-2 h-10 px-6 bg-foreground text-background text-sm font-semibold rounded-xl hover:bg-foreground/90 transition-colors"
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent mb-5">Commercial Edition</p>
+              <h1
+                className="text-[46px] leading-[0.96] sm:text-[66px] lg:text-[78px] text-foreground tracking-tight"
+                style={{ fontFamily: 'Cormorant Garamond, serif' }}
               >
-                Start for free <ArrowRight size={14} />
-              </button>
-              <button
-                onClick={() => scrollTo('pricing')}
-                className="flex items-center gap-2 h-10 px-6 border border-border text-sm font-semibold rounded-xl hover:bg-surface-sunken transition-colors"
-              >
-                View pricing
-              </button>
-            </div>
+                Architecture AI,
+                <br />
+                built for
+                <span className="italic text-accent"> real delivery.</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-sm sm:text-base text-foreground-secondary leading-relaxed">
+                ArchViz AI Studio turns sketches, CAD files, reference renders, and documents into production-ready
+                visuals. One workspace for generation, refinement, translation, validation, and client-facing output.
+              </p>
 
-            {/* Stats strip */}
-            <div className="flex flex-wrap gap-x-8 gap-y-3 pt-8 border-t border-border">
-              {[['18', 'generation modes'], ['< 30s', 'avg. render time'], ['50+', 'languages'], ['$0.05', 'per credit']].map(([v, l]) => (
-                <div key={l}>
-                  <p className="text-lg font-bold text-foreground font-mono">{v}</p>
-                  <p className="text-[10px] text-foreground-muted uppercase tracking-wider mt-0.5">{l}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right: app UI mockup */}
-          <div className="hidden lg:block shrink-0 w-[460px]">
-            <div className="rounded-2xl border border-border bg-surface-elevated shadow-elevated overflow-hidden">
-              {/* Fake TopBar */}
-              <div className="h-10 border-b border-border bg-background flex items-center px-4 gap-3">
-                <div className="text-xs font-bold text-foreground">ArchViz</div>
-                <div className="flex-1" />
-                <div className="w-16 h-5 bg-surface-sunken rounded-md" />
-                <div className="w-6 h-6 bg-surface-sunken rounded-full" />
-              </div>
-
-              <div className="flex" style={{ height: 300 }}>
-                {/* Left sidebar mock */}
-                <div className="w-12 border-r border-border bg-background flex flex-col items-center py-3 gap-2">
-                  {[true, false, false, false, false, false].map((active, i) => (
-                    <div key={i} className={cn('w-7 h-7 rounded-lg', active ? 'bg-foreground' : 'bg-surface-sunken')} />
-                  ))}
-                </div>
-
-                {/* Canvas mock */}
-                <div className="flex-1 bg-background flex items-center justify-center relative overflow-hidden">
-                  {/* Placeholder render output */}
-                  <div className="absolute inset-4 rounded-xl bg-surface-sunken">
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
-                      <Layers size={28} className="text-foreground-muted" />
-                      <span className="text-[10px] text-foreground-muted font-medium">Generated render</span>
-                    </div>
-                    {/* Fake architectural lines */}
-                    <svg className="absolute inset-0 w-full h-full opacity-10" xmlns="http://www.w3.org/2000/svg">
-                      <line x1="20%" y1="0" x2="20%" y2="100%" stroke="currentColor" strokeWidth="0.5" />
-                      <line x1="50%" y1="0" x2="50%" y2="100%" stroke="currentColor" strokeWidth="0.5" />
-                      <line x1="80%" y1="0" x2="80%" y2="100%" stroke="currentColor" strokeWidth="0.5" />
-                      <line x1="0" y1="30%" x2="100%" y2="30%" stroke="currentColor" strokeWidth="0.5" />
-                      <line x1="0" y1="65%" x2="100%" y2="65%" stroke="currentColor" strokeWidth="0.5" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Right panel mock */}
-                <div className="w-36 border-l border-border bg-background flex flex-col gap-3 p-3">
-                  <div className="space-y-1">
-                    <div className="h-2 bg-surface-sunken rounded-full w-12" />
-                    <div className="h-6 bg-surface-sunken rounded-lg w-full" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-2 bg-surface-sunken rounded-full w-16" />
-                    <div className="h-6 bg-surface-sunken rounded-lg w-full" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-2 bg-surface-sunken rounded-full w-10" />
-                    <div className="h-4 bg-surface-sunken rounded-full w-full" />
-                  </div>
-                  <div className="mt-auto h-8 bg-foreground rounded-lg w-full" />
-                </div>
-              </div>
-            </div>
-
-            {/* Mode grid below mockup */}
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              {MODE_PREVIEW.map(({ label, sub }) => (
-                <div key={label} className="bg-surface-elevated border border-border rounded-xl p-3 text-center hover:border-foreground-muted transition-colors">
-                  <p className="text-[11px] font-semibold text-foreground leading-tight">{label}</p>
-                  <p className="text-[9px] text-foreground-muted mt-0.5">{sub}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FEATURES ────────────────────────────────────────────────────────── */}
-      <section id="features" className="border-t border-border bg-surface-sunken py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="mb-10">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">Capabilities</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">Every tool your practice needs</h2>
-            <p className="text-sm text-foreground-muted mt-2 max-w-lg">From early-stage concept to final presentation — all in one platform.</p>
-          </div>
-
-          {/* Tab bar — matches app's segmented control */}
-          <div className="flex bg-background border border-border p-1 rounded-xl gap-1 flex-wrap mb-6 w-fit">
-            {FEATURE_TABS.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all',
-                  activeTab === id
-                    ? 'bg-surface-elevated text-foreground shadow-subtle'
-                    : 'text-foreground-muted hover:text-foreground'
-                )}
-              >
-                <Icon size={12} /> {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Feature grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {currentTab.items.map(item => (
-              <div key={item.title} className="bg-surface-elevated border border-border rounded-xl p-5 hover:border-foreground-muted transition-colors space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                  {item.badge && (
-                    <span className="text-[9px] font-bold uppercase tracking-wide text-accent bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-foreground-muted leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ────────────────────────────────────────────────────── */}
-      <section id="workflow" className="border-t border-border py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">Workflow</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">Four steps. Thirty seconds.</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {STEPS.map(({ n, title, desc }) => (
-              <div key={n} className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-bold font-mono text-accent">{n}</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-foreground">{title}</p>
-                  <p className="text-xs text-foreground-muted leading-relaxed">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── USE CASES ───────────────────────────────────────────────────────── */}
-      <section id="use-cases" className="border-t border-border bg-surface-sunken py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">Who it's for</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">Built for every scale of practice</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {USE_CASES.map(({ Icon, persona, headline, desc, points, plan, featured }) => (
-              <div
-                key={persona}
-                className={cn(
-                  'rounded-2xl border p-6 flex flex-col gap-5 transition-shadow',
-                  featured
-                    ? 'bg-foreground text-background border-foreground shadow-elevated'
-                    : 'bg-surface-elevated border-border hover:border-foreground-muted'
-                )}
-              >
-                <div className="flex items-start justify-between">
-                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', featured ? 'bg-white/10' : 'bg-surface-sunken')}>
-                    <Icon size={16} className={featured ? 'text-background/80' : 'text-foreground-muted'} />
-                  </div>
-                  <span className={cn(
-                    'text-[9px] font-bold uppercase tracking-widest border px-2.5 py-1 rounded-full',
-                    featured ? 'border-white/20 text-background/60' : 'border-border text-foreground-muted'
-                  )}>
-                    {plan}
-                  </span>
-                </div>
-
-                <div>
-                  <p className={cn('text-[10px] font-bold uppercase tracking-widest mb-2', featured ? 'text-background/50' : 'text-foreground-muted')}>
-                    {persona}
-                  </p>
-                  <p className={cn('text-sm font-semibold leading-snug mb-3', featured ? 'text-background' : 'text-foreground')}>
-                    {headline}
-                  </p>
-                  <p className={cn('text-xs leading-relaxed', featured ? 'text-background/60' : 'text-foreground-muted')}>
-                    {desc}
-                  </p>
-                </div>
-
-                <ul className="space-y-2 flex-1">
-                  {points.map(pt => (
-                    <li key={pt} className={cn('flex items-start gap-2 text-xs', featured ? 'text-background/70' : 'text-foreground-secondary')}>
-                      <Check size={11} className={cn('mt-0.5 shrink-0', featured ? 'text-background/50' : 'text-accent')} />
-                      {pt}
-                    </li>
-                  ))}
-                </ul>
-
+              <div className="mt-8 flex flex-wrap gap-3">
                 <button
-                  onClick={() => setShowAuth(true)}
-                  className={cn(
-                    'w-full h-9 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5',
-                    featured
-                      ? 'bg-white text-foreground hover:bg-white/90'
-                      : 'border border-border hover:bg-surface-sunken text-foreground'
-                  )}
+                  type="button"
+                  onClick={onOpenAuth}
+                  className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center gap-2 hover:bg-foreground/90 transition-colors"
                 >
-                  Get started <ArrowRight size={11} />
+                  Create free account
+                  <ArrowRight size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onNavigatePricing}
+                  className="h-11 px-6 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-surface-sunken transition-colors"
+                >
+                  View plans
                 </button>
               </div>
+
+              <div className="mt-10 pt-6 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  ['18+', 'workflows'],
+                  ['< 30s', 'avg output cycle'],
+                  ['50+', 'language coverage'],
+                  ['3', 'commercial plans'],
+                ].map(([value, label]) => (
+                  <div key={label}>
+                    <p className="text-2xl font-semibold text-foreground">{value}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-foreground-muted mt-1">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'transition-all duration-700 delay-150 ease-out',
+                heroReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+              )}
+            >
+              <div className="rounded-2xl border border-border bg-surface-elevated shadow-elevated overflow-hidden">
+                <div className="h-11 border-b border-border bg-background flex items-center px-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">Studio Session</div>
+                  <div className="ml-auto flex gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
+                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
+                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-[56px_1fr_140px] min-h-[340px]">
+                  <div className="border-r border-border bg-background p-2.5 flex flex-col gap-2">
+                    {['bg-foreground', 'bg-surface-sunken', 'bg-surface-sunken', 'bg-surface-sunken', 'bg-surface-sunken'].map(
+                      (clazz, index) => (
+                        <span key={index} className={cn('h-8 w-8 rounded-lg', clazz)} />
+                      )
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-background-secondary relative overflow-hidden">
+                    <div className="absolute inset-4 rounded-xl border border-border bg-[linear-gradient(135deg,#e8e8e2_0%,#f2f2ed_45%,#ecece7_100%)]" />
+                    <div className="absolute inset-8 rounded-lg border border-white/60 bg-white/35 backdrop-blur-sm" />
+                    <div className="absolute bottom-8 left-8 right-8 h-12 rounded-lg border border-white/70 bg-white/45 flex items-center px-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">Prompt · Camera · Materials</span>
+                    </div>
+                  </div>
+
+                  <div className="border-l border-border bg-background p-3 flex flex-col gap-3">
+                    <div className="space-y-1.5">
+                      <div className="h-2 w-14 rounded-full bg-surface-sunken" />
+                      <div className="h-7 rounded-lg bg-surface-sunken" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-2 w-16 rounded-full bg-surface-sunken" />
+                      <div className="h-7 rounded-lg bg-surface-sunken" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-2 w-12 rounded-full bg-surface-sunken" />
+                      <div className="h-7 rounded-lg bg-surface-sunken" />
+                    </div>
+                    <button className="mt-auto h-9 rounded-lg bg-foreground text-background text-[11px] font-semibold inline-flex items-center justify-center gap-1.5">
+                      Generate
+                      <Sparkles size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2.5 text-[11px]">
+                {[
+                  ['3D Render', 'Photoreal output'],
+                  ['Visual Edit', 'Targeted refinement'],
+                  ['Video', 'Walkthrough clips'],
+                ].map(([title, subtitle]) => (
+                  <div key={title} className="rounded-xl border border-border bg-surface-elevated px-3 py-2.5">
+                    <p className="font-semibold text-foreground leading-tight">{title}</p>
+                    <p className="text-foreground-muted mt-1">{subtitle}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border bg-background py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="mb-8 sm:mb-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Platform</p>
+            <h2 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold">
+              One product surface, full project lifecycle.
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 border border-border rounded-2xl overflow-hidden bg-surface-elevated">
+            {FEATURE_COLUMNS.map((column, index) => {
+              const Icon = column.icon;
+              return (
+                <div
+                  key={column.title}
+                  className={cn(
+                    'p-6 sm:p-7',
+                    index < FEATURE_COLUMNS.length - 1 && 'md:border-r border-border',
+                    index > 0 && 'border-t md:border-t-0 border-border'
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="h-8 w-8 rounded-lg bg-surface-sunken inline-flex items-center justify-center text-foreground-muted">
+                      <Icon size={14} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{column.title}</p>
+                      <p className="text-sm font-semibold text-foreground">{column.subtitle}</p>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-3 text-sm text-foreground-secondary leading-relaxed">
+                    {column.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check size={14} className="mt-0.5 shrink-0 text-accent" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border bg-surface-sunken/45 py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">How It Works</p>
+              <h3 className="mt-3 text-2xl sm:text-[34px] text-foreground font-semibold tracking-tight">Fast by default. Precise when needed.</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="h-10 px-4 rounded-lg border border-border text-xs font-semibold uppercase tracking-wider text-foreground hover:bg-surface-sunken transition-colors inline-flex items-center gap-1.5"
+            >
+              Try it now
+              <PlayCircle size={13} />
+            </button>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-4">
+            {WORKFLOW_STEPS.map((step, index) => (
+              <div key={step.title} className="rounded-xl border border-border bg-background p-5">
+                <p className="text-[11px] uppercase tracking-widest text-accent font-semibold">0{index + 1}</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{step.title}</p>
+                <p className="mt-2 text-sm text-foreground-muted leading-relaxed">{step.description}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── PRICING ─────────────────────────────────────────────────────────── */}
-      <section id="pricing" className="border-t border-border py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">Pricing</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight mb-2">Simple, transparent pricing</h2>
-            <p className="text-sm text-foreground-muted">Pay monthly, cancel anytime. All prices in USD.</p>
-          </div>
+      <section className="border-b border-border py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="rounded-2xl border border-border bg-[linear-gradient(160deg,#ffffff_0%,#f4f4f0_100%)] p-6 sm:p-8 lg:p-10">
+            <div className="grid lg:grid-cols-[1.15fr_0.85fr] gap-8 lg:gap-10 items-end">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Commercial Plans</p>
+                <h3 className="mt-3 text-3xl sm:text-[38px] tracking-tight text-foreground font-semibold">Pricing that scales from solo to studio.</h3>
+                <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-2xl leading-relaxed">
+                  Pick monthly credits for images and documents, then add video generation when needed. Clear unit economics,
+                  no hidden fees.
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 max-w-4xl mx-auto">
-            {PLANS.map(plan => (
-              <div
-                key={plan.id}
-                className={cn(
-                  'rounded-2xl border flex flex-col relative',
-                  plan.highlight ? 'bg-foreground text-background border-foreground shadow-elevated' : 'bg-surface-elevated border-border'
-                )}
+              <button
+                type="button"
+                onClick={onNavigatePricing}
+                className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors"
               >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="text-[9px] font-bold uppercase tracking-widest bg-accent text-white px-3 py-1 rounded-full whitespace-nowrap">
-                      Most popular
-                    </span>
-                  </div>
-                )}
+                See full pricing
+                <ChevronRight size={15} />
+              </button>
+            </div>
 
-                <div className="p-6 pb-4">
-                  <p className={cn('text-[10px] font-bold uppercase tracking-widest mb-4', plan.highlight ? 'text-background/50' : 'text-foreground-muted')}>
+            <div className="mt-8 grid sm:grid-cols-3 gap-3">
+              {PLANS.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={cn(
+                    'rounded-xl border px-4 py-4',
+                    plan.highlight
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-surface-elevated'
+                  )}
+                >
+                  <p className={cn('text-[10px] uppercase tracking-widest font-semibold', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
                     {plan.label}
                   </p>
-                  <div className="flex items-baseline gap-1 mb-1">
-                    <span className={cn('text-4xl font-bold tracking-tight', plan.highlight ? 'text-background' : 'text-foreground')}>
-                      ${plan.price}
+                  <p className={cn('mt-1 text-2xl font-semibold', plan.highlight ? 'text-background' : 'text-foreground')}>
+                    ${plan.price}
+                    <span className={cn('text-xs font-medium ml-1', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
+                      /mo
                     </span>
-                    <span className={cn('text-xs', plan.highlight ? 'text-background/50' : 'text-foreground-muted')}>/mo</span>
-                  </div>
-                  <p className={cn('text-xs', plan.highlight ? 'text-background/50' : 'text-foreground-muted')}>
-                    {plan.credits.toLocaleString()} credits · {plan.desc}
+                  </p>
+                  <p className={cn('mt-1 text-xs', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
+                    {plan.credits.toLocaleString()} credits
                   </p>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
-                <div className={cn('mx-6 h-px', plan.highlight ? 'bg-white/10' : 'bg-border')} />
+      <section className="py-16 sm:py-20">
+        <div className="max-w-3xl mx-auto px-5 sm:px-6">
+          <div className="text-center mb-8">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">FAQ</p>
+            <h3 className="mt-3 text-3xl sm:text-[36px] text-foreground tracking-tight font-semibold">Before you start</h3>
+          </div>
 
-                <ul className="p-6 pt-4 space-y-2.5 flex-1">
-                  {plan.features.map(f => (
-                    <li key={f} className={cn('flex items-start gap-2 text-xs', plan.highlight ? 'text-background/70' : 'text-foreground-secondary')}>
-                      <Check size={11} className={cn('mt-0.5 shrink-0', plan.highlight ? 'text-background/50' : 'text-accent')} />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="p-6 pt-0">
-                  <button
-                    onClick={() => setShowAuth(true)}
-                    className={cn(
-                      'w-full h-10 rounded-xl text-xs font-semibold transition-colors',
-                      plan.highlight
-                        ? 'bg-white text-foreground hover:bg-white/90'
-                        : 'bg-foreground text-background hover:bg-foreground/90'
-                    )}
-                  >
-                    {plan.cta}
-                  </button>
-                </div>
+          <div className="divide-y divide-border border-y border-border bg-surface-elevated rounded-xl">
+            {FAQ_ITEMS.map((item, index) => (
+              <div key={item.q} className="px-4 sm:px-6">
+                <button
+                  type="button"
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  className="w-full py-4 text-left flex items-start justify-between gap-4"
+                >
+                  <span className="text-sm font-medium text-foreground">{item.q}</span>
+                  <span className="text-xs text-foreground-muted mt-1">{openFaq === index ? '−' : '+'}</span>
+                </button>
+                {openFaq === index && <p className="pb-4 text-sm text-foreground-muted leading-relaxed">{item.a}</p>}
               </div>
             ))}
           </div>
+        </div>
+      </section>
+    </>
+  );
+}
 
-          <p className="text-center text-xs text-foreground-muted mt-8">
-            Need more credits? Top up anytime —{' '}
-            <strong className="text-foreground font-semibold">500 for $24</strong> or{' '}
-            <strong className="text-foreground font-semibold">2,000 for $79</strong>.{' '}
-            Larger teams?{' '}
-            <a href="mailto:hello@archviz.ai" className="text-accent hover:underline">Contact us for Enterprise.</a>
+type PricingPageProps = {
+  onOpenAuth: () => void;
+  onNavigateHome: () => void;
+};
+
+function PricingPage({ onOpenAuth, onNavigateHome }: PricingPageProps) {
+  return (
+    <>
+      <section className="border-b border-border bg-[radial-gradient(circle_at_22%_10%,rgba(22,163,74,0.18),transparent_38%),linear-gradient(to_bottom,#fafaf8,#f5f5f3)]">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-16">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Pricing & Plans</p>
+          <h1 className="mt-3 text-4xl sm:text-[54px] leading-[1.02] tracking-tight text-foreground font-semibold max-w-4xl">
+            Predictable monthly credits for teams shipping architectural visuals.
+          </h1>
+          <p className="mt-5 max-w-2xl text-sm sm:text-base text-foreground-secondary leading-relaxed">
+            Choose the plan that fits your output volume. Image and document workflows consume credits, while video is
+            billed separately by generation.
           </p>
         </div>
       </section>
 
-      {/* ── FAQ ─────────────────────────────────────────────────────────────── */}
-      <section id="faq" className="border-t border-border bg-surface-sunken py-20">
-        <div className="max-w-2xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">FAQ</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">Common questions</h2>
-          </div>
-
-          <div className="divide-y divide-border-subtle">
-            {FAQ.map((item, i) => (
-              <div key={i}>
-                <button
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full flex items-center justify-between gap-4 py-4 text-left"
-                >
-                  <span className="text-sm font-medium text-foreground">{item.q}</span>
-                  <ChevronDown
-                    size={14}
-                    className={cn('text-foreground-muted shrink-0 transition-transform duration-200', openFaq === i && 'rotate-180')}
-                  />
-                </button>
-                {openFaq === i && (
-                  <p className="text-xs text-foreground-muted leading-relaxed pb-4">{item.a}</p>
+      <section className="border-b border-border py-14 sm:py-16 bg-background">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="grid lg:grid-cols-3 gap-4">
+            {PLANS.map((plan) => (
+              <article
+                key={plan.id}
+                className={cn(
+                  'rounded-2xl border p-6 flex flex-col',
+                  plan.highlight
+                    ? 'border-foreground bg-foreground text-background shadow-elevated'
+                    : 'border-border bg-surface-elevated'
                 )}
+              >
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div>
+                    <p className={cn('text-[11px] font-semibold uppercase tracking-[0.16em]', plan.highlight ? 'text-background/65' : 'text-foreground-muted')}>
+                      {plan.label}
+                    </p>
+                    <p className={cn('mt-2 text-4xl font-semibold tracking-tight', plan.highlight ? 'text-background' : 'text-foreground')}>
+                      ${plan.price}
+                      <span className={cn('text-xs font-medium ml-1', plan.highlight ? 'text-background/65' : 'text-foreground-muted')}>
+                        /month
+                      </span>
+                    </p>
+                    <p className={cn('mt-2 text-sm', plan.highlight ? 'text-background/75' : 'text-foreground-secondary')}>
+                      {plan.tagline}
+                    </p>
+                  </div>
+                  {plan.highlight && (
+                    <span className="h-7 px-3 rounded-full bg-accent text-white text-[10px] font-semibold uppercase tracking-wider inline-flex items-center">
+                      Most Popular
+                    </span>
+                  )}
+                </div>
+
+                <p className={cn('text-sm mb-5', plan.highlight ? 'text-background/75' : 'text-foreground-muted')}>
+                  {plan.credits.toLocaleString()} credits included each month.
+                </p>
+
+                <ul className="space-y-2.5 text-sm flex-1">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className={cn('flex items-start gap-2', plan.highlight ? 'text-background/85' : 'text-foreground-secondary')}>
+                      <Check size={14} className={cn('mt-0.5 shrink-0', plan.highlight ? 'text-background/75' : 'text-accent')} />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className={cn(
+                    'mt-6 h-10 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors',
+                    plan.highlight
+                      ? 'bg-background text-foreground hover:bg-background/90'
+                      : 'bg-foreground text-background hover:bg-foreground/90'
+                  )}
+                >
+                  Start {plan.label}
+                  <ArrowRight size={14} />
+                </button>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border py-14 sm:py-16 bg-surface-sunken/45">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-2 gap-8">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Credit Guide</h2>
+            <div className="space-y-3 text-sm text-foreground-secondary">
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
+                <span>Standard image generation modes</span>
+                <strong className="text-foreground">4 credits</strong>
               </div>
-            ))}
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
+                <span>Upscale</span>
+                <strong className="text-foreground">3 credits</strong>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
+                <span>PDF compression</span>
+                <strong className="text-foreground">1 credit</strong>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
+                <span>Document translate</span>
+                <strong className="text-foreground">8 credits</strong>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Material validation</span>
+                <strong className="text-foreground">12 credits</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface-elevated p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Video (Pay Per Generation)</h2>
+            <div className="space-y-3 text-sm text-foreground-secondary">
+              {[
+                ['kling-standard-5s', 'Kling Standard 5s'],
+                ['kling-standard-10s', 'Kling Standard 10s'],
+                ['kling-pro-10s', 'Kling Pro 10s'],
+                ['veo-fast-5s', 'Veo Fast 5s'],
+                ['veo-standard-8s', 'Veo Standard 8s'],
+              ].map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-4 border-b border-border pb-2 last:border-b-0 last:pb-0">
+                  <span>{label}</span>
+                  <strong className="text-foreground">${((VIDEO_PRICES_CENTS[key] ?? 0) / 100).toFixed(2)}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── FINAL CTA ───────────────────────────────────────────────────────── */}
-      <section className="border-t border-border py-24">
-        <div className="max-w-2xl mx-auto px-6 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-4">Get started today</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight mb-4">
-            Your next render is<br />30 seconds away.
-          </h2>
-          <p className="text-sm text-foreground-muted mb-8">20 free credits on signup. No credit card required.</p>
-          <button
-            onClick={() => setShowAuth(true)}
-            className="inline-flex items-center gap-2 h-11 px-8 bg-foreground text-background text-sm font-semibold rounded-xl hover:bg-foreground/90 transition-colors"
-          >
-            Create free account <ArrowRight size={14} />
-          </button>
-        </div>
-      </section>
-
-      {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <span className="text-sm font-bold text-foreground">ArchViz</span>
-            <span className="text-sm font-normal text-foreground-muted"> AI Studio</span>
-            <p className="text-[10px] text-foreground-muted mt-1">© {new Date().getFullYear()} ArchViz AI Studio</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {NAV_LINKS.map(({ id, label }) => (
-              <button key={id} onClick={() => scrollTo(id)} className="text-xs text-foreground-muted hover:text-foreground transition-colors">
-                {label}
-              </button>
-            ))}
-            <a href="mailto:hello@archviz.ai" className="text-xs text-foreground-muted hover:text-foreground transition-colors">Contact</a>
-            <a href="#" className="text-xs text-foreground-muted hover:text-foreground transition-colors">Privacy</a>
-            <a href="#" className="text-xs text-foreground-muted hover:text-foreground transition-colors">Terms</a>
-          </div>
-        </div>
-      </footer>
-
-      {/* ── AUTH MODAL ──────────────────────────────────────────────────────── */}
-      {showAuth && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="relative w-full max-w-md bg-surface-elevated border border-border rounded-2xl shadow-elevated overflow-hidden">
+      <section className="py-16 sm:py-20">
+        <div className="max-w-5xl mx-auto px-5 sm:px-6 text-center">
+          <h3 className="text-3xl sm:text-[40px] tracking-tight text-foreground font-semibold">Need a faster pilot for your team?</h3>
+          <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-2xl mx-auto leading-relaxed">
+            Start with a commercial plan today and move your first client workflow through the platform in one afternoon.
+          </p>
+          <div className="mt-7 flex flex-wrap justify-center gap-3">
             <button
+              type="button"
+              onClick={onOpenAuth}
+              className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center gap-2 hover:bg-foreground/90 transition-colors"
+            >
+              Create free account
+              <ArrowRight size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              className="h-11 px-6 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-surface-sunken transition-colors"
+            >
+              Back to homepage
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function TermsPage() {
+  return (
+    <>
+      <section className="border-b border-border bg-[linear-gradient(to_bottom,#fafaf8,#f4f4f0)]">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-14">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Legal</p>
+          <h1 className="mt-3 text-4xl sm:text-[52px] tracking-tight leading-[1.03] text-foreground font-semibold">Terms of Service</h1>
+          <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-3xl leading-relaxed">
+            These terms govern access to and use of ArchViz AI Studio for commercial and professional usage.
+          </p>
+          <p className="mt-3 text-xs text-foreground-muted">Last updated: April 21, 2026</p>
+        </div>
+      </section>
+
+      <section className="py-12 sm:py-14">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-[240px_1fr] gap-8 lg:gap-12">
+          <aside className="hidden lg:block">
+            <div className="sticky top-24 rounded-xl border border-border bg-surface-elevated p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted mb-3">Sections</p>
+              <nav className="space-y-2">
+                {TERMS_SECTIONS.map((section) => (
+                  <a
+                    key={section.id}
+                    href={`#${section.id}`}
+                    className="block text-sm text-foreground-muted hover:text-foreground transition-colors"
+                  >
+                    {section.title}
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </aside>
+
+          <div className="space-y-8">
+            {TERMS_SECTIONS.map((section) => (
+              <article key={section.id} id={section.id} className="rounded-xl border border-border bg-surface-elevated p-5 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground tracking-tight">{section.title}</h2>
+                <div className="mt-3 space-y-3">
+                  {section.paragraphs.map((paragraph) => (
+                    <p key={paragraph} className="text-sm text-foreground-secondary leading-relaxed">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function LandingPage() {
+  const [route, setRoute] = useState<PublicRoute>(() => routeFromPath(window.location.pathname));
+  const [showAuth, setShowAuth] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [heroReady, setHeroReady] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  const navigate = useCallback((nextRoute: PublicRoute) => {
+    const targetPath = pathFromRoute(nextRoute);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+    setRoute(nextRoute);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+    document.body.style.overflowX = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow || 'hidden';
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setRoute(routeFromPath(window.location.pathname));
+      window.scrollTo({ top: 0 });
+    };
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 8);
+      setScrollY(y);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHeroReady(true), 60);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const content = useMemo(() => {
+    if (route === 'pricing') {
+      return <PricingPage onOpenAuth={() => setShowAuth(true)} onNavigateHome={() => navigate('home')} />;
+    }
+    if (route === 'terms') {
+      return <TermsPage />;
+    }
+    return (
+      <HomePage
+        heroReady={heroReady}
+        scrollY={scrollY}
+        onNavigatePricing={() => navigate('pricing')}
+        onOpenAuth={() => setShowAuth(true)}
+        openFaq={openFaq}
+        setOpenFaq={setOpenFaq}
+      />
+    );
+  }, [route, heroReady, scrollY, openFaq, navigate]);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground font-sans">
+      <SiteHeader route={route} scrolled={scrolled} onNavigate={navigate} onOpenAuth={() => setShowAuth(true)} />
+
+      <main>{content}</main>
+
+      <SiteFooter onNavigate={navigate} />
+
+      {showAuth && (
+        <div className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface-elevated shadow-elevated overflow-hidden relative">
+            <button
+              type="button"
               onClick={() => setShowAuth(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
+              className="absolute top-4 right-4 h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors inline-flex items-center justify-center"
+              aria-label="Close sign in dialog"
             >
               <X size={15} />
             </button>
 
             <div className="px-7 pt-7 pb-5 border-b border-border">
-              <span className="text-sm font-bold text-foreground">ArchViz</span>
-              <span className="text-sm font-normal text-foreground-muted"> AI Studio</span>
+              <Brand />
             </div>
 
             <div className="px-7 py-6">
@@ -661,10 +1020,35 @@ export function LandingPage() {
             </div>
 
             <div className="px-7 pb-6 text-center">
-              <p className="text-[10px] text-foreground-muted">
+              <p className="text-[11px] text-foreground-muted">
                 By continuing you agree to our{' '}
-                <a href="#" className="underline hover:text-foreground transition-colors">Terms</a> and{' '}
-                <a href="#" className="underline hover:text-foreground transition-colors">Privacy Policy</a>
+                <a
+                  href="/terms"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setShowAuth(false);
+                    navigate('terms');
+                  }}
+                  className="underline hover:text-foreground transition-colors"
+                >
+                  Terms
+                </a>{' '}
+                and{' '}
+                <a
+                  href="/terms#privacy"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setShowAuth(false);
+                    navigate('terms');
+                    setTimeout(() => {
+                      document.getElementById('privacy')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 50);
+                  }}
+                  className="underline hover:text-foreground transition-colors"
+                >
+                  Privacy
+                </a>
+                .
               </p>
             </div>
           </div>
