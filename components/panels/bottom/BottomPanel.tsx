@@ -82,6 +82,13 @@ export const BottomPanel: React.FC = () => {
     [historyItems, selectedHistoryIds]
   );
 
+  const handleBottomTabClick = useCallback((tab: string) => {
+    if (state.bottomPanelCollapsed) {
+      dispatch({ type: 'TOGGLE_BOTTOM_PANEL' });
+    }
+    dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: tab });
+  }, [dispatch, state.bottomPanelCollapsed]);
+
   const renderContent = () => {
     if (isVideoLocked) {
       return (
@@ -395,7 +402,7 @@ export const BottomPanel: React.FC = () => {
            ].map(tab => (
              <button 
                key={tab}
-               onClick={() => dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: tab })}
+               onClick={() => handleBottomTabClick(tab)}
                className={cn(
                  "flex items-center gap-2 px-3 sm:px-4 h-full border-r border-border-subtle text-[10px] sm:text-xs font-medium uppercase tracking-wider transition-colors",
                  resolvedBottomTab === tab ? "bg-background-secondary text-foreground" : "text-foreground-muted hover:text-foreground hover:bg-background-secondary"
@@ -434,4 +441,3 @@ export const BottomPanel: React.FC = () => {
     </div>
   );
 };
-
