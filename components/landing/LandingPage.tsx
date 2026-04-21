@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { LoginForm } from '../auth/LoginPage';
-import { PLAN_CREDITS, PLAN_PRICES_USD, VIDEO_PRICES_CENTS } from '../../lib/stripePrices';
+import { CREDITS_PER_MODE, PLAN_CREDITS, PLAN_PRICES_USD, VIDEO_PRICES_CENTS } from '../../lib/stripePrices';
 import { cn } from '../../lib/utils';
 
 type PublicRoute = 'home' | 'pricing' | 'terms';
@@ -83,6 +83,227 @@ const WORKFLOW_STEPS = [
   },
 ];
 
+type ModePricingKey = keyof typeof CREDITS_PER_MODE;
+
+type WorkflowGroup = {
+  title: string;
+  description: string;
+  items: Array<{
+    mode: ModePricingKey;
+    label: string;
+    summary: string;
+    useCase: string;
+  }>;
+};
+
+const WORKFLOW_GROUPS: WorkflowGroup[] = [
+  {
+    title: 'Design Generation',
+    description: 'Core creation modes for turning references, sketches, and planning input into client-ready visuals.',
+    items: [
+      {
+        mode: 'generate-text',
+        label: 'Generate',
+        summary: 'Draft visual concepts and prompt foundations before image production.',
+        useCase: 'Early concept alignment with clients and internal design reviews.',
+      },
+      {
+        mode: 'render-3d',
+        label: '3D to Render',
+        summary: 'Convert 3D model views into polished photoreal imagery with controlled lighting and material intent.',
+        useCase: 'Fast marketing and competition visuals from existing model geometry.',
+      },
+      {
+        mode: 'render-cad',
+        label: 'CAD to Render',
+        summary: 'Transform technical plans, sections, and elevations into styled perspective outputs.',
+        useCase: 'Upgrade drawing-heavy deliverables into presentation visuals.',
+      },
+      {
+        mode: 'render-sketch',
+        label: 'Sketch to Render',
+        summary: 'Translate hand-drawn or conceptual sketches into realistic design imagery.',
+        useCase: 'Concept storytelling before full BIM/CAD development.',
+      },
+      {
+        mode: 'masterplan',
+        label: 'Masterplans',
+        summary: 'Generate large-scale site and zoning visuals with boundary and context controls.',
+        useCase: 'Urban design pitches, planning submissions, and early-stage massing studies.',
+      },
+    ],
+  },
+  {
+    title: 'Refinement and Technical Views',
+    description: 'Precision workflows for iteration, post-production, consistency, and technical communication.',
+    items: [
+      {
+        mode: 'visual-edit',
+        label: 'Visual Editor',
+        summary: 'Apply targeted object edits, material swaps, background updates, and in-place cleanup.',
+        useCase: 'Revision cycles without re-running full scene generation.',
+      },
+      {
+        mode: 'exploded',
+        label: 'Exploded Views',
+        summary: 'Create exploded compositions and animation-ready separations for assemblies and systems.',
+        useCase: 'Construction logic communication and technical coordination.',
+      },
+      {
+        mode: 'section',
+        label: 'Render to Section',
+        summary: 'Build section visuals with cut controls, hatch strategy, line weight, and reveal options.',
+        useCase: 'Section diagrams and presentation-grade technical storytelling.',
+      },
+      {
+        mode: 'multi-angle',
+        label: 'Multi-Angle',
+        summary: 'Generate consistent viewpoints while preserving style, lighting, and design identity.',
+        useCase: 'Client decks requiring coherent perspectives of the same proposal.',
+      },
+      {
+        mode: 'upscale',
+        label: 'Image Upscaler',
+        summary: 'Increase resolution and detail for print, boards, and close-in review.',
+        useCase: 'Final delivery assets that need sharper output quality.',
+      },
+    ],
+  },
+  {
+    title: 'Conversion and Project Delivery',
+    description: 'Production workflows that connect visuals with documentation, translation, and validation tasks.',
+    items: [
+      {
+        mode: 'img-to-cad',
+        label: 'Image to CAD',
+        summary: 'Vectorize raster references toward CAD-ready linework outputs.',
+        useCase: 'Move scan-based references into drafting and documentation pipelines.',
+      },
+      {
+        mode: 'img-to-3d',
+        label: 'Image to 3D',
+        summary: 'Generate and preview 3D model outputs from still imagery.',
+        useCase: 'Rapid 3D ideation from references before detailed modeling.',
+      },
+      {
+        mode: 'document-translate',
+        label: 'Doc Translator',
+        summary: 'Translate PDF, DOCX, and XLSX project files while preserving structure.',
+        useCase: 'Cross-border collaboration across consultants, clients, and vendors.',
+      },
+      {
+        mode: 'material-validation',
+        label: 'Material Validation',
+        summary: 'Cross-check BoQ and specification documents against extracted material data.',
+        useCase: 'Pre-handoff QA for procurement and technical compliance.',
+      },
+      {
+        mode: 'pdf-compression',
+        label: 'PDF Compressor',
+        summary: 'Batch-compress heavy PDF packs with configurable quality preferences.',
+        useCase: 'Submit-ready document bundles for email, portals, and approvals.',
+      },
+    ],
+  },
+  {
+    title: 'Brand and Media Output',
+    description: 'Presentation-facing workflows for motion content and polished team assets.',
+    items: [
+      {
+        mode: 'video',
+        label: 'Video Studio',
+        summary: 'Generate short-form architectural motion using Kling and Veo pipelines.',
+        useCase: 'Social clips, hero banners, and narrative walkthrough teasers.',
+      },
+      {
+        mode: 'headshot',
+        label: 'Headshot Studio',
+        summary: 'Create consistent professional headshots from one to three reference angles.',
+        useCase: 'Unified team profile imagery for websites and proposal decks.',
+      },
+    ],
+  },
+];
+
+const USE_CASE_PLAYBOOK = [
+  {
+    title: 'Concept Sprint to Client Deck',
+    summary: 'Move from rough idea to presentation-ready stills in one session.',
+    sequence: ['Generate', 'Sketch to Render', 'Multi-Angle', 'Image Upscaler'],
+  },
+  {
+    title: 'Technical Narrative for Design Reviews',
+    summary: 'Pair expressive renders with explanatory technical graphics.',
+    sequence: ['3D to Render', 'Exploded Views', 'Render to Section', 'Visual Editor'],
+  },
+  {
+    title: 'International Bid and Handoff Package',
+    summary: 'Prepare visuals and translated documentation for distributed teams.',
+    sequence: ['CAD to Render', 'Doc Translator', 'Material Validation', 'PDF Compressor'],
+  },
+  {
+    title: 'Campaign-Ready Launch Assets',
+    summary: 'Build promotional stills, motion, and team identity from one workspace.',
+    sequence: ['3D to Render', 'Video Studio', 'Headshot Studio', 'Image Upscaler'],
+  },
+];
+
+const PLATFORM_PILLARS = [
+  {
+    title: 'Prompt and History Control',
+    points: [
+      'The bottom panel keeps generated prompts editable so teams can refine or reuse creative direction.',
+      'History thumbnails let you instantly reload previous outputs and continue iteration without re-uploading.',
+      'Mode-specific timeline, legend, and edit stack views surface context exactly where decisions happen.',
+    ],
+  },
+  {
+    title: 'Commercial Billing Clarity',
+    points: [
+      'Each workflow has an explicit credit cost, visible before generation.',
+      'Video is handled separately as pay-per-generation through Stripe.',
+      'Teams can top up credits and monitor usage without leaving the product workspace.',
+    ],
+  },
+  {
+    title: 'Team-Ready Operations',
+    points: [
+      'Studio organizations use shared credit pools and seat limits for coordinated output.',
+      'Owner/admin roles can manage members, invitations, and subscription controls.',
+      'Generation history is persisted per account for cross-session continuity.',
+    ],
+  },
+];
+
+const FILE_COMPATIBILITY = [
+  {
+    feature: 'Document Translate',
+    support: 'PDF, DOCX, XLSX input with translated output rebuilt in matching office-friendly formats.',
+  },
+  {
+    feature: 'Material Validation',
+    support: 'PDF, CSV, XLS, and XLSX uploads for BoQ/spec cross-checking and discrepancy reporting.',
+  },
+  {
+    feature: 'PDF Compression',
+    support: 'Batch queue support for up to 20 PDFs per compression run.',
+  },
+  {
+    feature: 'Image Pipelines',
+    support: 'Reference images flow across generation, editing, multi-angle, and upscaling workflows.',
+  },
+  {
+    feature: 'Video Delivery',
+    support: 'Kling and Veo generation with downloadable MP4 outputs.',
+  },
+];
+
+function formatModeCost(mode: ModePricingKey): string {
+  if (mode === 'video') return 'Pay per generation';
+  const credits = CREDITS_PER_MODE[mode];
+  return `${credits} ${credits === 1 ? 'credit' : 'credits'} per run`;
+}
+
 const FAQ_ITEMS = [
   {
     q: 'How do credits work?',
@@ -99,6 +320,18 @@ const FAQ_ITEMS = [
   {
     q: 'Do teams share usage?',
     a: 'Studio plan supports shared credits and team seats with role-based management in the dashboard.',
+  },
+  {
+    q: 'Which files are supported for delivery workflows?',
+    a: 'Document Translate supports PDF, DOCX, and XLSX. Material Validation supports PDF, CSV, XLS, and XLSX. PDF Compression supports batch PDF queues.',
+  },
+  {
+    q: 'Is generation history saved between sessions?',
+    a: 'Yes. Generated outputs are stored with account history so teams can resume work, reload assets, and continue iteration later.',
+  },
+  {
+    q: 'Can I use ArchViz AI Studio for both marketing and technical deliverables?',
+    a: 'Yes. The product includes visualization modes for client-facing imagery and technical modes such as sections, exploded views, material validation, and document translation.',
   },
 ];
 
@@ -591,6 +824,49 @@ function HomePage({
         </div>
       </section>
 
+      <section className="border-b border-border bg-surface-sunken/35 py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="mb-8 sm:mb-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Workflow Library</p>
+            <h3 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold max-w-4xl">
+              Every mode in the app, mapped to what it does and when to use it.
+            </h3>
+            <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-3xl leading-relaxed">
+              ArchViz AI Studio is organized as specialized workflows, not one generic generator. Teams can select the
+              exact mode for concept creation, technical output, document handling, or media delivery.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {WORKFLOW_GROUPS.map((group) => (
+              <article key={group.title} className="rounded-2xl border border-border bg-surface-elevated overflow-hidden">
+                <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-border grid md:grid-cols-[240px_1fr] gap-3 md:gap-6">
+                  <p className="text-sm font-semibold text-foreground">{group.title}</p>
+                  <p className="text-sm text-foreground-secondary leading-relaxed">{group.description}</p>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {group.items.map((item) => (
+                    <div key={item.mode} className="px-5 py-4 sm:px-6 sm:py-5 grid lg:grid-cols-[190px_1fr_260px] gap-3 lg:gap-6">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{item.label}</p>
+                        <span className="mt-2 inline-flex rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
+                          {formatModeCost(item.mode)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
+                      <p className="text-sm text-foreground-secondary leading-relaxed">
+                        <span className="font-semibold text-foreground">Use case:</span> {item.useCase}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="border-b border-border bg-surface-sunken/45 py-16 sm:py-20">
         <div className="max-w-6xl mx-auto px-5 sm:px-6">
           <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
@@ -617,6 +893,78 @@ function HomePage({
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border bg-background py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6">
+          <div className="mb-8 sm:mb-10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Studio Use Cases</p>
+            <h3 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold max-w-4xl">
+              Practical workflows teams run from kickoff to final handoff.
+            </h3>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {USE_CASE_PLAYBOOK.map((item) => (
+              <article key={item.title} className="rounded-2xl border border-border bg-surface-elevated p-5 sm:p-6">
+                <h4 className="text-lg font-semibold tracking-tight text-foreground">{item.title}</h4>
+                <p className="mt-2 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {item.sequence.map((step) => (
+                    <span
+                      key={`${item.title}-${step}`}
+                      className="rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted"
+                    >
+                      {step}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border bg-surface-sunken/40 py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-5 lg:gap-6">
+          <article className="rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Workspace Operations</p>
+            <h3 className="mt-3 text-2xl sm:text-[32px] leading-tight tracking-tight text-foreground font-semibold">
+              Built for commercial teams, not one-off demos.
+            </h3>
+
+            <div className="mt-6 space-y-5">
+              {PLATFORM_PILLARS.map((pillar) => (
+                <div key={pillar.title} className="pb-5 border-b border-border last:border-b-0 last:pb-0">
+                  <p className="text-sm font-semibold text-foreground">{pillar.title}</p>
+                  <ul className="mt-3 space-y-2.5">
+                    {pillar.points.map((point) => (
+                      <li key={point} className="flex items-start gap-2 text-sm text-foreground-secondary leading-relaxed">
+                        <Check size={14} className="mt-0.5 shrink-0 text-accent" />
+                        <span>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Compatibility</p>
+            <h3 className="mt-3 text-2xl sm:text-[30px] leading-tight tracking-tight text-foreground font-semibold">
+              Inputs and outputs by workflow.
+            </h3>
+            <div className="mt-5 divide-y divide-border">
+              {FILE_COMPATIBILITY.map((row) => (
+                <div key={row.feature} className="py-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{row.feature}</p>
+                  <p className="mt-1.5 text-sm text-foreground-secondary leading-relaxed">{row.support}</p>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
       </section>
 
