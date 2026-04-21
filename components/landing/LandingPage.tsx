@@ -278,22 +278,27 @@ const PLATFORM_PILLARS = [
 const FILE_COMPATIBILITY = [
   {
     feature: 'Document Translate',
+    formats: ['PDF', 'DOCX', 'XLSX'],
     support: 'PDF, DOCX, XLSX input with translated output rebuilt in matching office-friendly formats.',
   },
   {
     feature: 'Material Validation',
+    formats: ['PDF', 'CSV', 'XLS', 'XLSX'],
     support: 'PDF, CSV, XLS, and XLSX uploads for BoQ/spec cross-checking and discrepancy reporting.',
   },
   {
     feature: 'PDF Compression',
+    formats: ['PDF', 'Batch'],
     support: 'Batch queue support for up to 20 PDFs per compression run.',
   },
   {
     feature: 'Image Pipelines',
+    formats: ['Images', 'History'],
     support: 'Reference images flow across generation, editing, multi-angle, and upscaling workflows.',
   },
   {
     feature: 'Video Delivery',
+    formats: ['Kling', 'Veo', 'MP4'],
     support: 'Kling and Veo generation with downloadable MP4 outputs.',
   },
 ];
@@ -837,29 +842,56 @@ function HomePage({
             </p>
           </div>
 
-          <div className="space-y-4">
-            {WORKFLOW_GROUPS.map((group) => (
-              <article key={group.title} className="rounded-2xl border border-border bg-surface-elevated overflow-hidden">
-                <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-border grid md:grid-cols-[240px_1fr] gap-3 md:gap-6">
-                  <p className="text-sm font-semibold text-foreground">{group.title}</p>
-                  <p className="text-sm text-foreground-secondary leading-relaxed">{group.description}</p>
-                </div>
+          <div className="grid sm:grid-cols-3 gap-3 mb-6">
+            {[
+              [`${Object.keys(CREDITS_PER_MODE).length}`, 'workflows in the commercial app'],
+              [`${WORKFLOW_GROUPS.length}`, 'workflow families'],
+              ['2', 'billing models (credits + pay-per-gen)'],
+            ].map(([value, label]) => (
+              <div key={label} className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                <p className="text-2xl font-semibold text-foreground tracking-tight">{value}</p>
+                <p className="mt-1 text-[10px] uppercase tracking-wider text-foreground-muted">{label}</p>
+              </div>
+            ))}
+          </div>
 
-                <div className="divide-y divide-border">
-                  {group.items.map((item) => (
-                    <div key={item.mode} className="px-5 py-4 sm:px-6 sm:py-5 grid lg:grid-cols-[190px_1fr_260px] gap-3 lg:gap-6">
+          <div className="space-y-5">
+            {WORKFLOW_GROUPS.map((group, groupIndex) => (
+              <article key={group.title} className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated">
+                <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-accent/10 blur-2xl" aria-hidden />
+                <div className="relative px-5 py-5 sm:px-6 sm:py-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="h-8 w-8 shrink-0 rounded-lg border border-border bg-background inline-flex items-center justify-center text-[10px] font-semibold tracking-wider text-foreground-muted">
+                        {String(groupIndex + 1).padStart(2, '0')}
+                      </span>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{item.label}</p>
-                        <span className="mt-2 inline-flex rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
-                          {formatModeCost(item.mode)}
-                        </span>
+                        <p className="text-lg font-semibold tracking-tight text-foreground">{group.title}</p>
+                        <p className="mt-1 text-sm text-foreground-secondary max-w-3xl leading-relaxed">{group.description}</p>
                       </div>
-                      <p className="text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
-                      <p className="text-sm text-foreground-secondary leading-relaxed">
-                        <span className="font-semibold text-foreground">Use case:</span> {item.useCase}
-                      </p>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="mt-4 grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {group.items.map((item) => (
+                      <article
+                        key={item.mode}
+                        className="group rounded-xl border border-border bg-background/75 backdrop-blur-sm p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:border-foreground/40"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-foreground leading-tight">{item.label}</p>
+                          <span className="rounded-full border border-border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted whitespace-nowrap">
+                            {formatModeCost(item.mode)}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
+                        <div className="mt-4 pt-3 border-t border-border">
+                          <p className="text-[10px] uppercase tracking-wider font-semibold text-foreground-muted">Best for</p>
+                          <p className="mt-1.5 text-xs text-foreground-secondary leading-relaxed">{item.useCase}</p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
               </article>
             ))}
@@ -905,19 +937,32 @@ function HomePage({
             </h3>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {USE_CASE_PLAYBOOK.map((item) => (
-              <article key={item.title} className="rounded-2xl border border-border bg-surface-elevated p-5 sm:p-6">
-                <h4 className="text-lg font-semibold tracking-tight text-foreground">{item.title}</h4>
-                <p className="mt-2 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {item.sequence.map((step) => (
-                    <span
-                      key={`${item.title}-${step}`}
-                      className="rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted"
-                    >
-                      {step}
-                    </span>
+          <div className="space-y-4">
+            {USE_CASE_PLAYBOOK.map((item, index) => (
+              <article
+                key={item.title}
+                className="rounded-2xl border border-border bg-[linear-gradient(150deg,#ffffff_0%,#f5f5f1_85%)] p-5 sm:p-6"
+              >
+                <div className="flex flex-wrap items-start gap-4">
+                  <span className="h-8 w-8 shrink-0 rounded-full border border-border bg-background inline-flex items-center justify-center text-[10px] font-semibold tracking-wider text-foreground-muted">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <div className="flex-1 min-w-[220px]">
+                    <h4 className="text-lg font-semibold tracking-tight text-foreground">{item.title}</h4>
+                    <p className="mt-2 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  {item.sequence.map((step, stepIndex) => (
+                    <React.Fragment key={`${item.title}-${step}`}>
+                      <span className="rounded-full border border-border bg-background px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
+                        {step}
+                      </span>
+                      {stepIndex < item.sequence.length - 1 && (
+                        <ChevronRight size={12} className="text-foreground-muted" />
+                      )}
+                    </React.Fragment>
                   ))}
                 </div>
               </article>
@@ -934,14 +979,14 @@ function HomePage({
               Built for commercial teams, not one-off demos.
             </h3>
 
-            <div className="mt-6 space-y-5">
+            <div className="mt-6 grid sm:grid-cols-3 gap-3">
               {PLATFORM_PILLARS.map((pillar) => (
-                <div key={pillar.title} className="pb-5 border-b border-border last:border-b-0 last:pb-0">
-                  <p className="text-sm font-semibold text-foreground">{pillar.title}</p>
-                  <ul className="mt-3 space-y-2.5">
+                <div key={pillar.title} className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{pillar.title}</p>
+                  <ul className="mt-3 space-y-2">
                     {pillar.points.map((point) => (
-                      <li key={point} className="flex items-start gap-2 text-sm text-foreground-secondary leading-relaxed">
-                        <Check size={14} className="mt-0.5 shrink-0 text-accent" />
+                      <li key={point} className="flex items-start gap-2 text-xs text-foreground-secondary leading-relaxed">
+                        <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                         <span>{point}</span>
                       </li>
                     ))}
@@ -960,6 +1005,16 @@ function HomePage({
               {FILE_COMPATIBILITY.map((row) => (
                 <div key={row.feature} className="py-3.5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{row.feature}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.formats.map((format) => (
+                      <span
+                        key={`${row.feature}-${format}`}
+                        className="rounded-full border border-border bg-background px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted"
+                      >
+                        {format}
+                      </span>
+                    ))}
+                  </div>
                   <p className="mt-1.5 text-sm text-foreground-secondary leading-relaxed">{row.support}</p>
                 </div>
               ))}
