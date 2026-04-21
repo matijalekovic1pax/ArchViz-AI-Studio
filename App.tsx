@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Info, X, Layers, SlidersHorizontal } from 'lucide-react';
 import { AppProvider, useAppStore } from './store';
 import { AuthGate } from './components/auth/AuthGate';
+import { LandingPage } from './components/landing/LandingPage';
 import { TopBar } from './components/panels/TopBar';
 import { LeftSidebar } from './components/panels/left/LeftSidebar';
 import { RightPanel } from './components/panels/right/RightPanel';
@@ -275,15 +276,7 @@ function CheckoutHandler() {
   return null;
 }
 
-function AppRouter() {
-  const [path, setPath] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
-
+function AppRouter({ path }: { path: string }) {
   if (path === '/billing') return <BillingPage />;
   if (path === '/team') return <TeamDashboard />;
   if (path === '/admin') return <AdminPanel />;
@@ -291,13 +284,26 @@ function AppRouter() {
 }
 
 export default function App() {
+  const normalizePath = (value: string) => value.replace(/\/+$/, '') || '/';
+  const [path, setPath] = useState(() => normalizePath(window.location.pathname));
+
+  useEffect(() => {
+    const onPop = () => setPath(normalizePath(window.location.pathname));
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  if (path === '/' || path === '/pricing' || path === '/terms') {
+    return <LandingPage />;
+  }
+
   return (
     <AuthGate>
       <AppProvider>
         <InviteHandler />
         <CheckoutHandler />
         <GenerationPersister />
-        <AppRouter />
+        <AppRouter path={path} />
         <UpgradeModal />
       </AppProvider>
     </AuthGate>

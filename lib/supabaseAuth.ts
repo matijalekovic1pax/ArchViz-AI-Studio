@@ -72,7 +72,7 @@ export async function signInWithGoogle(): Promise<void> {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/app`,
       queryParams: { access_type: 'offline', prompt: 'consent' },
     },
   });
@@ -98,7 +98,7 @@ export async function signUpWithEmail(email: string, password: string, name: str
 /** Send password reset email */
 export async function sendPasswordReset(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}?reset=true`,
+    redirectTo: `${window.location.origin}/app?reset=true`,
   });
   if (error) throw new Error(error.message);
 }

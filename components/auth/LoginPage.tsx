@@ -45,7 +45,13 @@ export function LoginForm() {
   };
 
   const handleGoogleSignIn = () => handle(signInWithGoogle);
-  const handleEmailSignIn = (e: React.FormEvent) => { e.preventDefault(); handle(() => signInWithEmail(email, password)); };
+  const handleEmailSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    handle(async () => {
+      await signInWithEmail(email, password);
+      window.location.assign('/app');
+    });
+  };
   const handleEmailSignUp = (e: React.FormEvent) => {
     e.preventDefault();
     handle(async () => { await signUpWithEmail(email, password, name); setView('check-email'); });

@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabaseClient';
 import { fetchAppUser, signOut } from '../../lib/supabaseAuth';
 import type { AppUser } from '../../lib/supabaseAuth';
 import { LoginPage } from './LoginPage';
-import { LandingPage } from '../landing/LandingPage';
 import { setOnSessionExpired, triggerWelcomeEmail } from '../../services/apiGateway';
 
 interface AuthContextValue {
@@ -83,11 +82,7 @@ export function AuthGate({ children }: PropsWithChildren) {
   }
 
   if (!user) {
-    // Show sign-in page directly for special flows (password reset, invites)
-    const params = new URLSearchParams(window.location.search);
-    const isSpecialFlow = params.has('reset') || params.has('invite') || params.has('login');
-    if (isSpecialFlow) return <LoginPage />;
-    return <LandingPage />;
+    return <LoginPage />;
   }
 
   return (
