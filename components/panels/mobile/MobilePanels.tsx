@@ -29,6 +29,7 @@ import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
 import { LeftRender3DPanel } from '../left/LeftRender3DPanel';
+import { LeftSceneComposePanel } from '../left/LeftSceneComposePanel';
 import { LeftRenderCADPanel } from '../left/LeftRenderCADPanel';
 import { LeftMasterplanPanel } from '../left/LeftMasterplanPanel';
 import { LeftVisualEditPanel } from '../left/LeftVisualEditPanel';
@@ -63,6 +64,7 @@ export type MobilePanelType = 'workflow' | 'settings' | null;
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
+  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Palette },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
@@ -82,6 +84,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
 const renderLeftPanel = (mode: GenerationMode) => {
   switch (mode) {
     case 'render-3d': return <LeftRender3DPanel />;
+    case 'scene-compose': return <LeftSceneComposePanel />;
     case 'render-cad': return <LeftRenderCADPanel />;
     case 'material-validation': return <LeftValidationPanel />;
     case 'document-translate': return <LeftDocumentTranslatePanel />;
@@ -103,6 +106,7 @@ const renderLeftPanel = (mode: GenerationMode) => {
 const renderRightPanel = (mode: GenerationMode) => {
   switch (mode) {
     case 'render-3d': return <Render3DPanel />;
+    case 'scene-compose': return <Render3DPanel />;
     case 'render-cad': return <CadToRenderPanel />;
     case 'masterplan': return <MasterplanPanel />;
     case 'visual-edit': return <VisualEditPanel />;
@@ -142,6 +146,8 @@ const getRightPanelConfig = (mode: GenerationMode, t: (key: string) => string, m
   switch (mode) {
     case 'render-3d':
       return { title: t('rightPanel.render3d.title'), description: t('rightPanel.render3d.description'), icon: Box, meta };
+    case 'scene-compose':
+      return { title: t('rightPanel.sceneCompose.title'), description: t('rightPanel.sceneCompose.description'), icon: Box, meta };
     case 'render-cad':
       return { title: t('rightPanel.renderCad.title'), description: t('rightPanel.renderCad.description'), icon: FileCode, meta };
     case 'masterplan':

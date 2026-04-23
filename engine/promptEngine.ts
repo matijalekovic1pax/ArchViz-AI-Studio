@@ -2549,6 +2549,60 @@ const generateVisualEditPrompt = (state: AppState): string => {
   return parts.filter(Boolean).join(' ');
 };
 
+function generateSceneComposePrompt(state: AppState): string {
+  const basePrompt = generate3DRenderPrompt(state);
+  const references = state.workflow.sceneInsertionReferences || [];
+  const hasBackgroundReference = Boolean(
+    state.workflow.backgroundReferenceEnabled && state.workflow.backgroundReferenceImage
+  );
+  const parts: string[] = [basePrompt];
+
+  parts.push(
+    'This is a scene composition task focused on inserting custom objects into a partially furnished architectural scene while maintaining full photorealism.'
+  );
+  if (hasBackgroundReference) {
+    parts.push(
+      'Attachment order is critical: the first image is the base scene to preserve; the second image is a background/environment reference; every remaining image is an insertion reference to extract objects/elements from.'
+    );
+  } else {
+    parts.push(
+      'Attachment order is critical: the first image is the base scene to preserve; every following image is an insertion reference to extract objects/elements from.'
+    );
+  }
+  parts.push(
+    'Preserve the base architecture, camera framing, and perspective exactly. Only add or refine scene elements needed to satisfy insertion instructions.'
+  );
+
+  if (references.length === 0) {
+    parts.push(
+      'No insertion references were provided. Stage the scene with tasteful, realistic furniture and decor appropriate to the architecture.'
+    );
+  } else {
+    parts.push(
+      `Use all ${references.length} insertion reference image${references.length === 1 ? '' : 's'} and integrate their key elements naturally.`
+    );
+    references.forEach((reference, index) => {
+      const caption = reference.caption?.trim();
+      parts.push(
+        `Insertion #${index + 1}: ${
+          caption && caption.length > 0
+            ? caption
+            : 'Insert the primary object(s) from this reference in an appropriate location with realistic scale.'
+        }`
+      );
+    });
+  }
+
+  parts.push(
+    'For each inserted element, ensure accurate real-world scale, clean contact with floors/walls, plausible occlusion, coherent reflections, and shadows that match the scene lighting.'
+  );
+  parts.push(
+    'Avoid collage-like results: all inserted items must look native to the original render and match color grading, lens characteristics, and depth of field.'
+  );
+
+  return parts.filter(Boolean).join(' ');
+}
+
 function generateCadRenderPrompt(state: AppState): string {
   const { workflow, activeStyleId, customStyles } = state;
   const r3d = workflow.render3d;
@@ -3961,6 +4015,9 @@ export function generatePrompt(state: AppState): string {
   // Use specialized prompt generator for 3D Render mode
   if (state.mode === 'render-3d') {
     return generate3DRenderPrompt(state);
+  }
+  if (state.mode === 'scene-compose') {
+    return generateSceneComposePrompt(state);
   }
   if (state.mode === 'render-cad') {
     return generateCadRenderPrompt(state);

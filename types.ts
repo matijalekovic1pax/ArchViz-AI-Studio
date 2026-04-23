@@ -2,6 +2,7 @@
 export type GenerationMode =
   | 'generate-text'
   | 'render-3d'
+  | 'scene-compose'
   | 'render-cad'
   | 'masterplan'
   | 'visual-edit'
@@ -44,6 +45,12 @@ export interface DetectedElement {
   type: 'structural' | 'envelope' | 'interior' | 'site';
   detail?: string;
   selected: boolean;
+}
+
+export interface SceneInsertionReference {
+  id: string;
+  image: string;
+  caption: string;
 }
 
 export interface DetectedLayer {
@@ -189,6 +196,7 @@ export interface WorkflowSettings {
   canvasSync: boolean; // Used for Split View toggle
   compareMode: boolean;
   render3d: Render3DSettings;
+  sceneInsertionReferences: SceneInsertionReference[];
 
   // Background/Environment Reference
   backgroundReferenceImage: string | null;

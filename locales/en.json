@@ -73,6 +73,7 @@
   },
   "modes": {
     "render3d": "3D Render",
+    "sceneCompose": "Scene Compose",
     "renderCad": "CAD Render",
     "renderSketch": "Sketch Render",
     "masterplan": "Masterplan",
@@ -202,6 +203,7 @@
   "workflows": {
     "generateText": "Generate",
     "render3d": "3D to Render",
+    "sceneCompose": "Scene Compose",
     "renderCad": "CAD to Render",
     "masterplan": "Masterplans",
     "visualEdit": "Visual Editor",
@@ -556,6 +558,10 @@
       "title": "3D to Render",
       "description": "Control geometry preservation, lighting, camera settings, and materials for converting 3D models to photorealistic renders."
     },
+    "sceneCompose": {
+      "title": "Scene Compose",
+      "description": "Use the same rendering controls as 3D to Render while inserting custom reference objects into partially furnished scenes."
+    },
     "renderCad": {
       "title": "CAD to Render",
       "description": "Configure line interpretation, spatial settings, and auto-furnishing for generating renders from CAD drawings."
@@ -810,6 +816,22 @@
     "headshot": {
       "title": "Headshot Studio",
       "description": "Generate professional and custom team headshots from reference photos using AI."
+    }
+  },
+  "sceneCompose": {
+    "insertions": {
+      "title": "Custom Insertions",
+      "description": "Upload reference photos of furniture/elements to insert. Add a short caption for each item describing placement or styling intent.",
+      "addButton": "Add Reference Photos",
+      "emptyHint": "No insertion references yet. Add furniture/element references and caption each one so the model knows what to place.",
+      "referenceLabel": "Reference {{index}}",
+      "referenceAlt": "Insertion reference",
+      "captionPlaceholder": "Example: Place this sofa near the window, facing the coffee table.",
+      "remove": "Remove reference",
+      "clearAll": "Clear All References",
+      "limitReached": "Reference limit reached ({{max}} max). Remove one to add another.",
+      "limitWarning": "Only the first {{max}} references were kept.",
+      "uploadError": "Failed to upload one or more reference images."
     }
   },
   "pdfCompression": {

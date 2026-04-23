@@ -73,6 +73,7 @@
   },
   "modes": {
     "render3d": "Renderizado 3D",
+    "sceneCompose": "Composición de Escena",
     "renderCad": "Renderizado CAD",
     "renderSketch": "Renderizado de Boceto",
     "masterplan": "Plan Maestro",
@@ -202,6 +203,7 @@
   "workflows": {
     "generateText": "Generar",
     "render3d": "3D a Render",
+    "sceneCompose": "Composición de Escena",
     "renderCad": "CAD a Render",
     "masterplan": "Planes Maestros",
     "visualEdit": "Editor Visual",
@@ -554,6 +556,10 @@
     "render3d": {
       "title": "3D a Render",
       "description": "Controla geometría, iluminación, cámara y materiales para convertir modelos 3D en renders fotorrealistas."
+    },
+    "sceneCompose": {
+      "title": "Composición de Escena",
+      "description": "Usa los mismos controles de 3D a Render mientras insertas objetos de referencia en escenas parcialmente amuebladas."
     },
     "renderCad": {
       "title": "CAD a Render",

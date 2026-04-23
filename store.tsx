@@ -192,6 +192,7 @@ const initialWorkflow: WorkflowSettings = {
   canvasSync: false,
   compareMode: false,
   render3d: initialRender3D,
+  sceneInsertionReferences: [],
 
   // Background/Environment Reference
   backgroundReferenceImage: null,

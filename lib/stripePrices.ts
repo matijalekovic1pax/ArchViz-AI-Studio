@@ -34,6 +34,7 @@ export const PLAN_LABELS = {
 /** Credit costs per generation mode */
 export const CREDITS_PER_MODE: Record<string, number> = {
   'render-3d':           4,
+  'scene-compose':       4,
   'render-cad':          4,
   'render-sketch':       4,
   'masterplan':          4,

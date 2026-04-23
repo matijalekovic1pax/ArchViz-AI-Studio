@@ -53,6 +53,7 @@ const POLL_INTERVAL_MS = 2000;
 
 const CREDITS_PER_MODE = {
   'render-3d':           4,
+  'scene-compose':       4,
   'render-cad':          4,
   'render-sketch':       4,
   'masterplan':          4,
@@ -74,7 +75,7 @@ const CREDITS_PER_MODE = {
 // Modes accessible per plan
 const PLAN_MODE_ACCESS = {
   unsubscribed:  ['render-3d', 'render-cad'],
-  starter:       ['render-3d', 'render-cad', 'render-sketch', 'masterplan', 'visual-edit',
+  starter:       ['render-3d', 'scene-compose', 'render-cad', 'render-sketch', 'masterplan', 'visual-edit',
                   'exploded', 'section', 'multi-angle', 'headshot', 'generate-text',
                   'upscale', 'video'],
   professional:  'all',
