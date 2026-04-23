@@ -73,6 +73,7 @@
   },
   "modes": {
     "render3d": "Rendu 3D",
+    "sceneCompose": "Composition de Scene",
     "renderCad": "Rendu CAD",
     "renderSketch": "Rendu d'Esquisse",
     "masterplan": "Plan Directeur",
@@ -201,6 +202,7 @@
   "workflows": {
     "generateText": "Generer",
     "render3d": "3D vers Rendu",
+    "sceneCompose": "Composition de Scene",
     "renderCad": "CAD vers Rendu",
     "masterplan": "Plans Directeurs",
     "visualEdit": "Editeur Visuel",
@@ -553,6 +555,10 @@
     "render3d": {
       "title": "3D vers Rendu",
       "description": "Controlez la geometrie, l'eclairage, la camera et les materiaux pour convertir les modeles 3D en rendus photorealistes."
+    },
+    "sceneCompose": {
+      "title": "Composition de Scene",
+      "description": "Utilisez les memes controles que 3D vers Rendu tout en inserant des objets de reference dans des scenes partiellement meublees."
     },
     "renderCad": {
       "title": "CAD vers Rendu",

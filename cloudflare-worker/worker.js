@@ -1369,4 +1369,3 @@ export default {
     return corsResponse(origin, { error: 'Not found' }, { status: 404 });
   },
 };
-

@@ -10,6 +10,7 @@ import {
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
 import { LeftRender3DPanel } from './LeftRender3DPanel';
+import { LeftSceneComposePanel } from './LeftSceneComposePanel';
 import { LeftRenderCADPanel } from './LeftRenderCADPanel';
 import { LeftMasterplanPanel } from './LeftMasterplanPanel';
 import { LeftVisualEditPanel } from './LeftVisualEditPanel';
@@ -30,6 +31,7 @@ import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
+  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Palette },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
@@ -60,6 +62,7 @@ export const LeftSidebar: React.FC = () => {
     switch (state.mode) {
       case 'generate-text': return <GenerateTextPanel />;
       case 'render-3d': return <LeftRender3DPanel />;
+      case 'scene-compose': return <LeftSceneComposePanel />;
       case 'render-cad': return <LeftRenderCADPanel />;
       case 'material-validation': return <LeftValidationPanel />;
       case 'document-translate': return <LeftDocumentTranslatePanel />;

@@ -479,6 +479,7 @@ export function useGeneration(): UseGenerationReturn {
   const getModePromptPrefix = useCallback((mode: GenerationMode): string => {
     const prefixes: Partial<Record<GenerationMode, string>> = {
       'render-3d': 'Create a photorealistic architectural render: ',
+      'scene-compose': 'Create a photorealistic architectural scene composition: ',
       'render-cad': 'Transform this CAD drawing into a photorealistic visualization: ',
       'masterplan': 'Generate a detailed masterplan visualization: ',
       'visual-edit': 'Edit this image according to the following instructions: ',
@@ -587,6 +588,7 @@ export function useGeneration(): UseGenerationReturn {
 
       const sourceLockedModes: GenerationMode[] = [
         'render-3d',
+        'scene-compose',
         'render-cad',
         'render-sketch',
         'masterplan',
@@ -623,9 +625,9 @@ export function useGeneration(): UseGenerationReturn {
         }
       }
 
-      // Add background reference image for render-3d and render-cad modes if enabled
+      // Add background reference image for render-style modes if enabled
       if (
-        (state.mode === 'render-3d' || state.mode === 'render-cad') &&
+        (state.mode === 'render-3d' || state.mode === 'scene-compose' || state.mode === 'render-cad') &&
         state.workflow.backgroundReferenceEnabled &&
         state.workflow.backgroundReferenceImage
       ) {
@@ -633,6 +635,16 @@ export function useGeneration(): UseGenerationReturn {
         if (bgImgData) {
           images.push(bgImgData);
         }
+      }
+
+      const sceneInsertionReferences = state.workflow.sceneInsertionReferences ?? [];
+      if (state.mode === 'scene-compose' && sceneInsertionReferences.length > 0) {
+        sceneInsertionReferences.forEach((reference) => {
+          const referenceImage = dataUrlToImageData(reference.image);
+          if (referenceImage) {
+            images.push(referenceImage);
+          }
+        });
       }
 
       // Add background reference image for visual-edit background tool if enabled
@@ -1997,4 +2009,3 @@ export function useGeneration(): UseGenerationReturn {
 }
 
 export default useGeneration;
-

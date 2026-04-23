@@ -71,6 +71,12 @@ export const RightPanel: React.FC = () => {
         panelDescription = t('rightPanel.render3d.description');
         panelContent = <Render3DPanel />; 
         break;
+      case 'scene-compose':
+        panelTitle = t('rightPanel.sceneCompose.title');
+        PanelIcon = Box;
+        panelDescription = t('rightPanel.sceneCompose.description');
+        panelContent = <Render3DPanel />;
+        break;
       case 'render-cad': 
         panelTitle = t('rightPanel.renderCad.title'); 
         PanelIcon = FileCode; 
