@@ -22,6 +22,7 @@ import { ValidationPanel } from './ValidationPanel';
 import { DocumentTranslatePanel } from './DocumentTranslatePanel';
 import { PdfCompressionPanel } from './PdfCompressionPanel';
 import { HeadshotPanel } from './HeadshotPanel';
+import { SceneComposePanel } from './SceneComposePanel';
 
 export const RightPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -75,7 +76,7 @@ export const RightPanel: React.FC = () => {
         panelTitle = t('rightPanel.sceneCompose.title');
         PanelIcon = Box;
         panelDescription = t('rightPanel.sceneCompose.description');
-        panelContent = <Render3DPanel />;
+        panelContent = <SceneComposePanel />;
         break;
       case 'render-cad': 
         panelTitle = t('rightPanel.renderCad.title'); 

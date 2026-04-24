@@ -559,7 +559,7 @@
     },
     "sceneCompose": {
       "title": "Composición de Escena",
-      "description": "Usa los mismos controles de 3D a Render mientras insertas objetos de referencia en escenas parcialmente amuebladas."
+      "description": "Sube fotos de referencia en una pila, agrega una nota a cada una y compón la escena con renderizado fotorrealista."
     },
     "renderCad": {
       "title": "CAD a Render",

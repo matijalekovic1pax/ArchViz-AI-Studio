@@ -560,7 +560,7 @@
     },
     "sceneCompose": {
       "title": "Scene Compose",
-      "description": "Use the same rendering controls as 3D to Render while inserting custom reference objects into partially furnished scenes."
+      "description": "Upload reference photos as a stack, caption each one, and compose them into the base scene with photoreal rendering."
     },
     "renderCad": {
       "title": "CAD to Render",

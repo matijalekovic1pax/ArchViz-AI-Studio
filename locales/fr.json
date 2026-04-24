@@ -558,7 +558,7 @@
     },
     "sceneCompose": {
       "title": "Composition de Scene",
-      "description": "Utilisez les memes controles que 3D vers Rendu tout en inserant des objets de reference dans des scenes partiellement meublees."
+      "description": "Telechargez des photos de reference en pile, ajoutez un texte pour chacune, puis composez la scene en rendu photorealiste."
     },
     "renderCad": {
       "title": "CAD vers Rendu",

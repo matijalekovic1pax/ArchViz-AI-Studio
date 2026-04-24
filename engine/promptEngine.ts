@@ -2550,57 +2550,63 @@ const generateVisualEditPrompt = (state: AppState): string => {
 };
 
 function generateSceneComposePrompt(state: AppState): string {
-  const basePrompt = generate3DRenderPrompt(state);
-  const references = state.workflow.sceneInsertionReferences || [];
-  const hasBackgroundReference = Boolean(
-    state.workflow.backgroundReferenceEnabled && state.workflow.backgroundReferenceImage
-  );
-  const parts: string[] = [basePrompt];
+  const { workflow } = state;
+  const references = workflow.sceneInsertionReferences || [];
 
-  parts.push(
-    'This is a scene composition task focused on inserting custom objects into a partially furnished architectural scene while maintaining full photorealism.'
-  );
-  if (hasBackgroundReference) {
-    parts.push(
-      'Attachment order is critical: the first image is the base scene to preserve; the second image is a background/environment reference; every remaining image is an insertion reference to extract objects/elements from.'
-    );
-  } else {
-    parts.push(
-      'Attachment order is critical: the first image is the base scene to preserve; every following image is an insertion reference to extract objects/elements from.'
-    );
-  }
-  parts.push(
-    'Preserve the base architecture, camera framing, and perspective exactly. Only add or refine scene elements needed to satisfy insertion instructions.'
-  );
+  const sourceDescriptions: Record<string, string> = {
+    'rhino': 'a Rhino model screenshot',
+    'revit': 'a Revit model screenshot',
+    'sketchup': 'a SketchUp model screenshot',
+    'blender': 'a Blender scene screenshot',
+    '3dsmax': 'a 3ds Max scene screenshot',
+    'archicad': 'an ArchiCAD model screenshot',
+    'cinema4d': 'a Cinema 4D scene screenshot',
+    'clay': 'a clay render screenshot',
+    'other': 'a 3D scene screenshot',
+  };
+
+  const viewDescriptions: Record<string, string> = {
+    'exterior': 'exterior',
+    'interior': 'interior',
+    'aerial': 'aerial',
+    'detail': 'detail',
+  };
+
+  const parts: string[] = [
+    `Create a photorealistic ${viewDescriptions[workflow.viewType] || 'architectural'} scene composition from ${sourceDescriptions[workflow.sourceType] || 'a 3D scene screenshot'}.`,
+    'Treat the first attached image as the locked base scene: preserve camera, perspective, architecture, and structural geometry exactly.',
+    'Do not redesign the architecture. Only insert, arrange, and render scene elements based on the provided reference stack.',
+    'All outputs must look like a single coherent photograph with consistent lens behavior, lighting direction, shadows, reflections, and contact points.'
+  ];
 
   if (references.length === 0) {
     parts.push(
-      'No insertion references were provided. Stage the scene with tasteful, realistic furniture and decor appropriate to the architecture.'
+      'No insertion references were provided. Keep the space minimally staged and photoreal without adding unrelated feature objects.'
     );
   } else {
     parts.push(
-      `Use all ${references.length} insertion reference image${references.length === 1 ? '' : 's'} and integrate their key elements naturally.`
+      `The remaining ${references.length} attachment${references.length === 1 ? '' : 's'} are insertion references in stack order.`
     );
     references.forEach((reference, index) => {
       const caption = reference.caption?.trim();
       parts.push(
-        `Insertion #${index + 1}: ${
+        `Reference ${index + 1}: ${
           caption && caption.length > 0
             ? caption
-            : 'Insert the primary object(s) from this reference in an appropriate location with realistic scale.'
+            : 'Insert the key object(s) from this reference naturally with realistic scale and placement.'
         }`
       );
     });
+    parts.push(
+      'Honor every caption as an instruction for what to insert and how to place/style it. If captions conflict with scene physics, choose the most realistic interpretation.'
+    );
   }
 
   parts.push(
-    'For each inserted element, ensure accurate real-world scale, clean contact with floors/walls, plausible occlusion, coherent reflections, and shadows that match the scene lighting.'
-  );
-  parts.push(
-    'Avoid collage-like results: all inserted items must look native to the original render and match color grading, lens characteristics, and depth of field.'
+    'Avoid collage artifacts. Blend all inserted objects with correct occlusion, depth, grounding, and material response to the scene lighting.'
   );
 
-  return parts.filter(Boolean).join(' ');
+  return parts.join(' ');
 }
 
 function generateCadRenderPrompt(state: AppState): string {
