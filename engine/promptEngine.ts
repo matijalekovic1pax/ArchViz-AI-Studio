@@ -2608,6 +2608,9 @@ function generateSceneComposePrompt(state: AppState): string {
       parts.push(
         'Placement pins are authoritative and per-reference: do not swap pins between references. Keep inserted objects centered on or strongly anchored to their own pinned coordinates unless physically impossible.'
       );
+      parts.push(
+        'Placement pins are internal guidance metadata only. Never render dots, numbered badges, markers, crosshairs, labels, callouts, or any UI-style annotation in the final image.'
+      );
     }
   }
 

@@ -829,6 +829,7 @@
       "captionPlaceholder": "Example: Place this sofa near the window, facing the coffee table.",
       "remove": "Remove reference",
       "placementArmed": "Reference {{index}} is armed for placement. Click on the canvas to drop the pin.",
+      "placementArmedNamed": "Placement mode active: {{label}}. Click on the canvas to drop the pin.",
       "placeOnCanvas": "Place On Canvas",
       "repositionOnCanvas": "Reposition On Canvas",
       "cancelPlacement": "Cancel Placement",

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Crosshair, MapPin, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
+import { getSceneComposeMarkerColor } from '../../../lib/sceneComposePlacement';
 
 const MAX_INSERTION_REFERENCES = 20;
 
@@ -133,6 +134,13 @@ export const SceneComposePanel: React.FC = () => {
   const activePlacementIndex = activePlacementId
     ? references.findIndex((item) => item.id === activePlacementId)
     : -1;
+  const activePlacementReference = activePlacementIndex >= 0 ? references[activePlacementIndex] : null;
+  const activePlacementLabel = activePlacementReference?.caption.trim().length
+    ? activePlacementReference.caption.trim()
+    : (activePlacementIndex >= 0 ? t('sceneCompose.insertions.referenceLabel', { index: activePlacementIndex + 1 }) : '');
+  const activePlacementColor = activePlacementIndex >= 0
+    ? getSceneComposeMarkerColor(activePlacementIndex)
+    : '#0EA5E9';
 
   return (
     <div className="space-y-4">
@@ -152,7 +160,18 @@ export const SceneComposePanel: React.FC = () => {
       {activePlacementIndex >= 0 && (
         <div className="rounded border border-accent/30 bg-accent/10 px-3 py-2 text-[11px] text-foreground-secondary flex items-center gap-2">
           <Crosshair size={13} className="text-accent" />
-          {t('sceneCompose.insertions.placementArmed', { index: activePlacementIndex + 1 })}
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: activePlacementColor }}
+          />
+          {activePlacementReference && (
+            <img
+              src={activePlacementReference.image}
+              alt={activePlacementLabel}
+              className="w-5 h-5 rounded object-cover border border-white/80 shadow-sm"
+            />
+          )}
+          {t('sceneCompose.insertions.placementArmedNamed', { label: activePlacementLabel })}
         </div>
       )}
 
@@ -186,6 +205,7 @@ export const SceneComposePanel: React.FC = () => {
         <div className="space-y-3">
           {references.map((item, index) => (
             <div key={item.id} className="rounded-lg border border-border bg-surface-elevated overflow-hidden">
+              <div className="h-1" style={{ backgroundColor: getSceneComposeMarkerColor(index) }} />
               <div className="relative">
                 <img
                   src={item.image}
@@ -203,7 +223,11 @@ export const SceneComposePanel: React.FC = () => {
               </div>
 
               <div className="p-2 border-t border-border-subtle">
-                <div className="text-[10px] text-foreground-muted mb-1.5">
+                <div className="text-[10px] text-foreground-muted mb-1.5 flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: getSceneComposeMarkerColor(index) }}
+                  />
                   {t('sceneCompose.insertions.referenceLabel', { index: index + 1 })}
                 </div>
                 <input
@@ -247,7 +271,7 @@ export const SceneComposePanel: React.FC = () => {
 
                 {item.placement ? (
                   <div className="mt-1.5 text-[10px] text-foreground-secondary flex items-center gap-1.5">
-                    <MapPin size={10} className="text-accent" />
+                    <MapPin size={10} style={{ color: getSceneComposeMarkerColor(index) }} />
                     {t('sceneCompose.insertions.placementSet', {
                       x: (item.placement.x * 100).toFixed(1),
                       y: (item.placement.y * 100).toFixed(1)

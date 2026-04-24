@@ -823,6 +823,7 @@
       "captionPlaceholder": "Exemple: Placez ce canape pres de la fenetre, oriente vers la table basse.",
       "remove": "Supprimer la reference",
       "placementArmed": "La reference {{index}} est prete au placement. Cliquez sur le canevas pour poser l'epingle.",
+      "placementArmedNamed": "Mode placement actif : {{label}}. Cliquez sur le canevas pour poser l'epingle.",
       "placeOnCanvas": "Placer sur le Canevas",
       "repositionOnCanvas": "Replacer sur le Canevas",
       "cancelPlacement": "Annuler le Placement",
