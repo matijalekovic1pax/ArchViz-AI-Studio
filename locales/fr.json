@@ -812,6 +812,29 @@
       "description": "Mettez des PDF en file, pr?visualisez et t?l?chargez les versions compress?es."
     }
   },
+  "sceneCompose": {
+    "insertions": {
+      "title": "Insertions Personnalisees",
+      "description": "Telechargez des photos de reference de meubles ou d'elements a inserer. Ajoutez une courte note pour chaque element sur le placement ou le style.",
+      "addButton": "Ajouter des Photos de Reference",
+      "emptyHint": "Aucune reference d'insertion pour le moment. Ajoutez des references et une note pour chaque element.",
+      "referenceLabel": "Reference {{index}}",
+      "referenceAlt": "Reference d'insertion",
+      "captionPlaceholder": "Exemple: Placez ce canape pres de la fenetre, oriente vers la table basse.",
+      "remove": "Supprimer la reference",
+      "placementArmed": "La reference {{index}} est prete au placement. Cliquez sur le canevas pour poser l'epingle.",
+      "placeOnCanvas": "Placer sur le Canevas",
+      "repositionOnCanvas": "Replacer sur le Canevas",
+      "cancelPlacement": "Annuler le Placement",
+      "clearPlacement": "Effacer le Placement",
+      "placementSet": "Placement defini a x {{x}}%, y {{y}}%",
+      "placementNotSet": "Aucune epingle de placement.",
+      "clearAll": "Effacer Toutes les References",
+      "limitReached": "Limite de references atteinte (max {{max}}). Supprimez-en une pour en ajouter une autre.",
+      "limitWarning": "Seules les {{max}} premieres references ont ete conservees.",
+      "uploadError": "Echec du telechargement d'une ou plusieurs images de reference."
+    }
+  },
   "pdfCompression": {
     "uploadDocument": "Documents",
     "dropOrClick": "D?poser ou cliquer pour ajouter des PDF",
