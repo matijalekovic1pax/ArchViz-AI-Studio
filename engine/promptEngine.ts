@@ -2591,7 +2591,7 @@ function generateSceneComposePrompt(state: AppState): string {
     references.forEach((reference, index) => {
       const caption = reference.caption?.trim();
       const placement = reference.placement
-        ? ` Placement pin: x=${(reference.placement.x * 100).toFixed(1)}%, y=${(reference.placement.y * 100).toFixed(1)}% from the top-left of the base image (normalized coordinates on attachment #1). Anchor the main object from this reference around that coordinate.`
+        ? ` Placement pin: x=${(reference.placement.x * 100).toFixed(2)}%, y=${(reference.placement.y * 100).toFixed(2)}% from the top-left of the base image (normalized coordinates on attachment #1). Anchor the main object from this reference around that coordinate, and keep the contact-point centroid as close to that pin as physically plausible.`
         : ' No explicit placement pin provided; choose the most plausible location based on scene logic.';
       parts.push(
         `Reference ${index + 1}: ${
