@@ -813,6 +813,29 @@
       "description": "Encola PDFs, previsualiza y descarga las versiones comprimidas."
     }
   },
+  "sceneCompose": {
+    "insertions": {
+      "title": "Inserciones Personalizadas",
+      "description": "Sube fotos de referencia de muebles y elementos para insertar. Agrega una nota corta para cada item indicando ubicacion o estilo.",
+      "addButton": "Agregar Fotos de Referencia",
+      "emptyHint": "Aun no hay referencias. Agrega fotos de muebles o elementos y una nota para cada una.",
+      "referenceLabel": "Referencia {{index}}",
+      "referenceAlt": "Referencia de insercion",
+      "captionPlaceholder": "Ejemplo: Coloca este sofa cerca de la ventana, mirando hacia la mesa.",
+      "remove": "Quitar referencia",
+      "placementArmed": "La referencia {{index}} esta lista para ubicacion. Haz clic en el lienzo para poner el pin.",
+      "placeOnCanvas": "Ubicar en Lienzo",
+      "repositionOnCanvas": "Reubicar en Lienzo",
+      "cancelPlacement": "Cancelar Ubicacion",
+      "clearPlacement": "Borrar Ubicacion",
+      "placementSet": "Ubicacion fijada en x {{x}}%, y {{y}}%",
+      "placementNotSet": "Sin pin de ubicacion.",
+      "clearAll": "Borrar Todas las Referencias",
+      "limitReached": "Limite de referencias alcanzado (max {{max}}). Quita una para agregar otra.",
+      "limitWarning": "Solo se conservaron las primeras {{max}} referencias.",
+      "uploadError": "No se pudieron subir una o mas imagenes de referencia."
+    }
+  },
   "pdfCompression": {
     "uploadDocument": "Documentos",
     "dropOrClick": "Arrastra o haz clic para subir PDFs",

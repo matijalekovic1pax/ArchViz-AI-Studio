@@ -193,6 +193,7 @@ const initialWorkflow: WorkflowSettings = {
   compareMode: false,
   render3d: initialRender3D,
   sceneInsertionReferences: [],
+  sceneComposeActivePlacementId: null,
 
   // Background/Environment Reference
   backgroundReferenceImage: null,

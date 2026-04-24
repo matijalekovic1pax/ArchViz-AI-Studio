@@ -1,7 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { useTranslation } from 'react-i18next';
-import { Trash2, Upload, X } from 'lucide-react';
+import { Crosshair, MapPin, Trash2, Upload, X } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 
@@ -21,13 +21,24 @@ export const SceneComposePanel: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const references = state.workflow.sceneInsertionReferences || [];
+  const activePlacementId = state.workflow.sceneComposeActivePlacementId;
 
-  const updateReferences = useCallback((next: typeof references) => {
+  const updateReferences = useCallback((
+    next: typeof references,
+    options?: { activePlacementId?: string | null }
+  ) => {
+    const nextActivePlacementId = options?.activePlacementId !== undefined
+      ? options.activePlacementId
+      : (activePlacementId && next.some((item) => item.id === activePlacementId) ? activePlacementId : null);
+
     dispatch({
       type: 'UPDATE_WORKFLOW',
-      payload: { sceneInsertionReferences: next }
+      payload: {
+        sceneInsertionReferences: next,
+        sceneComposeActivePlacementId: nextActivePlacementId
+      }
     });
-  }, [dispatch, references]);
+  }, [activePlacementId, dispatch, references]);
 
   const handleUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
@@ -57,7 +68,8 @@ export const SceneComposePanel: React.FC = () => {
       const nextItems = dataUrls.map((image) => ({
         id: nanoid(),
         image,
-        caption: ''
+        caption: '',
+        placement: null
       }));
       updateReferences([...references, ...nextItems]);
 
@@ -96,8 +108,31 @@ export const SceneComposePanel: React.FC = () => {
   }, [references, updateReferences]);
 
   const handleClearAll = useCallback(() => {
-    updateReferences([]);
+    updateReferences([], { activePlacementId: null });
   }, [updateReferences]);
+
+  const handleTogglePlacementMode = useCallback((id: string) => {
+    const isArmed = activePlacementId === id;
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        sceneComposeActivePlacementId: isArmed ? null : id
+      }
+    });
+  }, [activePlacementId, dispatch]);
+
+  const handleClearPlacement = useCallback((id: string) => {
+    updateReferences(
+      references.map((item) => (
+        item.id === id ? { ...item, placement: null } : item
+      )),
+      { activePlacementId: activePlacementId === id ? null : activePlacementId }
+    );
+  }, [activePlacementId, references, updateReferences]);
+
+  const activePlacementIndex = activePlacementId
+    ? references.findIndex((item) => item.id === activePlacementId)
+    : -1;
 
   return (
     <div className="space-y-4">
@@ -113,6 +148,13 @@ export const SceneComposePanel: React.FC = () => {
       <p className="text-[11px] text-foreground-muted leading-relaxed">
         {t('sceneCompose.insertions.description')}
       </p>
+
+      {activePlacementIndex >= 0 && (
+        <div className="rounded border border-accent/30 bg-accent/10 px-3 py-2 text-[11px] text-foreground-secondary flex items-center gap-2">
+          <Crosshair size={13} className="text-accent" />
+          {t('sceneCompose.insertions.placementArmed', { index: activePlacementIndex + 1 })}
+        </div>
+      )}
 
       <input
         ref={fileInputRef}
@@ -172,6 +214,50 @@ export const SceneComposePanel: React.FC = () => {
                   maxLength={220}
                   className="w-full h-8 bg-background border border-border rounded text-xs px-2 text-foreground placeholder:text-foreground-muted/70 focus:outline-none focus:border-accent"
                 />
+
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePlacementMode(item.id)}
+                    className={cn(
+                      'h-7 px-2 rounded border text-[10px] font-semibold transition-colors flex items-center gap-1.5',
+                      activePlacementId === item.id
+                        ? 'border-accent bg-accent/15 text-foreground'
+                        : 'border-border bg-background text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+                    )}
+                  >
+                    <Crosshair size={11} />
+                    {activePlacementId === item.id
+                      ? t('sceneCompose.insertions.cancelPlacement')
+                      : item.placement
+                        ? t('sceneCompose.insertions.repositionOnCanvas')
+                        : t('sceneCompose.insertions.placeOnCanvas')}
+                  </button>
+
+                  {item.placement && (
+                    <button
+                      type="button"
+                      onClick={() => handleClearPlacement(item.id)}
+                      className="h-7 px-2 rounded border border-border bg-background text-[10px] font-semibold text-foreground-muted hover:text-rose-500 hover:border-rose-500/50 transition-colors"
+                    >
+                      {t('sceneCompose.insertions.clearPlacement')}
+                    </button>
+                  )}
+                </div>
+
+                {item.placement ? (
+                  <div className="mt-1.5 text-[10px] text-foreground-secondary flex items-center gap-1.5">
+                    <MapPin size={10} className="text-accent" />
+                    {t('sceneCompose.insertions.placementSet', {
+                      x: (item.placement.x * 100).toFixed(1),
+                      y: (item.placement.y * 100).toFixed(1)
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-[10px] text-foreground-muted">
+                    {t('sceneCompose.insertions.placementNotSet')}
+                  </div>
+                )}
               </div>
             </div>
           ))}

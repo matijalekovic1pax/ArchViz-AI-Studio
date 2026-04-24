@@ -316,14 +316,17 @@ const StandardCanvas: React.FC = () => {
   const isVideo = state.mode === 'video';
   const isVideoLocked = isVideo && !state.workflow.videoState.accessUnlocked;
   const isVisualEdit = state.mode === 'visual-edit';
+  const isSceneCompose = state.mode === 'scene-compose';
   const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
   const isMasterplan = state.mode === 'masterplan';
   const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
+  const sceneComposeReferences = state.workflow.sceneInsertionReferences || [];
+  const sceneComposeActivePlacementId = state.workflow.sceneComposeActivePlacementId;
+  const isSceneComposePlacementArmed = isSceneCompose && Boolean(sceneComposeActivePlacementId);
   const selectionMode = state.workflow.visualSelection.mode;
   const showCompare = state.workflow.videoState?.compareMode || (state.mode === 'upscale' && !state.workflow.canvasSync);
   const splitEligibleModes = [
     'render-3d',
-    'scene-compose',
     'render-cad',
     'masterplan',
     'visual-edit',
@@ -1165,7 +1168,40 @@ const StandardCanvas: React.FC = () => {
     setIsPanning(false);
   };
 
+  const handleSceneComposePlacement = useCallback((e: React.MouseEvent) => {
+    if (!isSceneCompose || !sceneComposeActivePlacementId || e.button !== 0) return;
+    const point = getSelectionPoint(e);
+    const layout = getImageLayout();
+    if (!point || !layout || layout.naturalWidth <= 0 || layout.naturalHeight <= 0) return;
+
+    const x = Math.min(Math.max(point.x / layout.naturalWidth, 0), 1);
+    const y = Math.min(Math.max(point.y / layout.naturalHeight, 0), 1);
+
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        sceneInsertionReferences: sceneComposeReferences.map((reference) => (
+          reference.id === sceneComposeActivePlacementId
+            ? { ...reference, placement: { x, y } }
+            : reference
+        )),
+        sceneComposeActivePlacementId: null,
+      },
+    });
+  }, [
+    dispatch,
+    getImageLayout,
+    getSelectionPoint,
+    isSceneCompose,
+    sceneComposeActivePlacementId,
+    sceneComposeReferences,
+  ]);
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (isSceneComposePlacementArmed) {
+      handleSceneComposePlacement(e);
+      return;
+    }
     if (isBoundaryTool) {
       startBoundarySelection(e);
       return;
@@ -1178,6 +1214,9 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isSceneComposePlacementArmed) {
+      return;
+    }
     if (isBoundaryTool) {
       if (isBoundarySelecting) {
         updateBoundaryPath(e);
@@ -1514,6 +1553,11 @@ const StandardCanvas: React.FC = () => {
   const boundaryPoints = isMasterplan
     ? (isBoundarySelecting && activeBoundary ? activeBoundary : state.workflow.mpBoundary.points)
     : [];
+  const sceneComposePins = isSceneCompose
+    ? sceneComposeReferences
+      .map((reference, index) => ({ reference, index }))
+      .filter(({ reference }) => Boolean(reference.placement))
+    : [];
   const brushShapes = selectionShapes.filter((shape) => shape.type === 'brush');
   const otherShapes = selectionShapes.filter((shape) => shape.type !== 'brush');
 
@@ -1613,6 +1657,40 @@ const StandardCanvas: React.FC = () => {
     );
   };
 
+  const renderSceneComposePins = () => {
+    if (!currentImageLayout || sceneComposePins.length === 0) return null;
+
+    return (
+      <>
+        {sceneComposePins.map(({ reference, index }) => {
+          if (!reference.placement) return null;
+          const pinX = currentImageLayout.offsetX + (Math.min(Math.max(reference.placement.x, 0), 1) * currentImageLayout.width);
+          const pinY = currentImageLayout.offsetY + (Math.min(Math.max(reference.placement.y, 0), 1) * currentImageLayout.height);
+          const isActivePin = sceneComposeActivePlacementId === reference.id;
+          const markerColor = isActivePin ? '#06b6d4' : '#0ea5e9';
+
+          return (
+            <g key={`scene-compose-pin-${reference.id}`}>
+              <circle cx={pinX} cy={pinY} r={12} fill="rgba(15, 23, 42, 0.35)" />
+              <circle cx={pinX} cy={pinY} r={10} fill={markerColor} stroke="white" strokeWidth={2} />
+              <text
+                x={pinX}
+                y={pinY + 0.5}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="white"
+                fontSize={9}
+                fontWeight={700}
+              >
+                {index + 1}
+              </text>
+            </g>
+          );
+        })}
+      </>
+    );
+  };
+
   if (isFullscreen && state.uploadedImage) {
       return (
           <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-fade-in">
@@ -1643,7 +1721,11 @@ const StandardCanvas: React.FC = () => {
          ref={containerRef}
          className={cn(
             "flex-1 relative overflow-hidden h-full w-full select-none",
-            isSelectTool || isBoundaryTool ? "cursor-crosshair" : isPanning ? "cursor-grabbing" : "cursor-grab"
+            isSelectTool || isBoundaryTool || isSceneComposePlacementArmed
+              ? "cursor-crosshair"
+              : isPanning
+                ? "cursor-grabbing"
+                : "cursor-grab"
          )}
          onWheel={handleWheel}
          onMouseDown={handleCanvasMouseDown}
@@ -1903,7 +1985,7 @@ const StandardCanvas: React.FC = () => {
                                        }
                                     }}
                                  />
-                                 {(isVisualEdit || isMasterplan) && state.uploadedImage && (
+                                 {(isVisualEdit || isMasterplan || isSceneCompose) && state.uploadedImage && (
                                     <div ref={selectionLayerRef} className="absolute inset-0 pointer-events-none">
                                        <svg className="w-full h-full">
                                           {isMasterplan && renderBoundaryShape()}
@@ -1960,6 +2042,7 @@ const StandardCanvas: React.FC = () => {
                                               {renderSelectionShape(shape, shape.id === 'active')}
                                             </g>
                                           ))}
+                                          {isSceneCompose && renderSceneComposePins()}
                                        </svg>
                                     </div>
                                  )}

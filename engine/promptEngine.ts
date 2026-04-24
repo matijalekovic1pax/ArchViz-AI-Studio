@@ -2552,6 +2552,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 function generateSceneComposePrompt(state: AppState): string {
   const { workflow } = state;
   const references = workflow.sceneInsertionReferences || [];
+  const referencesWithPlacement = references.filter((reference) => Boolean(reference.placement));
 
   const sourceDescriptions: Record<string, string> = {
     'rhino': 'a Rhino model screenshot',
@@ -2585,21 +2586,29 @@ function generateSceneComposePrompt(state: AppState): string {
     );
   } else {
     parts.push(
-      `The remaining ${references.length} attachment${references.length === 1 ? '' : 's'} are insertion references in stack order.`
+      `The remaining ${references.length} attachment${references.length === 1 ? '' : 's'} are insertion references in stack order. Attachment #1 is the locked base scene, and attachment #2 onward map to Reference 1 onward in the same order.`
     );
     references.forEach((reference, index) => {
       const caption = reference.caption?.trim();
+      const placement = reference.placement
+        ? ` Placement pin: x=${(reference.placement.x * 100).toFixed(1)}%, y=${(reference.placement.y * 100).toFixed(1)}% from the top-left of the base image (normalized coordinates on attachment #1). Anchor the main object from this reference around that coordinate.`
+        : ' No explicit placement pin provided; choose the most plausible location based on scene logic.';
       parts.push(
         `Reference ${index + 1}: ${
           caption && caption.length > 0
             ? caption
             : 'Insert the key object(s) from this reference naturally with realistic scale and placement.'
-        }`
+        }${placement}`
       );
     });
     parts.push(
       'Honor every caption as an instruction for what to insert and how to place/style it. If captions conflict with scene physics, choose the most realistic interpretation.'
     );
+    if (referencesWithPlacement.length > 0) {
+      parts.push(
+        'Placement pins are authoritative and per-reference: do not swap pins between references. Keep inserted objects centered on or strongly anchored to their own pinned coordinates unless physically impossible.'
+      );
+    }
   }
 
   parts.push(

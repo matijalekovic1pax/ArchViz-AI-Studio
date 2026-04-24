@@ -51,6 +51,10 @@ export interface SceneInsertionReference {
   id: string;
   image: string;
   caption: string;
+  placement: {
+    x: number; // normalized 0-1 (from left)
+    y: number; // normalized 0-1 (from top)
+  } | null;
 }
 
 export interface DetectedLayer {
@@ -197,6 +201,7 @@ export interface WorkflowSettings {
   compareMode: boolean;
   render3d: Render3DSettings;
   sceneInsertionReferences: SceneInsertionReference[];
+  sceneComposeActivePlacementId: string | null;
 
   // Background/Environment Reference
   backgroundReferenceImage: string | null;
