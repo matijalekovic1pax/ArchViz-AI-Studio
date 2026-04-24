@@ -824,6 +824,7 @@
       "captionPlaceholder": "Ejemplo: Coloca este sofa cerca de la ventana, mirando hacia la mesa.",
       "remove": "Quitar referencia",
       "placementArmed": "La referencia {{index}} esta lista para ubicacion. Haz clic en el lienzo para poner el pin.",
+      "placementArmedNamed": "Modo de ubicacion activo: {{label}}. Haz clic en el lienzo para poner el pin.",
       "placeOnCanvas": "Ubicar en Lienzo",
       "repositionOnCanvas": "Reubicar en Lienzo",
       "cancelPlacement": "Cancelar Ubicacion",

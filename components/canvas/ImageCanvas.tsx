@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { getSceneComposeMarkerColor } from '../../lib/sceneComposePlacement';
 import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
 import { VideoLockBanner } from '../video/VideoLockBanner';
@@ -1659,6 +1660,9 @@ const StandardCanvas: React.FC = () => {
 
   const renderSceneComposePins = () => {
     if (!currentImageLayout || sceneComposePins.length === 0) return null;
+    const previewSize = 34;
+    const previewPadding = 2;
+    const previewGap = 18;
 
     return (
       <>
@@ -1666,24 +1670,57 @@ const StandardCanvas: React.FC = () => {
           if (!reference.placement) return null;
           const pinX = currentImageLayout.offsetX + (Math.min(Math.max(reference.placement.x, 0), 1) * currentImageLayout.width);
           const pinY = currentImageLayout.offsetY + (Math.min(Math.max(reference.placement.y, 0), 1) * currentImageLayout.height);
+          const pinColor = getSceneComposeMarkerColor(index);
           const isActivePin = sceneComposeActivePlacementId === reference.id;
-          const markerColor = isActivePin ? '#06b6d4' : '#0ea5e9';
+          const isNearRightEdge = pinX > currentImageLayout.offsetX + currentImageLayout.width - (previewSize + previewGap + 8);
+          const isNearTopEdge = pinY < currentImageLayout.offsetY + previewSize + previewGap;
+          const previewX = pinX + (isNearRightEdge ? -(previewSize + previewGap) : previewGap);
+          const previewY = pinY + (isNearTopEdge ? previewGap : -(previewSize + previewGap));
+          const clipId = `scene-compose-pin-preview-${reference.id}`;
 
           return (
             <g key={`scene-compose-pin-${reference.id}`}>
-              <circle cx={pinX} cy={pinY} r={12} fill="rgba(15, 23, 42, 0.35)" />
-              <circle cx={pinX} cy={pinY} r={10} fill={markerColor} stroke="white" strokeWidth={2} />
-              <text
-                x={pinX}
-                y={pinY + 0.5}
-                textAnchor="middle"
-                dominantBaseline="middle"
+              <line
+                x1={pinX}
+                y1={pinY}
+                x2={previewX + previewSize / 2}
+                y2={previewY + previewSize / 2}
+                stroke={pinColor}
+                strokeWidth={isActivePin ? 2.5 : 2}
+                strokeLinecap="round"
+                opacity={0.7}
+              />
+              <rect
+                x={previewX}
+                y={previewY}
+                width={previewSize}
+                height={previewSize}
+                rx={9}
                 fill="white"
-                fontSize={9}
-                fontWeight={700}
-              >
-                {index + 1}
-              </text>
+                stroke={pinColor}
+                strokeWidth={isActivePin ? 3 : 2}
+              />
+              <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+                <rect
+                  x={previewX + previewPadding}
+                  y={previewY + previewPadding}
+                  width={previewSize - previewPadding * 2}
+                  height={previewSize - previewPadding * 2}
+                  rx={7}
+                />
+              </clipPath>
+              <image
+                href={reference.image}
+                x={previewX + previewPadding}
+                y={previewY + previewPadding}
+                width={previewSize - previewPadding * 2}
+                height={previewSize - previewPadding * 2}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath={`url(#${clipId})`}
+              />
+              <circle cx={pinX} cy={pinY} r={11} fill="rgba(15, 23, 42, 0.28)" />
+              <circle cx={pinX} cy={pinY} r={9.5} fill={pinColor} stroke="white" strokeWidth={2.5} />
+              <circle cx={pinX} cy={pinY} r={3.2} fill="white" />
             </g>
           );
         })}
