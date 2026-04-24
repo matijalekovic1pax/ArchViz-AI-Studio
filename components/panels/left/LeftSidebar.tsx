@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
-  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Lock
+  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Lock, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -33,7 +33,7 @@ import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
-  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Palette },
+  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Combine },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings,
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -74,7 +74,7 @@ export const RightPanel: React.FC = () => {
         break;
       case 'scene-compose':
         panelTitle = t('rightPanel.sceneCompose.title');
-        PanelIcon = Box;
+        PanelIcon = Combine;
         panelDescription = t('rightPanel.sceneCompose.description');
         panelContent = <SceneComposePanel />;
         break;
