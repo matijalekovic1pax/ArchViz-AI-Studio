@@ -23,7 +23,8 @@ import {
   Wrench,
   Maximize2,
   CheckCircle2,
-  X
+  X,
+  Combine
 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
@@ -65,7 +66,7 @@ export type MobilePanelType = 'workflow' | 'settings' | null;
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
-  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Palette },
+  { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Combine },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
@@ -148,7 +149,7 @@ const getRightPanelConfig = (mode: GenerationMode, t: (key: string) => string, m
     case 'render-3d':
       return { title: t('rightPanel.render3d.title'), description: t('rightPanel.render3d.description'), icon: Box, meta };
     case 'scene-compose':
-      return { title: t('rightPanel.sceneCompose.title'), description: t('rightPanel.sceneCompose.description'), icon: Box, meta };
+      return { title: t('rightPanel.sceneCompose.title'), description: t('rightPanel.sceneCompose.description'), icon: Combine, meta };
     case 'render-cad':
       return { title: t('rightPanel.renderCad.title'), description: t('rightPanel.renderCad.description'), icon: FileCode, meta };
     case 'masterplan':
