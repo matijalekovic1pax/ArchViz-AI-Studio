@@ -58,6 +58,7 @@ import { VideoPanel } from '../right/VideoPanel';
 import { ValidationPanel } from '../right/ValidationPanel';
 import { DocumentTranslatePanel } from '../right/DocumentTranslatePanel';
 import { PdfCompressionPanel } from '../right/PdfCompressionPanel';
+import { SceneComposePanel } from '../right/SceneComposePanel';
 
 export type MobilePanelType = 'workflow' | 'settings' | null;
 
@@ -106,7 +107,7 @@ const renderLeftPanel = (mode: GenerationMode) => {
 const renderRightPanel = (mode: GenerationMode) => {
   switch (mode) {
     case 'render-3d': return <Render3DPanel />;
-    case 'scene-compose': return <Render3DPanel />;
+    case 'scene-compose': return <SceneComposePanel />;
     case 'render-cad': return <CadToRenderPanel />;
     case 'masterplan': return <MasterplanPanel />;
     case 'visual-edit': return <VisualEditPanel />;

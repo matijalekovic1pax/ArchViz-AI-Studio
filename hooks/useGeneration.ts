@@ -627,7 +627,7 @@ export function useGeneration(): UseGenerationReturn {
 
       // Add background reference image for render-style modes if enabled
       if (
-        (state.mode === 'render-3d' || state.mode === 'scene-compose' || state.mode === 'render-cad') &&
+        (state.mode === 'render-3d' || state.mode === 'render-cad') &&
         state.workflow.backgroundReferenceEnabled &&
         state.workflow.backgroundReferenceImage
       ) {
