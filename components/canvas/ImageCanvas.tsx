@@ -488,6 +488,11 @@ const StandardCanvas: React.FC = () => {
     return () => observer.disconnect();
   }, [imageVersion, updateImageLayout]);
 
+  useEffect(() => {
+    if (!selectionLayerRef.current) return;
+    selectionLayerRectRef.current = selectionLayerRef.current.getBoundingClientRect();
+  }, [state.canvas.pan.x, state.canvas.pan.y, state.canvas.zoom]);
+
   const getImageBrushSize = useCallback(() => {
     const layout = getImageLayout();
     if (!layout) return state.workflow.visualSelection.brushSize;
