@@ -2017,9 +2017,12 @@ async function handleConvertApi(request, env) {
       Parameters: [{ Name: 'File', FileValue: { Name: fileName || 'document.pdf', Data: fileData } }],
     });
     const resp = await fetchWithRetry(
-      (signal) => fetch(`${CONVERTAPI_BASE}/convert/pdf/to/docx?Secret=${env.CONVERTAPI_SECRET}`, {
+      (signal) => fetch(`${CONVERTAPI_BASE}/convert/pdf/to/docx`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${env.CONVERTAPI_SECRET}`,
+        },
         body: convertBody,
         signal,
       }),
