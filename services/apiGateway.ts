@@ -58,9 +58,21 @@ async function gatewayFetch(
   });
 
   if (resp.status === 401) {
-    await supabase.auth.signOut();
-    _onSessionExpired?.();
-    throw new Error('Session expired. Please sign in again.');
+    // Only treat 401 as a real session expiry when it comes from the gateway's
+    // own auth middleware. Vendor passthroughs (ConvertAPI, iLovePDF, etc.) can
+    // surface 401s for non-session reasons (bad/expired vendor secret, exhausted
+    // quota) and must not log the user out.
+    const isGatewayAuthRejection = await resp
+      .clone()
+      .json()
+      .then((data) => data?.error === 'Unauthorized')
+      .catch(() => false);
+
+    if (isGatewayAuthRejection) {
+      await supabase.auth.signOut();
+      _onSessionExpired?.();
+      throw new Error('Session expired. Please sign in again.');
+    }
   }
 
   if (resp.status === 402) {

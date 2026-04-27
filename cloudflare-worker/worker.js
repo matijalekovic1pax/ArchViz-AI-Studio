@@ -2028,7 +2028,14 @@ async function handleConvertApi(request, env) {
 
     if (!resp.ok) {
       const errText = await resp.text();
-      return corsResponse(origin, { error: `ConvertAPI error (${resp.status}): ${errText}` }, { status: resp.status });
+      // Remap any upstream status to 502 so a vendor 401 (e.g. bad/expired
+      // CONVERTAPI_SECRET) is never confused with our own JWT rejection on the
+      // client — that would otherwise trigger an unintended logout.
+      return corsResponse(
+        origin,
+        { error: `ConvertAPI error (${resp.status}): ${errText}` },
+        { status: 502 },
+      );
     }
 
     const data = await resp.json();
