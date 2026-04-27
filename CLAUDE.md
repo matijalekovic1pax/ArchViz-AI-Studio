@@ -56,14 +56,16 @@ Each generation deducts credits from `CREDITS_PER_MODE` in `lib/stripePrices.ts`
 
 ### State Management
 `store.tsx` - React Context + `useReducer` pattern (not Zustand despite the file name). Access via `useAppStore()` which returns `{ state, dispatch }`. `AppState` contains:
-- `mode` - Current generation mode (17 modes total)
+- `mode` - Current generation mode (18 modes total)
 - `uploadedImage` - Input image
 - `isGenerating` - Loading state
 - `history` - Generation history
 - `workflow` - Mode-specific settings typed per mode
 
 ### Generation Modes
-`render-3d`, `render-cad`, `masterplan`, `visual-edit`, `exploded`, `section`, `render-sketch`, `multi-angle`, `upscale`, `img-to-cad`, `img-to-3d`, `video`, `material-validation`, `document-translate`, `pdf-compression`, `generate-text`, `headshot`
+`generate-text`, `render-3d`, `scene-compose`, `render-cad`, `masterplan`, `visual-edit`, `exploded`, `section`, `render-sketch`, `multi-angle`, `upscale`, `img-to-cad`, `img-to-3d`, `video`, `material-validation`, `document-translate`, `pdf-compression`, `headshot`
+
+The authoritative order/list is `GenerationMode` in `types.ts`.
 
 ### Key Data Flow
 1. User uploads image or enters settings → dispatched to Zustand store
