@@ -1588,7 +1588,7 @@ export function useGeneration(): UseGenerationReturn {
         // Prepare start/end frames for Veo interpolation (image-morph mode)
         let startFrame: ImageData | undefined;
         let endFrame: ImageData | undefined;
-        if (videoState.inputMode === 'image-morph' && videoState.model === 'veo-2') {
+        if (videoState.inputMode === 'image-morph' && videoState.model === 'veo-3.1-generate-preview') {
           if (videoState.startFrame) {
             const sf = dataUrlToImageData(videoState.startFrame);
             if (sf) startFrame = { ...sf, dataUrl: videoState.startFrame };
@@ -1629,7 +1629,7 @@ export function useGeneration(): UseGenerationReturn {
           const videoResult = await runWithRetry(
             'video generation',
             () => videoService.generateVideo({
-              model: 'veo-2',
+              model: 'veo-3.1-generate-preview',
               prompt: fullPrompt,
               inputImage,
               startFrame,
