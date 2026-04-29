@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, PropsWithChildren } from 'react';
 import { AuthUser, loadAuthSession, clearAuthSession } from '../../lib/googleAuth';
-import { clearGatewayToken, getTokenExpiresAt, isGatewayAuthenticated, setOnSessionExpired } from '../../services/apiGateway';
+import { clearGatewayToken, isGatewayAuthenticated, setOnSessionExpired } from '../../services/apiGateway';
 import { LoginPage } from './LoginPage';
 
 interface AuthContextValue {
@@ -56,26 +56,12 @@ export function AuthGate({ children }: PropsWithChildren) {
     return () => setOnSessionExpired(null);
   }, [logout]);
 
-  // Timer-based auto-logout when the JWT expires naturally
+  // Force logout if user profile is present but the JWT is missing or expired
   useEffect(() => {
     if (!user) return;
-
-    // If user profile exists in sessionStorage but JWT is gone (e.g. page refresh
-    // after expiry, or token cleared), force logout immediately
     if (!isGatewayAuthenticated()) {
       logout(true);
-      return;
     }
-
-    const expiresAt = getTokenExpiresAt();
-    const remaining = expiresAt - Date.now();
-    if (remaining <= 0) {
-      logout(true);
-      return;
-    }
-
-    const timer = setTimeout(() => logout(true), remaining);
-    return () => clearTimeout(timer);
   }, [user, logout]);
 
   const contextValue: AuthContextValue = {

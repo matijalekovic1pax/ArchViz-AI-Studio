@@ -23,7 +23,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 const MAX_PAYLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
-const JWT_EXPIRY_SECONDS = 7200; // 2 hours
+const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
@@ -410,8 +410,8 @@ async function handleVeoGenerate(request, env) {
     const hasVertexCreds = !!(env.GOOGLE_SERVICE_ACCOUNT_KEY && env.GOOGLE_PROJECT_ID);
 
     // Route to Vertex AI when:
-    //  - Frame interpolation (firstImage + lastImage) → needs veo-2-generate-preview
-    //  - Single image animate → veo-3.1-generate-001 on Vertex AI
+    //  - Frame interpolation (firstImage + lastImage) → veo-3.1-generate-preview on Vertex AI
+    //  - Single image animate → veo-3.1-generate-preview on Vertex AI
     //  - Caller explicitly requests Vertex AI
     const useVertex = (hasInterpolation || hasImage || useVertexAi) && hasVertexCreds;
 
@@ -448,7 +448,7 @@ async function handleVeoGenerate(request, env) {
     } else {
       // ── Gemini API path (text-to-video fallback) ──
       if (numberOfVideos) parameters.numberOfVideos = numberOfVideos;
-      endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-001:predictLongRunning`;
+      endpoint = `${GEMINI_API_BASE}/models/veo-3.1-generate-preview:predictLongRunning`;
       reqHeaders = {
         'Content-Type': 'application/json',
         'x-goog-api-key': env.GEMINI_API_KEY,

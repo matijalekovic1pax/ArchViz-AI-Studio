@@ -819,7 +819,7 @@ export interface HeadshotSettings {
 }
 
 // Video Studio Types
-export type VideoModel = 'veo-2' | 'kling-2.6';
+export type VideoModel = 'veo-3.1-generate-preview' | 'kling-2.6';
 export type VideoInputMode = 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
 export type CameraMotionType = 'static' | 'pan' | 'orbit' | 'dolly' | 'crane' | 'drone' | 'rotate' | 'push-in' | 'pull-out' | 'custom';
 

@@ -9,7 +9,8 @@ import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
 
-// JWT stored in memory only (not localStorage/sessionStorage)
+const JWT_SESSION_KEY = 'archviz_jwt';
+
 let _jwt: string | null = null;
 let _jwtExpiresAt: number = 0;
 let _onSessionExpired: (() => void) | null = null;
@@ -19,9 +20,26 @@ let _onSessionExpired: (() => void) | null = null;
 export function setGatewayToken(token: string, expiresIn: number): void {
   _jwt = token;
   _jwtExpiresAt = Date.now() + expiresIn * 1000;
+  try {
+    sessionStorage.setItem(JWT_SESSION_KEY, JSON.stringify({ token, expiresAt: _jwtExpiresAt }));
+  } catch {}
 }
 
 export function getGatewayToken(): string | null {
+  if (!_jwt) {
+    try {
+      const stored = sessionStorage.getItem(JWT_SESSION_KEY);
+      if (stored) {
+        const { token, expiresAt } = JSON.parse(stored);
+        if (Date.now() < expiresAt) {
+          _jwt = token;
+          _jwtExpiresAt = expiresAt;
+        } else {
+          sessionStorage.removeItem(JWT_SESSION_KEY);
+        }
+      }
+    } catch {}
+  }
   if (_jwt && Date.now() < _jwtExpiresAt) return _jwt;
   _jwt = null;
   return null;
@@ -30,15 +48,11 @@ export function getGatewayToken(): string | null {
 export function clearGatewayToken(): void {
   _jwt = null;
   _jwtExpiresAt = 0;
+  try { sessionStorage.removeItem(JWT_SESSION_KEY); } catch {}
 }
 
 export function isGatewayAuthenticated(): boolean {
   return getGatewayToken() !== null;
-}
-
-/** Returns the timestamp (ms) when the current token expires, or 0 if none. */
-export function getTokenExpiresAt(): number {
-  return _jwtExpiresAt;
 }
 
 /** Register a callback invoked when a 401 or token expiry is detected. */

@@ -34,7 +34,7 @@ import {
 
 // Unified Generation Options
 export interface VideoGenerationOptions {
-  model: 'veo-2' | 'kling-2.6';
+  model: 'veo-3.1-generate-preview' | 'kling-2.6';
   prompt: string;
   inputImage?: ImageData;
   keyframes?: ImageData[];
@@ -61,7 +61,7 @@ export interface VideoGenerationOptions {
 export interface VideoGenerationResponse {
   videoUrl: string;
   thumbnailUrl?: string;
-  model: 'veo-2' | 'kling-2.6';
+  model: 'veo-3.1-generate-preview' | 'kling-2.6';
   expiresAt?: Date;
 }
 
@@ -78,7 +78,7 @@ export interface ModelCapabilities {
 export class VideoGenerationError extends Error {
   constructor(
     message: string,
-    public model?: 'veo-2' | 'kling-2.6',
+    public model?: 'veo-3.1-generate-preview' | 'kling-2.6',
     public code?: string,
     public details?: unknown
   ) {
@@ -101,7 +101,7 @@ class VideoGenerationService {
     this.ensureServiceInitialized(model, klingProvider);
 
     // Route to appropriate service
-    if (model === 'veo-2') {
+    if (model === 'veo-3.1-generate-preview') {
       return this.generateWithVeo(options);
     } else if (model === 'kling-2.6') {
       return this.generateWithKling(options);
@@ -139,14 +139,14 @@ class VideoGenerationService {
       return {
         videoUrl: response.videoUrl,
         thumbnailUrl: response.thumbnailUrl,
-        model: 'veo-2',
+        model: 'veo-3.1-generate-preview',
         expiresAt: response.expiresAt
       };
     } catch (error) {
       if (error instanceof VeoError) {
         throw new VideoGenerationError(
           error.message,
-          'veo-2',
+          'veo-3.1-generate-preview',
           error.code,
           error.details
         );
@@ -203,10 +203,10 @@ class VideoGenerationService {
    * No API keys needed — gateway handles auth
    */
   private ensureServiceInitialized(
-    model: 'veo-2' | 'kling-2.6',
+    model: 'veo-3.1-generate-preview' | 'kling-2.6',
     klingProvider: KlingProvider
   ): void {
-    if (model === 'veo-2') {
+    if (model === 'veo-3.1-generate-preview') {
       if (!isVeoServiceInitialized()) {
         initVeoService();
       }
@@ -224,8 +224,8 @@ class VideoGenerationService {
   /**
    * Get model capabilities
    */
-  getModelCapabilities(model: 'veo-2' | 'kling-2.6'): ModelCapabilities {
-    if (model === 'veo-2') {
+  getModelCapabilities(model: 'veo-3.1-generate-preview' | 'kling-2.6'): ModelCapabilities {
+    if (model === 'veo-3.1-generate-preview') {
       return {
         maxDuration: 8,
         maxResolution: '4k',

@@ -5,7 +5,7 @@ import { generatePrompt } from './engine/promptEngine';
 
 const initialVideoState: VideoState = {
   inputMode: 'image-animate',
-  model: 'veo-2',
+  model: 'veo-3.1-generate-preview',
   scenario: '',
   compareMode: false,
   accessUnlocked: true,

@@ -18,75 +18,65 @@ No test or lint scripts are configured.
 
 Create a `.env.local` file with:
 ```
-VITE_GEMINI_API_KEY=                      # Google Gemini API key (required)
-VITE_API_GATEWAY_URL=                     # Cloudflare Worker URL (default: http://localhost:8787)
-VITE_PDF_CONVERTER_API_URL=               # Vercel PDF converter API URL
-VITE_VEO_PROXY_URL=                       # Cloudflare Veo proxy URL
-VITE_ILOVEPDF_PUBLIC_KEY=                 # iLovePDF API key (optional)
-SUPABASE_URL=                             # Supabase project URL
-SUPABASE_ANON_KEY=                        # Supabase anonymous key
-VITE_STRIPE_STARTER_PRICE_ID=             # Stripe price ID for Starter plan
-VITE_STRIPE_PROFESSIONAL_PRICE_ID=        # Stripe price ID for Professional plan
-VITE_STRIPE_STUDIO_PRICE_ID=              # Stripe price ID for Studio (org) plan
-VITE_STRIPE_CREDITS_500_PRICE_ID=         # Stripe price ID for 500 credit top-up
-VITE_STRIPE_CREDITS_2000_PRICE_ID=        # Stripe price ID for 2000 credit top-up
+VITE_GOOGLE_CLIENT_ID=         # Google OAuth client ID (required for login)
+VITE_ALLOWED_DOMAIN=           # Email domain allowed to sign in (e.g. company.com)
+VITE_API_GATEWAY_URL=          # Cloudflare Worker gateway URL (default: http://localhost:8787)
+VITE_CONVERTAPI_SECRET=        # ConvertAPI secret for document conversion (optional)
+VITE_ILOVEPDF_PUBLIC_KEY=      # iLovePDF API key (optional)
 ```
 
 ## Architecture
 
-**React + Vite + TypeScript** SPA with no backend (except two proxy services).
+**React + Vite + TypeScript** SPA. All vendor API calls (Gemini, video, etc.) go through a Cloudflare Worker gateway — no API secrets in the client bundle.
 
 ### Entry Point Flow
-`index.html` → `index.tsx` → `App.tsx` → `AuthGate` (Supabase session check) → layout + mode-specific panels
+`index.html` → `index.tsx` → `App.tsx` → `AuthGate` (Google session check) → layout + mode-specific panels
 
-### Auth & Billing Layer
-- `components/auth/AuthGate.tsx` - Wraps the app; gates access behind Supabase auth. Exposes `useAuth()` hook with `user`, `session`, `plan`, `credits`, `org`.
-- `components/auth/LoginPage.tsx` - Login/signup UI
-- `components/landing/LandingPage.tsx` - Public landing page (shown when not authenticated)
-- `components/billing/BillingPage.tsx` - Subscription management via Stripe
-- `components/billing/TeamDashboard.tsx` - Org/team management
-- `components/billing/UpgradeModal.tsx` - Upsell modal triggered when credits run out or gated mode is accessed
-- `components/admin/AdminPanel.tsx` - Superadmin controls (role: 'superadmin')
-- `lib/stripePrices.ts` - Plan tiers, credit costs per mode, video pricing. **Check here before hardcoding any pricing.**
-- `lib/supabaseClient.ts` - Supabase client + full `Database` type definitions for all tables.
-- `services/generationStorageService.ts` - Persists generation history to Supabase.
-
-### Credit System
-Each generation deducts credits from `CREDITS_PER_MODE` in `lib/stripePrices.ts`. Plans: `unsubscribed` (free trial, bonus modes only), `starter` (600 cr/mo), `professional` (2000 cr/mo), `studio` (6000 cr/mo, org). Video is pay-per-generation via Stripe (not credits). `PROFESSIONAL_ONLY_MODES` lists modes requiring Professional+.
+### Auth Layer
+- `components/auth/AuthGate.tsx` - Wraps the app; gates access behind Google Sign-In. Exposes `useAuth()` returning `{ user, isAuthenticated, login, logout }`.
+- `lib/googleAuth.ts` - Google Identity Services integration. On login, exchanges the Google ID token with the gateway for a short-lived JWT. User profile (name/email/picture) stored in `sessionStorage`; JWT is **in-memory only**.
+- `services/apiGateway.ts` - Holds the in-memory JWT and attaches it as a `Bearer` header on all gateway requests. Auto-calls `setOnSessionExpired` callback on 401.
 
 ### State Management
-`store.tsx` - React Context + `useReducer` pattern (not Zustand despite the file name). Access via `useAppStore()` which returns `{ state, dispatch }`. `AppState` contains:
-- `mode` - Current generation mode (18 modes total)
-- `uploadedImage` - Input image
+`store.tsx` - React Context + `useReducer` (not Zustand, despite the filename). Access via `useAppStore()` which returns `{ state, dispatch }`. `AppState` contains:
+- `mode` - Current generation mode
+- `uploadedImage` - Input image (base64)
 - `isGenerating` - Loading state
-- `history` - Generation history
-- `workflow` - Mode-specific settings typed per mode
+- `history` - In-session generation history
+- `workflow` - Mode-specific settings, typed per mode in `types.ts`
+- `appAlert` - Global toast/banner alert
 
 ### Generation Modes
 `generate-text`, `render-3d`, `scene-compose`, `render-cad`, `masterplan`, `visual-edit`, `exploded`, `section`, `render-sketch`, `multi-angle`, `upscale`, `img-to-cad`, `img-to-3d`, `video`, `material-validation`, `document-translate`, `pdf-compression`, `headshot`
 
-The authoritative order/list is `GenerationMode` in `types.ts`.
+Authoritative list is the `GenerationMode` union in `types.ts`.
+
+**Special rendering paths in `App.tsx`:**
+- `material-validation` → `<MaterialValidationView />` (full-page custom UI)
+- `document-translate` → `<DocumentTranslateView />` (full-page custom UI)
+- `pdf-compression` → `<PdfCompressionView />` (full-page custom UI)
+- `generate-text` → canvas view, but left sidebar is hidden
+- All other modes → standard three-panel layout with `<ImageCanvas />`
 
 ### Key Data Flow
-1. User uploads image or enters settings → dispatched to Zustand store
-2. `engine/promptEngine.ts` (4000+ lines) generates specialized prompts based on mode + settings
-3. `hooks/useGeneration.ts` - central orchestrator that wires store state → prompt engine → API calls → result dispatch. This is the main hook to read when tracing a generation end-to-end.
-4. `services/apiGateway.ts` routes to Cloudflare Worker gateway (adds API keys server-side, verifies Supabase JWT)
-5. Results returned to store, rendered in `components/canvas/ImageCanvas.tsx` (Three.js, 94KB)
-6. `services/generationStorageService.ts` persists result to Supabase
+1. User uploads image or enters settings → dispatched to store
+2. `engine/promptEngine.ts` (4000+ lines) generates specialized prompts based on mode + workflow settings
+3. `hooks/useGeneration.ts` - central orchestrator: store state → prompt engine → API calls → result dispatch. Start here when tracing any generation end-to-end.
+4. `services/apiGateway.ts` routes to the Cloudflare Worker gateway (attaches JWT, adds API keys server-side)
+5. Results returned to store; `components/canvas/ImageCanvas.tsx` renders them (Three.js)
 
-Modes `material-validation` and `document-translate` are `TEXT_ONLY_MODES` — they don't require an uploaded image and use different code paths in `useGeneration.ts`.
+`TEXT_ONLY_MODES` (`material-validation`, `document-translate`) skip the image-upload requirement in `useGeneration.ts`. `pdf-compression` has its own separate code path (not via the prompt engine).
 
 ### Services Layer (`services/`)
-- `geminiService.ts` - Google Gemini API client (image/text generation)
-- `apiGateway.ts` - Central gateway with Supabase JWT auth; all vendor calls go through here
+- `geminiService.ts` - Gemini API client (routes through gateway)
+- `apiGateway.ts` - JWT management + all gateway routing
 - `videoGenerationService.ts`, `veoService.ts`, `klingService.ts` - Video generation (Veo2 + Kling)
 - `documentTranslationService.ts`, `docxParserService.ts`, `docxRebuilderService.ts` - DOCX pipeline
 - `xlsxParserService.ts`, `xlsxRebuilderService.ts` - Excel pipeline
 - `pdfParser.ts`, `pdfConverterService.ts`, `ilovepdfService.ts` - PDF processing
 - `materialValidationService.ts`, `materialValidationPipeline.ts` - Material validation workflow
 - `cloudConvertService.ts`, `convertApiService.ts` - Alternative document conversion providers
-- `translationService.ts` - Text translation (used by document-translate mode)
+- `translationService.ts` - Text translation (used by document-translate)
 
 ### UI Layout
 Three-panel workspace:
@@ -97,27 +87,27 @@ Three-panel workspace:
 - `components/canvas/ImageCanvas.tsx` - Three.js canvas (main viewport)
 - `components/panels/mobile/MobilePanels.tsx` - Mobile-responsive panel layout
 
-Each generation mode has two dedicated panel components: `left/Left<Mode>Panel.tsx` (inputs/controls) and `right/<Mode>Panel.tsx` (output settings). When adding a new mode, both are required. `SharedLeftComponents.tsx` and `SharedRightComponents.tsx` contain reusable panel primitives.
+Each mode gets two panel components: `left/Left<Mode>Panel.tsx` and `right/<Mode>Panel.tsx`. `SharedLeftComponents.tsx` and `SharedRightComponents.tsx` contain reusable primitives.
 
 ### Deployment
-Deployed to Cloudflare Workers with SPA fallback (`not_found_handling: "single-page-application"` in `wrangler.jsonc`). Static assets in `public/` are included in the build output via Vite.
+Deployed to Cloudflare Workers with SPA fallback (`not_found_handling: "single-page-application"` in `wrangler.jsonc`).
 
 ### Path Alias
-`@/` maps to the repository root (not `src/`), configured in both `vite.config.ts` and `tsconfig.json`.
+`@/` maps to the repository root (not `src/`), configured in `vite.config.ts` and `tsconfig.json`.
 
 ### External Infrastructure
 
-**`cloudflare-worker/`** - Cloudflare Worker proxy for Google Vertex AI Veo video generation. Handles CORS, JWT auth, and long-polling for async operations. Deploy with Wrangler.
+**`cloudflare-worker/`** - Cloudflare Worker proxy for Google Vertex AI Veo video generation. Handles CORS and long-polling for async operations. Deploy with Wrangler.
 
 **`pdf-converter-api/`** - Python Vercel serverless API for PDF/DOCX conversion. Uses PyPDF2, python-docx, reportlab, and proxies to iLovePDF API. 10-second timeout on free tier.
 
 ### Internationalization
-i18next with browser language detection. Translation files in `locales/` (en, es, fr). localStorage key: `i18nextLng`.
+i18next with browser language detection. Translation files in `locales/` (en, es, fr).
 
 ### Keyboard Shortcuts
 Defined in `App.tsx` via `ShortcutsListener`:
 - `Cmd/Ctrl + Enter` - Trigger generation
-- `Cmd/Ctrl + 1-9` - Switch between first 9 generation modes
+- `Cmd/Ctrl + 1-9` - Switch between generation modes
 
 ### Adding a New Generation Mode
 1. Add the mode string to `GenerationMode` union in `types.ts`
@@ -126,8 +116,7 @@ Defined in `App.tsx` via `ShortcutsListener`:
 4. Create `components/panels/left/Left<Mode>Panel.tsx` (inputs/controls)
 5. Create `components/panels/right/<Mode>Panel.tsx` (output settings)
 6. Register in `LeftSidebar.tsx` and `RightPanel.tsx` switch statements
-7. Add credit cost in `lib/stripePrices.ts` (`CREDITS_PER_MODE`)
-8. Handle in `hooks/useGeneration.ts` if it needs special logic (like `TEXT_ONLY_MODES`)
+7. Handle in `hooks/useGeneration.ts` if it needs special logic (e.g. `TEXT_ONLY_MODES` or custom view)
 
 ### Types
-`types.ts` (2700+ lines) is the authoritative source for all TypeScript interfaces. Check here before creating new types. Supabase table types are in `lib/supabaseClient.ts`.
+`types.ts` (2700+ lines) is the authoritative source for all TypeScript interfaces. Check here before creating new types.
