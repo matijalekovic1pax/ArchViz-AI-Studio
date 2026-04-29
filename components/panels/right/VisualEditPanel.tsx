@@ -7,6 +7,7 @@ import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './Sh
 import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized, IMAGE_MODEL } from '../../../services/geminiService';
 import { isGatewayAuthenticated } from '../../../services/apiGateway';
 import { nanoid } from 'nanoid';
+import { MATERIAL_CATEGORIES, MATERIAL_SWATCHES, getMaterialById } from '../../../lib/materialCatalog';
 import {
   Image as ImageIcon,
   Move,
@@ -172,96 +173,9 @@ interface ObjectAsset {
   icon: ObjectIconKey;
 }
 
-const fallbackMaterialPreview =
-  'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20200%20200%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23e7ecf3%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23cfd7e2%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%22200%22%20height%3D%22200%22%20fill%3D%22url(%23g)%22/%3E%3C/svg%3E';
-
-const normalizeMaterialQuery = (query: string) =>
-  query
-    .split(',')
-    .map((part) => encodeURIComponent(part.trim()))
-    .filter(Boolean)
-    .join(',');
-
-const buildMaterialPreview = (query: string, lock: number) =>
-  `https://loremflickr.com/240/240/${normalizeMaterialQuery(query)}?lock=${lock}`;
-
-const buildMaterialAltPreview = (query: string) =>
-  `https://source.unsplash.com/240x240/?${normalizeMaterialQuery(query)}`;
-
-const materialSwatches = [
-  { id: 'floor-oak', label: 'Oak Plank', category: 'Flooring', query: 'oak,wood,texture' },
-  { id: 'floor-walnut', label: 'Walnut Plank', category: 'Flooring', query: 'walnut,wood,texture' },
-  { id: 'floor-maple', label: 'Maple', category: 'Flooring', query: 'maple,wood,texture' },
-  { id: 'floor-terrazzo', label: 'Terrazzo', category: 'Flooring', query: 'terrazzo,texture' },
-  { id: 'floor-polished-concrete', label: 'Polished Concrete', category: 'Flooring', query: 'polished,concrete,texture' },
-  { id: 'floor-bamboo', label: 'Bamboo', category: 'Flooring', query: 'bamboo,wood,texture' },
-  { id: 'floor-cork', label: 'Cork', category: 'Flooring', query: 'cork,texture' },
-  { id: 'floor-chevron', label: 'Chevron Oak', category: 'Flooring', query: 'herringbone,wood,texture' },
-
-  { id: 'wall-plaster', label: 'White Plaster', category: 'Wall', query: 'plaster,wall,texture' },
-  { id: 'wall-venetian', label: 'Venetian Plaster', category: 'Wall', query: 'stucco,texture' },
-  { id: 'wall-gypsum', label: 'Painted Gypsum', category: 'Wall', query: 'painted,wall,texture' },
-  { id: 'wall-limewash', label: 'Limewash', category: 'Wall', query: 'limewash,wall,texture' },
-  { id: 'wall-microcement', label: 'Microcement', category: 'Wall', query: 'microcement,texture' },
-  { id: 'wall-wood-slat', label: 'Wood Slat', category: 'Wall', query: 'wood,slat,texture' },
-  { id: 'wall-ceramic-tile', label: 'Ceramic Tile', category: 'Wall', query: 'ceramic,tile,texture' },
-  { id: 'wall-acoustic', label: 'Acoustic Panel', category: 'Wall', query: 'acoustic,panel,texture' },
-
-  { id: 'facade-brick-red', label: 'Red Brick', category: 'Facade', query: 'red,brick,texture' },
-  { id: 'facade-brick-white', label: 'White Brick', category: 'Facade', query: 'white,brick,texture' },
-  { id: 'facade-brick-dark', label: 'Dark Brick', category: 'Facade', query: 'dark,brick,texture' },
-  { id: 'facade-corten', label: 'Corten Panel', category: 'Facade', query: 'corten,steel,texture' },
-  { id: 'facade-aluminum', label: 'Aluminum Panel', category: 'Facade', query: 'aluminum,cladding,texture' },
-  { id: 'facade-fiber-cement', label: 'Fiber Cement', category: 'Facade', query: 'fiber,cement,texture' },
-  { id: 'facade-concrete-board', label: 'Concrete Board', category: 'Facade', query: 'concrete,board,texture' },
-  { id: 'facade-stone-clad', label: 'Stone Cladding', category: 'Facade', query: 'stone,cladding,texture' },
-
-  { id: 'roof-standing-seam', label: 'Standing Seam', category: 'Roof', query: 'standing,seam,metal,roof' },
-  { id: 'roof-clay-tile', label: 'Clay Tile', category: 'Roof', query: 'clay,roof,tile' },
-  { id: 'roof-slate', label: 'Slate', category: 'Roof', query: 'slate,roof,texture' },
-  { id: 'roof-gravel', label: 'Gravel', category: 'Roof', query: 'gravel,roof,texture' },
-  { id: 'roof-green', label: 'Green Roof', category: 'Roof', query: 'green,roof,texture' },
-  { id: 'roof-epdm', label: 'EPDM Membrane', category: 'Roof', query: 'rubber,roof,texture' },
-  { id: 'roof-copper', label: 'Copper Roof', category: 'Roof', query: 'copper,roof,texture' },
-
-  { id: 'metal-brushed-steel', label: 'Brushed Steel', category: 'Metal', query: 'brushed,steel,texture' },
-  { id: 'metal-black', label: 'Black Steel', category: 'Metal', query: 'black,steel,texture' },
-  { id: 'metal-anodized', label: 'Anodized Aluminum', category: 'Metal', query: 'anodized,aluminum,texture' },
-  { id: 'metal-brass', label: 'Brass', category: 'Metal', query: 'brass,metal,texture' },
-  { id: 'metal-copper-patina', label: 'Copper Patina', category: 'Metal', query: 'copper,patina,texture' },
-  { id: 'metal-zinc', label: 'Zinc', category: 'Metal', query: 'zinc,metal,texture' },
-  { id: 'metal-perforated', label: 'Perforated Metal', category: 'Metal', query: 'perforated,metal,texture' },
-
-  { id: 'glass-clear', label: 'Clear Glass', category: 'Glass', query: 'clear,glass,texture' },
-  { id: 'glass-frosted', label: 'Frosted Glass', category: 'Glass', query: 'frosted,glass,texture' },
-  { id: 'glass-tinted', label: 'Tinted Glass', category: 'Glass', query: 'tinted,glass,texture' },
-  { id: 'glass-low-e', label: 'Low-E Glass', category: 'Glass', query: 'glass,low-e,texture' },
-  { id: 'glass-ribbed', label: 'Ribbed Glass', category: 'Glass', query: 'ribbed,glass,texture' },
-  { id: 'glass-reflective', label: 'Reflective Glass', category: 'Glass', query: 'reflective,glass,texture' },
-  { id: 'glass-wired', label: 'Wired Glass', category: 'Glass', query: 'wired,glass,texture' },
-
-  { id: 'stone-marble', label: 'Marble', category: 'Stone', query: 'marble,texture' },
-  { id: 'stone-travertine', label: 'Travertine', category: 'Stone', query: 'travertine,texture' },
-  { id: 'stone-limestone', label: 'Limestone', category: 'Stone', query: 'limestone,texture' },
-  { id: 'stone-granite', label: 'Granite', category: 'Stone', query: 'granite,texture' },
-  { id: 'stone-sandstone', label: 'Sandstone', category: 'Stone', query: 'sandstone,texture' },
-  { id: 'stone-basalt', label: 'Basalt', category: 'Stone', query: 'basalt,texture' },
-  { id: 'stone-quartzite', label: 'Quartzite', category: 'Stone', query: 'quartzite,texture' },
-
-  { id: 'fabric-linen', label: 'Linen', category: 'Fabric', query: 'linen,fabric,texture' },
-  { id: 'fabric-wool', label: 'Wool Felt', category: 'Fabric', query: 'wool,felt,texture' },
-  { id: 'fabric-leather', label: 'Leather', category: 'Fabric', query: 'leather,texture' },
-  { id: 'fabric-velvet', label: 'Velvet', category: 'Fabric', query: 'velvet,fabric,texture' },
-  { id: 'fabric-canvas', label: 'Canvas', category: 'Fabric', query: 'canvas,fabric,texture' },
-  { id: 'fabric-sheer', label: 'Sheer', category: 'Fabric', query: 'sheer,fabric,texture' },
-  { id: 'fabric-acoustic', label: 'Acoustic Fabric', category: 'Fabric', query: 'acoustic,fabric,texture' },
-].map((item, index) => ({
-  ...item,
-  previewUrl: buildMaterialPreview(item.query, index + 1),
-  previewAltUrl: buildMaterialAltPreview(item.query),
-}));
-
-const materialCategories = ['All', 'Flooring', 'Wall', 'Facade', 'Roof', 'Metal', 'Glass', 'Stone', 'Fabric'];
+const fallbackMaterialPreview = MATERIAL_SWATCHES[0]?.previewUrl || '';
+const materialSwatches = MATERIAL_SWATCHES;
+const materialCategories = MATERIAL_CATEGORIES;
 
 const hdriPresets = ['Studio', 'Outdoor', 'Overcast', 'Interior', 'Night'];
 const skyPresets = [
@@ -1803,11 +1717,26 @@ export const VisualEditPanel = () => {
     }
   }, [dispatch, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
 
+  useEffect(() => {
+    if (!isMaterialBrowserOpen) return;
+    materialSwatches.forEach((material) => {
+      const img = new Image();
+      img.decoding = 'sync';
+      img.src = material.previewUrl;
+    });
+  }, [isMaterialBrowserOpen]);
+
+  const selectedMaterial = useMemo(
+    () => getMaterialById(wf.visualMaterial.materialId),
+    [wf.visualMaterial.materialId]
+  );
+
   const filteredMaterials = useMemo(() => {
     const query = materialQuery.trim().toLowerCase();
     return materialSwatches.filter((item) => {
       const matchesCategory = materialFilterCategory === 'All' || item.category === materialFilterCategory;
-      const matchesQuery = !query || item.label.toLowerCase().includes(query);
+      const searchText = [item.label, item.category, item.description, ...item.tags].join(' ').toLowerCase();
+      const matchesQuery = !query || searchText.includes(query);
       return matchesCategory && matchesQuery;
     });
   }, [materialFilterCategory, materialQuery]);
@@ -2226,31 +2155,20 @@ export const VisualEditPanel = () => {
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Selected Material</div>
                   <div className="text-sm font-semibold text-foreground mt-1">
-                    {materialSwatches.find((item) => item.id === wf.visualMaterial.materialId)?.label || 'Custom'}
+                    {selectedMaterial?.label || 'Custom'}
                   </div>
-                  <div className="text-[10px] text-foreground-muted mt-0.5">{wf.visualMaterial.category}</div>
+                  <div className="text-[10px] text-foreground-muted mt-0.5">{selectedMaterial?.category || wf.visualMaterial.category}</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg border border-border overflow-hidden bg-surface-elevated">
                     <img
-                      src={
-                        materialSwatches.find((item) => item.id === wf.visualMaterial.materialId)?.previewUrl ||
-                        fallbackMaterialPreview
-                      }
-                      data-alt-src={
-                        materialSwatches.find((item) => item.id === wf.visualMaterial.materialId)?.previewAltUrl
-                      }
+                      src={selectedMaterial?.previewUrl || fallbackMaterialPreview}
+                      decoding="sync"
                       onError={(event) => {
-                        const altSrc = event.currentTarget.dataset.altSrc;
-                        if (altSrc) {
-                          event.currentTarget.src = altSrc;
-                          event.currentTarget.removeAttribute('data-alt-src');
-                          return;
-                        }
                         event.currentTarget.src = fallbackMaterialPreview;
                       }}
                       className="w-full h-full object-cover"
-                      alt=""
+                      alt={selectedMaterial?.label || 'Selected material'}
                     />
                   </div>
                   <button
@@ -4026,33 +3944,28 @@ onChange={(value) => updateExtend({ amount: value })}
                   return (
                     <button
                       key={material.id}
+                      type="button"
                       onClick={() => {
                         updateMaterial({ materialId: material.id, category: material.category });
                         setIsMaterialBrowserOpen(false);
                       }}
                       className={cn(
-                        'aspect-square rounded border overflow-hidden relative text-[9px] font-semibold transition-colors',
+                        'aspect-square rounded border overflow-hidden relative text-[9px] font-semibold transition-colors bg-surface-sunken',
                         active
                           ? 'border-foreground ring-1 ring-foreground'
                           : 'border-border hover:border-foreground-muted'
                       )}
-                      style={{ backgroundImage: `url(${fallbackMaterialPreview})` }}
                     >
                       <img
                         src={material.previewUrl}
-                        data-alt-src={material.previewAltUrl}
-                        loading="lazy"
+                        loading="eager"
+                        decoding="sync"
+                        draggable={false}
                         onError={(event) => {
-                          const altSrc = event.currentTarget.dataset.altSrc;
-                          if (altSrc) {
-                            event.currentTarget.src = altSrc;
-                            event.currentTarget.removeAttribute('data-alt-src');
-                            return;
-                          }
                           event.currentTarget.src = fallbackMaterialPreview;
                         }}
                         className="absolute inset-0 w-full h-full object-cover"
-                        alt=""
+                        alt={material.label}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                       {active && (

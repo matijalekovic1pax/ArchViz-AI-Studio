@@ -1,5 +1,6 @@
 
 import { AppState, Render3DSettings, StyleConfiguration, VisualSelectionShape } from '../types';
+import { getMaterialById } from '../lib/materialCatalog';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
   {
@@ -1708,6 +1709,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     parts.push(describeUserIntent(userPrompt));
 
     const material = workflow.visualMaterial;
+    const selectedMaterial = getMaterialById(material.materialId);
     if (workflow.visualMaterial.surfaceType === 'auto') {
       parts.push('Intelligently detect and target the appropriate surfaces regardless of selection boundaries.');
     } else {
@@ -1716,7 +1718,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     // Describe material in natural language
     const materialDesc: string[] = [];
-    if (material.category && material.materialId) {
+    if (selectedMaterial) {
+      materialDesc.push(`Apply ${selectedMaterial.label.toLowerCase()} as a ${selectedMaterial.category.toLowerCase()} finish`);
+      materialDesc.push(selectedMaterial.modelPrompt);
+    } else if (material.category && material.materialId) {
       materialDesc.push(`Apply a ${material.materialId} ${material.category} finish`);
     } else if (material.category) {
       materialDesc.push(`Apply a ${material.category} material`);

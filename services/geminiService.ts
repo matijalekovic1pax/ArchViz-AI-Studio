@@ -99,6 +99,7 @@ export interface BatchTextOptions {
 export interface ImageEditRequest {
   sourceImage: ImageData;
   maskImage?: ImageData;
+  referenceImages?: ImageData[];
   prompt: string;
   editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace';
   generationConfig?: GenerationConfig;
@@ -387,15 +388,22 @@ export class GeminiService {
 
   async editImage(request: ImageEditRequest): Promise<GeminiResponse> {
     let editPrompt = request.prompt;
+    const referenceCount = request.referenceImages?.length || 0;
+    const referenceInstructions = referenceCount > 0
+      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and mask' : ''}. Use ${referenceCount > 1 ? 'these references' : 'this reference'} only as visual target material data for color, pattern, texture scale, roughness, reflectivity, grain direction, joints, and seams. Do not copy reference-image framing, add the reference as an object, or change scene geometry.`
+      : '';
     const maskInstructions = request.maskImage
       ? [
-          'You are given two input images in this exact order:',
+          referenceCount > 0
+            ? 'You are given input images in this exact order:'
+            : 'You are given two input images in this exact order:',
           '1. The original source image.',
           '2. A black-and-white selection mask with the same framing as the source image.',
           'White mask pixels are the ONLY editable pixels. Black mask pixels are locked and must remain visually identical to the original source image.',
-          'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.'
+          'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
+          referenceInstructions
         ].join(' ')
-      : 'Return a complete edited image preserving the original camera, framing, and perspective unless the request explicitly changes the canvas or aspect ratio.';
+      : `Return a complete edited image preserving the original camera, framing, and perspective unless the request explicitly changes the canvas or aspect ratio.${referenceInstructions}`;
 
     switch (request.editType) {
       case 'inpaint':
@@ -420,6 +428,7 @@ export class GeminiService {
 
     const images: ImageData[] = [request.sourceImage];
     if (request.maskImage) images.push(request.maskImage);
+    if (request.referenceImages?.length) images.push(...request.referenceImages);
 
     return this.generate({
       prompt: editPrompt,
