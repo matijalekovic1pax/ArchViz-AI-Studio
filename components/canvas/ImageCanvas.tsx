@@ -8,6 +8,7 @@ import { getSceneComposeMarkerColor } from '../../lib/sceneComposePlacement';
 import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
 import { VideoLockBanner } from '../video/VideoLockBanner';
+import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 
 type CanvasPoint = { x: number; y: number };
 type ImageLayout = {
@@ -279,6 +280,7 @@ const StandardCanvas: React.FC = () => {
   const [volume, setVolume] = useState(1);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [activeBoundary, setActiveBoundary] = useState<CanvasPoint[] | null>(null);
@@ -1114,6 +1116,20 @@ const StandardCanvas: React.FC = () => {
      dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 }); 
   }, [dispatch]);
 
+  const handleClearImage = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!state.uploadedImage) return;
+    setShowClearConfirm(true);
+  }, [state.uploadedImage]);
+
+  const handleConfirmClearImage = useCallback(() => {
+    dispatch({ type: 'CLEAR_CANVAS' });
+    setShowClearConfirm(false);
+  }, [dispatch]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isGenerateText) return;
     const file = e.target.files?.[0];
@@ -1791,6 +1807,19 @@ const StandardCanvas: React.FC = () => {
             style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} 
          />
 
+         {state.uploadedImage && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={handleClearImage}
+              className="absolute top-4 right-4 z-40 h-10 w-10 rounded-full border border-white/70 bg-white/90 text-foreground-secondary shadow-lg ring-1 ring-black/5 backdrop-blur-xl flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-600 hover:border-red-200 hover:shadow-xl active:scale-95"
+              title={t('topBar.clearImage')}
+              aria-label={t('topBar.clearImage')}
+            >
+              <Trash2 size={16} />
+            </button>
+         )}
+
          {state.uploadedImage ? (
             <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                 <div 
@@ -2176,6 +2205,11 @@ const StandardCanvas: React.FC = () => {
               </div>
           </div>
       )}
+      <ClearCanvasConfirmDialog
+        open={showClearConfirm}
+        onCancel={() => setShowClearConfirm(false)}
+        onConfirm={handleConfirmClearImage}
+      />
     </div>
   );
 };

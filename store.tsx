@@ -937,6 +937,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_STYLE': return { ...state, activeStyleId: action.payload };
     case 'SET_IMAGE': return { ...state, uploadedImage: action.payload };
     case 'SET_SOURCE_IMAGE': return { ...state, sourceImage: action.payload };
+    case 'CLEAR_CANVAS': return { ...state, uploadedImage: null, sourceImage: null };
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'UPDATE_WORKFLOW': return { ...state, workflow: { ...state.workflow, ...action.payload } };

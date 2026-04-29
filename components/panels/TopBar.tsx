@@ -1,178 +1,17 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, AlertTriangle, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, Zap, BookOpen } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, Zap, BookOpen } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
-import { VisualSelectionShape } from '../../types';
 import { useGeneration } from '../../hooks/useGeneration';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
 import { PLAN_LABELS } from '../../lib/stripePrices';
 import { CreditCard, Users, Settings } from 'lucide-react';
 import { MobilePanelType } from './mobile/MobilePanels';
-
-const drawSelectionOverlay = (
-  ctx: CanvasRenderingContext2D,
-  shapes: VisualSelectionShape[],
-  selectionCanvasSize: { width: number; height: number } | null,
-  outputWidth: number,
-  outputHeight: number,
-  brushFallback: number,
-  viewScale: number | null,
-  zoom: number
-) => {
-  if (!selectionCanvasSize || shapes.length === 0) return;
-
-  const canvasWidth = selectionCanvasSize.width;
-  const canvasHeight = selectionCanvasSize.height;
-  if (canvasWidth < 2 || canvasHeight < 2 || outputWidth < 2 || outputHeight < 2) return;
-
-  const imageAspect = outputWidth / outputHeight;
-  const canvasAspect = canvasWidth / canvasHeight;
-  let drawWidth = canvasWidth;
-  let drawHeight = canvasHeight;
-  let offsetX = 0;
-  let offsetY = 0;
-
-  if (imageAspect > canvasAspect) {
-    drawHeight = canvasWidth / imageAspect;
-    offsetY = (canvasHeight - drawHeight) / 2;
-  } else {
-    drawWidth = canvasHeight * imageAspect;
-    offsetX = (canvasWidth - drawWidth) / 2;
-  }
-
-  const scaleX = outputWidth / drawWidth;
-  const scaleY = outputHeight / drawHeight;
-  const scale = (scaleX + scaleY) / 2;
-  const baseViewScale = viewScale && viewScale > 0 ? viewScale : 1;
-  const displayScale = Math.max(0.0001, baseViewScale * zoom);
-  const selectionStrokeScreen = Math.max(1.5, 2.4 / zoom);
-  const brushOutlineScreen = Math.max(1.5, 2.6 / zoom);
-  const selectionStrokeImage = selectionStrokeScreen / displayScale;
-  const brushOutlineImage = brushOutlineScreen / displayScale;
-  const selectionStrokeWidth = selectionStrokeImage * scale;
-  const brushOutlineWidth = brushOutlineImage * scale;
-
-  const mapPoint = (point: { x: number; y: number }) => ({
-    x: (point.x - offsetX) * scaleX,
-    y: (point.y - offsetY) * scaleY,
-  });
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, outputWidth, outputHeight);
-  ctx.clip();
-
-  const selectionFill = 'rgba(56, 189, 248, 0.28)';
-  const selectionStroke = 'rgba(56, 189, 248, 0.9)';
-  const brushFill = 'rgba(56, 189, 248, 0.28)';
-  const brushOutline = 'rgba(56, 189, 248, 0.9)';
-  const brushShapes = shapes.filter((shape) => shape.type === 'brush');
-  const otherShapes = shapes.filter((shape) => shape.type !== 'brush');
-
-  ctx.fillStyle = selectionFill;
-  ctx.strokeStyle = selectionStroke;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  otherShapes.forEach((shape) => {
-    if (shape.type === 'rect') {
-      const x = Math.min(shape.start.x, shape.end.x);
-      const y = Math.min(shape.start.y, shape.end.y);
-      const w = Math.abs(shape.end.x - shape.start.x);
-      const h = Math.abs(shape.end.y - shape.start.y);
-      if (w > 0 && h > 0) {
-        const start = mapPoint({ x, y });
-        const end = mapPoint({ x: x + w, y: y + h });
-        ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
-        ctx.lineWidth = selectionStrokeWidth;
-        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
-      }
-      return;
-    }
-
-    if (shape.type === 'lasso') {
-      if (shape.points.length < 2) return;
-      ctx.beginPath();
-      const mapped = shape.points.map(mapPoint);
-      ctx.moveTo(mapped[0].x, mapped[0].y);
-      mapped.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
-      ctx.closePath();
-      ctx.fill();
-      ctx.lineWidth = selectionStrokeWidth;
-      ctx.stroke();
-    }
-  });
-
-  if (brushShapes.length > 0) {
-    const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = outputWidth;
-    maskCanvas.height = outputHeight;
-    const maskCtx = maskCanvas.getContext('2d');
-
-    if (maskCtx) {
-      maskCtx.strokeStyle = '#fff';
-      maskCtx.lineJoin = 'round';
-      maskCtx.lineCap = 'round';
-      brushShapes.forEach((shape) => {
-        if (shape.type !== 'brush' || shape.points.length < 2) return;
-        const brushSize = (shape.brushSize || brushFallback) * scale;
-        maskCtx.lineWidth = brushSize;
-        maskCtx.beginPath();
-        const mapped = shape.points.map(mapPoint);
-        maskCtx.moveTo(mapped[0].x, mapped[0].y);
-        mapped.slice(1).forEach((point) => maskCtx.lineTo(point.x, point.y));
-        maskCtx.stroke();
-      });
-    }
-
-    const fillCanvas = document.createElement('canvas');
-    fillCanvas.width = outputWidth;
-    fillCanvas.height = outputHeight;
-    const fillCtx = fillCanvas.getContext('2d');
-    if (fillCtx) {
-      fillCtx.drawImage(maskCanvas, 0, 0);
-      fillCtx.globalCompositeOperation = 'source-in';
-      fillCtx.fillStyle = brushFill;
-      fillCtx.fillRect(0, 0, outputWidth, outputHeight);
-      ctx.drawImage(fillCanvas, 0, 0);
-    }
-
-    const outlineCanvas = document.createElement('canvas');
-    outlineCanvas.width = outputWidth;
-    outlineCanvas.height = outputHeight;
-    const outlineCtx = outlineCanvas.getContext('2d');
-    if (outlineCtx) {
-      const outlineWidth = brushOutlineWidth;
-
-      outlineCtx.drawImage(maskCanvas, 0, 0);
-      outlineCtx.globalCompositeOperation = 'source-out';
-      outlineCtx.strokeStyle = brushOutline;
-      outlineCtx.lineJoin = 'round';
-      outlineCtx.lineCap = 'round';
-
-      brushShapes.forEach((shape) => {
-        if (shape.type !== 'brush' || shape.points.length < 2) return;
-        const brushSize = (shape.brushSize || brushFallback) * scale;
-        outlineCtx.lineWidth = brushSize + outlineWidth * 2;
-        outlineCtx.beginPath();
-        const mapped = shape.points.map(mapPoint);
-        outlineCtx.moveTo(mapped[0].x, mapped[0].y);
-        mapped.slice(1).forEach((point) => outlineCtx.lineTo(point.x, point.y));
-        outlineCtx.stroke();
-      });
-
-      outlineCtx.globalCompositeOperation = 'destination-out';
-      outlineCtx.drawImage(maskCanvas, 0, 0);
-      ctx.drawImage(outlineCanvas, 0, 0);
-    }
-  }
-
-  ctx.restore();
-};
+import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
@@ -421,14 +260,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     const prefix = isVideoMode ? 'archviz-video' : 'archviz-render';
     const filename = `${prefix}-${Date.now()}${resSuffix}.${ext}`;
 
-    const selectionShapes = state.workflow.visualSelections;
-    const selectionCanvasSize = state.workflow.visualSelectionMaskSize;
-    const shouldBakeSelections = state.mode === 'visual-edit' && selectionShapes.length > 0;
-    const useCompositeSource = shouldBakeSelections && !!state.workflow.visualSelectionComposite;
-
-    const downloadSource = useCompositeSource
-      ? state.workflow.visualSelectionComposite!
-      : state.uploadedImage;
+    const downloadSource = state.uploadedImage;
 
     // For video mode, we download the source URL directly
     if (isVideoMode) {
@@ -465,18 +297,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             
             if (ctx) {
                 ctx.drawImage(img, 0, 0, width, height);
-                if (shouldBakeSelections && !useCompositeSource) {
-                    drawSelectionOverlay(
-                        ctx,
-                        selectionShapes,
-                        selectionCanvasSize,
-                        width,
-                        height,
-                        state.workflow.visualSelection.brushSize,
-                        state.workflow.visualSelectionViewScale,
-                        state.canvas.zoom
-                    );
-                }
                 
                 const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
                 const quality = ext === 'jpg' ? 0.85 : undefined;
@@ -1865,42 +1685,14 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       )}
     </header>
 
-    {/* Clear Image Confirmation Modal */}
-    {showClearConfirm && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-         <div className="w-[400px] bg-background rounded-2xl shadow-2xl border border-border overflow-hidden animate-scale-in">
-            <div className="p-6">
-               <div className="flex items-center gap-3 mb-4">
-                   <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                      <AlertTriangle size={20} />
-                   </div>
-                   <h3 className="text-lg font-bold text-foreground">{t('topBar.clearCanvas')}</h3>
-               </div>
-               <p className="text-sm text-foreground-secondary leading-relaxed mb-6">
-                  {t('topBar.clearCanvasMessage')}
-               </p>
-               <div className="flex gap-3">
-                  <button
-                     onClick={() => setShowClearConfirm(false)}
-                     className="flex-1 py-2.5 text-xs font-bold text-foreground border border-border rounded-lg hover:bg-surface-sunken transition-colors"
-                  >
-                     {t('topBar.cancel')}
-                  </button>
-                  <button
-                     onClick={() => {
-                        dispatch({ type: 'SET_IMAGE', payload: null });
-                        dispatch({ type: 'SET_SOURCE_IMAGE', payload: null });
-                        setShowClearConfirm(false);
-                     }}
-                     className="flex-1 py-2.5 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm"
-                  >
-                     {t('topBar.confirmClear')}
-                  </button>
-               </div>
-            </div>
-         </div>
-      </div>
-    )}
+    <ClearCanvasConfirmDialog
+      open={showClearConfirm}
+      onCancel={() => setShowClearConfirm(false)}
+      onConfirm={() => {
+        dispatch({ type: 'CLEAR_CANVAS' });
+        setShowClearConfirm(false);
+      }}
+    />
 
     {/* Save Project Modal Overlay */}
     {showSaveInfo && (
