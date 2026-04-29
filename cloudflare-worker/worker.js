@@ -32,7 +32,10 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
 ];
 
-const MAX_PAYLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
+// Cloudflare's documented request body cap is 100 MB on Free/Pro accounts.
+// Keep the gateway limit just below that so high-resolution image+mask edits
+// can pass while still failing before the platform edge limit.
+const MAX_PAYLOAD_BYTES = 95 * 1024 * 1024; // 95 MB
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
