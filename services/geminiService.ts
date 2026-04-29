@@ -387,25 +387,34 @@ export class GeminiService {
 
   async editImage(request: ImageEditRequest): Promise<GeminiResponse> {
     let editPrompt = request.prompt;
+    const maskInstructions = request.maskImage
+      ? [
+          'You are given two input images in this exact order:',
+          '1. The original source image.',
+          '2. A black-and-white selection mask with the same framing as the source image.',
+          'White mask pixels are the ONLY editable pixels. Black mask pixels are locked and must remain visually identical to the original source image.',
+          'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.'
+        ].join(' ')
+      : 'Return a complete edited image preserving the original camera, framing, and perspective unless the request explicitly changes the canvas or aspect ratio.';
 
     switch (request.editType) {
       case 'inpaint':
-        editPrompt = `Edit this image by replacing the masked area with: ${request.prompt}. Maintain seamless blending.`;
+        editPrompt = `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
-        editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly.`;
+        editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Do not change existing source pixels unless needed only at the extension seam.`;
         break;
       case 'style-transfer':
-        editPrompt = `Transform this image to have the following style: ${request.prompt}. Maintain composition.`;
+        editPrompt = `${maskInstructions} Transform only the allowed area to have the following style or material change: ${request.prompt}. Maintain composition, geometry, and all locked pixels.`;
         break;
       case 'enhance':
-        editPrompt = `Enhance this image: ${request.prompt}. Improve quality while preserving content.`;
+        editPrompt = `${maskInstructions} Enhance only the allowed area: ${request.prompt}. Improve quality while preserving content, geometry, and all locked pixels.`;
         break;
       case 'remove':
-        editPrompt = `Remove the following from this image: ${request.prompt}. Fill naturally.`;
+        editPrompt = `${maskInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
         break;
       case 'replace':
-        editPrompt = `Replace the selected area with: ${request.prompt}. Blend seamlessly.`;
+        editPrompt = `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
         break;
     }
 

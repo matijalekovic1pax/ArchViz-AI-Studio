@@ -1597,12 +1597,18 @@ const buildSelectionBounds = (
     .filter((item) => item);
 };
 
-const buildSelectionContext = (workflow: AppState['workflow']) => {
+type SelectionContextRole = 'edit' | 'preserve';
+
+const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionContextRole = 'edit') => {
   const selectionCount = workflow.visualSelections.length;
   const parts: string[] = [];
 
   if (selectionCount === 0) {
-    parts.push('No specific area has been selected, so the edits should be applied thoughtfully across the entire image where appropriate.');
+    parts.push(
+      role === 'preserve'
+        ? 'No protected area has been selected, so background replacement should be applied thoughtfully where appropriate.'
+        : 'No specific area has been selected, so the edits should be applied thoughtfully across the entire image where appropriate.'
+    );
   } else {
     const summary = workflow.visualSelections.reduce(
       (acc, shape) => {
@@ -1622,10 +1628,23 @@ const buildSelectionContext = (workflow: AppState['workflow']) => {
       count === 1 ? `a ${shapeDescriptions[type] || type}` : `${count} ${shapeDescriptions[type] || type}s`
     );
 
-    parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define exactly where changes should occur. Apply all edits precisely within this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
+    if (role === 'preserve') {
+      parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define the protected region that must remain unchanged. Apply edits only outside this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
+    } else {
+      parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define exactly where changes should occur. Apply all edits precisely within this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
+    }
 
     if (workflow.visualSelectionMask) {
-      parts.push('A selection mask is provided where white areas indicate the regions to be edited.');
+      parts.push(
+        role === 'preserve'
+          ? 'A selection mask is provided to identify the protected selected region; the app may invert it before editing so only unselected pixels are changed.'
+          : 'A selection mask is provided where white areas indicate the only regions to be edited.'
+      );
+    }
+
+    const bounds = buildSelectionBounds(workflow.visualSelections, workflow.visualSelectionMaskSize);
+    if (bounds.length > 0) {
+      parts.push(`Selection geometry summary in normalized image coordinates for reference only; the mask remains authoritative: ${JSON.stringify(bounds)}.`);
     }
   }
 
@@ -1643,7 +1662,11 @@ const buildSelectionContext = (workflow: AppState['workflow']) => {
     parts.push(`The selection has ${featherDesc}.`);
   }
 
-  parts.push('Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Confine all modifications strictly to the intended selection or tool scope. Leave unrelated architectural elements, layout, and materials completely untouched. Ensure all edges blend seamlessly and naturally into the surrounding image.');
+  parts.push(
+    role === 'preserve'
+      ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Preserve every pixel inside the selected region exactly. Confine modifications strictly to the unselected background/tool scope and blend naturally at the selection edge.'
+      : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Confine all modifications strictly to the intended selection or tool scope. Leave unrelated architectural elements, layout, and materials completely untouched. Ensure all edges blend seamlessly and naturally into the surrounding image.'
+  );
 
   return parts;
 };
@@ -2498,7 +2521,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'background') {
     parts.push('Replace the background of this architectural image while preserving the selected area completely untouched.');
-    parts.push(...selectionParts);
+    parts.push(...buildSelectionContext(workflow, 'preserve'));
     const background = workflow.visualBackground;
     const backgroundPrompt = background.prompt?.trim() || userPrompt;
 
