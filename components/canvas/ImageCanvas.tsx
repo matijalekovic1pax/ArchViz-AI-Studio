@@ -859,26 +859,38 @@ const StandardCanvas: React.FC = () => {
   );
 
   const getSelectionPoint = useCallback((e: React.MouseEvent, clamp = false) => {
-    if (!selectionLayerRef.current) return null;
+    const layer = selectionLayerRef.current;
+    if (!layer) return null;
     const layout = getImageLayout();
     if (!layout) return null;
-    const rect = selectionLayerRectRef.current || selectionLayerRef.current.getBoundingClientRect();
-    const rawX = (e.clientX - rect.left) / state.canvas.zoom;
-    const rawY = (e.clientY - rect.top) / state.canvas.zoom;
-    const localX = rawX - layout.offsetX;
-    const localY = rawY - layout.offsetY;
+
+    const rect = layer.getBoundingClientRect();
+    selectionLayerRectRef.current = rect;
+
+    const layerWidth = layer.offsetWidth || layout.width + layout.offsetX * 2;
+    const layerHeight = layer.offsetHeight || layout.height + layout.offsetY * 2;
+    const screenScaleX = layerWidth > 0 ? rect.width / layerWidth : state.canvas.zoom;
+    const screenScaleY = layerHeight > 0 ? rect.height / layerHeight : state.canvas.zoom;
+    const imageLeft = rect.left + layout.offsetX * screenScaleX;
+    const imageTop = rect.top + layout.offsetY * screenScaleY;
+    const imageScaleX = layout.scaleX * screenScaleX;
+    const imageScaleY = layout.scaleY * screenScaleY;
+    if (imageScaleX <= 0 || imageScaleY <= 0) return null;
+
+    const localX = (e.clientX - imageLeft) / imageScaleX;
+    const localY = (e.clientY - imageTop) / imageScaleY;
     const within =
       localX >= 0 &&
-      localX <= layout.width &&
+      localX <= layout.naturalWidth &&
       localY >= 0 &&
-      localY <= layout.height;
+      localY <= layout.naturalHeight;
     if (!clamp && !within) return null;
-    const clampedX = Math.min(Math.max(localX, 0), layout.width);
-    const clampedY = Math.min(Math.max(localY, 0), layout.height);
+    const clampedX = Math.min(Math.max(localX, 0), layout.naturalWidth);
+    const clampedY = Math.min(Math.max(localY, 0), layout.naturalHeight);
 
     return {
-      x: clampedX / layout.scaleX,
-      y: clampedY / layout.scaleY,
+      x: clampedX,
+      y: clampedY,
     };
   }, [getImageLayout, state.canvas.zoom]);
 

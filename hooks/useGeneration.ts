@@ -35,6 +35,103 @@ import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProg
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 
+const loadCanvasImage = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image for canvas processing.'));
+    img.src = src;
+  });
+
+const generatedImageFromDataUrl = (dataUrl: string): GeneratedImage => {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,(.+)$/);
+  return {
+    dataUrl,
+    mimeType: (match?.[1] as GeneratedImage['mimeType']) || 'image/png',
+    base64: match?.[2] || dataUrl.split(',')[1] || ''
+  };
+};
+
+const drawMaskImageData = (
+  mask: HTMLImageElement,
+  width: number,
+  height: number,
+  options: { invert?: boolean; alphaMask?: boolean } = {}
+): HTMLCanvasElement | null => {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.drawImage(mask, 0, 0, width, height);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const luminance = (pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3;
+    const value = options.invert ? 255 - luminance : luminance;
+    pixels[index] = options.alphaMask ? 255 : value;
+    pixels[index + 1] = options.alphaMask ? 255 : value;
+    pixels[index + 2] = options.alphaMask ? 255 : value;
+    pixels[index + 3] = options.alphaMask ? value : 255;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean): Promise<string> => {
+  if (!invert) return maskDataUrl;
+  const mask = await loadCanvasImage(maskDataUrl);
+  const width = mask.naturalWidth || mask.width;
+  const height = mask.naturalHeight || mask.height;
+  if (!width || !height) return maskDataUrl;
+  return drawMaskImageData(mask, width, height, { invert })?.toDataURL('image/png') || maskDataUrl;
+};
+
+const compositeVisualEditResult = async (
+  sourceDataUrl: string,
+  generated: GeneratedImage,
+  selectedMaskDataUrl: string,
+  editOutsideSelection: boolean
+): Promise<GeneratedImage> => {
+  const [source, generatedImage, selectedMask] = await Promise.all([
+    loadCanvasImage(sourceDataUrl),
+    loadCanvasImage(generated.dataUrl),
+    loadCanvasImage(selectedMaskDataUrl)
+  ]);
+
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  if (!width || !height) return generated;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return generated;
+  ctx.drawImage(source, 0, 0, width, height);
+
+  const editCanvas = document.createElement('canvas');
+  editCanvas.width = width;
+  editCanvas.height = height;
+  const editCtx = editCanvas.getContext('2d');
+  if (!editCtx) return generated;
+  editCtx.drawImage(generatedImage, 0, 0, width, height);
+
+  const maskCanvas = drawMaskImageData(selectedMask, width, height, {
+    invert: editOutsideSelection,
+    alphaMask: true
+  });
+  if (!maskCanvas) return generated;
+
+  editCtx.globalCompositeOperation = 'destination-in';
+  editCtx.drawImage(maskCanvas, 0, 0);
+  ctx.drawImage(editCanvas, 0, 0);
+
+  return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
+};
+
 // Initialize Gemini service if gateway is authenticated
 const ensureServiceInitialized = (): boolean => {
   if (isGeminiServiceInitialized()) {
@@ -560,12 +657,25 @@ export function useGeneration(): UseGenerationReturn {
         throw new DOMException('Request aborted', 'AbortError');
       }
 
-      // Build prompt: use user-edited prompt (state.prompt) if set, else provided prompt, else auto-generate
-      let basePrompt = state.prompt?.trim() || options.prompt || (
-        state.mode === 'material-validation'
-          ? ''
-          : generatePrompt(state)
-      );
+      // Build prompt. Visual-edit always goes through the structured prompt generator so
+      // selection constraints and mask semantics cannot be bypassed by a freeform prompt.
+      let basePrompt = '';
+      if (state.mode === 'visual-edit') {
+        const visualPrompt = options.prompt?.trim() || state.workflow.visualPrompt;
+        basePrompt = generatePrompt({
+          ...state,
+          workflow: {
+            ...state.workflow,
+            visualPrompt
+          }
+        });
+      } else {
+        basePrompt = state.prompt?.trim() || options.prompt || (
+          state.mode === 'material-validation'
+            ? ''
+            : generatePrompt(state)
+        );
+      }
 
       // Translate user-entered prompts to English if needed
       // Note: Generated prompts from promptEngine are already in English
@@ -1539,12 +1649,22 @@ export function useGeneration(): UseGenerationReturn {
         if (abortSignal.aborted) {
           throw new DOMException('Request aborted', 'AbortError');
         }
-        const sourceImage = state.uploadedImage ? dataUrlToImageData(state.uploadedImage) : null;
+        const sourceImageUrl = state.uploadedImage;
+        const sourceImage = sourceImageUrl ? dataUrlToImageData(sourceImageUrl) : null;
         if (!sourceImage) {
           throw new Error('No source image available for visual edit.');
         }
-        const maskImage = state.workflow.visualSelectionMask
-          ? dataUrlToImageData(state.workflow.visualSelectionMask)
+        const activeVisualTool = state.workflow.activeTool;
+        const selectedMaskDataUrl = state.workflow.visualSelectionMask;
+        const shouldUseSelectionMask = Boolean(selectedMaskDataUrl) &&
+          activeVisualTool !== 'extend' &&
+          !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
+        const editOutsideSelection = activeVisualTool === 'background';
+        const editableMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl
+          ? await createEditableMaskDataUrl(selectedMaskDataUrl, editOutsideSelection)
+          : null;
+        const maskImage = editableMaskDataUrl
+          ? dataUrlToImageData(editableMaskDataUrl)
           : null;
 
         const editTypeMap: Record<string, ImageEditRequest['editType']> = {
@@ -1559,7 +1679,7 @@ export function useGeneration(): UseGenerationReturn {
           adjust: 'enhance',
           extend: 'outpaint',
         };
-        const editType = editTypeMap[state.workflow.activeTool] || 'replace';
+        const editType = editTypeMap[activeVisualTool] || 'replace';
 
         result = await runWithRetry('image edit', () => service.editImage({
           sourceImage,
@@ -1568,6 +1688,17 @@ export function useGeneration(): UseGenerationReturn {
           editType,
           generationConfig: generationConfigWithAbort
         }));
+
+        if (shouldUseSelectionMask && selectedMaskDataUrl && result.images?.length) {
+          result = {
+            ...result,
+            images: await Promise.all(
+              result.images.map((image) =>
+                compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection)
+              )
+            )
+          };
+        }
       } else if (isVideoMode) {
         updateProgress(10);
         const videoState = state.workflow.videoState;
