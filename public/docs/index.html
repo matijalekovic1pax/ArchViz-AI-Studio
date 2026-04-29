@@ -493,6 +493,283 @@
       100% { box-shadow: 0 0 0 0px rgba(201,185,154,0); }
     }
 
+    /* Documentation assistant */
+    .doc-chat-launcher {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 120;
+      height: 46px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      border: 1px solid rgba(26,26,26,0.12);
+      border-radius: 999px;
+      background: #1A1A1A;
+      color: #FFFFFF;
+      font: 700 12px/1 var(--font);
+      box-shadow: 0 12px 38px rgba(0,0,0,0.18);
+      cursor: pointer;
+      transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+    }
+    .doc-chat-launcher:hover { transform: translateY(-1px); box-shadow: 0 16px 42px rgba(0,0,0,0.22); }
+    .doc-chat-launcher svg { flex-shrink: 0; }
+
+    .doc-chat-panel {
+      position: fixed;
+      right: 22px;
+      bottom: 82px;
+      z-index: 130;
+      width: min(420px, calc(100vw - 32px));
+      height: min(680px, calc(100vh - 112px));
+      display: none;
+      grid-template-rows: auto auto 1fr auto;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.18);
+      overflow: hidden;
+      backdrop-filter: blur(18px);
+    }
+    .doc-chat-panel.open {
+      display: grid;
+      animation: chat-enter 180ms ease-out both;
+    }
+    @keyframes chat-enter {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .doc-chat-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: linear-gradient(180deg, #FFFFFF 0%, #FAFAF8 100%);
+    }
+    .doc-chat-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .doc-chat-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #E7F0FF;
+      color: #1D4ED8;
+      border: 1px solid #C7DAFF;
+      flex-shrink: 0;
+    }
+    .doc-chat-title strong {
+      display: block;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.2;
+    }
+    .doc-chat-title span {
+      display: block;
+      color: var(--fg-muted);
+      font-size: 11px;
+      line-height: 1.4;
+      margin-top: 2px;
+    }
+    .doc-chat-close {
+      width: 30px;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--fg-muted);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+    .doc-chat-close:hover { background: var(--surface-sunken); color: var(--fg); border-color: var(--border); }
+
+    .doc-chat-context {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #F8FAFC;
+      border-bottom: 1px solid #E2E8F0;
+      color: #475569;
+      font-size: 11px;
+    }
+    .doc-chat-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .doc-chat-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22C55E;
+      box-shadow: 0 0 0 3px rgba(34,197,94,0.12);
+      flex-shrink: 0;
+    }
+    .doc-chat-model {
+      font-family: var(--mono);
+      color: #64748B;
+      white-space: nowrap;
+    }
+
+    .doc-chat-messages {
+      overflow-y: auto;
+      padding: 14px;
+      background:
+        linear-gradient(180deg, rgba(248,250,252,0.72), rgba(255,255,255,0.92)),
+        var(--surface);
+    }
+    .doc-chat-message {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: flex-start;
+    }
+    .doc-chat-message.user { justify-content: flex-end; }
+    .doc-chat-bubble {
+      max-width: 88%;
+      border-radius: 13px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      line-height: 1.55;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg-secondary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .doc-chat-message.user .doc-chat-bubble {
+      background: #1D4ED8;
+      border-color: #1D4ED8;
+      color: #FFFFFF;
+      box-shadow: 0 8px 22px rgba(29,78,216,0.18);
+    }
+    .doc-chat-bubble strong { color: inherit; font-weight: 700; }
+    .doc-chat-bubble a {
+      color: #1D4ED8;
+      font-weight: 700;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(29,78,216,0.28);
+    }
+    .doc-chat-bubble a:hover { border-bottom-color: currentColor; }
+    .doc-chat-message.user .doc-chat-bubble a { color: #FFFFFF; border-bottom-color: rgba(255,255,255,0.45); }
+    .doc-chat-meta {
+      margin-top: 7px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .doc-chat-source {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: #EFF6FF;
+      color: #1D4ED8;
+      border: 1px solid #BFDBFE;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .doc-chat-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 2px 0 13px;
+    }
+    .doc-chat-chip {
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid #D8E2F2;
+      border-radius: 999px;
+      background: #FFFFFF;
+      color: #334155;
+      font: 600 11px/1 var(--font);
+      cursor: pointer;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
+    }
+    .doc-chat-chip:hover { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+
+    .doc-chat-typing {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 11px 12px;
+    }
+    .doc-chat-typing span {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: #94A3B8;
+      animation: typing-dot 900ms ease-in-out infinite;
+    }
+    .doc-chat-typing span:nth-child(2) { animation-delay: 120ms; }
+    .doc-chat-typing span:nth-child(3) { animation-delay: 240ms; }
+    @keyframes typing-dot {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+      40% { transform: translateY(-3px); opacity: 1; }
+    }
+
+    .doc-chat-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      background: #FFFFFF;
+    }
+    .doc-chat-input {
+      min-height: 42px;
+      max-height: 120px;
+      resize: none;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: 13px/1.45 var(--font);
+      color: var(--fg);
+      background: var(--surface-sunken);
+      outline: none;
+      transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+    }
+    .doc-chat-input:focus {
+      border-color: #93C5FD;
+      background: #FFFFFF;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    }
+    .doc-chat-send {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #1D4ED8;
+      border-radius: 12px;
+      background: #1D4ED8;
+      color: #FFFFFF;
+      cursor: pointer;
+      transition: background var(--transition), transform var(--transition), opacity var(--transition);
+    }
+    .doc-chat-send:hover { background: #1E40AF; transform: translateY(-1px); }
+    .doc-chat-send:disabled { cursor: not-allowed; opacity: 0.55; transform: none; }
+
     /* Load animation */
     @keyframes fade-up {
       from { opacity: 0; transform: translateY(6px); }
@@ -509,6 +786,14 @@
       .search-input { width: 150px; }
       .shortcut-grid { grid-template-columns: 1fr; }
       .plans-grid { grid-template-columns: 1fr 1fr; }
+      .doc-chat-panel {
+        right: 10px;
+        bottom: 76px;
+        width: calc(100vw - 20px);
+        height: min(650px, calc(100vh - 92px));
+      }
+      .doc-chat-launcher { right: 14px; bottom: 14px; }
+      .doc-chat-model { display: none; }
     }
   </style>
 </head>
@@ -552,6 +837,7 @@
     <div class="nav-divider"></div>
     <div class="nav-section-label">Generation modes</div>
     <a class="nav-item" href="#mode-render-3d"><span class="nav-dot"></span>3D Rendering<span class="nav-mode-tag tag-free">Free</span></a>
+    <a class="nav-item" href="#mode-scene-compose"><span class="nav-dot"></span>Scene Compose<span class="nav-mode-tag tag-free">Free</span></a>
     <a class="nav-item" href="#mode-render-cad"><span class="nav-dot"></span>CAD to Render<span class="nav-mode-tag tag-free">Free</span></a>
     <a class="nav-item" href="#mode-render-sketch"><span class="nav-dot"></span>Sketch to Render<span class="nav-mode-tag tag-free">Free</span></a>
     <a class="nav-item" href="#mode-generate-text"><span class="nav-dot"></span>Generate from Text<span class="nav-mode-tag tag-free">Free</span></a>
@@ -590,7 +876,7 @@
       <h1>ArcVisAI Studio</h1>
       <p>AI-powered architectural visualization — from concept sketch to photorealistic render, CAD drawing, video walkthrough, and more. Everything you need to get the most out of the platform.</p>
       <div class="hero-stats">
-        <div class="hero-stat"><div class="hero-stat-num">17</div><div class="hero-stat-label">Generation modes</div></div>
+        <div class="hero-stat"><div class="hero-stat-num">18</div><div class="hero-stat-label">Generation modes</div></div>
         <div class="hero-stat"><div class="hero-stat-num">3</div><div class="hero-stat-label">Plan tiers</div></div>
         <div class="hero-stat"><div class="hero-stat-num">30+</div><div class="hero-stat-label">Arch. styles</div></div>
         <div class="hero-stat"><div class="hero-stat-num">4K</div><div class="hero-stat-label">Max resolution</div></div>
@@ -604,6 +890,7 @@
       <div class="section-lead">A full visualization pipeline in one tool — generate, edit, translate, and export without leaving the browser.</div>
       <div class="card-grid">
         <div class="card"><div class="card-icon">🏛️</div><div class="card-title">Photo-quality renders</div><div class="card-desc">Transform 3D models, sketches, and CAD files into atmospheric renders.</div></div>
+        <div class="card"><div class="card-icon">🧩</div><div class="card-title">Scene composition</div><div class="card-desc">Place reference furniture, fixtures, landscape, or decor into a locked base scene.</div></div>
         <div class="card"><div class="card-icon">✏️</div><div class="card-title">AI visual editing</div><div class="card-desc">Brush over any part of your image and describe the change.</div></div>
         <div class="card"><div class="card-icon">🎬</div><div class="card-title">Video walkthroughs</div><div class="card-desc">Generate fly-through videos from a single still render.</div></div>
         <div class="card"><div class="card-icon">📐</div><div class="card-title">CAD output</div><div class="card-desc">Extract SVG/DXF technical drawings from any photograph.</div></div>
@@ -621,7 +908,7 @@
       <div class="section-lead">From sign-up to rendered image in four steps.</div>
       <div class="steps">
         <div class="step"><div class="step-num">1</div><div><div class="step-title">Sign in</div><div class="step-desc">Log in with your Google account. No installation needed — everything runs in the browser.</div></div></div>
-        <div class="step"><div class="step-num">2</div><div><div class="step-title">Choose a mode</div><div class="step-desc">Select a generation mode from the top bar. Start with <strong>3D Rendering</strong> or <strong>Generate from Text</strong>.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div><div class="step-title">Choose a mode</div><div class="step-desc">Select a generation mode from the top bar. Start with <strong>3D Rendering</strong>, <strong>Scene Compose</strong>, or <strong>Generate from Text</strong>.</div></div></div>
         <div class="step"><div class="step-num">3</div><div><div class="step-title">Upload &amp; configure</div><div class="step-desc">Drag your image onto the canvas. Set style, lighting, and camera angle in the left panel. Click Generate.</div></div></div>
         <div class="step"><div class="step-num">4</div><div><div class="step-title">Download or iterate</div><div class="step-desc">Save as PNG or JPG from the top bar, or pass the result into another mode to keep refining.</div></div></div>
       </div>
@@ -660,7 +947,7 @@
 
     <div class="doc-section">
       <div class="section-eyebrow">Generation modes</div>
-      <div class="section-title">All 17 modes</div>
+      <div class="section-title">All 18 modes</div>
       <div class="section-lead">Each mode is a specialized pipeline with its own inputs, controls, and output type.</div>
     </div>
 
@@ -689,6 +976,36 @@
           <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Consistent camera.</strong> Match the camera angle in your 3D tool with the mode setting for the most predictable result.</div></div>
           <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Problem-area tool.</strong> Mark messy geometry sections before generating — the engine compensates in its preprocessing pass.</div></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Scene Compose -->
+    <div class="doc-section" id="mode-scene-compose">
+      <div class="mode-header">
+        <div class="mode-icon-lg">🧩</div>
+        <div class="mode-meta"><div class="mode-title">Scene Compose</div><div class="mode-desc">Adds custom reference objects into a locked architectural scene with realistic scale, shadows, occlusion, and lighting.</div></div>
+        <span class="mode-badge badge-free">Free</span>
+      </div>
+      <div class="prose">
+        <p>Use Scene Compose when the architecture is already right, but the scene needs specific furniture, fixtures, vehicles, planting, art, products, or decor. The first uploaded image is treated as the base scene. Additional reference photos become an insertion stack that the model uses as visual guidance.</p>
+        <h3>How it works</h3>
+        <table class="settings-table">
+          <thead><tr><th>Control</th><th>Purpose</th><th>Best practice</th></tr></thead>
+          <tbody>
+            <tr><td>Base scene</td><td>The source architectural image to preserve</td><td>Use a clean 3D screenshot or render with the camera, perspective, and architecture already approved</td></tr>
+            <tr><td>Reference photos</td><td>Objects or elements to insert into the scene</td><td>Upload up to 20 images; crop each reference around the object when possible</td></tr>
+            <tr><td>Captions</td><td>Tell the model what to use from each reference and how it should appear</td><td>Write short placement intent, e.g. <code>Place this lounge chair by the window, angled toward the table</code></td></tr>
+            <tr><td>Canvas pins</td><td>Anchor a reference to a normalized point on the base image</td><td>Click <strong>Place On Canvas</strong>, then click the target contact point in the canvas</td></tr>
+            <tr><td>Source type</td><td>Defines the base image origin: Rhino, Revit, SketchUp, Blender, clay, and more</td><td>Pick the closest source so geometry preservation instructions match the input</td></tr>
+            <tr><td>View type</td><td>Exterior, interior, or aerial</td><td>Set this before generating so inserted elements match scale and spatial logic</td></tr>
+          </tbody>
+        </table>
+        <div class="tip-list">
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Caption every reference.</strong> Captions remove ambiguity when a photo contains multiple objects or a product shown in a different context.</div></div>
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Use pins for exact placement.</strong> Pins are treated as internal guidance and are never rendered as visible markers in the final image.</div></div>
+          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Protect the architecture.</strong> Scene Compose preserves the base camera, perspective, structural geometry, and spatial layout; use Visual Edit for changing walls, materials, or facade elements.</div></div>
+        </div>
+        <div class="info-box note"><span class="info-icon">ℹ️</span><span>Scene Compose is ideal for staging and product placement. If you need to remove or replace part of the original image, switch to Visual Edit and use a tight mask instead.</span></div>
       </div>
     </div>
 
@@ -1039,7 +1356,7 @@
           <div class="plan-price">€49<span>/mo</span></div>
           <div class="plan-credits">2,000 credits / month</div>
           <ul class="plan-features">
-            <li>All 17 modes</li>
+            <li>All 18 modes</li>
             <li>Up to 4K resolution</li>
             <li>Priority generation</li>
             <li>Video Studio access</li>
@@ -1090,6 +1407,7 @@
       <div class="section-title">Tips &amp; tricks</div>
       <div class="tip-list">
         <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Chain modes together.</strong> 3D Rendering → Visual Edit → Upscale. Results compound significantly at each step.</div></div>
+        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Stage after approval.</strong> Use Scene Compose after the base render is approved, then add reference furniture, planting, lighting fixtures, or vehicles with captions and placement pins.</div></div>
         <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Draft at 1K, deliver at 4K.</strong> Iterate cheaply at 1K until you're happy with composition and style, then re-run at 4K for the final output.</div></div>
         <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Describe the photo, not just the building.</strong> "Late afternoon golden light, street-level 35mm shot, slight lens flare" produces more atmosphere than a pure architectural description.</div></div>
         <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>White clay renders = best 3D results.</strong> Export with no textures on a white background. The AI reads geometry most accurately from clean clay models.</div></div>
@@ -1101,6 +1419,51 @@
     </div>
 
   </main>
+
+  <button class="doc-chat-launcher" id="docChatLauncher" type="button" aria-expanded="false" aria-controls="docChatPanel">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
+    Ask the manual
+  </button>
+
+  <section class="doc-chat-panel" id="docChatPanel" aria-label="Documentation assistant">
+    <div class="doc-chat-head">
+      <div class="doc-chat-title">
+        <div class="doc-chat-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L20 11l-6.1 2.3L12 19l-1.9-5.7L4 11l6.1-2.3L12 3z"/></svg>
+        </div>
+        <div>
+          <strong>Documentation Assistant</strong>
+          <span>Ask how to use ArcVisAI Studio, including Scene Compose.</span>
+        </div>
+      </div>
+      <button class="doc-chat-close" id="docChatClose" type="button" aria-label="Close documentation assistant">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="doc-chat-context">
+      <div class="doc-chat-status"><span class="doc-chat-status-dot" id="docChatStatusDot"></span><span id="docChatStatus">Manual connected</span></div>
+      <div class="doc-chat-model" id="docChatModel">gemini-3.1-pro-preview</div>
+    </div>
+    <div class="doc-chat-messages" id="docChatMessages" role="log" aria-live="polite">
+      <div class="doc-chat-message assistant">
+        <div class="doc-chat-bubble">
+          I can answer from this manual, jump you to relevant sections, and help choose the right workflow. Try one of these:
+        </div>
+      </div>
+      <div class="doc-chat-suggestions" id="docChatSuggestions">
+        <button class="doc-chat-chip" type="button" data-prompt="How do I use Scene Compose with placement pins?">Scene Compose pins</button>
+        <button class="doc-chat-chip" type="button" data-prompt="Can I add furniture to an existing render without changing the architecture?">Add furniture</button>
+        <button class="doc-chat-chip" type="button" data-prompt="Which mode should I use for a CAD floor plan?">Pick a mode</button>
+        <button class="doc-chat-chip" type="button" data-prompt="What is the best workflow for a final presentation render?">Final render workflow</button>
+      </div>
+    </div>
+    <form class="doc-chat-form" id="docChatForm">
+      <textarea class="doc-chat-input" id="docChatInput" rows="1" placeholder="Ask the documentation..." autocomplete="off"></textarea>
+      <button class="doc-chat-send" id="docChatSend" type="submit" aria-label="Send question">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      </button>
+    </form>
+  </section>
 </div>
 
 <script>
@@ -1110,6 +1473,7 @@
     { id: 'getting-started',    icon: '🚀', title: 'Quick start',           section: 'Getting started',  kw: 'quick start first render login sign in upload' },
     { id: 'interface',          icon: '🖥️', title: 'Interface layout',      section: 'Getting started',  kw: 'interface layout sidebar topbar canvas panel zones workspace' },
     { id: 'mode-render-3d',     icon: '🏛️', title: '3D Rendering',          section: 'Modes',            kw: '3d render model screenshot blender sketchup rhino revit clay' },
+    { id: 'mode-scene-compose', icon: '🧩', title: 'Scene Compose',         section: 'Modes',            kw: 'scene compose custom insertions reference photos furniture elements captions placement pins base scene locked architecture' },
     { id: 'mode-render-cad',    icon: '📐', title: 'CAD to Render',         section: 'Modes',            kw: 'cad drawing floor plan elevation section technical linework' },
     { id: 'mode-render-sketch', icon: '✏️', title: 'Sketch to Render',      section: 'Modes',            kw: 'sketch hand drawn concept pencil freehand' },
     { id: 'mode-generate-text', icon: '💬', title: 'Generate from Text',    section: 'Modes',            kw: 'text prompt describe no image generate text concept' },
@@ -1207,6 +1571,318 @@
       if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
   });
+
+  // Documentation assistant
+  const DOCS_CHAT_REQUESTED_MODEL = 'gemini-3.1-pro-preview';
+  const DOCS_CHAT_FALLBACK_MODEL = 'gemini-3-pro-preview';
+  const DOCS_CHAT_PRODUCTION_GATEWAY = 'https://archviz-api-gateway.matija-lekovic.workers.dev';
+  const DOCS_CHAT_SESSION_KEY = 'archviz_jwt';
+
+  const chatLauncher = document.getElementById('docChatLauncher');
+  const chatPanel = document.getElementById('docChatPanel');
+  const chatClose = document.getElementById('docChatClose');
+  const chatMessages = document.getElementById('docChatMessages');
+  const chatForm = document.getElementById('docChatForm');
+  const chatInput = document.getElementById('docChatInput');
+  const chatSend = document.getElementById('docChatSend');
+  const chatStatus = document.getElementById('docChatStatus');
+  const chatStatusDot = document.getElementById('docChatStatusDot');
+  const chatModel = document.getElementById('docChatModel');
+  const chatSuggestions = document.getElementById('docChatSuggestions');
+  const chatHistory = [];
+
+  function getDocsGatewayUrl() {
+    const configured = window.AVAS_GATEWAY_URL || localStorage.getItem('archviz_gateway_url');
+    if (configured) return String(configured).replace(/\/+$/, '');
+    const isLocal = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
+    return isLocal ? 'http://localhost:8787' : DOCS_CHAT_PRODUCTION_GATEWAY;
+  }
+
+  function getDocsGatewayToken() {
+    try {
+      const stored = sessionStorage.getItem(DOCS_CHAT_SESSION_KEY);
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      if (parsed?.token && Number(parsed.expiresAt) > Date.now()) return parsed.token;
+      sessionStorage.removeItem(DOCS_CHAT_SESSION_KEY);
+    } catch {}
+    return null;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function renderAssistantText(text) {
+    let safe = escapeHtml(text.trim());
+    safe = safe.replace(/\[([^\]]+)\]\((#[a-z0-9-]+)\)/gi, (match, label, href) => {
+      const targetId = href.slice(1);
+      return document.getElementById(targetId)
+        ? `<a href="${href}" data-chat-anchor>${label}</a>`
+        : label;
+    });
+    safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
+    safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    safe = safe.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+    return safe;
+  }
+
+  function setChatStatus(text, tone = 'ready') {
+    chatStatus.textContent = text;
+    const colors = {
+      ready: ['#22C55E', 'rgba(34,197,94,0.12)'],
+      busy: ['#2563EB', 'rgba(37,99,235,0.14)'],
+      warn: ['#F59E0B', 'rgba(245,158,11,0.16)'],
+      error: ['#EF4444', 'rgba(239,68,68,0.14)'],
+    };
+    const [bg, glow] = colors[tone] || colors.ready;
+    chatStatusDot.style.background = bg;
+    chatStatusDot.style.boxShadow = `0 0 0 3px ${glow}`;
+  }
+
+  function openChat() {
+    chatPanel.classList.add('open');
+    chatLauncher.setAttribute('aria-expanded', 'true');
+    setTimeout(() => chatInput.focus(), 80);
+  }
+
+  function closeChat() {
+    chatPanel.classList.remove('open');
+    chatLauncher.setAttribute('aria-expanded', 'false');
+  }
+
+  function scrollChatToEnd() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function appendChatMessage(role, text, sources = []) {
+    const row = document.createElement('div');
+    row.className = `doc-chat-message ${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'doc-chat-bubble';
+    if (role === 'assistant') {
+      bubble.innerHTML = renderAssistantText(text);
+      if (sources.length) {
+        const meta = document.createElement('div');
+        meta.className = 'doc-chat-meta';
+        sources.forEach((source) => {
+          const link = document.createElement('a');
+          link.className = 'doc-chat-source';
+          link.href = `#${source.id}`;
+          link.textContent = source.title;
+          link.dataset.chatAnchor = 'true';
+          meta.appendChild(link);
+        });
+        bubble.appendChild(meta);
+      }
+    } else {
+      bubble.textContent = text;
+    }
+    row.appendChild(bubble);
+    chatMessages.appendChild(row);
+    scrollChatToEnd();
+    return row;
+  }
+
+  function appendTypingIndicator() {
+    const row = document.createElement('div');
+    row.className = 'doc-chat-message assistant';
+    row.dataset.typing = 'true';
+    row.innerHTML = '<div class="doc-chat-bubble doc-chat-typing"><span></span><span></span><span></span></div>';
+    chatMessages.appendChild(row);
+    scrollChatToEnd();
+    return row;
+  }
+
+  function getManualText() {
+    const mainText = document.getElementById('main')?.innerText || '';
+    const indexText = searchIndex.map((item) => `${item.title} (#${item.id}) - ${item.section}. Keywords: ${item.kw}`).join('\n');
+    return [
+      'Manual search index:',
+      indexText,
+      '',
+      'Manual body:',
+      mainText.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    ].join('\n');
+  }
+
+  function buildAssistantPrompt(question) {
+    const recent = chatHistory.slice(-8).map((message) => `${message.role.toUpperCase()}: ${message.content}`).join('\n');
+    return [
+      'You are the ArcVisAI Studio Documentation Assistant.',
+      'Answer only from the documentation context below. If the manual does not say something, say that the manual does not specify it and offer the closest documented workflow.',
+      'Keep answers practical and concise. Use numbered steps for procedures. When a feature can or cannot do something, say so directly.',
+      'When relevant, include one or two markdown links to manual anchors using the exact anchor ids from the search index, for example [Scene Compose](#mode-scene-compose).',
+      'Scene Compose facts that must be preserved: it uses a locked base scene, up to 20 insertion reference photos, captions for each reference, optional canvas placement pins, and it should not redesign architecture.',
+      '',
+      'DOCUMENTATION CONTEXT',
+      getManualText(),
+      '',
+      'RECENT CHAT',
+      recent || 'No previous messages.',
+      '',
+      `USER QUESTION: ${question}`
+    ].join('\n');
+  }
+
+  function extractGeminiText(data) {
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.map((part) => part.text || '').join('').trim();
+    return text || 'I could not find a text answer in the model response. Try rephrasing the question.';
+  }
+
+  function shouldFallbackModel(errorText) {
+    const msg = String(errorText || '').toLowerCase();
+    return msg.includes('not found') ||
+      msg.includes('not supported') ||
+      msg.includes('invalid') ||
+      msg.includes('model') ||
+      msg.includes('404') ||
+      msg.includes('400');
+  }
+
+  async function requestDocsAnswer(question) {
+    const token = getDocsGatewayToken();
+    if (!token) {
+      throw new Error('Your documentation chat session is not signed in. Go back to the app, sign in, then reopen the manual.');
+    }
+
+    const gatewayUrl = getDocsGatewayUrl();
+    const body = {
+      contents: [{ role: 'user', parts: [{ text: buildAssistantPrompt(question) }] }],
+      generationConfig: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxOutputTokens: 1400,
+        responseModalities: ['TEXT'],
+        thinkingConfig: { thinkingLevel: 'low' }
+      }
+    };
+
+    const models = [DOCS_CHAT_REQUESTED_MODEL, DOCS_CHAT_FALLBACK_MODEL];
+    let lastError = '';
+
+    for (const model of models) {
+      chatModel.textContent = model;
+      const response = await fetch(`${gatewayUrl}/api/gemini/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { text: extractGeminiText(data), model };
+      }
+
+      lastError = await response.text().catch(() => `Request failed (${response.status})`);
+      if (model === DOCS_CHAT_REQUESTED_MODEL && shouldFallbackModel(lastError)) continue;
+      break;
+    }
+
+    throw new Error(lastError || 'The documentation assistant could not reach Gemini.');
+  }
+
+  function findRelevantSources(question, answer) {
+    const haystack = `${question} ${answer}`.toLowerCase();
+    return searchIndex
+      .map((item) => {
+        const titleWords = item.title.toLowerCase().split(/\s+/);
+        const keywordWords = item.kw.toLowerCase().split(/\s+/);
+        let score = 0;
+        if (haystack.includes(item.title.toLowerCase())) score += 8;
+        titleWords.forEach((word) => { if (word.length > 2 && haystack.includes(word)) score += 2; });
+        keywordWords.forEach((word) => { if (word.length > 3 && haystack.includes(word)) score += 1; });
+        return { ...item, score };
+      })
+      .filter((item) => item.score > 2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+  }
+
+  async function handleDocsQuestion(rawQuestion) {
+    const question = rawQuestion.trim();
+    if (!question) return;
+
+    openChat();
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    chatSend.disabled = true;
+    appendChatMessage('user', question);
+    chatHistory.push({ role: 'user', content: question });
+    const typing = appendTypingIndicator();
+    setChatStatus('Asking Gemini with manual context...', 'busy');
+
+    try {
+      const { text, model } = await requestDocsAnswer(question);
+      typing.remove();
+      const sources = findRelevantSources(question, text);
+      appendChatMessage('assistant', text, sources);
+      chatHistory.push({ role: 'assistant', content: text });
+      setChatStatus(model === DOCS_CHAT_REQUESTED_MODEL ? 'Manual connected' : 'Manual connected with supported model', 'ready');
+    } catch (error) {
+      typing.remove();
+      const message = error?.message || 'The documentation assistant is unavailable right now.';
+      appendChatMessage('assistant', message, [{ id: 'overview', title: 'Overview' }]);
+      setChatStatus('Needs attention', 'error');
+    } finally {
+      chatSend.disabled = false;
+      chatInput.focus();
+    }
+  }
+
+  chatLauncher.addEventListener('click', () => {
+    chatPanel.classList.contains('open') ? closeChat() : openChat();
+  });
+  chatClose.addEventListener('click', closeChat);
+
+  chatForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    handleDocsQuestion(chatInput.value);
+  });
+
+  chatInput.addEventListener('input', () => {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = `${Math.min(chatInput.scrollHeight, 120)}px`;
+  });
+
+  chatInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      chatForm.requestSubmit();
+    }
+    if (event.key === 'Escape') closeChat();
+  });
+
+  chatSuggestions.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-prompt]');
+    if (chip) handleDocsQuestion(chip.dataset.prompt || chip.textContent || '');
+  });
+
+  chatMessages.addEventListener('click', (event) => {
+    const anchor = event.target.closest('a[data-chat-anchor], a.doc-chat-source');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (!href || !href.startsWith('#')) return;
+    const target = document.querySelector(href);
+    if (!target) return;
+    event.preventDefault();
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.classList.add('highlight-target');
+    target.addEventListener('animationend', () => target.classList.remove('highlight-target'), { once: true });
+  });
+
+  if (!getDocsGatewayToken()) {
+    setChatStatus('Sign in required for chat', 'warn');
+  }
 </script>
 </body>
 </html>

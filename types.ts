@@ -1444,6 +1444,7 @@ export type Action =
   | { type: 'SET_STYLE'; payload: string }
   | { type: 'SET_IMAGE'; payload: string | null }
   | { type: 'SET_SOURCE_IMAGE'; payload: string | null }
+  | { type: 'CLEAR_CANVAS' }
   | { type: 'SET_GENERATING'; payload: boolean }
   | { type: 'SET_PROGRESS'; payload: number }
   | { type: 'UPDATE_WORKFLOW'; payload: Partial<WorkflowSettings> }
