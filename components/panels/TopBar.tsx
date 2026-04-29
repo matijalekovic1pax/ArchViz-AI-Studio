@@ -118,6 +118,15 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
 
+  const handleDocsNavigation = () => {
+    try {
+      const gatewayToken = sessionStorage.getItem('archviz_jwt');
+      if (gatewayToken) {
+        localStorage.setItem('archviz_docs_auth_handoff', gatewayToken);
+      }
+    } catch {}
+  };
+
   // Video mode validation
   const videoReady = isVideoMode
     ? (() => {
@@ -610,8 +619,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               )}
               <a
                 href="/docs/"
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={handleDocsNavigation}
                 className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
                 title="User Manual"
               >
@@ -1607,8 +1615,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           
           <a
             href="/docs/"
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={handleDocsNavigation}
             className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-elevated rounded-full transition-colors"
             title="User Manual"
           >

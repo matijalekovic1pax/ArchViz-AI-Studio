@@ -30,6 +30,7 @@ import { isGatewayAuthenticated } from '../services/apiGateway';
 import { isConvertApiConfigured } from '../services/convertApiService';
 import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
+import { getMaterialById } from '../lib/materialCatalog';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
@@ -87,6 +88,24 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean): 
   const height = mask.naturalHeight || mask.height;
   if (!width || !height) return maskDataUrl;
   return drawMaskImageData(mask, width, height, { invert })?.toDataURL('image/png') || maskDataUrl;
+};
+
+const materialPreviewToImageData = async (previewUrl: string): Promise<ImageData | null> => {
+  try {
+    const preview = await loadCanvasImage(previewUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+    return ImageUtils.dataUrlToImageData(canvas.toDataURL('image/png'));
+  } catch {
+    return null;
+  }
 };
 
 const compositeVisualEditResult = async (
@@ -1680,10 +1699,17 @@ export function useGeneration(): UseGenerationReturn {
           extend: 'outpaint',
         };
         const editType = editTypeMap[activeVisualTool] || 'replace';
+        const materialReference = activeVisualTool === 'material'
+          ? getMaterialById(state.workflow.visualMaterial.materialId)
+          : null;
+        const materialReferenceImage = materialReference
+          ? await materialPreviewToImageData(materialReference.previewUrl)
+          : null;
 
         result = await runWithRetry('image edit', () => service.editImage({
           sourceImage,
           maskImage: maskImage || undefined,
+          referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
           prompt: basePrompt,
           editType,
           generationConfig: generationConfigWithAbort

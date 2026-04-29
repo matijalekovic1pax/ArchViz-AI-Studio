@@ -1,1888 +1,1075 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ArcVisAI Studio — User Manual</title>
-  <meta name="description" content="Complete user guide for ArcVisAI Studio — AI-powered architectural visualization platform.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArchViz AI Studio — Documentation</title>
+  <meta name="description" content="ArchViz AI Studio documentation, feature guide, and documentation assistant." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:            #FAFAF8;
-      --bg-secondary:  #F5F5F3;
-      --bg-tertiary:   #EEEDE9;
-      --surface:       #FFFFFF;
-      --surface-sunken:#F0F0EC;
-      --fg:            #1A1A1A;
-      --fg-secondary:  #4A4A4A;
-      --fg-muted:      #8A8A8A;
-      --fg-subtle:     #B0B0B0;
-      --border:        #E5E5E0;
-      --border-subtle: #EFEFEA;
-      --border-strong: #D0D0C8;
-      --accent:        #C9B99A;
-      --accent-hover:  #B8A687;
-      --accent-muted:  #E8E0D0;
-      --sidebar-w:     260px;
-      --header-h:      56px;
-      --font:          'Inter', system-ui, sans-serif;
-      --mono:          'JetBrains Mono', monospace;
-      --radius:        8px;
-      --radius-lg:     12px;
-      --shadow-subtle: 0 1px 2px rgba(0,0,0,0.04);
-      --shadow-elevated: 0 8px 32px rgba(0,0,0,0.10);
-      --transition:    160ms cubic-bezier(.4,0,.2,1);
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --surface-soft: #f1f2ee;
+      --surface-warm: #ebe4d7;
+      --surface-cool: #edf4ff;
+      --ink: #171717;
+      --ink-soft: #444642;
+      --ink-muted: #777970;
+      --line: #deded7;
+      --line-strong: #c9c8bd;
+      --accent: #1d4ed8;
+      --accent-soft: #dbeafe;
+      --gold: #b69f72;
+      --green: #15803d;
+      --orange: #c26718;
+      --red: #dc2626;
+      --sidebar: 280px;
+      --header: 64px;
+      --radius: 8px;
+      --shadow: 0 14px 42px rgba(23, 23, 23, 0.11);
+      --font: "Inter", system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --ease: 160ms cubic-bezier(.4,0,.2,1);
     }
-
-    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 20px); }
-
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header) + 20px); }
     body {
+      min-height: 100vh;
       background: var(--bg);
-      color: var(--fg);
+      color: var(--ink);
       font-family: var(--font);
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.58;
       -webkit-font-smoothing: antialiased;
     }
+    a { color: inherit; }
+    button, input, textarea, select { font: inherit; }
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-thumb { background: #c8c8bf; border-radius: 999px; }
 
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
-
-    /* Layout */
-    .app-shell {
-      display: grid;
-      grid-template-rows: var(--header-h) 1fr;
-      grid-template-columns: var(--sidebar-w) 1fr;
-      grid-template-areas: "header header" "sidebar main";
+    .shell {
       min-height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      grid-template-rows: var(--header) 1fr;
+      grid-template-areas: "header header" "nav main";
     }
-
-    /* Header */
-    .header {
+    .topbar {
       grid-area: header;
-      height: var(--header-h);
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
       position: sticky;
       top: 0;
       z-index: 50;
-      box-shadow: var(--shadow-subtle);
+      height: var(--header);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 0 18px;
+      background: rgba(255,255,255,0.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(16px);
     }
-
-    .header-left { display: flex; align-items: center; gap: 10px; }
-
-    .logo-mark {
-      width: 32px; height: 32px;
-      background: var(--fg);
-      border-radius: var(--radius);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 220px; }
+    .brand-mark {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: var(--ink); color: white;
+      display: grid; place-items: center;
+      font-weight: 800; font-size: 11px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.18);
     }
-    .logo-mark span { color: var(--surface); font-weight: 700; font-size: 11px; letter-spacing: -0.3px; }
-
-    .logo-text { display: flex; flex-direction: column; }
-    .logo-name { font-size: 12px; font-weight: 700; color: var(--fg); line-height: 1.2; }
-    .logo-sub  { font-size: 10px; color: var(--fg-muted); line-height: 1.2; }
-
-    .header-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
-
-    .header-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 8px;
-      background: var(--surface-sunken);
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      font-size: 10px; font-weight: 600; color: var(--fg-muted);
-      text-transform: uppercase; letter-spacing: 0.06em;
+    .brand-title { font-size: 13px; font-weight: 800; line-height: 1.1; }
+    .brand-subtitle { font-size: 11px; color: var(--ink-muted); line-height: 1.2; }
+    .top-actions { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .search { position: relative; width: min(360px, 34vw); }
+    .search input {
+      width: 100%; height: 38px; border: 1px solid var(--line);
+      border-radius: 999px; background: var(--surface-soft);
+      padding: 0 14px 0 38px; outline: none; color: var(--ink);
+      transition: background var(--ease), border-color var(--ease), box-shadow var(--ease);
     }
-
-    .header-right { display: flex; align-items: center; gap: 8px; }
-
-    .search-wrap { position: relative; }
-
-    .search-input {
-      width: 220px; height: 32px;
-      background: var(--surface-sunken);
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      padding: 0 12px 0 32px;
-      font-family: var(--font); font-size: 12px; color: var(--fg);
-      outline: none;
-      transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
-    }
-    .search-input:focus {
-      border-color: var(--accent);
-      background: var(--surface);
-      box-shadow: 0 0 0 3px rgba(201,185,154,0.15);
-    }
-    .search-input::placeholder { color: var(--fg-muted); }
-
-    .search-icon {
-      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-      color: var(--fg-muted); pointer-events: none;
-    }
-
-    .back-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 0 12px; height: 32px;
-      background: var(--surface-sunken);
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      font-size: 12px; font-weight: 500; color: var(--fg-secondary);
-      text-decoration: none;
-      transition: all var(--transition);
-    }
-    .back-btn:hover { background: var(--surface); border-color: var(--border-strong); color: var(--fg); }
-
-    /* Sidebar */
-    .sidebar {
-      grid-area: sidebar;
-      width: var(--sidebar-w);
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      position: sticky;
-      top: var(--header-h);
-      height: calc(100vh - var(--header-h));
-      overflow-y: auto;
-      padding: 16px 0;
-    }
-
-    .nav-section-label {
-      font-size: 9.5px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.08em;
-      color: var(--fg-muted);
-      padding: 8px 20px 4px;
-    }
-
-    .nav-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 12px;
-      margin: 0 8px;
-      border-radius: var(--radius);
-      font-size: 12.5px; font-weight: 500; color: var(--fg-secondary);
-      text-decoration: none;
-      transition: all var(--transition);
-    }
-    .nav-item:hover { background: var(--surface-sunken); color: var(--fg); }
-    .nav-item.active { background: var(--accent-muted); color: var(--fg); }
-    .nav-item.active .nav-dot { background: var(--accent-hover); }
-
-    .nav-dot {
-      width: 5px; height: 5px; border-radius: 50%;
-      background: var(--border-strong); flex-shrink: 0;
-      transition: background var(--transition);
-    }
-
-    .nav-divider { height: 1px; background: var(--border-subtle); margin: 8px 12px; }
-
-    .nav-mode-tag {
-      margin-left: auto;
-      font-size: 9px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.05em;
-      padding: 2px 6px; border-radius: 99px; flex-shrink: 0;
-    }
-    .tag-pro  { background: #FEF3C7; color: #92400E; }
-    .tag-free { background: var(--surface-sunken); color: var(--fg-muted); border: 1px solid var(--border); }
-
-    /* Main */
-    .main { grid-area: main; padding: 32px 40px 80px; max-width: 820px; }
-
-    .doc-section { margin-bottom: 48px; }
-
-    .section-eyebrow {
-      font-size: 10px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--fg-muted); margin-bottom: 5px;
-    }
-
-    .section-title {
-      font-size: 21px; font-weight: 700; color: var(--fg);
-      line-height: 1.25; margin-bottom: 8px; letter-spacing: -0.4px;
-    }
-
-    .section-lead {
-      font-size: 14px; color: var(--fg-secondary);
-      line-height: 1.7; margin-bottom: 20px; max-width: 580px;
-    }
-
-    /* Hero */
-    .hero {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 28px 32px;
-      margin-bottom: 40px;
-      position: relative; overflow: hidden;
-    }
-    .hero::before {
-      content: '';
-      position: absolute; top: 0; right: 0;
-      width: 300px; height: 300px;
-      background: radial-gradient(circle at top right, rgba(201,185,154,0.16) 0%, transparent 68%);
-      pointer-events: none;
-    }
-    .hero-tag {
-      display: inline-flex; align-items: center; gap: 5px;
-      padding: 3px 10px;
-      background: var(--accent-muted);
-      border: 1px solid var(--accent);
-      border-radius: 99px;
-      font-size: 10px; font-weight: 600; color: var(--accent-hover);
-      text-transform: uppercase; letter-spacing: 0.07em;
-      margin-bottom: 14px;
-    }
-    .hero h1 {
-      font-size: 26px; font-weight: 700; letter-spacing: -0.5px;
-      line-height: 1.2; margin-bottom: 10px; color: var(--fg);
-    }
-    .hero p {
-      font-size: 14px; color: var(--fg-secondary); line-height: 1.7;
-      max-width: 500px; margin-bottom: 20px;
-    }
-    .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; }
-    .hero-stat { display: flex; flex-direction: column; gap: 1px; }
-    .hero-stat-num { font-size: 18px; font-weight: 700; color: var(--fg); letter-spacing: -0.3px; }
-    .hero-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-muted); }
-
-    /* Cards */
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
-      gap: 10px; margin-bottom: 12px;
-    }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 16px;
-      transition: border-color var(--transition), box-shadow var(--transition);
-    }
-    .card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-subtle); }
-    .card-icon {
-      width: 32px; height: 32px;
-      background: var(--surface-sunken); border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: flex; align-items: center; justify-content: center;
-      margin-bottom: 10px; font-size: 14px;
-    }
-    .card-title { font-size: 12.5px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
-    .card-desc  { font-size: 11.5px; color: var(--fg-muted); line-height: 1.5; }
-
-    /* Mode header */
-    .mode-header {
-      display: flex; align-items: flex-start; gap: 14px;
-      padding: 18px 20px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); margin-bottom: 16px;
-    }
-    .mode-icon-lg {
-      width: 42px; height: 42px;
-      background: var(--surface-sunken); border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 19px; flex-shrink: 0;
-    }
-    .mode-meta { flex: 1; }
-    .mode-title { font-size: 16px; font-weight: 700; color: var(--fg); letter-spacing: -0.2px; margin-bottom: 3px; }
-    .mode-desc  { font-size: 13px; color: var(--fg-secondary); line-height: 1.55; }
-
-    .mode-badge {
-      font-size: 9.5px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      padding: 3px 8px; border-radius: 99px; flex-shrink: 0; white-space: nowrap;
-    }
-    .badge-free { background: var(--surface-sunken); border: 1px solid var(--border); color: var(--fg-muted); }
-    .badge-pro  { background: #FEF3C7; border: 1px solid #FDE68A; color: #92400E; }
-
-    /* Prose */
-    .prose h3 { font-size: 12.5px; font-weight: 700; color: var(--fg); margin: 18px 0 6px; }
-    .prose p   { font-size: 13.5px; color: var(--fg-secondary); line-height: 1.7; margin-bottom: 10px; }
-    .prose ul  { list-style: none; padding: 0; margin-bottom: 12px; }
-    .prose ul li {
-      font-size: 13px; color: var(--fg-secondary);
-      padding: 3px 0 3px 16px; position: relative; line-height: 1.55;
-    }
-    .prose ul li::before {
-      content: ''; position: absolute; left: 4px; top: 10px;
-      width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
-    }
-
-    /* Table */
-    .settings-table {
-      width: 100%; border-collapse: collapse;
-      font-size: 12.5px; margin-bottom: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-    }
-    .settings-table th {
-      text-align: left; padding: 8px 14px;
-      font-size: 10px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-muted);
-      background: var(--surface-sunken); border-bottom: 1px solid var(--border);
-    }
-    .settings-table td {
-      padding: 9px 14px;
-      border-bottom: 1px solid var(--border-subtle);
-      color: var(--fg-secondary); vertical-align: top;
-    }
-    .settings-table tr:last-child td { border-bottom: none; }
-    .settings-table td:first-child { font-weight: 600; color: var(--fg); }
-    .settings-table td code {
-      font-family: var(--mono); font-size: 11px;
-      background: var(--surface-sunken); border: 1px solid var(--border);
-      border-radius: 4px; padding: 1px 5px; color: var(--fg-secondary);
-    }
-
-    /* Info boxes */
-    .info-box {
-      display: flex; gap: 10px;
-      padding: 11px 14px; border-radius: var(--radius); border: 1px solid;
-      margin-bottom: 12px; font-size: 13px; line-height: 1.55;
-    }
-    .info-box.tip  { background: rgba(201,185,154,0.10); border-color: var(--accent);             color: var(--fg-secondary); }
-    .info-box.note { background: rgba(59,130,246,0.05);  border-color: rgba(59,130,246,0.22);     color: var(--fg-secondary); }
-    .info-box.warn { background: rgba(245,158,11,0.06);  border-color: rgba(245,158,11,0.28);     color: var(--fg-secondary); }
-    .info-icon { font-size: 14px; flex-shrink: 0; line-height: 1.4; }
-
-    /* Steps */
-    .steps { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
-    .step {
-      display: flex; gap: 12px; padding: 11px 14px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); align-items: flex-start;
-    }
-    .step-num {
-      width: 20px; height: 20px;
-      background: var(--fg); color: var(--surface);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
-    }
-    .step-title { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 2px; }
-    .step-desc  { font-size: 12.5px; color: var(--fg-muted); line-height: 1.5; }
-
-    /* Shortcuts */
-    .shortcut-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px;
-    }
-    .shortcut-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 12px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); font-size: 12px;
-    }
-    .shortcut-label { color: var(--fg-secondary); }
-    .kbd-combo { display: flex; align-items: center; gap: 3px; }
-    kbd {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 22px; height: 20px; padding: 0 5px;
-      background: var(--surface-sunken);
-      border: 1px solid var(--border-strong); border-bottom-width: 2px;
-      border-radius: 4px;
-      font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--fg-secondary);
-    }
-
-    /* Plans */
-    .plans-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-      gap: 10px; margin-bottom: 16px;
-    }
-    .plan-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 18px 16px;
-    }
-    .plan-card.featured {
-      border-color: var(--accent);
-      background: linear-gradient(135deg, rgba(201,185,154,0.07) 0%, var(--surface) 100%);
-    }
-    .plan-name    { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-muted); margin-bottom: 5px; }
-    .plan-price   { font-size: 22px; font-weight: 700; color: var(--fg); letter-spacing: -0.5px; margin-bottom: 2px; }
-    .plan-price span { font-size: 12px; font-weight: 500; color: var(--fg-muted); letter-spacing: 0; }
-    .plan-credits { font-size: 11.5px; color: var(--fg-secondary); margin-bottom: 10px; }
-    .plan-features { list-style: none; padding: 0; }
-    .plan-features li { font-size: 11.5px; color: var(--fg-secondary); padding: 2px 0 2px 14px; position: relative; }
-    .plan-features li::before { content: '✓'; position: absolute; left: 0; color: var(--accent-hover); font-size: 10px; font-weight: 700; }
-
-    /* Tips */
-    .tip-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
-    .tip-item {
-      display: flex; gap: 12px; padding: 11px 14px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); align-items: flex-start;
-      transition: border-color var(--transition);
-    }
-    .tip-item:hover { border-color: var(--border-strong); }
-    .tip-bullet { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
-    .tip-text { font-size: 13px; color: var(--fg-secondary); line-height: 1.55; }
-    .tip-text strong { color: var(--fg); font-weight: 600; }
-
-    /* Divider */
-    .section-divider { height: 1px; background: var(--border); margin: 32px 0; }
-
-    /* Interface diagram */
-    .interface-diagram {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 18px; margin-bottom: 18px;
-    }
-    .diagram-inner {
-      display: grid;
-      grid-template-columns: 76px 1fr 76px;
-      grid-template-rows: 30px 130px 38px;
-      gap: 4px;
-      font-size: 9.5px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.05em;
-    }
-    .diag-cell {
-      background: var(--surface-sunken); border: 1px solid var(--border);
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--fg-muted); text-align: center;
-      padding: 4px; line-height: 1.3;
-    }
-    .diag-header { grid-column: 1 / -1; background: var(--bg-tertiary); border-color: var(--border-strong); color: var(--fg-secondary); }
-    .diag-bottom { grid-column: 1 / -1; background: var(--bg-tertiary); border-color: var(--border-strong); color: var(--fg-secondary); }
-    .diag-canvas { background: var(--bg-secondary); border-style: dashed; color: var(--fg-secondary); }
-
-    /* Search results */
+    .search input:focus { background: var(--surface); border-color: #93b4ee; box-shadow: 0 0 0 4px rgba(29,78,216,0.1); }
+    .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ink-muted); }
     .search-results {
-      display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated);
-      max-height: 320px; overflow-y: auto; z-index: 100;
+      display: none; position: absolute; inset: calc(100% + 8px) 0 auto 0;
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; z-index: 80;
+      max-height: 420px; overflow-y: auto;
     }
     .search-results.open { display: block; }
-    .search-result-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 12px; cursor: pointer;
-      transition: background var(--transition);
-      border-bottom: 1px solid var(--border-subtle);
+    .search-hit {
+      display: grid; grid-template-columns: 28px 1fr; gap: 10px;
+      padding: 10px 12px; border-bottom: 1px solid #eeeeea;
+      cursor: pointer; transition: background var(--ease);
     }
-    .search-result-item:last-child { border-bottom: none; }
-    .search-result-item:hover { background: var(--surface-sunken); }
-    .search-result-item mark { background: var(--accent-muted); color: var(--fg); border-radius: 2px; padding: 0 2px; }
-    .result-icon {
-      width: 26px; height: 26px;
-      background: var(--surface-sunken); border: 1px solid var(--border);
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; flex-shrink: 0;
+    .search-hit:hover { background: var(--surface-soft); }
+    .search-hit:last-child { border-bottom: 0; }
+    .hit-icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--surface-soft); border: 1px solid var(--line); font-size: 14px; }
+    .hit-title { font-size: 12px; font-weight: 800; }
+    .hit-section { font-size: 11px; color: var(--ink-muted); }
+    mark { background: var(--accent-soft); color: var(--ink); border-radius: 3px; padding: 0 2px; }
+    .select, .pill-link {
+      height: 38px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--surface); color: var(--ink-soft);
+      padding: 0 13px; font-size: 12px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+      transition: background var(--ease), border-color var(--ease), color var(--ease);
     }
-    .result-info { flex: 1; overflow: hidden; }
-    .result-title   { font-size: 12.5px; font-weight: 600; color: var(--fg); }
-    .result-section { font-size: 11px; color: var(--fg-muted); }
-    .no-results { padding: 20px; text-align: center; font-size: 13px; color: var(--fg-muted); }
+    .pill-link:hover, .select:hover { background: var(--surface-soft); border-color: var(--line-strong); color: var(--ink); }
 
-    /* Highlight on jump */
-    .highlight-target { animation: highlight-flash 1.2s ease-out; border-radius: var(--radius-lg); }
-    @keyframes highlight-flash {
-      0%   { box-shadow: 0 0 0 3px rgba(201,185,154,0.5); }
-      100% { box-shadow: 0 0 0 0px rgba(201,185,154,0); }
-    }
-
-    /* Documentation assistant */
-    .doc-chat-launcher {
-      position: fixed;
-      right: 22px;
-      bottom: 22px;
-      z-index: 120;
-      height: 46px;
-      padding: 0 16px;
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      border: 1px solid rgba(26,26,26,0.12);
-      border-radius: 999px;
-      background: #1A1A1A;
-      color: #FFFFFF;
-      font: 700 12px/1 var(--font);
-      box-shadow: 0 12px 38px rgba(0,0,0,0.18);
-      cursor: pointer;
-      transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
-    }
-    .doc-chat-launcher:hover { transform: translateY(-1px); box-shadow: 0 16px 42px rgba(0,0,0,0.22); }
-    .doc-chat-launcher svg { flex-shrink: 0; }
-
-    .doc-chat-panel {
-      position: fixed;
-      right: 22px;
-      bottom: 82px;
-      z-index: 130;
-      width: min(420px, calc(100vw - 32px));
-      height: min(680px, calc(100vh - 112px));
-      display: none;
-      grid-template-rows: auto auto 1fr auto;
-      background: rgba(255,255,255,0.96);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      box-shadow: 0 24px 70px rgba(0,0,0,0.18);
-      overflow: hidden;
-      backdrop-filter: blur(18px);
-    }
-    .doc-chat-panel.open {
-      display: grid;
-      animation: chat-enter 180ms ease-out both;
-    }
-    @keyframes chat-enter {
-      from { opacity: 0; transform: translateY(10px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    .doc-chat-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 16px 16px 12px;
-      border-bottom: 1px solid var(--border-subtle);
-      background: linear-gradient(180deg, #FFFFFF 0%, #FAFAF8 100%);
-    }
-    .doc-chat-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .doc-chat-mark {
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #E7F0FF;
-      color: #1D4ED8;
-      border: 1px solid #C7DAFF;
-      flex-shrink: 0;
-    }
-    .doc-chat-title strong {
-      display: block;
-      color: var(--fg);
-      font-size: 13px;
-      line-height: 1.2;
-    }
-    .doc-chat-title span {
-      display: block;
-      color: var(--fg-muted);
-      font-size: 11px;
-      line-height: 1.4;
-      margin-top: 2px;
-    }
-    .doc-chat-close {
-      width: 30px;
-      height: 30px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid transparent;
-      border-radius: 8px;
-      background: transparent;
-      color: var(--fg-muted);
-      cursor: pointer;
-      transition: background var(--transition), color var(--transition), border-color var(--transition);
-    }
-    .doc-chat-close:hover { background: var(--surface-sunken); color: var(--fg); border-color: var(--border); }
-
-    .doc-chat-context {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px 14px;
-      background: #F8FAFC;
-      border-bottom: 1px solid #E2E8F0;
-      color: #475569;
-      font-size: 11px;
-    }
-    .doc-chat-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-    .doc-chat-status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: #22C55E;
-      box-shadow: 0 0 0 3px rgba(34,197,94,0.12);
-      flex-shrink: 0;
-    }
-    .doc-chat-model {
-      font-family: var(--mono);
-      color: #64748B;
-      white-space: nowrap;
-    }
-
-    .doc-chat-messages {
+    .sidebar {
+      grid-area: nav;
+      position: sticky;
+      top: var(--header);
+      height: calc(100vh - var(--header));
       overflow-y: auto;
-      padding: 14px;
-      background:
-        linear-gradient(180deg, rgba(248,250,252,0.72), rgba(255,255,255,0.92)),
-        var(--surface);
+      background: rgba(255,255,255,0.72);
+      border-right: 1px solid var(--line);
+      padding: 20px 12px 32px;
     }
-    .doc-chat-message {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-      align-items: flex-start;
+    .nav-block { margin-bottom: 18px; }
+    .nav-label {
+      padding: 0 10px 7px;
+      font-size: 10px; font-weight: 800; color: var(--ink-muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
     }
-    .doc-chat-message.user { justify-content: flex-end; }
-    .doc-chat-bubble {
-      max-width: 88%;
-      border-radius: 13px;
-      padding: 10px 12px;
-      font-size: 12.5px;
-      line-height: 1.55;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--fg-secondary);
-      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
+    .nav-link {
+      width: 100%;
+      display: flex; align-items: center; gap: 8px;
+      min-height: 32px; border-radius: 8px;
+      padding: 6px 10px;
+      color: var(--ink-soft); text-decoration: none;
+      font-size: 12.5px; font-weight: 650;
+      transition: background var(--ease), color var(--ease);
     }
-    .doc-chat-message.user .doc-chat-bubble {
-      background: #1D4ED8;
-      border-color: #1D4ED8;
-      color: #FFFFFF;
-      box-shadow: 0 8px 22px rgba(29,78,216,0.18);
-    }
-    .doc-chat-bubble strong { color: inherit; font-weight: 700; }
-    .doc-chat-bubble a {
-      color: #1D4ED8;
-      font-weight: 700;
-      text-decoration: none;
-      border-bottom: 1px solid rgba(29,78,216,0.28);
-    }
-    .doc-chat-bubble a:hover { border-bottom-color: currentColor; }
-    .doc-chat-message.user .doc-chat-bubble a { color: #FFFFFF; border-bottom-color: rgba(255,255,255,0.45); }
-    .doc-chat-meta {
-      margin-top: 7px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .doc-chat-source {
-      display: inline-flex;
-      align-items: center;
-      height: 22px;
-      padding: 0 8px;
+    .nav-link:hover, .nav-link.active { background: var(--surface-warm); color: var(--ink); }
+    .nav-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--line-strong); flex-shrink: 0; }
+    .nav-link.active .nav-dot { background: var(--gold); }
+    .tag {
+      margin-left: auto;
       border-radius: 999px;
-      background: #EFF6FF;
-      color: #1D4ED8;
-      border: 1px solid #BFDBFE;
-      font-size: 10.5px;
-      font-weight: 700;
-      text-decoration: none;
+      padding: 2px 6px;
+      font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+      border: 1px solid var(--line);
+      color: var(--ink-muted);
+      background: #f6f6f2;
     }
+    .tag.pro { background: #fff3ca; border-color: #f2d889; color: #92570e; }
+    .tag.pay { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
 
-    .doc-chat-suggestions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-      margin: 2px 0 13px;
+    .main {
+      grid-area: main;
+      width: min(1180px, 100%);
+      padding: 34px 44px 110px;
     }
-    .doc-chat-chip {
-      min-height: 28px;
-      padding: 0 10px;
-      border: 1px solid #D8E2F2;
-      border-radius: 999px;
-      background: #FFFFFF;
-      color: #334155;
-      font: 600 11px/1 var(--font);
-      cursor: pointer;
-      transition: background var(--transition), border-color var(--transition), color var(--transition);
-    }
-    .doc-chat-chip:hover { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
-
-    .doc-chat-typing {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 11px 12px;
-    }
-    .doc-chat-typing span {
-      width: 5px;
-      height: 5px;
-      border-radius: 999px;
-      background: #94A3B8;
-      animation: typing-dot 900ms ease-in-out infinite;
-    }
-    .doc-chat-typing span:nth-child(2) { animation-delay: 120ms; }
-    .doc-chat-typing span:nth-child(3) { animation-delay: 240ms; }
-    @keyframes typing-dot {
-      0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
-      40% { transform: translateY(-3px); opacity: 1; }
-    }
-
-    .doc-chat-form {
+    .hero {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      padding: 12px;
-      border-top: 1px solid var(--border);
-      background: #FFFFFF;
+      grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+      gap: 30px;
+      align-items: stretch;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 30px;
     }
-    .doc-chat-input {
-      min-height: 42px;
-      max-height: 120px;
-      resize: none;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 12px;
-      font: 13px/1.45 var(--font);
-      color: var(--fg);
-      background: var(--surface-sunken);
-      outline: none;
-      transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+    .eyebrow {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.1em;
+      color: var(--ink-muted); text-transform: uppercase; margin-bottom: 8px;
     }
-    .doc-chat-input:focus {
-      border-color: #93C5FD;
-      background: #FFFFFF;
-      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    h1 {
+      font-size: clamp(34px, 5vw, 62px);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+      margin-bottom: 15px;
     }
-    .doc-chat-send {
-      width: 42px;
-      height: 42px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid #1D4ED8;
-      border-radius: 12px;
-      background: #1D4ED8;
-      color: #FFFFFF;
-      cursor: pointer;
-      transition: background var(--transition), transform var(--transition), opacity var(--transition);
+    .hero-lead { max-width: 680px; color: var(--ink-soft); font-size: 16px; line-height: 1.7; }
+    .hero-panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fff, #f3f3ef);
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
     }
-    .doc-chat-send:hover { background: #1E40AF; transform: translateY(-1px); }
-    .doc-chat-send:disabled { cursor: not-allowed; opacity: 0.55; transform: none; }
+    .hero-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat {
+      min-height: 76px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .stat strong { display: block; font-size: 25px; line-height: 1; margin-bottom: 7px; }
+    .stat span { color: var(--ink-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
 
-    /* Load animation */
-    @keyframes fade-up {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .section { margin: 42px 0; }
+    .section-head {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      gap: 18px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
     }
-    .hero    { animation: fade-up 260ms ease-out both; }
-    .sidebar { animation: fade-up 180ms ease-out both; }
+    .section h2 { font-size: 24px; letter-spacing: -0.03em; line-height: 1.12; }
+    .section-lead { max-width: 680px; color: var(--ink-muted); font-size: 13.5px; }
+    .overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .overview-card, .mode-card, .reference-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .overview-card .icon {
+      width: 34px; height: 34px; display: grid; place-items: center;
+      border-radius: 8px; background: var(--surface-soft); border: 1px solid var(--line); margin-bottom: 12px;
+    }
+    .overview-card h3, .reference-card h3 { font-size: 14px; margin-bottom: 6px; }
+    .overview-card p, .reference-card p { color: var(--ink-muted); font-size: 12.5px; }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      .app-shell { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
+    .path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .path-step {
+      border-left: 3px solid var(--gold);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 116px;
+      border-top: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .path-step span { display: block; font-family: var(--mono); color: var(--gold); font-size: 11px; font-weight: 800; margin-bottom: 7px; }
+    .path-step strong { display: block; margin-bottom: 5px; }
+    .path-step p { color: var(--ink-muted); font-size: 12px; }
+
+    .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .mode-card { padding: 0; overflow: hidden; scroll-margin-top: calc(var(--header) + 20px); }
+    .mode-top {
+      display: grid;
+      grid-template-columns: 46px 1fr auto;
+      gap: 12px;
+      align-items: start;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff, #fbfbf8);
+    }
+    .mode-icon {
+      width: 46px; height: 46px; border-radius: 11px;
+      display: grid; place-items: center;
+      background: var(--surface-soft); border: 1px solid var(--line);
+      font-size: 20px;
+    }
+    .mode-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+    .mode-summary { margin-top: 3px; color: var(--ink-muted); font-size: 12.5px; line-height: 1.45; }
+    .mode-body { padding: 16px; display: grid; gap: 14px; }
+    .mode-intro { color: var(--ink-soft); font-size: 13px; }
+    .mode-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mode-meta {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfbf8;
+      padding: 9px 10px;
+    }
+    .mode-meta span { display: block; font-size: 9px; font-weight: 800; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px; }
+    .mode-meta strong { font-size: 12px; color: var(--ink-soft); }
+    .doc-list h4 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--ink-muted); margin-bottom: 7px;
+    }
+    .doc-list ul { list-style: none; display: grid; gap: 6px; }
+    .doc-list li {
+      position: relative; padding-left: 16px;
+      color: var(--ink-soft); font-size: 12.5px; line-height: 1.55;
+    }
+    .doc-list li::before {
+      content: ""; position: absolute; left: 3px; top: 9px;
+      width: 4px; height: 4px; border-radius: 999px; background: var(--gold);
+    }
+    .reference-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .reference-card ul { list-style: none; display: grid; gap: 7px; margin-top: 10px; }
+    .reference-card li { color: var(--ink-soft); font-size: 12.5px; }
+    code, kbd {
+      font-family: var(--mono);
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 11px;
+    }
+
+    .doc-chat-launcher {
+      position: fixed; right: 22px; bottom: 22px; z-index: 120;
+      height: 46px; padding: 0 16px; border: 1px solid rgba(23,23,23,0.1);
+      border-radius: 999px; background: var(--ink); color: #fff;
+      display: inline-flex; align-items: center; gap: 9px;
+      font-weight: 800; font-size: 12px; cursor: pointer;
+      box-shadow: var(--shadow); transition: transform var(--ease), box-shadow var(--ease);
+    }
+    .doc-chat-launcher:hover { transform: translateY(-1px); box-shadow: 0 18px 48px rgba(0,0,0,0.18); }
+    .doc-chat-panel {
+      position: fixed; right: 22px; bottom: 82px; z-index: 130;
+      width: min(440px, calc(100vw - 28px)); height: min(700px, calc(100vh - 110px));
+      display: none; grid-template-rows: auto auto 1fr auto;
+      border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+      background: rgba(255,255,255,0.96); backdrop-filter: blur(18px);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.18);
+    }
+    .doc-chat-panel.open { display: grid; animation: chat-in 180ms ease-out both; }
+    @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+    .chat-head {
+      display: grid; grid-template-columns: 38px 1fr auto; gap: 11px; align-items: center;
+      padding: 15px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #fff, #f8f8f4);
+    }
+    .chat-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid #bfdbfe; }
+    .chat-title strong { display: block; font-size: 13px; }
+    .chat-title span { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+    .icon-button {
+      border: 1px solid transparent; background: transparent; color: var(--ink-muted);
+      width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+      cursor: pointer; transition: background var(--ease), color var(--ease), border-color var(--ease);
+    }
+    .icon-button:hover { background: var(--surface-soft); color: var(--ink); border-color: var(--line); }
+    .chat-context {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+      color: #475569; font-size: 11px;
+    }
+    .chat-status { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+    .chat-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--green); box-shadow: 0 0 0 3px rgba(21,128,61,0.12); flex-shrink: 0; }
+    .chat-model { font-family: var(--mono); color: #64748b; white-space: nowrap; }
+    .chat-messages { overflow-y: auto; padding: 14px; background: linear-gradient(180deg, rgba(248,250,252,.72), rgba(255,255,255,.94)); }
+    .chat-message { display: flex; margin-bottom: 12px; align-items: flex-start; }
+    .chat-message.user { justify-content: flex-end; }
+    .chat-bubble {
+      max-width: 88%; border: 1px solid var(--line); border-radius: 13px; background: #fff;
+      padding: 10px 12px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.55;
+      white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    .chat-message.user .chat-bubble { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .chat-bubble a { color: var(--accent); font-weight: 800; text-decoration: none; border-bottom: 1px solid rgba(29,78,216,.25); }
+    .chat-message.user .chat-bubble a { color: #fff; border-bottom-color: rgba(255,255,255,.42); }
+    .chat-source-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chat-source {
+      display: inline-flex; align-items: center; min-height: 22px; border: 1px solid #bfdbfe; border-radius: 999px;
+      padding: 0 8px; background: #eff6ff; color: var(--accent); font-size: 10.5px; font-weight: 800; text-decoration: none;
+    }
+    .chat-suggestions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .chip {
+      border: 1px solid #d8e2f2; border-radius: 999px; background: #fff; color: #334155;
+      padding: 7px 10px; font-size: 11px; font-weight: 800; cursor: pointer;
+    }
+    .chip:hover { background: #eff6ff; border-color: #bfdbfe; color: var(--accent); }
+    .chat-form { border-top: 1px solid var(--line); background: #fff; padding: 11px; display: grid; gap: 8px; }
+    .attachment-preview {
+      display: none; align-items: center; gap: 8px;
+      border: 1px solid #bfdbfe; background: #eff6ff; color: #1e3a8a;
+      border-radius: 10px; padding: 7px 8px; font-size: 11px; font-weight: 700;
+    }
+    .attachment-preview.open { display: flex; }
+    .attachment-preview img { width: 34px; height: 34px; border-radius: 7px; object-fit: cover; border: 1px solid #bfdbfe; }
+    .chat-input-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: end; }
+    .chat-input {
+      min-height: 42px; max-height: 118px; resize: none;
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+      background: var(--surface-soft); outline: none; color: var(--ink); font-size: 13px;
+    }
+    .chat-input:focus { background: #fff; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(29,78,216,.1); }
+    .send-button {
+      width: 42px; height: 42px; border: 1px solid var(--accent); border-radius: 12px;
+      background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer;
+    }
+    .send-button:disabled { opacity: .55; cursor: not-allowed; }
+    .typing { display: inline-flex; align-items: center; gap: 4px; padding: 11px 12px; }
+    .typing span { width: 5px; height: 5px; border-radius: 999px; background: #94a3b8; animation: dot 900ms ease-in-out infinite; }
+    .typing span:nth-child(2) { animation-delay: 120ms; }
+    .typing span:nth-child(3) { animation-delay: 240ms; }
+    @keyframes dot { 0%,80%,100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-3px); opacity: 1; } }
+    .highlight-target { animation: flash 1.2s ease-out; }
+    @keyframes flash { 0% { box-shadow: 0 0 0 4px rgba(182,159,114,.45); } 100% { box-shadow: 0 0 0 0 rgba(182,159,114,0); } }
+
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
       .sidebar { display: none; }
-      .main { padding: 20px 16px 60px; }
-      .search-input { width: 150px; }
-      .shortcut-grid { grid-template-columns: 1fr; }
-      .plans-grid { grid-template-columns: 1fr 1fr; }
-      .doc-chat-panel {
-        right: 10px;
-        bottom: 76px;
-        width: calc(100vw - 20px);
-        height: min(650px, calc(100vh - 92px));
-      }
+      .main { padding: 24px 18px 96px; }
+      .hero { grid-template-columns: 1fr; }
+      .overview-grid, .path, .mode-grid, .reference-grid { grid-template-columns: 1fr; }
+      .search { width: min(320px, 42vw); }
+    }
+    @media (max-width: 680px) {
+      .topbar { height: auto; min-height: var(--header); flex-wrap: wrap; padding: 10px 12px; }
+      .brand { min-width: auto; }
+      .top-actions { width: 100%; }
+      .search { width: 100%; flex: 1; }
+      .pill-link span { display: none; }
+      .hero-stat-grid, .mode-meta-grid { grid-template-columns: 1fr; }
+      .doc-chat-panel { right: 10px; bottom: 72px; width: calc(100vw - 20px); height: min(660px, calc(100vh - 90px)); }
       .doc-chat-launcher { right: 14px; bottom: 14px; }
-      .doc-chat-model { display: none; }
+      .chat-model { display: none; }
     }
   </style>
 </head>
 <body>
-<div class="app-shell">
-
-  <!-- Header -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo-mark"><span>AV</span></div>
-      <div class="logo-text">
-        <div class="logo-name">ArcVisAI Studio</div>
-        <div class="logo-sub">User Manual</div>
-      </div>
-      <div class="header-divider"></div>
-      <div class="header-badge">
-        <svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="#22C55E"/></svg>
-        v2.0
-      </div>
-    </div>
-    <div class="header-right">
-      <div class="search-wrap" id="searchWrap">
-        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" class="search-input" id="searchInput" placeholder="Search manual…" autocomplete="off" spellcheck="false"/>
-        <div class="search-results" id="searchResults"></div>
-      </div>
-      <a href="/" class="back-btn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
-        Back to app
-      </a>
-    </div>
-  </header>
-
-  <!-- Sidebar -->
-  <nav class="sidebar" id="sidebar">
-    <div class="nav-section-label">Getting started</div>
-    <a class="nav-item active" href="#overview"><span class="nav-dot"></span>Overview</a>
-    <a class="nav-item" href="#getting-started"><span class="nav-dot"></span>Quick start</a>
-    <a class="nav-item" href="#interface"><span class="nav-dot"></span>Interface layout</a>
-
-    <div class="nav-divider"></div>
-    <div class="nav-section-label">Generation modes</div>
-    <a class="nav-item" href="#mode-render-3d"><span class="nav-dot"></span>3D Rendering<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-scene-compose"><span class="nav-dot"></span>Scene Compose<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-render-cad"><span class="nav-dot"></span>CAD to Render<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-render-sketch"><span class="nav-dot"></span>Sketch to Render<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-generate-text"><span class="nav-dot"></span>Generate from Text<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-masterplan"><span class="nav-dot"></span>Masterplan<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-visual-edit"><span class="nav-dot"></span>Visual Edit<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-exploded"><span class="nav-dot"></span>Exploded View<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-section"><span class="nav-dot"></span>Section Render<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-multi-angle"><span class="nav-dot"></span>Multi-Angle<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-upscale"><span class="nav-dot"></span>Upscale<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-img-to-cad"><span class="nav-dot"></span>Image to CAD<span class="nav-mode-tag tag-pro">Pro</span></a>
-    <a class="nav-item" href="#mode-img-to-3d"><span class="nav-dot"></span>Image to 3D<span class="nav-mode-tag tag-pro">Pro</span></a>
-    <a class="nav-item" href="#mode-headshot"><span class="nav-dot"></span>Headshot Studio<span class="nav-mode-tag tag-free">Free</span></a>
-    <a class="nav-item" href="#mode-video"><span class="nav-dot"></span>Video Studio<span class="nav-mode-tag tag-pro">Pro</span></a>
-    <a class="nav-item" href="#mode-material"><span class="nav-dot"></span>Material Validation<span class="nav-mode-tag tag-pro">Pro</span></a>
-    <a class="nav-item" href="#mode-translate"><span class="nav-dot"></span>Document Translate<span class="nav-mode-tag tag-pro">Pro</span></a>
-    <a class="nav-item" href="#mode-pdf"><span class="nav-dot"></span>PDF Compression<span class="nav-mode-tag tag-free">Free</span></a>
-
-    <div class="nav-divider"></div>
-    <div class="nav-section-label">Reference</div>
-    <a class="nav-item" href="#settings"><span class="nav-dot"></span>Render settings</a>
-    <a class="nav-item" href="#styles"><span class="nav-dot"></span>Architectural styles</a>
-    <a class="nav-item" href="#plans"><span class="nav-dot"></span>Plans &amp; credits</a>
-    <a class="nav-item" href="#shortcuts"><span class="nav-dot"></span>Keyboard shortcuts</a>
-    <a class="nav-item" href="#tips"><span class="nav-dot"></span>Tips &amp; tricks</a>
-  </nav>
-
-  <!-- Main -->
-  <main class="main" id="main">
-
-    <!-- Hero -->
-    <div class="hero" id="overview">
-      <div class="hero-tag">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        User Manual
-      </div>
-      <h1>ArcVisAI Studio</h1>
-      <p>AI-powered architectural visualization — from concept sketch to photorealistic render, CAD drawing, video walkthrough, and more. Everything you need to get the most out of the platform.</p>
-      <div class="hero-stats">
-        <div class="hero-stat"><div class="hero-stat-num">18</div><div class="hero-stat-label">Generation modes</div></div>
-        <div class="hero-stat"><div class="hero-stat-num">3</div><div class="hero-stat-label">Plan tiers</div></div>
-        <div class="hero-stat"><div class="hero-stat-num">30+</div><div class="hero-stat-label">Arch. styles</div></div>
-        <div class="hero-stat"><div class="hero-stat-num">4K</div><div class="hero-stat-label">Max resolution</div></div>
-      </div>
-    </div>
-
-    <!-- What it does -->
-    <div class="doc-section">
-      <div class="section-eyebrow">Platform overview</div>
-      <div class="section-title">What ArcVisAI Studio can do</div>
-      <div class="section-lead">A full visualization pipeline in one tool — generate, edit, translate, and export without leaving the browser.</div>
-      <div class="card-grid">
-        <div class="card"><div class="card-icon">🏛️</div><div class="card-title">Photo-quality renders</div><div class="card-desc">Transform 3D models, sketches, and CAD files into atmospheric renders.</div></div>
-        <div class="card"><div class="card-icon">🧩</div><div class="card-title">Scene composition</div><div class="card-desc">Place reference furniture, fixtures, landscape, or decor into a locked base scene.</div></div>
-        <div class="card"><div class="card-icon">✏️</div><div class="card-title">AI visual editing</div><div class="card-desc">Brush over any part of your image and describe the change.</div></div>
-        <div class="card"><div class="card-icon">🎬</div><div class="card-title">Video walkthroughs</div><div class="card-desc">Generate fly-through videos from a single still render.</div></div>
-        <div class="card"><div class="card-icon">📐</div><div class="card-title">CAD output</div><div class="card-desc">Extract SVG/DXF technical drawings from any photograph.</div></div>
-        <div class="card"><div class="card-icon">🌍</div><div class="card-title">Document translation</div><div class="card-desc">Translate full DOCX / Excel files preserving all formatting.</div></div>
-        <div class="card"><div class="card-icon">🔬</div><div class="card-title">Material validation</div><div class="card-desc">AI compliance check against your design specification.</div></div>
-      </div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Quick start -->
-    <div class="doc-section" id="getting-started">
-      <div class="section-eyebrow">Quick start</div>
-      <div class="section-title">Your first render in 60 seconds</div>
-      <div class="section-lead">From sign-up to rendered image in four steps.</div>
-      <div class="steps">
-        <div class="step"><div class="step-num">1</div><div><div class="step-title">Sign in</div><div class="step-desc">Log in with your Google account. No installation needed — everything runs in the browser.</div></div></div>
-        <div class="step"><div class="step-num">2</div><div><div class="step-title">Choose a mode</div><div class="step-desc">Select a generation mode from the top bar. Start with <strong>3D Rendering</strong>, <strong>Scene Compose</strong>, or <strong>Generate from Text</strong>.</div></div></div>
-        <div class="step"><div class="step-num">3</div><div><div class="step-title">Upload &amp; configure</div><div class="step-desc">Drag your image onto the canvas. Set style, lighting, and camera angle in the left panel. Click Generate.</div></div></div>
-        <div class="step"><div class="step-num">4</div><div><div class="step-title">Download or iterate</div><div class="step-desc">Save as PNG or JPG from the top bar, or pass the result into another mode to keep refining.</div></div></div>
-      </div>
-      <div class="info-box tip"><span class="info-icon">💡</span><span>New accounts receive a free credit allowance. No credit card required to try the platform.</span></div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Interface -->
-    <div class="doc-section" id="interface">
-      <div class="section-eyebrow">Interface</div>
-      <div class="section-title">Workspace layout</div>
-      <div class="section-lead">Five zones, consistent across all modes.</div>
-      <div class="interface-diagram">
-        <div class="diagram-inner">
-          <div class="diag-cell diag-header">Top bar — mode selector · undo/redo · download · settings</div>
-          <div class="diag-cell">Left sidebar<br>Mode controls<br>&amp; inputs</div>
-          <div class="diag-cell diag-canvas">Canvas<br>Three.js viewport</div>
-          <div class="diag-cell">Right panel<br>Output settings<br>&amp; adjustments</div>
-          <div class="diag-cell diag-bottom">History panel — past generations, quick re-run</div>
-        </div>
-      </div>
-      <table class="settings-table">
-        <thead><tr><th>Zone</th><th>Purpose</th></tr></thead>
-        <tbody>
-          <tr><td>Top bar</td><td>Switch modes, undo/redo selection masks, download output, project and language settings</td></tr>
-          <tr><td>Left sidebar</td><td>Mode-specific inputs: image upload, text prompts, style picker, camera controls</td></tr>
-          <tr><td>Canvas</td><td>Main viewport. Drag to pan, scroll to zoom. Paint selection masks for visual editing</td></tr>
-          <tr><td>Right panel</td><td>Output parameters: aspect ratio, resolution, lighting, render quality</td></tr>
-          <tr><td>History panel</td><td>Log of every generation this session. Click any thumbnail to restore it</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <div class="doc-section">
-      <div class="section-eyebrow">Generation modes</div>
-      <div class="section-title">All 18 modes</div>
-      <div class="section-lead">Each mode is a specialized pipeline with its own inputs, controls, and output type.</div>
-    </div>
-
-    <!-- 3D Rendering -->
-    <div class="doc-section" id="mode-render-3d">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🏛️</div>
-        <div class="mode-meta"><div class="mode-title">3D Rendering</div><div class="mode-desc">Transforms a raw 3D model screenshot into a photorealistic architectural render.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <h3>Input</h3>
-        <p>A screenshot from Blender, SketchUp, Rhino, Revit, or any 3D tool. Wireframe, clay, or textured views all work. White-background clay renders give the best geometry extraction.</p>
-        <h3>Key settings</h3>
-        <table class="settings-table">
-          <thead><tr><th>Setting</th><th>Options</th><th>Effect</th></tr></thead>
-          <tbody>
-            <tr><td>Architectural style</td><td>30+ styles</td><td>Sets the visual language — materials, detailing, era</td></tr>
-            <tr><td>Camera angle</td><td>Eye-level · Bird's-eye · Worm's-eye · Aerial · Interior</td><td>Determines perspective</td></tr>
-            <tr><td>Time of day</td><td>Golden hour · Midday · Dusk · Night · Overcast</td><td>Controls lighting mood</td></tr>
-            <tr><td>Environment</td><td>Urban · Suburban · Coastal · Forest · Desert…</td><td>Sets surrounding context</td></tr>
-            <tr><td>Resolution</td><td>1K · 2K · 4K</td><td>Output pixel density</td></tr>
-          </tbody>
-        </table>
-        <div class="tip-list">
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Consistent camera.</strong> Match the camera angle in your 3D tool with the mode setting for the most predictable result.</div></div>
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Problem-area tool.</strong> Mark messy geometry sections before generating — the engine compensates in its preprocessing pass.</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Scene Compose -->
-    <div class="doc-section" id="mode-scene-compose">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🧩</div>
-        <div class="mode-meta"><div class="mode-title">Scene Compose</div><div class="mode-desc">Adds custom reference objects into a locked architectural scene with realistic scale, shadows, occlusion, and lighting.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Use Scene Compose when the architecture is already right, but the scene needs specific furniture, fixtures, vehicles, planting, art, products, or decor. The first uploaded image is treated as the base scene. Additional reference photos become an insertion stack that the model uses as visual guidance.</p>
-        <h3>How it works</h3>
-        <table class="settings-table">
-          <thead><tr><th>Control</th><th>Purpose</th><th>Best practice</th></tr></thead>
-          <tbody>
-            <tr><td>Base scene</td><td>The source architectural image to preserve</td><td>Use a clean 3D screenshot or render with the camera, perspective, and architecture already approved</td></tr>
-            <tr><td>Reference photos</td><td>Objects or elements to insert into the scene</td><td>Upload up to 20 images; crop each reference around the object when possible</td></tr>
-            <tr><td>Captions</td><td>Tell the model what to use from each reference and how it should appear</td><td>Write short placement intent, e.g. <code>Place this lounge chair by the window, angled toward the table</code></td></tr>
-            <tr><td>Canvas pins</td><td>Anchor a reference to a normalized point on the base image</td><td>Click <strong>Place On Canvas</strong>, then click the target contact point in the canvas</td></tr>
-            <tr><td>Source type</td><td>Defines the base image origin: Rhino, Revit, SketchUp, Blender, clay, and more</td><td>Pick the closest source so geometry preservation instructions match the input</td></tr>
-            <tr><td>View type</td><td>Exterior, interior, or aerial</td><td>Set this before generating so inserted elements match scale and spatial logic</td></tr>
-          </tbody>
-        </table>
-        <div class="tip-list">
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Caption every reference.</strong> Captions remove ambiguity when a photo contains multiple objects or a product shown in a different context.</div></div>
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Use pins for exact placement.</strong> Pins are treated as internal guidance and are never rendered as visible markers in the final image.</div></div>
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Protect the architecture.</strong> Scene Compose preserves the base camera, perspective, structural geometry, and spatial layout; use Visual Edit for changing walls, materials, or facade elements.</div></div>
-        </div>
-        <div class="info-box note"><span class="info-icon">ℹ️</span><span>Scene Compose is ideal for staging and product placement. If you need to remove or replace part of the original image, switch to Visual Edit and use a tight mask instead.</span></div>
-      </div>
-    </div>
-
-    <!-- CAD to Render -->
-    <div class="doc-section" id="mode-render-cad">
-      <div class="mode-header">
-        <div class="mode-icon-lg">📐</div>
-        <div class="mode-meta"><div class="mode-title">CAD to Render</div><div class="mode-desc">Turns flat CAD drawings, floor plans, and section cuts into photorealistic renders.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Upload a CAD export (PNG or JPG). The AI reads the line-work and renders it in full 3D. Works with floor plans, elevations, and sections.</p>
-        <table class="settings-table">
-          <thead><tr><th>Setting</th><th>Options</th></tr></thead>
-          <tbody>
-            <tr><td>Drawing type</td><td>Floor plan · Elevation · Section · Axonometric</td></tr>
-            <tr><td>Output view</td><td>Exterior · Interior · Aerial</td></tr>
-            <tr><td>Style</td><td>All 30+ architectural styles</td></tr>
-          </tbody>
-        </table>
-        <div class="info-box note"><span class="info-icon">ℹ️</span><span>Clean, high-contrast line-work on white produces significantly better results than scanned sketches with noise.</span></div>
-      </div>
-    </div>
-
-    <!-- Sketch to Render -->
-    <div class="doc-section" id="mode-render-sketch">
-      <div class="mode-header">
-        <div class="mode-icon-lg">✏️</div>
-        <div class="mode-meta"><div class="mode-title">Sketch to Render</div><div class="mode-desc">Takes a hand-drawn or digital concept sketch and generates a photorealistic render.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>For early design-phase ideation. Even rough pencil sketches produce useful results. The less detail, the more creative freedom the AI takes.</p>
-        <div class="info-box tip"><span class="info-icon">💡</span><span>Enable <strong>Structure adherence: High</strong> in the right panel for fidelity to your sketch. Set to <strong>Low</strong> for creative interpretation.</span></div>
-      </div>
-    </div>
-
-    <!-- Generate from Text -->
-    <div class="doc-section" id="mode-generate-text">
-      <div class="mode-header">
-        <div class="mode-icon-lg">💬</div>
-        <div class="mode-meta"><div class="mode-title">Generate from Text</div><div class="mode-desc">No image needed — describe a building or space and get a render.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Type a description into the prompt box. The more context you provide (materials, lighting, surroundings, era), the more specific the result.</p>
-        <table class="settings-table">
-          <thead><tr><th>Style</th><th>Example prompt</th></tr></thead>
-          <tbody>
-            <tr><td>Brief</td><td><code>a brutalist library in a city square</code></td></tr>
-            <tr><td>Detailed</td><td><code>a Japanese minimalist wooden pavilion, exposed cedar beams, courtyard with bamboo, late afternoon light</code></td></tr>
-            <tr><td>Concept</td><td><code>a biophilic office tower where every floor has hanging gardens, tropical canopy through floor-to-ceiling glass</code></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Masterplan -->
-    <div class="doc-section" id="mode-masterplan">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🗺️</div>
-        <div class="mode-meta"><div class="mode-title">Masterplan</div><div class="mode-desc">Generates a photorealistic aerial masterplan render from a satellite image or site diagram.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Upload a base satellite map or hand-drawn site plan. Draw a polygon boundary on the canvas to define your development zone. The AI renders the area with the specified program type and density.</p>
-        <div class="tip-list">
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Polygon tool.</strong> Click to place vertices. Double-click to close. Ctrl+Z undoes the last point.</div></div>
-          <div class="tip-item"><span class="tip-bullet">→</span><div class="tip-text"><strong>Full-image mode.</strong> Skip the boundary tool to render the entire image as a masterplan.</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Visual Edit -->
-    <div class="doc-section" id="mode-visual-edit">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🖌️</div>
-        <div class="mode-meta"><div class="mode-title">Visual Edit</div><div class="mode-desc">Paint a selection mask, describe the change, and the AI re-renders only that region.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <table class="settings-table">
-          <thead><tr><th>Tool</th><th>Best for</th></tr></thead>
-          <tbody>
-            <tr><td>Brush</td><td>Irregular regions: foliage, curved walls</td></tr>
-            <tr><td>Rectangle</td><td>Windows, panels, rectangular facades</td></tr>
-            <tr><td>Polygon</td><td>Complex but crisp shapes</td></tr>
-          </tbody>
-        </table>
-        <div class="prose"><ul>
-          <li>Swap cladding: <em>"Replace with dark brushed steel panels"</em></li>
-          <li>Change landscape: <em>"Replace lawn with gravel courtyard and low hedges"</em></li>
-          <li>Update glazing: <em>"Floor-to-ceiling glass with thin aluminium frames"</em></li>
-          <li>Add greenery: <em>"Hanging planters and climbing plants"</em></li>
-        </ul></div>
-        <div class="info-box tip"><span class="info-icon">💡</span><span>Keep selections tight to the target area. Overly large masks can alter regions you didn't intend to change.</span></div>
-      </div>
-    </div>
-
-    <!-- Exploded View -->
-    <div class="doc-section" id="mode-exploded">
-      <div class="mode-header">
-        <div class="mode-icon-lg">💥</div>
-        <div class="mode-meta"><div class="mode-title">Exploded View</div><div class="mode-desc">Generates a technical exploded axonometric diagram revealing structural layers.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Separates the building into labelled layers (foundation, frame, envelope, interior, roof) with connecting guide lines. Best from isometric or axonometric model views.</p>
-      </div>
-    </div>
-
-    <!-- Section Render -->
-    <div class="doc-section" id="mode-section">
-      <div class="mode-header">
-        <div class="mode-icon-lg">✂️</div>
-        <div class="mode-meta"><div class="mode-title">Section Render</div><div class="mode-desc">Takes a flat section drawing and renders it as a dimensional architectural section perspective.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Upload a 2D section cut. The AI adds depth, materials, interior details, lighting, and human scale figures. Best with clearly drawn cut lines and poché on cut elements.</p>
-      </div>
-    </div>
-
-    <!-- Multi-Angle -->
-    <div class="doc-section" id="mode-multi-angle">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🔄</div>
-        <div class="mode-meta"><div class="mode-title">Multi-Angle</div><div class="mode-desc">Generates several views of the same building simultaneously from a single input image.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Select angles (front, side, rear, aerial, interior) using checkboxes in the left panel. All views share the same style settings for a consistent presentation package.</p>
-      </div>
-    </div>
-
-    <!-- Upscale -->
-    <div class="doc-section" id="mode-upscale">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🔍</div>
-        <div class="mode-meta"><div class="mode-title">Upscale</div><div class="mode-desc">Increases resolution and sharpens fine detail without unwanted changes.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <table class="settings-table">
-          <thead><tr><th>Mode</th><th>Behaviour</th></tr></thead>
-          <tbody>
-            <tr><td>Conservative</td><td>Adds sharpness only — stays very close to the original</td></tr>
-            <tr><td>Enhanced</td><td>Adds material texture and enriches lighting — slight reinterpretation</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Image to CAD -->
-    <div class="doc-section" id="mode-img-to-cad">
-      <div class="mode-header">
-        <div class="mode-icon-lg">📏</div>
-        <div class="mode-meta"><div class="mode-title">Image to CAD</div><div class="mode-desc">Reverse-engineers a photograph into a structured architectural line drawing (SVG / DXF).</div></div>
-        <span class="mode-badge badge-pro">Professional+</span>
-      </div>
-      <div class="prose">
-        <p>Traces walls, openings, columns, and major structural elements into clean vector geometry, organized by layer. Importable directly into AutoCAD, Rhino, or Illustrator.</p>
-        <div class="info-box warn"><span class="info-icon">⚠️</span><span>Output is an AI interpretation, not a precise measurement. Always verify dimensions against original drawings before use in construction documentation.</span></div>
-      </div>
-    </div>
-
-    <!-- Image to 3D -->
-    <div class="doc-section" id="mode-img-to-3d">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🧊</div>
-        <div class="mode-meta"><div class="mode-title">Image to 3D</div><div class="mode-desc">Generates orthographic reference views from a single architectural photograph for 3D reconstruction.</div></div>
-        <span class="mode-badge badge-pro">Professional+</span>
-      </div>
-      <div class="prose">
-        <p>Produces front, side, and top reference views for use when rebuilding a model from a photograph. Useful for massing studies and site modelling.</p>
-      </div>
-    </div>
-
-    <!-- Headshot -->
-    <div class="doc-section" id="mode-headshot">
-      <div class="mode-header">
-        <div class="mode-icon-lg">👤</div>
-        <div class="mode-meta"><div class="mode-title">Headshot Studio</div><div class="mode-desc">Generates professional headshots for proposals, CVs, and team pages.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <table class="settings-table">
-          <thead><tr><th>Setting</th><th>Options</th></tr></thead>
-          <tbody>
-            <tr><td>Format</td><td>Square (1:1) · Portrait (3:4) · Wide (16:9)</td></tr>
-            <tr><td>Background</td><td>Studio white · Neutral grey · Office · Outdoor · Abstract</td></tr>
-            <tr><td>Style</td><td>Corporate · Editorial · Creative</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Video -->
-    <div class="doc-section" id="mode-video">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🎬</div>
-        <div class="mode-meta"><div class="mode-title">Video Studio</div><div class="mode-desc">Creates cinematic video walkthroughs from a single still render using Veo 2 or Kling AI.</div></div>
-        <span class="mode-badge badge-pro">Pay-per-clip</span>
-      </div>
-      <div class="prose">
-        <p>Video is charged per clip via Stripe, not from your credit balance. Generation runs asynchronously (2–4 min) and delivers a notification when ready.</p>
-        <table class="settings-table">
-          <thead><tr><th>Motion preset</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td>Fly-through</td><td>Camera pushes forward into the scene</td></tr>
-            <tr><td>Orbit</td><td>Camera rotates around the central subject</td></tr>
-            <tr><td>Pull-back</td><td>Camera retreats to reveal surrounding context</td></tr>
-            <tr><td>Crane up</td><td>Vertical rise to aerial perspective</td></tr>
-            <tr><td>Custom</td><td>Describe the camera motion in natural language</td></tr>
-          </tbody>
-        </table>
-        <div class="info-box tip"><span class="info-icon">💡</span><span>Upscale your still before generating video — clip quality is directly proportional to input render quality.</span></div>
-      </div>
-    </div>
-
-    <!-- Material Validation -->
-    <div class="doc-section" id="mode-material">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🔬</div>
-        <div class="mode-meta"><div class="mode-title">Material Validation</div><div class="mode-desc">Upload a materials schedule and get an AI compliance check with flagged issues.</div></div>
-        <span class="mode-badge badge-pro">Professional+</span>
-      </div>
-      <div class="prose">
-        <p>No image required. Paste or upload a materials schedule (PDF, DOCX, or plain text) and describe the design spec. The AI flags non-compliant, mismatched, or problematic materials.</p>
-        <div class="prose"><ul>
-          <li><strong>Compliant items</strong> — confirmed with no issues</li>
-          <li><strong>Flagged items</strong> — requiring verification or substitution</li>
-          <li><strong>Suggested alternatives</strong> — compliant replacements for flagged items</li>
-          <li><strong>Summary</strong> — overall assessment and priority actions</li>
-        </ul></div>
-      </div>
-    </div>
-
-    <!-- Document Translate -->
-    <div class="doc-section" id="mode-translate">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🌍</div>
-        <div class="mode-meta"><div class="mode-title">Document Translate</div><div class="mode-desc">Translates DOCX and Excel files preserving all formatting, tables, styles, and layout.</div></div>
-        <span class="mode-badge badge-pro">Professional+</span>
-      </div>
-      <div class="prose">
-        <p>Designed for architectural specifications, tender documents, and technical reports. Preserves exact document structure — paragraph styles, tables, headers, footers — in the output.</p>
-        <div class="prose"><ul>
-          <li>DOCX — full formatting preservation</li>
-          <li>XLSX — cell content translated, formulas preserved</li>
-          <li>PDF — converted to DOCX first, then translated (minor formatting loss)</li>
-        </ul></div>
-      </div>
-    </div>
-
-    <!-- PDF Compression -->
-    <div class="doc-section" id="mode-pdf">
-      <div class="mode-header">
-        <div class="mode-icon-lg">🗜️</div>
-        <div class="mode-meta"><div class="mode-title">PDF Compression</div><div class="mode-desc">Compresses large architectural PDF sets for email submission or portal upload.</div></div>
-        <span class="mode-badge badge-free">Free</span>
-      </div>
-      <div class="prose">
-        <p>Upload any PDF and select a compression level: Low (max quality), Medium (balanced), or High (minimum file size). Typical architectural drawing sets see 40–70% reduction at Medium.</p>
-      </div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Render Settings -->
-    <div class="doc-section" id="settings">
-      <div class="section-eyebrow">Reference</div>
-      <div class="section-title">Render settings</div>
-      <div class="section-lead">All output parameters available in the right panel.</div>
-      <table class="settings-table">
-        <thead><tr><th>Setting</th><th>Values</th><th>Notes</th></tr></thead>
-        <tbody>
-          <tr><td>Aspect ratio</td><td>1:1 · 4:3 · 3:2 · 16:9 · 9:16 · 3:4</td><td>Landscape ratios suit exteriors; portrait suits tall buildings and social media</td></tr>
-          <tr><td>Resolution</td><td>1K · 2K · 4K</td><td>Use 1K for iteration, 4K for final delivery</td></tr>
-          <tr><td>Lighting preset</td><td>Golden hour · Midday · Dusk · Night · Overcast · Studio</td><td>Affects shadow direction, colour temperature, and mood</td></tr>
-          <tr><td>Rendering style</td><td>Photorealistic · Sketch · Watercolour · Technical · Diagram</td><td>Non-photorealistic styles use fewer credits</td></tr>
-          <tr><td>Detail level</td><td>Draft · Standard · High · Ultra</td><td>Ultra adds micro-detail at extra credit cost</td></tr>
-          <tr><td>People</td><td>None · Sparse · Populated</td><td>Adds human scale figures to the scene</td></tr>
-          <tr><td>Vegetation</td><td>None · Minimal · Lush</td><td>Controls trees, planting, and groundcover</td></tr>
-          <tr><td>Weather</td><td>Clear · Partly cloudy · Overcast · Rain · Snow</td><td>Overcast + midday = soft, even, shadowless light</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Styles -->
-    <div class="doc-section" id="styles">
-      <div class="section-eyebrow">Reference</div>
-      <div class="section-title">Architectural styles</div>
-      <div class="section-lead">Available across all rendering modes. The free-text field lets you go beyond these presets.</div>
-      <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
-        <div class="card"><div class="card-title">Contemporary</div><div class="card-desc">Clean lines, mixed materials, restrained detailing</div></div>
-        <div class="card"><div class="card-title">Minimalist</div><div class="card-desc">White plaster, large voids, extreme restraint</div></div>
-        <div class="card"><div class="card-title">Brutalist</div><div class="card-desc">Raw concrete, bold massing, sculptural form</div></div>
-        <div class="card"><div class="card-title">Industrial</div><div class="card-desc">Steel, glass, exposed structure</div></div>
-        <div class="card"><div class="card-title">Scandinavian</div><div class="card-desc">Light wood, pitched roofs, cosy restraint</div></div>
-        <div class="card"><div class="card-title">Japanese</div><div class="card-desc">Timber, rock gardens, negative space</div></div>
-        <div class="card"><div class="card-title">Mediterranean</div><div class="card-desc">White render, terracotta, arches</div></div>
-        <div class="card"><div class="card-title">Art Deco</div><div class="card-desc">Geometric ornament, stepped forms, gilding</div></div>
-        <div class="card"><div class="card-title">Biophilic</div><div class="card-desc">Living walls, natural light, organic materials</div></div>
-        <div class="card"><div class="card-title">Parametric</div><div class="card-desc">Algorithmic form, complex curves</div></div>
-        <div class="card"><div class="card-title">Deconstructivist</div><div class="card-desc">Fragmented geometry, tilted planes</div></div>
-        <div class="card"><div class="card-title">Neo-Classical</div><div class="card-desc">Columns, pediments, symmetry</div></div>
-        <div class="card"><div class="card-title">Bauhaus</div><div class="card-desc">Primary colours, functional forms, no ornament</div></div>
-        <div class="card"><div class="card-title">Tropical</div><div class="card-desc">Open-plan, lush greenery, deep overhangs</div></div>
-        <div class="card"><div class="card-title">Mid-Century</div><div class="card-desc">Clerestories, flat roofs, post-war optimism</div></div>
-        <div class="card"><div class="card-title">Vernacular</div><div class="card-desc">Local materials and craft, regional tradition</div></div>
-      </div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Plans & Credits -->
-    <div class="doc-section" id="plans">
-      <div class="section-eyebrow">Billing</div>
-      <div class="section-title">Plans &amp; credits</div>
-      <div class="section-lead">Credits are consumed per generation. Video is pay-per-clip via Stripe. Credits do not roll over.</div>
-      <div class="plans-grid">
-        <div class="plan-card">
-          <div class="plan-name">Free</div>
-          <div class="plan-price">€0<span>/mo</span></div>
-          <div class="plan-credits">Trial credits included</div>
-          <ul class="plan-features">
-            <li>All basic modes</li>
-            <li>Up to 1K resolution</li>
-            <li>Watermarked output</li>
-          </ul>
-        </div>
-        <div class="plan-card featured">
-          <div class="plan-name">Starter</div>
-          <div class="plan-price">€19<span>/mo</span></div>
-          <div class="plan-credits">600 credits / month</div>
-          <ul class="plan-features">
-            <li>All basic modes</li>
-            <li>Up to 2K resolution</li>
-            <li>No watermark</li>
-            <li>Persistent history</li>
-          </ul>
-        </div>
-        <div class="plan-card featured">
-          <div class="plan-name">Professional</div>
-          <div class="plan-price">€49<span>/mo</span></div>
-          <div class="plan-credits">2,000 credits / month</div>
-          <ul class="plan-features">
-            <li>All 18 modes</li>
-            <li>Up to 4K resolution</li>
-            <li>Priority generation</li>
-            <li>Video Studio access</li>
-          </ul>
-        </div>
-        <div class="plan-card">
-          <div class="plan-name">Studio</div>
-          <div class="plan-price">€149<span>/mo</span></div>
-          <div class="plan-credits">6,000 credits / month</div>
-          <ul class="plan-features">
-            <li>Everything in Pro</li>
-            <li>Team dashboard</li>
-            <li>Shared credit pool</li>
-            <li>Admin controls</li>
-          </ul>
-        </div>
-      </div>
-      <div class="info-box note"><span class="info-icon">ℹ️</span><span>Credit top-ups (500 or 2,000 credits) are available in the Billing page at any time without changing your plan tier.</span></div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Shortcuts -->
-    <div class="doc-section" id="shortcuts">
-      <div class="section-eyebrow">Reference</div>
-      <div class="section-title">Keyboard shortcuts</div>
-      <div class="shortcut-grid">
-        <div class="shortcut-row"><span class="shortcut-label">Generate</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>↵</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Cancel generation</span><div class="kbd-combo"><kbd>Esc</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Undo selection</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>Z</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Redo selection</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Z</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Zoom in</span><div class="kbd-combo"><kbd>+</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Zoom out</span><div class="kbd-combo"><kbd>−</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Fit to canvas</span><div class="kbd-combo"><kbd>F</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Download output</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>S</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Clear canvas</span><div class="kbd-combo"><kbd>⌘</kbd><kbd>⌫</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Toggle left panel</span><div class="kbd-combo"><kbd>[</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Toggle right panel</span><div class="kbd-combo"><kbd>]</kbd></div></div>
-        <div class="shortcut-row"><span class="shortcut-label">Pan canvas</span><div class="kbd-combo"><kbd>Space</kbd> + drag</div></div>
-      </div>
-    </div>
-
-    <div class="section-divider"></div>
-
-    <!-- Tips -->
-    <div class="doc-section" id="tips">
-      <div class="section-eyebrow">Best practices</div>
-      <div class="section-title">Tips &amp; tricks</div>
-      <div class="tip-list">
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Chain modes together.</strong> 3D Rendering → Visual Edit → Upscale. Results compound significantly at each step.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Stage after approval.</strong> Use Scene Compose after the base render is approved, then add reference furniture, planting, lighting fixtures, or vehicles with captions and placement pins.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Draft at 1K, deliver at 4K.</strong> Iterate cheaply at 1K until you're happy with composition and style, then re-run at 4K for the final output.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Describe the photo, not just the building.</strong> "Late afternoon golden light, street-level 35mm shot, slight lens flare" produces more atmosphere than a pure architectural description.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>White clay renders = best 3D results.</strong> Export with no textures on a white background. The AI reads geometry most accurately from clean clay models.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Tight masks for Visual Edit.</strong> Constrain selections to exactly the area you want changed — loose masks give the AI too much latitude.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>16:9 for boards, 3:4 for social.</strong> Match your aspect ratio to the destination — widescreen for presentations, portrait for Instagram and LinkedIn.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Upscale before video.</strong> The richer the input still, the more convincing the camera motion in Video Studio.</div></div>
-        <div class="tip-item"><span class="tip-bullet">💡</span><div class="tip-text"><strong>Use History to A/B test styles.</strong> Run the same prompt with two different styles back-to-back, then compare thumbnails in the History panel.</div></div>
-      </div>
-    </div>
-
-  </main>
-
-  <button class="doc-chat-launcher" id="docChatLauncher" type="button" aria-expanded="false" aria-controls="docChatPanel">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
-    Ask the manual
-  </button>
-
-  <section class="doc-chat-panel" id="docChatPanel" aria-label="Documentation assistant">
-    <div class="doc-chat-head">
-      <div class="doc-chat-title">
-        <div class="doc-chat-mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L20 11l-6.1 2.3L12 19l-1.9-5.7L4 11l6.1-2.3L12 3z"/></svg>
-        </div>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AV</div>
         <div>
-          <strong>Documentation Assistant</strong>
-          <span>Ask how to use ArcVisAI Studio, including Scene Compose.</span>
+          <div class="brand-title">ArchViz AI Studio</div>
+          <div class="brand-subtitle" data-i18n="manualLabel">Documentation</div>
         </div>
       </div>
-      <button class="doc-chat-close" id="docChatClose" type="button" aria-label="Close documentation assistant">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="doc-chat-context">
-      <div class="doc-chat-status"><span class="doc-chat-status-dot" id="docChatStatusDot"></span><span id="docChatStatus">Manual connected</span></div>
-      <div class="doc-chat-model" id="docChatModel">gemini-3.1-pro-preview</div>
-    </div>
-    <div class="doc-chat-messages" id="docChatMessages" role="log" aria-live="polite">
-      <div class="doc-chat-message assistant">
-        <div class="doc-chat-bubble">
-          I can answer from this manual, jump you to relevant sections, and help choose the right workflow. Try one of these:
+      <div class="top-actions">
+        <div class="search" id="searchWrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="searchInput" type="search" autocomplete="off" spellcheck="false" />
+          <div class="search-results" id="searchResults"></div>
         </div>
+        <select id="languageSelect" class="select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+        </select>
+        <a class="pill-link" href="/" id="backToApp">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 18-6-6 6-6"/></svg>
+          <span data-i18n="backToApp">Back to app</span>
+        </a>
       </div>
-      <div class="doc-chat-suggestions" id="docChatSuggestions">
-        <button class="doc-chat-chip" type="button" data-prompt="How do I use Scene Compose with placement pins?">Scene Compose pins</button>
-        <button class="doc-chat-chip" type="button" data-prompt="Can I add furniture to an existing render without changing the architecture?">Add furniture</button>
-        <button class="doc-chat-chip" type="button" data-prompt="Which mode should I use for a CAD floor plan?">Pick a mode</button>
-        <button class="doc-chat-chip" type="button" data-prompt="What is the best workflow for a final presentation render?">Final render workflow</button>
+    </header>
+
+    <nav class="sidebar" id="sidebar"></nav>
+    <main class="main" id="main"></main>
+
+    <button class="doc-chat-launcher" id="docChatLauncher" type="button" aria-expanded="false" aria-controls="docChatPanel">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
+      <span id="chatLauncherText">Ask the manual</span>
+    </button>
+
+    <section class="doc-chat-panel" id="docChatPanel" aria-label="Documentation assistant">
+      <div class="chat-head">
+        <div class="chat-mark">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L20 11l-6.1 2.3L12 19l-1.9-5.7L4 11l6.1-2.3L12 3z"/></svg>
+        </div>
+        <div class="chat-title">
+          <strong id="chatTitle">Documentation Assistant</strong>
+          <span id="chatSubtitle">Ask how to use ArchViz AI Studio.</span>
+        </div>
+        <button class="icon-button" id="docChatClose" type="button" aria-label="Close">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-    </div>
-    <form class="doc-chat-form" id="docChatForm">
-      <textarea class="doc-chat-input" id="docChatInput" rows="1" placeholder="Ask the documentation..." autocomplete="off"></textarea>
-      <button class="doc-chat-send" id="docChatSend" type="submit" aria-label="Send question">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-      </button>
-    </form>
-  </section>
-</div>
+      <div class="chat-context">
+        <div class="chat-status"><span class="chat-dot" id="docChatStatusDot"></span><span id="docChatStatus">Manual connected</span></div>
+        <div class="chat-model" id="docChatModel">gemini-3.1-pro-preview</div>
+      </div>
+      <div class="chat-messages" id="docChatMessages" role="log" aria-live="polite"></div>
+      <form class="chat-form" id="docChatForm">
+        <div class="attachment-preview" id="attachmentPreview">
+          <img id="attachmentThumb" alt="" />
+          <span id="attachmentName"></span>
+          <button class="icon-button" id="removeAttachment" type="button" aria-label="Remove image">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="chat-input-row">
+          <input id="docChatImageInput" type="file" accept="image/*" hidden />
+          <button class="icon-button" id="attachImageButton" type="button" aria-label="Attach image">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+          </button>
+          <textarea class="chat-input" id="docChatInput" rows="1"></textarea>
+          <button class="send-button" id="docChatSend" type="submit" aria-label="Send">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
 
-<script>
-  // Search index
-  const searchIndex = [
-    { id: 'overview',           icon: '🏛️', title: 'Overview',             section: 'Getting started',  kw: 'overview platform arcvisai what is' },
-    { id: 'getting-started',    icon: '🚀', title: 'Quick start',           section: 'Getting started',  kw: 'quick start first render login sign in upload' },
-    { id: 'interface',          icon: '🖥️', title: 'Interface layout',      section: 'Getting started',  kw: 'interface layout sidebar topbar canvas panel zones workspace' },
-    { id: 'mode-render-3d',     icon: '🏛️', title: '3D Rendering',          section: 'Modes',            kw: '3d render model screenshot blender sketchup rhino revit clay' },
-    { id: 'mode-scene-compose', icon: '🧩', title: 'Scene Compose',         section: 'Modes',            kw: 'scene compose custom insertions reference photos furniture elements captions placement pins base scene locked architecture' },
-    { id: 'mode-render-cad',    icon: '📐', title: 'CAD to Render',         section: 'Modes',            kw: 'cad drawing floor plan elevation section technical linework' },
-    { id: 'mode-render-sketch', icon: '✏️', title: 'Sketch to Render',      section: 'Modes',            kw: 'sketch hand drawn concept pencil freehand' },
-    { id: 'mode-generate-text', icon: '💬', title: 'Generate from Text',    section: 'Modes',            kw: 'text prompt describe no image generate text concept' },
-    { id: 'mode-masterplan',    icon: '🗺️', title: 'Masterplan',            section: 'Modes',            kw: 'masterplan aerial site satellite boundary polygon' },
-    { id: 'mode-visual-edit',   icon: '🖌️', title: 'Visual Edit',           section: 'Modes',            kw: 'visual edit brush selection mask paint inpaint region facade material change' },
-    { id: 'mode-exploded',      icon: '💥', title: 'Exploded View',         section: 'Modes',            kw: 'exploded axonometric diagram layer structural' },
-    { id: 'mode-section',       icon: '✂️', title: 'Section Render',        section: 'Modes',            kw: 'section cut drawing elevation interior detail' },
-    { id: 'mode-multi-angle',   icon: '🔄', title: 'Multi-Angle',           section: 'Modes',            kw: 'multi angle multiple views front side rear aerial interior' },
-    { id: 'mode-upscale',       icon: '🔍', title: 'Upscale',               section: 'Modes',            kw: 'upscale resolution enhance sharpen detail quality' },
-    { id: 'mode-img-to-cad',    icon: '📏', title: 'Image to CAD',          section: 'Modes',            kw: 'image to cad vector line drawing svg dxf reverse engineer' },
-    { id: 'mode-img-to-3d',     icon: '🧊', title: 'Image to 3D',           section: 'Modes',            kw: 'image to 3d model orthographic massing' },
-    { id: 'mode-headshot',      icon: '👤', title: 'Headshot Studio',       section: 'Modes',            kw: 'headshot portrait professional photo cv team' },
-    { id: 'mode-video',         icon: '🎬', title: 'Video Studio',          section: 'Modes',            kw: 'video walkthrough animation fly through orbit crane veo kling' },
-    { id: 'mode-material',      icon: '🔬', title: 'Material Validation',   section: 'Modes',            kw: 'material validation compliance schedule specification check' },
-    { id: 'mode-translate',     icon: '🌍', title: 'Document Translate',    section: 'Modes',            kw: 'translate translation docx excel word language document' },
-    { id: 'mode-pdf',           icon: '🗜️', title: 'PDF Compression',       section: 'Modes',            kw: 'pdf compress reduce file size' },
-    { id: 'settings',           icon: '⚙️', title: 'Render settings',       section: 'Reference',        kw: 'settings aspect ratio resolution lighting style detail people vegetation weather' },
-    { id: 'styles',             icon: '🎨', title: 'Architectural styles',  section: 'Reference',        kw: 'style contemporary minimalist brutalist industrial scandinavian japanese' },
-    { id: 'plans',              icon: '💳', title: 'Plans & credits',       section: 'Billing',          kw: 'plan credits billing price starter professional studio cost' },
-    { id: 'shortcuts',          icon: '⌨️', title: 'Keyboard shortcuts',    section: 'Reference',        kw: 'keyboard shortcut hotkey generate cancel undo zoom download' },
-    { id: 'tips',               icon: '💡', title: 'Tips & tricks',         section: 'Best practices',   kw: 'tips tricks best practice chain modes quality advice workflow' },
-  ];
+  <script src="./docs-data.js"></script>
+  <script>
+    const REQUESTED_MODEL = "gemini-3.1-pro-preview";
+    const FALLBACK_MODEL = "gemini-3-pro-preview";
+    const PROD_GATEWAY = "https://archviz-api-gateway.matija-lekovic.workers.dev";
+    const JWT_SESSION_KEY = "archviz_jwt";
+    const HANDOFF_KEY = "archviz_docs_auth_handoff";
+    const SUPPORTED_LANGS = ["en", "es", "fr"];
 
-  function esc(t) { return t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
-  function mark(text, q) {
-    if (!q) return text;
-    return text.replace(new RegExp(`(${esc(q)})`,'gi'),'<mark>$1</mark>');
-  }
+    let lang = detectLanguage();
+    let doc = window.AVAS_DOCS[lang];
+    let searchIndex = [];
+    let chatHistory = [];
+    let selectedImage = null;
 
-  const input   = document.getElementById('searchInput');
-  const results = document.getElementById('searchResults');
-  const wrap    = document.getElementById('searchWrap');
+    const els = {
+      main: document.getElementById("main"),
+      sidebar: document.getElementById("sidebar"),
+      searchInput: document.getElementById("searchInput"),
+      searchResults: document.getElementById("searchResults"),
+      searchWrap: document.getElementById("searchWrap"),
+      languageSelect: document.getElementById("languageSelect"),
+      chatLauncher: document.getElementById("docChatLauncher"),
+      chatPanel: document.getElementById("docChatPanel"),
+      chatClose: document.getElementById("docChatClose"),
+      chatMessages: document.getElementById("docChatMessages"),
+      chatForm: document.getElementById("docChatForm"),
+      chatInput: document.getElementById("docChatInput"),
+      chatSend: document.getElementById("docChatSend"),
+      chatStatus: document.getElementById("docChatStatus"),
+      chatDot: document.getElementById("docChatStatusDot"),
+      chatModel: document.getElementById("docChatModel"),
+      chatTitle: document.getElementById("chatTitle"),
+      chatSubtitle: document.getElementById("chatSubtitle"),
+      chatLauncherText: document.getElementById("chatLauncherText"),
+      imageInput: document.getElementById("docChatImageInput"),
+      attachButton: document.getElementById("attachImageButton"),
+      attachmentPreview: document.getElementById("attachmentPreview"),
+      attachmentThumb: document.getElementById("attachmentThumb"),
+      attachmentName: document.getElementById("attachmentName"),
+      removeAttachment: document.getElementById("removeAttachment"),
+    };
 
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) { results.innerHTML = ''; results.classList.remove('open'); return; }
+    function detectLanguage() {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("lang");
+      const stored = localStorage.getItem("archviz_docs_lang") || localStorage.getItem("i18nextLng") || "";
+      const nav = navigator.language || "en";
+      const candidate = (requested || stored || nav || "en").slice(0, 2).toLowerCase();
+      return SUPPORTED_LANGS.includes(candidate) ? candidate : "en";
+    }
 
-    const hits = searchIndex.filter(i =>
-      i.title.toLowerCase().includes(q) ||
-      i.kw.toLowerCase().includes(q) ||
-      i.section.toLowerCase().includes(q)
-    ).slice(0, 8);
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
-    if (!hits.length) {
-      results.innerHTML = `<div class="no-results">No results for "<strong>${q}</strong>"</div>`;
-    } else {
-      results.innerHTML = hits.map(i => `
-        <div class="search-result-item" data-id="${i.id}">
-          <div class="result-icon">${i.icon}</div>
-          <div class="result-info">
-            <div class="result-title">${mark(i.title, input.value.trim())}</div>
-            <div class="result-section">${i.section}</div>
+    function renderInline(text) {
+      return escapeHtml(text)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    }
+
+    function list(items) {
+      return `<ul>${items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ul>`;
+    }
+
+    function renderPage() {
+      doc = window.AVAS_DOCS[lang];
+      document.documentElement.lang = lang;
+      document.title = doc.meta.title;
+      localStorage.setItem("archviz_docs_lang", lang);
+      els.languageSelect.value = lang;
+      document.querySelectorAll("[data-i18n]").forEach((node) => {
+        node.textContent = doc.ui[node.dataset.i18n] || node.textContent;
+      });
+      els.searchInput.placeholder = doc.ui.searchPlaceholder;
+      els.chatLauncherText.textContent = doc.chat.launcher;
+      els.chatTitle.textContent = doc.chat.title;
+      els.chatSubtitle.textContent = doc.chat.subtitle;
+      els.chatInput.placeholder = doc.chat.placeholder;
+      els.attachButton.setAttribute("aria-label", doc.chat.attachImage);
+      els.removeAttachment.setAttribute("aria-label", doc.chat.removeImage);
+
+      renderSidebar();
+      renderMain();
+      buildSearchIndex();
+      resetChatIntro();
+      setChatStatus(getDocsGatewayToken() ? doc.chat.connected : doc.chat.signInRequired, getDocsGatewayToken() ? "ready" : "warn");
+    }
+
+    function renderSidebar() {
+      const blocks = [
+        { label: doc.nav.start, links: [
+          { id: "overview", label: doc.nav.overview },
+          { id: "workflow", label: doc.nav.workflow },
+          { id: "interface", label: doc.nav.interface },
+        ]},
+        { label: doc.nav.modes, links: doc.modes.map((mode) => ({ id: mode.id, label: mode.title, tier: mode.tier })) },
+        { label: doc.nav.reference, links: [
+          { id: "settings", label: doc.reference.settings.title },
+          { id: "styles", label: doc.reference.styles.title },
+          { id: "plans", label: doc.reference.plans.title },
+          { id: "shortcuts", label: doc.reference.shortcuts.title },
+          { id: "troubleshooting", label: doc.reference.troubleshooting.title },
+        ]},
+      ];
+      els.sidebar.innerHTML = blocks.map((block) => `
+        <div class="nav-block">
+          <div class="nav-label">${escapeHtml(block.label)}</div>
+          ${block.links.map((link) => `
+            <a class="nav-link" href="#${link.id}">
+              <span class="nav-dot"></span>
+              <span>${escapeHtml(link.label)}</span>
+              ${link.tier ? `<span class="tag ${link.tier === "pro" ? "pro" : link.tier === "pay" ? "pay" : ""}">${escapeHtml(doc.tiers[link.tier] || link.tier)}</span>` : ""}
+            </a>
+          `).join("")}
+        </div>
+      `).join("");
+    }
+
+    function renderMain() {
+      els.main.innerHTML = `
+        <section class="hero" id="overview">
+          <div>
+            <div class="eyebrow">${escapeHtml(doc.hero.eyebrow)}</div>
+            <h1>${escapeHtml(doc.hero.title)}</h1>
+            <p class="hero-lead">${escapeHtml(doc.hero.lead)}</p>
           </div>
-        </div>`).join('');
+          <aside class="hero-panel">
+            <div class="hero-stat-grid">
+              ${doc.hero.stats.map((stat) => `<div class="stat"><strong>${escapeHtml(stat.value)}</strong><span>${escapeHtml(stat.label)}</span></div>`).join("")}
+            </div>
+            <p class="section-lead">${escapeHtml(doc.hero.note)}</p>
+          </aside>
+        </section>
 
-      results.querySelectorAll('.search-result-item').forEach(el => {
-        el.addEventListener('click', () => {
-          const t = document.getElementById(el.dataset.id);
-          if (t) {
-            results.classList.remove('open');
-            input.value = '';
-            t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            t.classList.add('highlight-target');
-            t.addEventListener('animationend', () => t.classList.remove('highlight-target'), { once: true });
-          }
+        <section class="section">
+          <div class="section-head">
+            <div><div class="eyebrow">${escapeHtml(doc.platform.eyebrow)}</div><h2>${escapeHtml(doc.platform.title)}</h2></div>
+            <p class="section-lead">${escapeHtml(doc.platform.lead)}</p>
+          </div>
+          <div class="overview-grid">
+            ${doc.platform.cards.map((card) => `<article class="overview-card"><div class="icon">${card.icon}</div><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.text)}</p></article>`).join("")}
+          </div>
+        </section>
+
+        <section class="section" id="workflow">
+          <div class="section-head">
+            <div><div class="eyebrow">${escapeHtml(doc.workflow.eyebrow)}</div><h2>${escapeHtml(doc.workflow.title)}</h2></div>
+            <p class="section-lead">${escapeHtml(doc.workflow.lead)}</p>
+          </div>
+          <div class="path">
+            ${doc.workflow.steps.map((step, index) => `<article class="path-step"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.text)}</p></article>`).join("")}
+          </div>
+        </section>
+
+        <section class="section" id="interface">
+          <div class="section-head">
+            <div><div class="eyebrow">${escapeHtml(doc.interface.eyebrow)}</div><h2>${escapeHtml(doc.interface.title)}</h2></div>
+            <p class="section-lead">${escapeHtml(doc.interface.lead)}</p>
+          </div>
+          <div class="reference-grid">
+            ${doc.interface.zones.map((zone) => `<article class="reference-card"><h3>${escapeHtml(zone.title)}</h3><p>${escapeHtml(zone.text)}</p></article>`).join("")}
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div><div class="eyebrow">${escapeHtml(doc.modesIntro.eyebrow)}</div><h2>${escapeHtml(doc.modesIntro.title)}</h2></div>
+            <p class="section-lead">${escapeHtml(doc.modesIntro.lead)}</p>
+          </div>
+          <div class="mode-grid">${doc.modes.map(renderModeCard).join("")}</div>
+        </section>
+
+        ${renderReference()}
+      `;
+      observeNav();
+    }
+
+    function renderModeCard(mode) {
+      return `
+        <article class="mode-card" id="${mode.id}">
+          <div class="mode-top">
+            <div class="mode-icon">${mode.icon}</div>
+            <div>
+              <div class="mode-title">${escapeHtml(mode.title)}</div>
+              <div class="mode-summary">${escapeHtml(mode.summary)}</div>
+            </div>
+            <span class="tag ${mode.tier === "pro" ? "pro" : mode.tier === "pay" ? "pay" : ""}">${escapeHtml(doc.tiers[mode.tier])}</span>
+          </div>
+          <div class="mode-body">
+            <p class="mode-intro">${escapeHtml(mode.detail)}</p>
+            <div class="mode-meta-grid">
+              <div class="mode-meta"><span>${escapeHtml(doc.modeLabels.input)}</span><strong>${escapeHtml(mode.input)}</strong></div>
+              <div class="mode-meta"><span>${escapeHtml(doc.modeLabels.output)}</span><strong>${escapeHtml(mode.output)}</strong></div>
+            </div>
+            <div class="doc-list"><h4>${escapeHtml(doc.modeLabels.offers)}</h4>${list(mode.offers)}</div>
+            <div class="doc-list"><h4>${escapeHtml(doc.modeLabels.workflow)}</h4>${list(mode.workflow)}</div>
+            <div class="doc-list"><h4>${escapeHtml(doc.modeLabels.tips)}</h4>${list(mode.tips)}</div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderReference() {
+      const ref = doc.reference;
+      const blocks = [ref.settings, ref.styles, ref.plans, ref.shortcuts, ref.troubleshooting];
+      return blocks.map((block) => `
+        <section class="section" id="${block.id}">
+          <div class="section-head">
+            <div><div class="eyebrow">${escapeHtml(block.eyebrow)}</div><h2>${escapeHtml(block.title)}</h2></div>
+            <p class="section-lead">${escapeHtml(block.lead)}</p>
+          </div>
+          <div class="reference-grid">
+            ${block.cards.map((card) => `<article class="reference-card"><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.text)}</p>${card.items ? list(card.items) : ""}</article>`).join("")}
+          </div>
+        </section>
+      `).join("");
+    }
+
+    function buildSearchIndex() {
+      searchIndex = [
+        { id: "overview", icon: "⌁", title: doc.nav.overview, section: doc.nav.start, text: `${doc.hero.title} ${doc.hero.lead}` },
+        { id: "workflow", icon: "→", title: doc.nav.workflow, section: doc.nav.start, text: doc.workflow.steps.map((s) => `${s.title} ${s.text}`).join(" ") },
+        { id: "interface", icon: "▦", title: doc.nav.interface, section: doc.nav.start, text: doc.interface.zones.map((z) => `${z.title} ${z.text}`).join(" ") },
+        ...doc.modes.map((mode) => ({ id: mode.id, icon: mode.icon, title: mode.title, section: doc.nav.modes, text: [mode.summary, mode.detail, mode.input, mode.output, ...mode.offers, ...mode.workflow, ...mode.tips].join(" ") })),
+        ...Object.values(doc.reference).map((block) => ({ id: block.id, icon: "•", title: block.title, section: doc.nav.reference, text: [block.lead, ...block.cards.flatMap((c) => [c.title, c.text, ...(c.items || [])])].join(" ") })),
+      ];
+    }
+
+    function observeNav() {
+      const navLinks = [...document.querySelectorAll(".nav-link")];
+      const targets = navLinks.map((link) => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          navLinks.forEach((link) => link.classList.toggle("active", link.getAttribute("href") === `#${entry.target.id}`));
         });
+      }, { rootMargin: "-20% 0px -70% 0px" });
+      targets.forEach((target) => observer.observe(target));
+    }
+
+    function scrollToId(id) {
+      const target = document.getElementById(id);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("highlight-target");
+      target.addEventListener("animationend", () => target.classList.remove("highlight-target"), { once: true });
+    }
+
+    function performSearch(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) { els.searchResults.innerHTML = ""; els.searchResults.classList.remove("open"); return; }
+      const hits = searchIndex
+        .map((item) => ({ ...item, score: scoreSearch(item, q) }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 9);
+      if (!hits.length) {
+        els.searchResults.innerHTML = `<div class="search-hit"><div class="hit-icon">?</div><div><div class="hit-title">${escapeHtml(doc.ui.noResults)}</div><div class="hit-section">${escapeHtml(query)}</div></div></div>`;
+      } else {
+        els.searchResults.innerHTML = hits.map((hit) => `<div class="search-hit" data-id="${hit.id}"><div class="hit-icon">${hit.icon}</div><div><div class="hit-title">${highlight(hit.title, query)}</div><div class="hit-section">${escapeHtml(hit.section)}</div></div></div>`).join("");
+      }
+      els.searchResults.classList.add("open");
+    }
+
+    function scoreSearch(item, q) {
+      const title = item.title.toLowerCase();
+      const text = item.text.toLowerCase();
+      let score = 0;
+      if (title.includes(q)) score += 12;
+      q.split(/\s+/).forEach((part) => {
+        if (part.length < 2) return;
+        if (title.includes(part)) score += 4;
+        if (text.includes(part)) score += 1;
+      });
+      return score;
+    }
+
+    function highlight(text, query) {
+      const q = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return q ? escapeHtml(text).replace(new RegExp(`(${q})`, "ig"), "<mark>$1</mark>") : escapeHtml(text);
+    }
+
+    function getGatewayUrl() {
+      const configured = window.AVAS_GATEWAY_URL || localStorage.getItem("archviz_gateway_url");
+      if (configured) return String(configured).replace(/\/+$/, "");
+      return ["localhost", "127.0.0.1", "0.0.0.0"].includes(location.hostname) ? "http://localhost:8787" : PROD_GATEWAY;
+    }
+
+    function getDocsGatewayToken() {
+      const fromSession = readToken(sessionStorage.getItem(JWT_SESSION_KEY));
+      if (fromSession) {
+        try { localStorage.removeItem(HANDOFF_KEY); } catch {}
+        return fromSession;
+      }
+      const handoff = readToken(localStorage.getItem(HANDOFF_KEY));
+      if (handoff) {
+        try {
+          sessionStorage.setItem(JWT_SESSION_KEY, localStorage.getItem(HANDOFF_KEY));
+          localStorage.removeItem(HANDOFF_KEY);
+        } catch {}
+        return handoff;
+      }
+      return null;
+    }
+
+    function readToken(raw) {
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.token && Number(parsed.expiresAt) > Date.now()) return parsed.token;
+      } catch {}
+      return null;
+    }
+
+    function resetChatIntro() {
+      els.chatMessages.innerHTML = `
+        <div class="chat-message assistant"><div class="chat-bubble">${renderAssistantText(doc.chat.intro)}<div class="chat-suggestions">${doc.chat.suggestions.map((item) => `<button class="chip" type="button" data-prompt="${escapeHtml(item.prompt)}">${escapeHtml(item.label)}</button>`).join("")}</div></div></div>
+      `;
+    }
+
+    function openChat() {
+      els.chatPanel.classList.add("open");
+      els.chatLauncher.setAttribute("aria-expanded", "true");
+      setTimeout(() => els.chatInput.focus(), 60);
+    }
+
+    function closeChat() {
+      els.chatPanel.classList.remove("open");
+      els.chatLauncher.setAttribute("aria-expanded", "false");
+    }
+
+    function setChatStatus(text, tone = "ready") {
+      const colors = {
+        ready: ["#15803d", "rgba(21,128,61,.12)"],
+        busy: ["#1d4ed8", "rgba(29,78,216,.14)"],
+        warn: ["#c26718", "rgba(194,103,24,.16)"],
+        error: ["#dc2626", "rgba(220,38,38,.14)"],
+      };
+      const [bg, glow] = colors[tone] || colors.ready;
+      els.chatStatus.textContent = text;
+      els.chatDot.style.background = bg;
+      els.chatDot.style.boxShadow = `0 0 0 3px ${glow}`;
+    }
+
+    function renderAssistantText(text) {
+      let safe = renderInline(text).replace(/\n{3,}/g, "\n\n").replace(/\n/g, "<br>");
+      safe = safe.replace(/\[([^\]]+)\]\((#[a-z0-9-]+)\)/gi, (_, label, href) => {
+        const id = href.slice(1);
+        return document.getElementById(id) ? `<a href="${href}" data-chat-anchor>${escapeHtml(label)}</a>` : escapeHtml(label);
+      });
+      return safe;
+    }
+
+    function appendMessage(role, text, sources = [], imageDataUrl = null) {
+      const row = document.createElement("div");
+      row.className = `chat-message ${role}`;
+      const bubble = document.createElement("div");
+      bubble.className = "chat-bubble";
+      if (imageDataUrl) {
+        bubble.innerHTML = `<img src="${imageDataUrl}" alt="" style="display:block;width:100%;max-height:160px;object-fit:cover;border-radius:9px;margin-bottom:8px;border:1px solid rgba(255,255,255,.35)" />`;
+      }
+      if (role === "assistant") {
+        bubble.innerHTML += renderAssistantText(text);
+        if (sources.length) {
+          bubble.innerHTML += `<div class="chat-source-row">${sources.map((source) => `<a class="chat-source" href="#${source.id}" data-chat-anchor>${escapeHtml(source.title)}</a>`).join("")}</div>`;
+        }
+      } else {
+        bubble.innerHTML += escapeHtml(text);
+      }
+      row.appendChild(bubble);
+      els.chatMessages.appendChild(row);
+      els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      return row;
+    }
+
+    function typingIndicator() {
+      const row = document.createElement("div");
+      row.className = "chat-message assistant";
+      row.innerHTML = `<div class="chat-bubble typing"><span></span><span></span><span></span></div>`;
+      els.chatMessages.appendChild(row);
+      els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      return row;
+    }
+
+    function buildManualText() {
+      return [
+        `${doc.hero.title}: ${doc.hero.lead}`,
+        doc.workflow.steps.map((s) => `${s.title}: ${s.text}`).join("\n"),
+        doc.interface.zones.map((z) => `${z.title}: ${z.text}`).join("\n"),
+        doc.modes.map((mode) => [
+          `${mode.title} (#${mode.id})`,
+          mode.summary,
+          mode.detail,
+          `${doc.modeLabels.input}: ${mode.input}`,
+          `${doc.modeLabels.output}: ${mode.output}`,
+          `${doc.modeLabels.offers}: ${mode.offers.join("; ")}`,
+          `${doc.modeLabels.workflow}: ${mode.workflow.join("; ")}`,
+          `${doc.modeLabels.tips}: ${mode.tips.join("; ")}`,
+        ].join("\n")).join("\n\n"),
+        Object.values(doc.reference).map((block) => `${block.title}: ${block.lead}\n${block.cards.map((card) => `${card.title}: ${card.text} ${(card.items || []).join("; ")}`).join("\n")}`).join("\n\n"),
+      ].join("\n\n");
+    }
+
+    function buildPrompt(question) {
+      const recent = chatHistory.slice(-8).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n") || doc.chat.noHistory;
+      return [
+        doc.chat.system,
+        doc.chat.photoInstruction,
+        doc.chat.answerRules,
+        "",
+        "ANCHORS:",
+        searchIndex.map((item) => `${item.title}: #${item.id}`).join("\n"),
+        "",
+        "DOCUMENTATION:",
+        buildManualText(),
+        "",
+        "RECENT CHAT:",
+        recent,
+        "",
+        `QUESTION: ${question}`
+      ].join("\n");
+    }
+
+    async function requestAnswer(question, image) {
+      const token = getDocsGatewayToken();
+      if (!token) throw new Error(doc.chat.signInError);
+      const textPart = { text: buildPrompt(question) };
+      const parts = image ? [textPart, { inlineData: { mimeType: image.mimeType, data: image.base64 } }] : [textPart];
+      const body = {
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.9,
+          maxOutputTokens: 1700,
+          responseModalities: ["TEXT"],
+          thinkingConfig: { thinkingLevel: "low" }
+        }
+      };
+      let lastError = "";
+      for (const model of [REQUESTED_MODEL, FALLBACK_MODEL]) {
+        els.chatModel.textContent = model;
+        const response = await fetch(`${getGatewayUrl()}/api/gemini/models/${model}:generateContent`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const text = (data?.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("").trim();
+          return { text: text || doc.chat.emptyResponse, model };
+        }
+        lastError = await response.text().catch(() => `Request failed (${response.status})`);
+        if (model === REQUESTED_MODEL && /model|not found|invalid|not supported|404|400/i.test(lastError)) continue;
+        break;
+      }
+      throw new Error(lastError || doc.chat.unavailable);
+    }
+
+    function findSources(question, answer) {
+      const haystack = `${question} ${answer}`.toLowerCase();
+      return searchIndex
+        .map((item) => ({ ...item, score: scoreSearch(item, haystack.slice(0, 240)) + (haystack.includes(item.title.toLowerCase()) ? 10 : 0) }))
+        .filter((item) => item.score > 2)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    }
+
+    async function submitQuestion(rawQuestion) {
+      const question = rawQuestion.trim() || (selectedImage ? doc.chat.photoOnlyQuestion : "");
+      if (!question) return;
+      openChat();
+      const image = selectedImage;
+      clearAttachment();
+      els.chatInput.value = "";
+      els.chatInput.style.height = "auto";
+      els.chatSend.disabled = true;
+      appendMessage("user", question, [], image?.dataUrl);
+      chatHistory.push({ role: "user", content: image ? `${question} (${doc.chat.imageAttached})` : question });
+      const typing = typingIndicator();
+      setChatStatus(doc.chat.thinking, "busy");
+      try {
+        const { text, model } = await requestAnswer(question, image);
+        typing.remove();
+        appendMessage("assistant", text, findSources(question, text));
+        chatHistory.push({ role: "assistant", content: text });
+        setChatStatus(model === REQUESTED_MODEL ? doc.chat.connected : doc.chat.connectedFallback, "ready");
+      } catch (error) {
+        typing.remove();
+        appendMessage("assistant", error?.message || doc.chat.unavailable, [{ id: "overview", title: doc.nav.overview }]);
+        setChatStatus(doc.chat.needsAttention, "error");
+      } finally {
+        els.chatSend.disabled = false;
+        els.chatInput.focus();
+      }
+    }
+
+    function clearAttachment() {
+      selectedImage = null;
+      els.attachmentPreview.classList.remove("open");
+      els.attachmentThumb.removeAttribute("src");
+      els.attachmentName.textContent = "";
+      els.imageInput.value = "";
+    }
+
+    function readImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result);
+          const base64 = dataUrl.split(",")[1] || "";
+          resolve({ name: file.name, mimeType: file.type || "image/png", base64, dataUrl });
+        };
+        reader.onerror = () => reject(new Error(doc.chat.imageReadError));
+        reader.readAsDataURL(file);
       });
     }
-    results.classList.add('open');
-  });
 
-  document.addEventListener('click', e => { if (!wrap.contains(e.target)) results.classList.remove('open'); });
-  input.addEventListener('keydown', e => { if (e.key === 'Escape') { results.classList.remove('open'); input.blur(); } });
-
-  // Active nav highlight on scroll
-  const allSections = Array.from(document.querySelectorAll('[id]'));
-  const navLinks    = Array.from(document.querySelectorAll('.nav-item'));
-
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        navLinks.forEach(n => n.classList.remove('active'));
-        const a = navLinks.find(n => n.getAttribute('href') === '#' + e.target.id);
-        if (a) a.classList.add('active');
-      }
+    els.languageSelect.addEventListener("change", () => {
+      lang = els.languageSelect.value;
+      renderPage();
     });
-  }, { rootMargin: '-20% 0px -70% 0px' });
-
-  allSections.forEach(s => { if (s.id) obs.observe(s); });
-
-  // Smooth scroll
-  document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', e => {
-      const t = document.querySelector(a.getAttribute('href'));
-      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    els.searchInput.addEventListener("input", () => performSearch(els.searchInput.value));
+    els.searchResults.addEventListener("click", (event) => {
+      const hit = event.target.closest("[data-id]");
+      if (!hit) return;
+      els.searchResults.classList.remove("open");
+      els.searchInput.value = "";
+      scrollToId(hit.dataset.id);
     });
-  });
-
-  // Documentation assistant
-  const DOCS_CHAT_REQUESTED_MODEL = 'gemini-3.1-pro-preview';
-  const DOCS_CHAT_FALLBACK_MODEL = 'gemini-3-pro-preview';
-  const DOCS_CHAT_PRODUCTION_GATEWAY = 'https://archviz-api-gateway.matija-lekovic.workers.dev';
-  const DOCS_CHAT_SESSION_KEY = 'archviz_jwt';
-
-  const chatLauncher = document.getElementById('docChatLauncher');
-  const chatPanel = document.getElementById('docChatPanel');
-  const chatClose = document.getElementById('docChatClose');
-  const chatMessages = document.getElementById('docChatMessages');
-  const chatForm = document.getElementById('docChatForm');
-  const chatInput = document.getElementById('docChatInput');
-  const chatSend = document.getElementById('docChatSend');
-  const chatStatus = document.getElementById('docChatStatus');
-  const chatStatusDot = document.getElementById('docChatStatusDot');
-  const chatModel = document.getElementById('docChatModel');
-  const chatSuggestions = document.getElementById('docChatSuggestions');
-  const chatHistory = [];
-
-  function getDocsGatewayUrl() {
-    const configured = window.AVAS_GATEWAY_URL || localStorage.getItem('archviz_gateway_url');
-    if (configured) return String(configured).replace(/\/+$/, '');
-    const isLocal = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
-    return isLocal ? 'http://localhost:8787' : DOCS_CHAT_PRODUCTION_GATEWAY;
-  }
-
-  function getDocsGatewayToken() {
-    try {
-      const stored = sessionStorage.getItem(DOCS_CHAT_SESSION_KEY);
-      if (!stored) return null;
-      const parsed = JSON.parse(stored);
-      if (parsed?.token && Number(parsed.expiresAt) > Date.now()) return parsed.token;
-      sessionStorage.removeItem(DOCS_CHAT_SESSION_KEY);
-    } catch {}
-    return null;
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function renderAssistantText(text) {
-    let safe = escapeHtml(text.trim());
-    safe = safe.replace(/\[([^\]]+)\]\((#[a-z0-9-]+)\)/gi, (match, label, href) => {
-      const targetId = href.slice(1);
-      return document.getElementById(targetId)
-        ? `<a href="${href}" data-chat-anchor>${label}</a>`
-        : label;
+    document.addEventListener("click", (event) => {
+      if (!els.searchWrap.contains(event.target)) els.searchResults.classList.remove("open");
     });
-    safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
-    safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    safe = safe.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
-    return safe;
-  }
-
-  function setChatStatus(text, tone = 'ready') {
-    chatStatus.textContent = text;
-    const colors = {
-      ready: ['#22C55E', 'rgba(34,197,94,0.12)'],
-      busy: ['#2563EB', 'rgba(37,99,235,0.14)'],
-      warn: ['#F59E0B', 'rgba(245,158,11,0.16)'],
-      error: ['#EF4444', 'rgba(239,68,68,0.14)'],
-    };
-    const [bg, glow] = colors[tone] || colors.ready;
-    chatStatusDot.style.background = bg;
-    chatStatusDot.style.boxShadow = `0 0 0 3px ${glow}`;
-  }
-
-  function openChat() {
-    chatPanel.classList.add('open');
-    chatLauncher.setAttribute('aria-expanded', 'true');
-    setTimeout(() => chatInput.focus(), 80);
-  }
-
-  function closeChat() {
-    chatPanel.classList.remove('open');
-    chatLauncher.setAttribute('aria-expanded', 'false');
-  }
-
-  function scrollChatToEnd() {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
-
-  function appendChatMessage(role, text, sources = []) {
-    const row = document.createElement('div');
-    row.className = `doc-chat-message ${role}`;
-    const bubble = document.createElement('div');
-    bubble.className = 'doc-chat-bubble';
-    if (role === 'assistant') {
-      bubble.innerHTML = renderAssistantText(text);
-      if (sources.length) {
-        const meta = document.createElement('div');
-        meta.className = 'doc-chat-meta';
-        sources.forEach((source) => {
-          const link = document.createElement('a');
-          link.className = 'doc-chat-source';
-          link.href = `#${source.id}`;
-          link.textContent = source.title;
-          link.dataset.chatAnchor = 'true';
-          meta.appendChild(link);
-        });
-        bubble.appendChild(meta);
-      }
-    } else {
-      bubble.textContent = text;
-    }
-    row.appendChild(bubble);
-    chatMessages.appendChild(row);
-    scrollChatToEnd();
-    return row;
-  }
-
-  function appendTypingIndicator() {
-    const row = document.createElement('div');
-    row.className = 'doc-chat-message assistant';
-    row.dataset.typing = 'true';
-    row.innerHTML = '<div class="doc-chat-bubble doc-chat-typing"><span></span><span></span><span></span></div>';
-    chatMessages.appendChild(row);
-    scrollChatToEnd();
-    return row;
-  }
-
-  function getManualText() {
-    const mainText = document.getElementById('main')?.innerText || '';
-    const indexText = searchIndex.map((item) => `${item.title} (#${item.id}) - ${item.section}. Keywords: ${item.kw}`).join('\n');
-    return [
-      'Manual search index:',
-      indexText,
-      '',
-      'Manual body:',
-      mainText.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-    ].join('\n');
-  }
-
-  function buildAssistantPrompt(question) {
-    const recent = chatHistory.slice(-8).map((message) => `${message.role.toUpperCase()}: ${message.content}`).join('\n');
-    return [
-      'You are the ArcVisAI Studio Documentation Assistant.',
-      'Answer only from the documentation context below. If the manual does not say something, say that the manual does not specify it and offer the closest documented workflow.',
-      'Keep answers practical and concise. Use numbered steps for procedures. When a feature can or cannot do something, say so directly.',
-      'When relevant, include one or two markdown links to manual anchors using the exact anchor ids from the search index, for example [Scene Compose](#mode-scene-compose).',
-      'Scene Compose facts that must be preserved: it uses a locked base scene, up to 20 insertion reference photos, captions for each reference, optional canvas placement pins, and it should not redesign architecture.',
-      '',
-      'DOCUMENTATION CONTEXT',
-      getManualText(),
-      '',
-      'RECENT CHAT',
-      recent || 'No previous messages.',
-      '',
-      `USER QUESTION: ${question}`
-    ].join('\n');
-  }
-
-  function extractGeminiText(data) {
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const text = parts.map((part) => part.text || '').join('').trim();
-    return text || 'I could not find a text answer in the model response. Try rephrasing the question.';
-  }
-
-  function shouldFallbackModel(errorText) {
-    const msg = String(errorText || '').toLowerCase();
-    return msg.includes('not found') ||
-      msg.includes('not supported') ||
-      msg.includes('invalid') ||
-      msg.includes('model') ||
-      msg.includes('404') ||
-      msg.includes('400');
-  }
-
-  async function requestDocsAnswer(question) {
-    const token = getDocsGatewayToken();
-    if (!token) {
-      throw new Error('Your documentation chat session is not signed in. Go back to the app, sign in, then reopen the manual.');
-    }
-
-    const gatewayUrl = getDocsGatewayUrl();
-    const body = {
-      contents: [{ role: 'user', parts: [{ text: buildAssistantPrompt(question) }] }],
-      generationConfig: {
-        temperature: 0.2,
-        topP: 0.9,
-        maxOutputTokens: 1400,
-        responseModalities: ['TEXT'],
-        thinkingConfig: { thinkingLevel: 'low' }
-      }
-    };
-
-    const models = [DOCS_CHAT_REQUESTED_MODEL, DOCS_CHAT_FALLBACK_MODEL];
-    let lastError = '';
-
-    for (const model of models) {
-      chatModel.textContent = model;
-      const response = await fetch(`${gatewayUrl}/api/gemini/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return { text: extractGeminiText(data), model };
-      }
-
-      lastError = await response.text().catch(() => `Request failed (${response.status})`);
-      if (model === DOCS_CHAT_REQUESTED_MODEL && shouldFallbackModel(lastError)) continue;
-      break;
-    }
-
-    throw new Error(lastError || 'The documentation assistant could not reach Gemini.');
-  }
-
-  function findRelevantSources(question, answer) {
-    const haystack = `${question} ${answer}`.toLowerCase();
-    return searchIndex
-      .map((item) => {
-        const titleWords = item.title.toLowerCase().split(/\s+/);
-        const keywordWords = item.kw.toLowerCase().split(/\s+/);
-        let score = 0;
-        if (haystack.includes(item.title.toLowerCase())) score += 8;
-        titleWords.forEach((word) => { if (word.length > 2 && haystack.includes(word)) score += 2; });
-        keywordWords.forEach((word) => { if (word.length > 3 && haystack.includes(word)) score += 1; });
-        return { ...item, score };
-      })
-      .filter((item) => item.score > 2)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-  }
-
-  async function handleDocsQuestion(rawQuestion) {
-    const question = rawQuestion.trim();
-    if (!question) return;
-
-    openChat();
-    chatInput.value = '';
-    chatInput.style.height = 'auto';
-    chatSend.disabled = true;
-    appendChatMessage('user', question);
-    chatHistory.push({ role: 'user', content: question });
-    const typing = appendTypingIndicator();
-    setChatStatus('Asking Gemini with manual context...', 'busy');
-
-    try {
-      const { text, model } = await requestDocsAnswer(question);
-      typing.remove();
-      const sources = findRelevantSources(question, text);
-      appendChatMessage('assistant', text, sources);
-      chatHistory.push({ role: 'assistant', content: text });
-      setChatStatus(model === DOCS_CHAT_REQUESTED_MODEL ? 'Manual connected' : 'Manual connected with supported model', 'ready');
-    } catch (error) {
-      typing.remove();
-      const message = error?.message || 'The documentation assistant is unavailable right now.';
-      appendChatMessage('assistant', message, [{ id: 'overview', title: 'Overview' }]);
-      setChatStatus('Needs attention', 'error');
-    } finally {
-      chatSend.disabled = false;
-      chatInput.focus();
-    }
-  }
-
-  chatLauncher.addEventListener('click', () => {
-    chatPanel.classList.contains('open') ? closeChat() : openChat();
-  });
-  chatClose.addEventListener('click', closeChat);
-
-  chatForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    handleDocsQuestion(chatInput.value);
-  });
-
-  chatInput.addEventListener('input', () => {
-    chatInput.style.height = 'auto';
-    chatInput.style.height = `${Math.min(chatInput.scrollHeight, 120)}px`;
-  });
-
-  chatInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    document.addEventListener("click", (event) => {
+      const anchor = event.target.closest("a[href^='#']");
+      if (!anchor) return;
+      const id = anchor.getAttribute("href").slice(1);
+      if (!document.getElementById(id)) return;
       event.preventDefault();
-      chatForm.requestSubmit();
-    }
-    if (event.key === 'Escape') closeChat();
-  });
+      scrollToId(id);
+      if (anchor.dataset.chatAnchor) closeChat();
+    });
+    els.chatLauncher.addEventListener("click", () => els.chatPanel.classList.contains("open") ? closeChat() : openChat());
+    els.chatClose.addEventListener("click", closeChat);
+    els.chatForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitQuestion(els.chatInput.value);
+    });
+    els.chatMessages.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-prompt]");
+      if (chip) submitQuestion(chip.dataset.prompt || chip.textContent || "");
+    });
+    els.chatInput.addEventListener("input", () => {
+      els.chatInput.style.height = "auto";
+      els.chatInput.style.height = `${Math.min(els.chatInput.scrollHeight, 118)}px`;
+    });
+    els.chatInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        els.chatForm.requestSubmit();
+      }
+      if (event.key === "Escape") closeChat();
+    });
+    els.attachButton.addEventListener("click", () => els.imageInput.click());
+    els.imageInput.addEventListener("change", async () => {
+      const file = els.imageInput.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        appendMessage("assistant", doc.chat.imageTypeError);
+        return;
+      }
+      selectedImage = await readImage(file);
+      els.attachmentThumb.src = selectedImage.dataUrl;
+      els.attachmentName.textContent = selectedImage.name;
+      els.attachmentPreview.classList.add("open");
+      openChat();
+    });
+    els.removeAttachment.addEventListener("click", clearAttachment);
 
-  chatSuggestions.addEventListener('click', (event) => {
-    const chip = event.target.closest('[data-prompt]');
-    if (chip) handleDocsQuestion(chip.dataset.prompt || chip.textContent || '');
-  });
-
-  chatMessages.addEventListener('click', (event) => {
-    const anchor = event.target.closest('a[data-chat-anchor], a.doc-chat-source');
-    if (!anchor) return;
-    const href = anchor.getAttribute('href');
-    if (!href || !href.startsWith('#')) return;
-    const target = document.querySelector(href);
-    if (!target) return;
-    event.preventDefault();
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    target.classList.add('highlight-target');
-    target.addEventListener('animationend', () => target.classList.remove('highlight-target'), { once: true });
-  });
-
-  if (!getDocsGatewayToken()) {
-    setChatStatus('Sign in required for chat', 'warn');
-  }
-</script>
+    renderPage();
+  </script>
 </body>
 </html>

@@ -352,7 +352,7 @@ const initialWorkflow: WorkflowSettings = {
   visualMaterial: {
     surfaceType: 'auto',
     category: 'Flooring',
-    materialId: 'oak',
+    materialId: 'floor-oak',
     scale: 100,
     rotation: 0,
     roughness: 60,
