@@ -2030,7 +2030,7 @@ export const VisualEditPanel = () => {
             />
             {wf.visualSelection.mode === 'adjust' && (
               <div className="rounded-md border border-blue-200 bg-blue-50/80 px-3 py-2 text-[10px] leading-relaxed text-blue-700">
-                Drag inside the current selection to move it. Drag edges or corners to stretch the selection until it covers the area cleanly.
+                Drag a corner point to reshape. Drag an edge point to refine that edge, or drag between points to insert a new control point. Drag inside to move the whole selected shape.
               </div>
             )}
             <button
