@@ -1,29 +1,28 @@
 const AVAS_MODE_SPECS = [
-  ["mode-render-3d", "🏛️", "free"],
-  ["mode-scene-compose", "🧩", "free"],
-  ["mode-render-cad", "📐", "free"],
-  ["mode-render-sketch", "✏️", "free"],
-  ["mode-generate-text", "💬", "free"],
-  ["mode-masterplan", "🗺️", "free"],
-  ["mode-visual-edit", "🖌️", "free"],
-  ["mode-exploded", "💥", "free"],
-  ["mode-section", "✂️", "free"],
-  ["mode-multi-angle", "🔄", "free"],
-  ["mode-upscale", "🔍", "free"],
-  ["mode-img-to-cad", "📏", "pro"],
-  ["mode-img-to-3d", "🧊", "pro"],
-  ["mode-headshot", "👤", "free"],
-  ["mode-video", "🎬", "pay"],
-  ["mode-material", "🔬", "pro"],
-  ["mode-translate", "🌍", "pro"],
-  ["mode-pdf", "🗜️", "free"],
+  ["mode-render-3d", "🏛️"],
+  ["mode-scene-compose", "🧩"],
+  ["mode-render-cad", "📐"],
+  ["mode-render-sketch", "✏️"],
+  ["mode-generate-text", "💬"],
+  ["mode-masterplan", "🗺️"],
+  ["mode-visual-edit", "🖌️"],
+  ["mode-exploded", "💥"],
+  ["mode-section", "✂️"],
+  ["mode-multi-angle", "🔄"],
+  ["mode-upscale", "🔍"],
+  ["mode-img-to-cad", "📏"],
+  ["mode-img-to-3d", "🧊"],
+  ["mode-headshot", "👤"],
+  ["mode-video", "🎬"],
+  ["mode-material", "🔬"],
+  ["mode-translate", "🌍"],
+  ["mode-pdf", "🗜️"],
 ];
 
 function withModeSpecs(modes) {
   return modes.map((mode, index) => ({
     id: AVAS_MODE_SPECS[index][0],
     icon: AVAS_MODE_SPECS[index][1],
-    tier: AVAS_MODE_SPECS[index][2],
     ...mode,
   }));
 }
@@ -582,7 +581,6 @@ function makeDoc(lang, modes, labels) {
     meta: { title: labels.metaTitle },
     ui: labels.ui,
     nav: labels.nav,
-    tiers: labels.tiers,
     hero: labels.hero,
     platform: labels.platform,
     workflow: labels.workflow,
@@ -600,7 +598,6 @@ window.AVAS_DOCS = {
     metaTitle: "ArchViz AI Studio — Documentation",
     ui: { manualLabel: "Documentation", backToApp: "Back to app", searchPlaceholder: "Search documentation...", noResults: "No matching section" },
     nav: { start: "Start", overview: "Overview", workflow: "Core workflow", interface: "Workspace", modes: "Features", reference: "Reference" },
-    tiers: { free: "Free", pro: "Pro", pay: "Pay" },
     hero: {
       eyebrow: "Product documentation",
       title: "ArchViz AI Studio Documentation",
@@ -660,12 +657,6 @@ window.AVAS_DOCS = {
         { title: "Custom style text", text: "Add material and mood cues such as exposed cedar, rammed earth, oxidized copper, translucent polycarbonate, soft overcast light, or gallery lighting." },
         { title: "No-style mode", text: "Use neutral or no-style guidance when the source design should remain close to the original." },
       ]},
-      plans: { id: "plans", eyebrow: "Billing", title: "Plans and credits", lead: "Image generation uses credits; some professional workflows are plan-gated; video is pay-per-clip.", cards: [
-        { title: "Free", text: "Trial access for basic exploration, lower resolution, and watermarked output where applicable." },
-        { title: "Starter", text: "Higher monthly credit allowance, no watermark, and stronger output resolution for regular use." },
-        { title: "Professional", text: "Access to all 18 modes, higher resolution, priority generation, document tools, validation, and professional workflows." },
-        { title: "Studio", text: "Team-oriented usage with shared credit pool, admin controls, and higher monthly capacity." },
-      ]},
       shortcuts: { id: "shortcuts", eyebrow: "Reference", title: "Keyboard shortcuts", lead: "Shortcuts speed up repeated workflows on desktop.", cards: [
         { title: "Generation", text: "`Cmd/Ctrl + Enter` starts generation. `Esc` cancels generation when supported." },
         { title: "Selection", text: "`Cmd/Ctrl + Z` undoes selection edits. `Cmd/Ctrl + Shift + Z` redoes selection edits." },
@@ -715,7 +706,6 @@ window.AVAS_DOCS = {
     metaTitle: "ArchViz AI Studio — Documentación",
     ui: { manualLabel: "Documentación", backToApp: "Volver a la app", searchPlaceholder: "Buscar documentación...", noResults: "Sin secciones coincidentes" },
     nav: { start: "Inicio", overview: "Resumen", workflow: "Flujo principal", interface: "Espacio de trabajo", modes: "Funciones", reference: "Referencia" },
-    tiers: { free: "Gratis", pro: "Pro", pay: "Pago" },
     hero: {
       eyebrow: "Documentación del producto",
       title: "Documentación de ArchViz AI Studio",
@@ -775,12 +765,6 @@ window.AVAS_DOCS = {
         { title: "Texto personalizado", text: "Añade pistas como cedar expuesto, tierra apisonada, cobre oxidado, policarbonato translúcido, luz overcast o iluminación de galería." },
         { title: "Sin estilo", text: "Úsalo cuando la fuente debe permanecer muy cercana al original." },
       ]},
-      plans: { id: "plans", eyebrow: "Facturación", title: "Planes y créditos", lead: "La generación de imagen usa créditos; algunos flujos son Pro; el vídeo se paga por clip.", cards: [
-        { title: "Free", text: "Acceso de prueba para exploración básica, menor resolución y marca de agua donde aplique." },
-        { title: "Starter", text: "Más créditos mensuales, sin marca de agua y mejor resolución para uso regular." },
-        { title: "Professional", text: "Acceso a las 18 funciones, mayor resolución, prioridad, documentos, validación y flujos profesionales." },
-        { title: "Studio", text: "Uso de equipo con créditos compartidos, administración y mayor capacidad mensual." },
-      ]},
       shortcuts: { id: "shortcuts", eyebrow: "Referencia", title: "Atajos de teclado", lead: "Los atajos aceleran flujos repetidos en escritorio.", cards: [
         { title: "Generación", text: "`Cmd/Ctrl + Enter` inicia generación. `Esc` cancela cuando está soportado." },
         { title: "Selección", text: "`Cmd/Ctrl + Z` deshace selección. `Cmd/Ctrl + Shift + Z` rehace." },
@@ -830,7 +814,6 @@ window.AVAS_DOCS = {
     metaTitle: "ArchViz AI Studio — Documentation",
     ui: { manualLabel: "Documentation", backToApp: "Retour à l'app", searchPlaceholder: "Rechercher dans la documentation...", noResults: "Aucune section correspondante" },
     nav: { start: "Début", overview: "Vue d'ensemble", workflow: "Flux principal", interface: "Espace de travail", modes: "Fonctions", reference: "Référence" },
-    tiers: { free: "Gratuit", pro: "Pro", pay: "Payant" },
     hero: {
       eyebrow: "Documentation produit",
       title: "Documentation ArchViz AI Studio",
@@ -889,12 +872,6 @@ window.AVAS_DOCS = {
         { title: "Styles conceptuels", text: "Biophilique, Paramétrique, Déconstructiviste, Néoclassique, futuriste, réemploi, civique, hospitality, résidentiel ou produit." },
         { title: "Texte personnalisé", text: "Ajoutez cèdre apparent, pisé, cuivre oxydé, polycarbonate translucide, lumière couverte ou éclairage galerie." },
         { title: "Sans style", text: "À utiliser quand la source doit rester très proche de l'original." },
-      ]},
-      plans: { id: "plans", eyebrow: "Facturation", title: "Plans et crédits", lead: "La génération d'images utilise des crédits; certains flux sont Pro; la vidéo est facturée par clip.", cards: [
-        { title: "Free", text: "Accès d'essai pour exploration de base, résolution plus faible et filigrane si applicable." },
-        { title: "Starter", text: "Plus de crédits mensuels, sans filigrane et meilleure résolution pour usage régulier." },
-        { title: "Professional", text: "Accès aux 18 fonctions, haute résolution, priorité, documents, validation et flux professionnels." },
-        { title: "Studio", text: "Usage équipe avec pool de crédits partagé, administration et capacité mensuelle supérieure." },
       ]},
       shortcuts: { id: "shortcuts", eyebrow: "Référence", title: "Raccourcis clavier", lead: "Les raccourcis accélèrent les flux répétés sur desktop.", cards: [
         { title: "Génération", text: "`Cmd/Ctrl + Enter` lance la génération. `Esc` annule lorsque pris en charge." },
