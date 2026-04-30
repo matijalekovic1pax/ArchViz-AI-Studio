@@ -26,7 +26,19 @@ type SelectionShape =
   | { id: string; type: 'brush'; points: CanvasPoint[]; brushSize: number }
   | { id: string; type: 'lasso'; points: CanvasPoint[] };
 type SelectionBounds = { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number };
-type SelectionAdjustHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+type SelectionAdjustTarget =
+  | { type: 'move'; shapeId: string }
+  | { type: 'vertex'; shapeId: string; vertexIndex: number }
+  | { type: 'edge'; shapeId: string; edgeStartIndex: number };
+type SelectionAdjustDragState = {
+  target: SelectionAdjustTarget;
+  startPoint: CanvasPoint;
+  originalSelections: SelectionShape[];
+  originalShape: SelectionShape;
+  originalPolygon: CanvasPoint[] | null;
+  edgeAnchorPoint: CanvasPoint | null;
+  undoApplied: boolean;
+};
 
 // --- Floating Prompt Bar Component ---
 
@@ -285,7 +297,7 @@ const StandardCanvas: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionAdjustHandle, setSelectionAdjustHandle] = useState<SelectionAdjustHandle | null>(null);
+  const [selectionAdjustHandle, setSelectionAdjustHandle] = useState<SelectionAdjustTarget | null>(null);
   const [activeBoundary, setActiveBoundary] = useState<CanvasPoint[] | null>(null);
   const [isBoundarySelecting, setIsBoundarySelecting] = useState(false);
   const [imageVersion, setImageVersion] = useState(0);
@@ -306,13 +318,7 @@ const StandardCanvas: React.FC = () => {
   const eraseUndoSnapshotRef = useRef<SelectionShape[] | null>(null);
   const eraseUndoAppliedRef = useRef(false);
   const eraseUndoStackRef = useRef<SelectionShape[][] | null>(null);
-  const selectionAdjustDragRef = useRef<{
-    handle: SelectionAdjustHandle;
-    startPoint: CanvasPoint;
-    originalSelections: SelectionShape[];
-    originalBounds: SelectionBounds;
-    undoApplied: boolean;
-  } | null>(null);
+  const selectionAdjustDragRef = useRef<SelectionAdjustDragState | null>(null);
   const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
   const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
   const boundaryRafRef = useRef<number | null>(null);
@@ -562,139 +568,82 @@ const StandardCanvas: React.FC = () => {
     return scale > 0 ? 14 / scale : 12;
   }, [getImageLayout, state.canvas.zoom]);
 
-  const getSelectionAdjustHandleAtPoint = useCallback((point: CanvasPoint, bounds: SelectionBounds): SelectionAdjustHandle | null => {
-    const radius = getSelectionAdjustHitRadius();
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerY = (bounds.minY + bounds.maxY) / 2;
-    const handlePoints: Array<{ handle: SelectionAdjustHandle; point: CanvasPoint }> = [
-      { handle: 'nw', point: { x: bounds.minX, y: bounds.minY } },
-      { handle: 'n', point: { x: centerX, y: bounds.minY } },
-      { handle: 'ne', point: { x: bounds.maxX, y: bounds.minY } },
-      { handle: 'e', point: { x: bounds.maxX, y: centerY } },
-      { handle: 'se', point: { x: bounds.maxX, y: bounds.maxY } },
-      { handle: 's', point: { x: centerX, y: bounds.maxY } },
-      { handle: 'sw', point: { x: bounds.minX, y: bounds.maxY } },
-      { handle: 'w', point: { x: bounds.minX, y: centerY } },
-    ];
+  const clampPointToImage = useCallback((point: CanvasPoint): CanvasPoint => {
+    const layout = getImageLayout();
+    const maxWidth = layout?.naturalWidth || imageRef.current?.naturalWidth || 0;
+    const maxHeight = layout?.naturalHeight || imageRef.current?.naturalHeight || 0;
+    if (maxWidth <= 0 || maxHeight <= 0) return point;
+    return {
+      x: Math.min(Math.max(point.x, 0), maxWidth),
+      y: Math.min(Math.max(point.y, 0), maxHeight),
+    };
+  }, [getImageLayout]);
 
-    const hitRadius = radius * 1.35;
-    for (const handlePoint of handlePoints) {
-      if (Math.hypot(point.x - handlePoint.point.x, point.y - handlePoint.point.y) <= hitRadius) {
-        return handlePoint.handle;
-      }
+  const getShapeAdjustPolygon = useCallback((shape: SelectionShape): CanvasPoint[] | null => {
+    if (shape.type === 'rect') {
+      const minX = Math.min(shape.start.x, shape.end.x);
+      const maxX = Math.max(shape.start.x, shape.end.x);
+      const minY = Math.min(shape.start.y, shape.end.y);
+      const maxY = Math.max(shape.start.y, shape.end.y);
+      return [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY },
+      ];
     }
-
-    const withinY = point.y >= bounds.minY - radius && point.y <= bounds.maxY + radius;
-    const withinX = point.x >= bounds.minX - radius && point.x <= bounds.maxX + radius;
-    if (withinY && Math.abs(point.x - bounds.minX) <= radius) return 'w';
-    if (withinY && Math.abs(point.x - bounds.maxX) <= radius) return 'e';
-    if (withinX && Math.abs(point.y - bounds.minY) <= radius) return 'n';
-    if (withinX && Math.abs(point.y - bounds.maxY) <= radius) return 's';
-    if (point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY) {
-      return 'move';
+    if (shape.type === 'lasso' && shape.points.length >= 2) {
+      return shape.points;
     }
     return null;
-  }, [getSelectionAdjustHitRadius]);
+  }, []);
 
-  const clampSelectionBounds = useCallback((bounds: SelectionBounds, handle: SelectionAdjustHandle): SelectionBounds => {
+  const replaceSelectionShape = useCallback((shapes: SelectionShape[], shapeId: string, nextShape: SelectionShape) => {
+    return shapes.map((shape) => (shape.id === shapeId ? nextShape : shape));
+  }, []);
+
+  const getMoveDeltaWithinImage = useCallback((shape: SelectionShape, dx: number, dy: number) => {
+    const bounds = getSelectionBounds([shape]);
+    if (!bounds) return { dx, dy };
     const layout = getImageLayout();
     const maxWidth = layout?.naturalWidth || imageRef.current?.naturalWidth || bounds.maxX;
     const maxHeight = layout?.naturalHeight || imageRef.current?.naturalHeight || bounds.maxY;
-    const minSize = 4;
-    let { minX, minY, maxX, maxY } = bounds;
+    const clampedDx = Math.min(Math.max(dx, -bounds.minX), maxWidth - bounds.maxX);
+    const clampedDy = Math.min(Math.max(dy, -bounds.minY), maxHeight - bounds.maxY);
+    return { dx: clampedDx, dy: clampedDy };
+  }, [getImageLayout, getSelectionBounds]);
 
-    if (handle === 'move') {
-      const width = bounds.width;
-      const height = bounds.height;
-      minX = Math.min(Math.max(minX, 0), Math.max(0, maxWidth - width));
-      minY = Math.min(Math.max(minY, 0), Math.max(0, maxHeight - height));
-      maxX = minX + width;
-      maxY = minY + height;
-    } else {
-      minX = Math.min(Math.max(minX, 0), maxWidth);
-      maxX = Math.min(Math.max(maxX, 0), maxWidth);
-      minY = Math.min(Math.max(minY, 0), maxHeight);
-      maxY = Math.min(Math.max(maxY, 0), maxHeight);
-
-      if (maxX - minX < minSize) {
-        if (handle.includes('w')) minX = maxX - minSize;
-        else maxX = minX + minSize;
-      }
-      if (maxY - minY < minSize) {
-        if (handle.includes('n')) minY = maxY - minSize;
-        else maxY = minY + minSize;
-      }
-
-      minX = Math.min(Math.max(minX, 0), maxWidth - minSize);
-      maxX = Math.min(Math.max(maxX, minX + minSize), maxWidth);
-      minY = Math.min(Math.max(minY, 0), maxHeight - minSize);
-      maxY = Math.min(Math.max(maxY, minY + minSize), maxHeight);
+  const translateSelectionShape = useCallback((shape: SelectionShape, dx: number, dy: number): SelectionShape => {
+    if (shape.type === 'rect') {
+      return {
+        ...shape,
+        start: { x: shape.start.x + dx, y: shape.start.y + dy },
+        end: { x: shape.end.x + dx, y: shape.end.y + dy },
+      };
     }
+    return {
+      ...shape,
+      points: shape.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
+    };
+  }, []);
 
-    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
-  }, [getImageLayout]);
-
-  const getAdjustedSelectionBounds = useCallback((
-    originalBounds: SelectionBounds,
-    handle: SelectionAdjustHandle,
-    startPoint: CanvasPoint,
-    currentPoint: CanvasPoint
-  ) => {
-    const dx = currentPoint.x - startPoint.x;
-    const dy = currentPoint.y - startPoint.y;
-    let minX = originalBounds.minX;
-    let minY = originalBounds.minY;
-    let maxX = originalBounds.maxX;
-    let maxY = originalBounds.maxY;
-
-    if (handle === 'move') {
-      minX += dx;
-      maxX += dx;
-      minY += dy;
-      maxY += dy;
-    } else {
-      if (handle.includes('w')) minX += dx;
-      if (handle.includes('e')) maxX += dx;
-      if (handle.includes('n')) minY += dy;
-      if (handle.includes('s')) maxY += dy;
+  const buildAdjustedShapeFromPolygon = useCallback((shape: SelectionShape, points: CanvasPoint[]): SelectionShape => {
+    if (shape.type === 'lasso') {
+      return { ...shape, points };
     }
+    return { id: shape.id, type: 'lasso', points };
+  }, []);
 
-    return clampSelectionBounds({
-      minX,
-      minY,
-      maxX,
-      maxY,
-      width: maxX - minX,
-      height: maxY - minY,
-    }, handle);
-  }, [clampSelectionBounds]);
-
-  const transformSelectionsToBounds = useCallback((
-    shapes: SelectionShape[],
-    originalBounds: SelectionBounds,
-    nextBounds: SelectionBounds
-  ): SelectionShape[] => {
-    const scaleX = originalBounds.width > 0 ? nextBounds.width / originalBounds.width : 1;
-    const scaleY = originalBounds.height > 0 ? nextBounds.height / originalBounds.height : 1;
-    const scaleBrush = Math.max(0.2, (Math.abs(scaleX) + Math.abs(scaleY)) / 2);
-    const transformPoint = (point: CanvasPoint): CanvasPoint => ({
-      x: nextBounds.minX + (point.x - originalBounds.minX) * scaleX,
-      y: nextBounds.minY + (point.y - originalBounds.minY) * scaleY,
-    });
-
-    return shapes.map((shape) => {
-      if (shape.type === 'rect') {
-        return { ...shape, start: transformPoint(shape.start), end: transformPoint(shape.end) };
-      }
-      if (shape.type === 'brush') {
-        return {
-          ...shape,
-          points: shape.points.map(transformPoint),
-          brushSize: Math.max(1, shape.brushSize * scaleBrush),
-        };
-      }
-      return { ...shape, points: shape.points.map(transformPoint) };
-    });
+  const projectPointOntoSegment = useCallback((point: CanvasPoint, start: CanvasPoint, end: CanvasPoint): CanvasPoint => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) return start;
+    const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+    const clamped = Math.max(0, Math.min(1, t));
+    return {
+      x: start.x + clamped * dx,
+      y: start.y + clamped * dy,
+    };
   }, []);
 
   const distanceToSegment = useCallback((point: CanvasPoint, start: CanvasPoint, end: CanvasPoint) => {
@@ -756,6 +705,63 @@ const StandardCanvas: React.FC = () => {
 
     return false;
   }, [distanceToSegment, getImageBrushSize, isPointInPolygon]);
+
+  const getSelectionAdjustTargetAtPoint = useCallback((point: CanvasPoint, shapes: SelectionShape[]): SelectionAdjustTarget | null => {
+    if (shapes.length === 0) return null;
+    const radius = getSelectionAdjustHitRadius();
+    const ordered = [...shapes].reverse();
+
+    for (const shape of ordered) {
+      const polygon = getShapeAdjustPolygon(shape);
+      if (!polygon || polygon.length < 2) continue;
+      let bestIndex = -1;
+      let bestDistance = Infinity;
+      polygon.forEach((vertex, index) => {
+        const dist = Math.hypot(point.x - vertex.x, point.y - vertex.y);
+        if (dist <= radius && dist < bestDistance) {
+          bestDistance = dist;
+          bestIndex = index;
+        }
+      });
+      if (bestIndex !== -1) {
+        return { type: 'vertex', shapeId: shape.id, vertexIndex: bestIndex };
+      }
+    }
+
+    for (const shape of ordered) {
+      const polygon = getShapeAdjustPolygon(shape);
+      if (!polygon || polygon.length < 2) continue;
+      let bestEdgeIndex = -1;
+      let bestDistance = Infinity;
+      for (let i = 0; i < polygon.length; i += 1) {
+        const nextIndex = (i + 1) % polygon.length;
+        const dist = distanceToSegment(point, polygon[i], polygon[nextIndex]);
+        if (dist <= radius * 0.95 && dist < bestDistance) {
+          bestDistance = dist;
+          bestEdgeIndex = i;
+        }
+      }
+      if (bestEdgeIndex !== -1) {
+        return { type: 'edge', shapeId: shape.id, edgeStartIndex: bestEdgeIndex };
+      }
+    }
+
+    for (const shape of ordered) {
+      if (shape.type === 'brush') {
+        if (isPointOverSelection(point, shape, Math.max(1, radius * 0.5))) {
+          return { type: 'move', shapeId: shape.id };
+        }
+        continue;
+      }
+      const polygon = getShapeAdjustPolygon(shape);
+      if (!polygon || polygon.length < 3) continue;
+      if (isPointInPolygon(point, polygon)) {
+        return { type: 'move', shapeId: shape.id };
+      }
+    }
+
+    return null;
+  }, [distanceToSegment, getSelectionAdjustHitRadius, getShapeAdjustPolygon, isPointInPolygon, isPointOverSelection]);
 
   const resetEraseState = useCallback(() => {
     eraseSelectionIdsRef.current.clear();
@@ -1101,18 +1107,27 @@ const StandardCanvas: React.FC = () => {
     const point = getSelectionPoint(e);
     if (!point) return;
     if (selectionMode === 'adjust') {
-      const bounds = getSelectionBounds(state.workflow.visualSelections);
-      if (!bounds) return;
-      const handle = getSelectionAdjustHandleAtPoint(point, bounds);
-      if (!handle) return;
+      const target = getSelectionAdjustTargetAtPoint(point, state.workflow.visualSelections);
+      if (!target) return;
+      const originalShape = state.workflow.visualSelections.find((shape) => shape.id === target.shapeId);
+      if (!originalShape) return;
+      const originalPolygon = getShapeAdjustPolygon(originalShape);
+      let edgeAnchorPoint: CanvasPoint | null = null;
+      if (target.type === 'edge' && originalPolygon && originalPolygon.length >= 2) {
+        const start = originalPolygon[target.edgeStartIndex];
+        const end = originalPolygon[(target.edgeStartIndex + 1) % originalPolygon.length];
+        edgeAnchorPoint = projectPointOntoSegment(point, start, end);
+      }
       selectionAdjustDragRef.current = {
-        handle,
+        target,
         startPoint: point,
         originalSelections: state.workflow.visualSelections,
-        originalBounds: bounds,
+        originalShape,
+        originalPolygon: originalPolygon ? originalPolygon.map((item) => ({ ...item })) : null,
+        edgeAnchorPoint,
         undoApplied: false,
       };
-      setSelectionAdjustHandle(handle);
+      setSelectionAdjustHandle(target);
       setIsSelecting(true);
       return;
     }
@@ -1152,10 +1167,11 @@ const StandardCanvas: React.FC = () => {
     }
   }, [
     applySelectionEraseAtPoint,
-    getSelectionAdjustHandleAtPoint,
-    getSelectionBounds,
+    getSelectionAdjustTargetAtPoint,
     getImageLayout,
+    getShapeAdjustPolygon,
     getSelectionPoint,
+    projectPointOntoSegment,
     resetEraseState,
     selectionMode,
     state.canvas.zoom,
@@ -1195,23 +1211,53 @@ const StandardCanvas: React.FC = () => {
       if (selectionMode === 'adjust') {
         const drag = selectionAdjustDragRef.current;
         if (!drag) return;
-        const nextBounds = getAdjustedSelectionBounds(
-          drag.originalBounds,
-          drag.handle,
-          drag.startPoint,
-          latestPoint
-        );
-        const changed =
-          Math.abs(nextBounds.minX - drag.originalBounds.minX) > 0.5 ||
-          Math.abs(nextBounds.minY - drag.originalBounds.minY) > 0.5 ||
-          Math.abs(nextBounds.maxX - drag.originalBounds.maxX) > 0.5 ||
-          Math.abs(nextBounds.maxY - drag.originalBounds.maxY) > 0.5;
-        if (!changed) return;
-        const nextSelections = transformSelectionsToBounds(
-          drag.originalSelections,
-          drag.originalBounds,
-          nextBounds
-        );
+        const dx = latestPoint.x - drag.startPoint.x;
+        const dy = latestPoint.y - drag.startPoint.y;
+        let nextShape: SelectionShape | null = null;
+
+        if (drag.target.type === 'move') {
+          const constrained = getMoveDeltaWithinImage(drag.originalShape, dx, dy);
+          const movedDistance = Math.hypot(constrained.dx, constrained.dy);
+          if (movedDistance < 0.05) return;
+          nextShape = translateSelectionShape(drag.originalShape, constrained.dx, constrained.dy);
+        } else {
+          const originalPolygon = drag.originalPolygon;
+          if (!originalPolygon || originalPolygon.length < 2) return;
+          if (drag.target.type === 'vertex') {
+            const originalPoint = originalPolygon[drag.target.vertexIndex];
+            if (!originalPoint) return;
+            const movedPoint = clampPointToImage({
+              x: originalPoint.x + dx,
+              y: originalPoint.y + dy,
+            });
+            if (Math.hypot(movedPoint.x - originalPoint.x, movedPoint.y - originalPoint.y) < 0.05) return;
+            const nextPolygon = originalPolygon.map((item) => ({ ...item }));
+            nextPolygon[drag.target.vertexIndex] = movedPoint;
+            nextShape = buildAdjustedShapeFromPolygon(drag.originalShape, nextPolygon);
+          } else {
+            const edgeStartIndex = drag.target.edgeStartIndex;
+            const edgeEndIndex = (edgeStartIndex + 1) % originalPolygon.length;
+            const edgeStart = originalPolygon[edgeStartIndex];
+            const edgeEnd = originalPolygon[edgeEndIndex];
+            if (!edgeStart || !edgeEnd) return;
+            const anchorPoint =
+              drag.edgeAnchorPoint || projectPointOntoSegment(drag.startPoint, edgeStart, edgeEnd);
+            const movedPoint = clampPointToImage({
+              x: anchorPoint.x + dx,
+              y: anchorPoint.y + dy,
+            });
+            if (Math.hypot(movedPoint.x - anchorPoint.x, movedPoint.y - anchorPoint.y) < 0.05) return;
+            const nextPolygon = [
+              ...originalPolygon.slice(0, edgeStartIndex + 1),
+              movedPoint,
+              ...originalPolygon.slice(edgeStartIndex + 1),
+            ];
+            nextShape = buildAdjustedShapeFromPolygon(drag.originalShape, nextPolygon);
+          }
+        }
+
+        if (!nextShape) return;
+        const nextSelections = replaceSelectionShape(drag.originalSelections, drag.target.shapeId, nextShape);
         const payload: any = {
           visualSelections: nextSelections,
           visualSelectionRedoStack: [],
@@ -1262,12 +1308,16 @@ const StandardCanvas: React.FC = () => {
     });
   }, [
     applySelectionEraseAtPoint,
+    buildAdjustedShapeFromPolygon,
+    clampPointToImage,
     dispatch,
-    getAdjustedSelectionBounds,
+    getMoveDeltaWithinImage,
     getSelectionPoint,
+    projectPointOntoSegment,
+    replaceSelectionShape,
     selectionMode,
     state.workflow.visualSelectionUndoStack,
-    transformSelectionsToBounds,
+    translateSelectionShape,
     updateActiveSelection
   ]);
 
@@ -1494,20 +1544,14 @@ const StandardCanvas: React.FC = () => {
   ]);
 
   const updateSelectionAdjustHover = useCallback((e: React.MouseEvent) => {
-    const bounds = getSelectionBounds(state.workflow.visualSelections);
-    if (!bounds) {
-      setSelectionAdjustHandle(null);
-      return;
-    }
     const point = getSelectionPoint(e);
     if (!point) {
       setSelectionAdjustHandle(null);
       return;
     }
-    setSelectionAdjustHandle(getSelectionAdjustHandleAtPoint(point, bounds));
+    setSelectionAdjustHandle(getSelectionAdjustTargetAtPoint(point, state.workflow.visualSelections));
   }, [
-    getSelectionAdjustHandleAtPoint,
-    getSelectionBounds,
+    getSelectionAdjustTargetAtPoint,
     getSelectionPoint,
     state.workflow.visualSelections
   ]);
@@ -1873,22 +1917,19 @@ const StandardCanvas: React.FC = () => {
     state.mode === 'visual-edit'
       ? [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])]
       : [];
-  const selectionAdjustBounds = isSelectionAdjustMode
-    ? getSelectionBounds(state.workflow.visualSelections)
+  const selectionAdjustActiveShapeId = isSelectionAdjustMode
+    ? (
+      selectionAdjustDragRef.current?.target.shapeId ||
+      selectionAdjustHandle?.shapeId ||
+      [...state.workflow.visualSelections].reverse().find((shape) => Boolean(getShapeAdjustPolygon(shape)))?.id ||
+      state.workflow.visualSelections[state.workflow.visualSelections.length - 1]?.id ||
+      null
+    )
     : null;
-  const getSelectionAdjustCursor = (handle: SelectionAdjustHandle | null) => {
-    switch (handle) {
-      case 'move': return 'move';
-      case 'n':
-      case 's': return 'ns-resize';
-      case 'e':
-      case 'w': return 'ew-resize';
-      case 'ne':
-      case 'sw': return 'nesw-resize';
-      case 'nw':
-      case 'se': return 'nwse-resize';
-      default: return 'default';
-    }
+  const getSelectionAdjustCursor = (target: SelectionAdjustTarget | null) => {
+    if (!target) return undefined;
+    if (target.type === 'move') return isSelecting ? 'grabbing' : 'move';
+    return isSelecting ? 'grabbing' : 'grab';
   };
   const canvasCursor = isSelectionAdjustMode ? getSelectionAdjustCursor(selectionAdjustHandle) : undefined;
   const boundaryPoints = isMasterplan
@@ -1980,51 +2021,71 @@ const StandardCanvas: React.FC = () => {
   };
 
   const renderSelectionAdjustHandles = () => {
-    if (!currentImageLayout || !selectionAdjustBounds) return null;
-    const topLeft = mapPoint({ x: selectionAdjustBounds.minX, y: selectionAdjustBounds.minY });
-    const bottomRight = mapPoint({ x: selectionAdjustBounds.maxX, y: selectionAdjustBounds.maxY });
-    const x = topLeft.x;
-    const y = topLeft.y;
-    const width = bottomRight.x - topLeft.x;
-    const height = bottomRight.y - topLeft.y;
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-    const radius = Math.max(4.5, 5.5 / state.canvas.zoom);
-    const handlePoints: Array<{ handle: SelectionAdjustHandle; x: number; y: number }> = [
-      { handle: 'nw', x, y },
-      { handle: 'n', x: centerX, y },
-      { handle: 'ne', x: x + width, y },
-      { handle: 'e', x: x + width, y: centerY },
-      { handle: 'se', x: x + width, y: y + height },
-      { handle: 's', x: centerX, y: y + height },
-      { handle: 'sw', x, y: y + height },
-      { handle: 'w', x, y: centerY },
-    ];
+    if (!currentImageLayout || !selectionAdjustActiveShapeId) return null;
+    const shape = state.workflow.visualSelections.find((item) => item.id === selectionAdjustActiveShapeId);
+    if (!shape) return null;
+    const polygon = getShapeAdjustPolygon(shape);
+    if (!polygon || polygon.length < 2) return null;
+    const mappedPoints = polygon.map((point) => mapPoint(point));
+    const pointString = mappedPoints.map((point) => `${point.x},${point.y}`).join(' ');
+    if (!pointString) return null;
+
+    const vertexRadius = Math.max(4.5, 5.4 / state.canvas.zoom);
+    const edgeRadius = Math.max(3.2, 4.1 / state.canvas.zoom);
+    const dragTarget = selectionAdjustDragRef.current?.target;
+    const hoverTarget = selectionAdjustHandle;
+    const isMoveActive =
+      (dragTarget?.type === 'move' && dragTarget.shapeId === shape.id) ||
+      (hoverTarget?.type === 'move' && hoverTarget.shapeId === shape.id);
+
+    const edgeMidpoints = mappedPoints.map((start, index) => {
+      const end = mappedPoints[(index + 1) % mappedPoints.length];
+      return {
+        index,
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+      };
+    });
 
     return (
       <g>
-        <rect
-          x={x}
-          y={y}
-          width={width}
-          height={height}
+        <polygon
+          points={pointString}
           fill="none"
-          stroke="rgba(14, 165, 233, 0.92)"
-          strokeWidth={selectionStroke}
+          stroke={isMoveActive ? 'rgba(2, 132, 199, 0.96)' : 'rgba(14, 165, 233, 0.86)'}
+          strokeWidth={Math.max(selectionStroke, 2 / state.canvas.zoom)}
           strokeDasharray="6 4"
-          rx={6}
+          strokeLinejoin="round"
         />
-        {handlePoints.map((point) => {
-          const active = selectionAdjustHandle === point.handle;
+        {edgeMidpoints.map((edge) => {
+          const active =
+            (dragTarget?.type === 'edge' && dragTarget.shapeId === shape.id && dragTarget.edgeStartIndex === edge.index) ||
+            (hoverTarget?.type === 'edge' && hoverTarget.shapeId === shape.id && hoverTarget.edgeStartIndex === edge.index);
           return (
             <circle
-              key={`adjust-handle-${point.handle}`}
+              key={`adjust-edge-${shape.id}-${edge.index}`}
+              cx={edge.x}
+              cy={edge.y}
+              r={active ? edgeRadius * 1.2 : edgeRadius}
+              fill={active ? '#0ea5e9' : 'rgba(255, 255, 255, 0.94)'}
+              stroke="#0ea5e9"
+              strokeWidth={Math.max(1.2, 1.5 / state.canvas.zoom)}
+            />
+          );
+        })}
+        {mappedPoints.map((point, index) => {
+          const active =
+            (dragTarget?.type === 'vertex' && dragTarget.shapeId === shape.id && dragTarget.vertexIndex === index) ||
+            (hoverTarget?.type === 'vertex' && hoverTarget.shapeId === shape.id && hoverTarget.vertexIndex === index);
+          return (
+            <circle
+              key={`adjust-vertex-${shape.id}-${index}`}
               cx={point.x}
               cy={point.y}
-              r={active ? radius * 1.22 : radius}
-              fill={active ? '#0ea5e9' : '#ffffff'}
-              stroke="#0ea5e9"
-              strokeWidth={Math.max(1.5, selectionStroke)}
+              r={active ? vertexRadius * 1.2 : vertexRadius}
+              fill={active ? '#0284c7' : '#ffffff'}
+              stroke="#0284c7"
+              strokeWidth={Math.max(1.6, 2 / state.canvas.zoom)}
             />
           );
         })}
