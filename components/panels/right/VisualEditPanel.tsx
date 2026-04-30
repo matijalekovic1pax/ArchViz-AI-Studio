@@ -2024,9 +2024,15 @@ export const VisualEditPanel = () => {
                 { label: 'Brush', value: 'brush' },
                 { label: 'Lasso', value: 'lasso' },
                 { label: 'Auto', value: 'ai' },
+                { label: 'Adjust', value: 'adjust' },
               ]}
               onChange={(value) => updateSelection({ mode: value })}
             />
+            {wf.visualSelection.mode === 'adjust' && (
+              <div className="rounded-md border border-blue-200 bg-blue-50/80 px-3 py-2 text-[10px] leading-relaxed text-blue-700">
+                Drag inside the current selection to move it. Drag edges or corners to stretch the selection until it covers the area cleanly.
+              </div>
+            )}
             <button
               type="button"
               onClick={() => updateSelection({ mode: 'erase' })}

@@ -25,6 +25,8 @@ type SelectionShape =
   | { id: string; type: 'rect'; start: CanvasPoint; end: CanvasPoint }
   | { id: string; type: 'brush'; points: CanvasPoint[]; brushSize: number }
   | { id: string; type: 'lasso'; points: CanvasPoint[] };
+type SelectionBounds = { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number };
+type SelectionAdjustHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
 // --- Floating Prompt Bar Component ---
 
@@ -283,6 +285,7 @@ const StandardCanvas: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionAdjustHandle, setSelectionAdjustHandle] = useState<SelectionAdjustHandle | null>(null);
   const [activeBoundary, setActiveBoundary] = useState<CanvasPoint[] | null>(null);
   const [isBoundarySelecting, setIsBoundarySelecting] = useState(false);
   const [imageVersion, setImageVersion] = useState(0);
@@ -303,6 +306,13 @@ const StandardCanvas: React.FC = () => {
   const eraseUndoSnapshotRef = useRef<SelectionShape[] | null>(null);
   const eraseUndoAppliedRef = useRef(false);
   const eraseUndoStackRef = useRef<SelectionShape[][] | null>(null);
+  const selectionAdjustDragRef = useRef<{
+    handle: SelectionAdjustHandle;
+    startPoint: CanvasPoint;
+    originalSelections: SelectionShape[];
+    originalBounds: SelectionBounds;
+    undoApplied: boolean;
+  } | null>(null);
   const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
   const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
   const boundaryRafRef = useRef<number | null>(null);
@@ -321,6 +331,7 @@ const StandardCanvas: React.FC = () => {
   const isVisualEdit = state.mode === 'visual-edit';
   const isSceneCompose = state.mode === 'scene-compose';
   const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
+  const isSelectionAdjustMode = isSelectTool && state.workflow.visualSelection.mode === 'adjust';
   const isMasterplan = state.mode === 'masterplan';
   const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
   const sceneComposeReferences = state.workflow.sceneInsertionReferences || [];
@@ -504,6 +515,187 @@ const StandardCanvas: React.FC = () => {
   }, [getImageLayout, state.canvas.zoom, state.workflow.visualSelection.brushSize]);
 
   const getEraserRadius = useCallback(() => Math.max(1, getImageBrushSize() / 2), [getImageBrushSize]);
+
+  const getSelectionBounds = useCallback((shapes: SelectionShape[]): SelectionBounds | null => {
+    if (shapes.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    const includePoint = (point: CanvasPoint, radius = 0) => {
+      minX = Math.min(minX, point.x - radius);
+      minY = Math.min(minY, point.y - radius);
+      maxX = Math.max(maxX, point.x + radius);
+      maxY = Math.max(maxY, point.y + radius);
+    };
+
+    shapes.forEach((shape) => {
+      if (shape.type === 'rect') {
+        includePoint(shape.start);
+        includePoint(shape.end);
+        return;
+      }
+
+      const radius = shape.type === 'brush' ? (shape.brushSize || getImageBrushSize()) / 2 : 0;
+      shape.points.forEach((point) => includePoint(point, radius));
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return null;
+    }
+
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: Math.max(0, maxX - minX),
+      height: Math.max(0, maxY - minY),
+    };
+  }, [getImageBrushSize]);
+
+  const getSelectionAdjustHitRadius = useCallback(() => {
+    const layout = getImageLayout();
+    if (!layout) return 12;
+    const scale = ((layout.scaleX + layout.scaleY) / 2) * state.canvas.zoom;
+    return scale > 0 ? 14 / scale : 12;
+  }, [getImageLayout, state.canvas.zoom]);
+
+  const getSelectionAdjustHandleAtPoint = useCallback((point: CanvasPoint, bounds: SelectionBounds): SelectionAdjustHandle | null => {
+    const radius = getSelectionAdjustHitRadius();
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const handlePoints: Array<{ handle: SelectionAdjustHandle; point: CanvasPoint }> = [
+      { handle: 'nw', point: { x: bounds.minX, y: bounds.minY } },
+      { handle: 'n', point: { x: centerX, y: bounds.minY } },
+      { handle: 'ne', point: { x: bounds.maxX, y: bounds.minY } },
+      { handle: 'e', point: { x: bounds.maxX, y: centerY } },
+      { handle: 'se', point: { x: bounds.maxX, y: bounds.maxY } },
+      { handle: 's', point: { x: centerX, y: bounds.maxY } },
+      { handle: 'sw', point: { x: bounds.minX, y: bounds.maxY } },
+      { handle: 'w', point: { x: bounds.minX, y: centerY } },
+    ];
+
+    const hitRadius = radius * 1.35;
+    for (const handlePoint of handlePoints) {
+      if (Math.hypot(point.x - handlePoint.point.x, point.y - handlePoint.point.y) <= hitRadius) {
+        return handlePoint.handle;
+      }
+    }
+
+    const withinY = point.y >= bounds.minY - radius && point.y <= bounds.maxY + radius;
+    const withinX = point.x >= bounds.minX - radius && point.x <= bounds.maxX + radius;
+    if (withinY && Math.abs(point.x - bounds.minX) <= radius) return 'w';
+    if (withinY && Math.abs(point.x - bounds.maxX) <= radius) return 'e';
+    if (withinX && Math.abs(point.y - bounds.minY) <= radius) return 'n';
+    if (withinX && Math.abs(point.y - bounds.maxY) <= radius) return 's';
+    if (point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY) {
+      return 'move';
+    }
+    return null;
+  }, [getSelectionAdjustHitRadius]);
+
+  const clampSelectionBounds = useCallback((bounds: SelectionBounds, handle: SelectionAdjustHandle): SelectionBounds => {
+    const layout = getImageLayout();
+    const maxWidth = layout?.naturalWidth || imageRef.current?.naturalWidth || bounds.maxX;
+    const maxHeight = layout?.naturalHeight || imageRef.current?.naturalHeight || bounds.maxY;
+    const minSize = 4;
+    let { minX, minY, maxX, maxY } = bounds;
+
+    if (handle === 'move') {
+      const width = bounds.width;
+      const height = bounds.height;
+      minX = Math.min(Math.max(minX, 0), Math.max(0, maxWidth - width));
+      minY = Math.min(Math.max(minY, 0), Math.max(0, maxHeight - height));
+      maxX = minX + width;
+      maxY = minY + height;
+    } else {
+      minX = Math.min(Math.max(minX, 0), maxWidth);
+      maxX = Math.min(Math.max(maxX, 0), maxWidth);
+      minY = Math.min(Math.max(minY, 0), maxHeight);
+      maxY = Math.min(Math.max(maxY, 0), maxHeight);
+
+      if (maxX - minX < minSize) {
+        if (handle.includes('w')) minX = maxX - minSize;
+        else maxX = minX + minSize;
+      }
+      if (maxY - minY < minSize) {
+        if (handle.includes('n')) minY = maxY - minSize;
+        else maxY = minY + minSize;
+      }
+
+      minX = Math.min(Math.max(minX, 0), maxWidth - minSize);
+      maxX = Math.min(Math.max(maxX, minX + minSize), maxWidth);
+      minY = Math.min(Math.max(minY, 0), maxHeight - minSize);
+      maxY = Math.min(Math.max(maxY, minY + minSize), maxHeight);
+    }
+
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+  }, [getImageLayout]);
+
+  const getAdjustedSelectionBounds = useCallback((
+    originalBounds: SelectionBounds,
+    handle: SelectionAdjustHandle,
+    startPoint: CanvasPoint,
+    currentPoint: CanvasPoint
+  ) => {
+    const dx = currentPoint.x - startPoint.x;
+    const dy = currentPoint.y - startPoint.y;
+    let minX = originalBounds.minX;
+    let minY = originalBounds.minY;
+    let maxX = originalBounds.maxX;
+    let maxY = originalBounds.maxY;
+
+    if (handle === 'move') {
+      minX += dx;
+      maxX += dx;
+      minY += dy;
+      maxY += dy;
+    } else {
+      if (handle.includes('w')) minX += dx;
+      if (handle.includes('e')) maxX += dx;
+      if (handle.includes('n')) minY += dy;
+      if (handle.includes('s')) maxY += dy;
+    }
+
+    return clampSelectionBounds({
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+    }, handle);
+  }, [clampSelectionBounds]);
+
+  const transformSelectionsToBounds = useCallback((
+    shapes: SelectionShape[],
+    originalBounds: SelectionBounds,
+    nextBounds: SelectionBounds
+  ): SelectionShape[] => {
+    const scaleX = originalBounds.width > 0 ? nextBounds.width / originalBounds.width : 1;
+    const scaleY = originalBounds.height > 0 ? nextBounds.height / originalBounds.height : 1;
+    const scaleBrush = Math.max(0.2, (Math.abs(scaleX) + Math.abs(scaleY)) / 2);
+    const transformPoint = (point: CanvasPoint): CanvasPoint => ({
+      x: nextBounds.minX + (point.x - originalBounds.minX) * scaleX,
+      y: nextBounds.minY + (point.y - originalBounds.minY) * scaleY,
+    });
+
+    return shapes.map((shape) => {
+      if (shape.type === 'rect') {
+        return { ...shape, start: transformPoint(shape.start), end: transformPoint(shape.end) };
+      }
+      if (shape.type === 'brush') {
+        return {
+          ...shape,
+          points: shape.points.map(transformPoint),
+          brushSize: Math.max(1, shape.brushSize * scaleBrush),
+        };
+      }
+      return { ...shape, points: shape.points.map(transformPoint) };
+    });
+  }, []);
 
   const distanceToSegment = useCallback((point: CanvasPoint, start: CanvasPoint, end: CanvasPoint) => {
     const dx = end.x - start.x;
@@ -908,6 +1100,22 @@ const StandardCanvas: React.FC = () => {
     lastPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
+    if (selectionMode === 'adjust') {
+      const bounds = getSelectionBounds(state.workflow.visualSelections);
+      if (!bounds) return;
+      const handle = getSelectionAdjustHandleAtPoint(point, bounds);
+      if (!handle) return;
+      selectionAdjustDragRef.current = {
+        handle,
+        startPoint: point,
+        originalSelections: state.workflow.visualSelections,
+        originalBounds: bounds,
+        undoApplied: false,
+      };
+      setSelectionAdjustHandle(handle);
+      setIsSelecting(true);
+      return;
+    }
     if (selectionMode === 'erase') {
       resetEraseState();
       setIsSelecting(true);
@@ -944,6 +1152,8 @@ const StandardCanvas: React.FC = () => {
     }
   }, [
     applySelectionEraseAtPoint,
+    getSelectionAdjustHandleAtPoint,
+    getSelectionBounds,
     getImageLayout,
     getSelectionPoint,
     resetEraseState,
@@ -951,6 +1161,7 @@ const StandardCanvas: React.FC = () => {
     state.canvas.zoom,
     state.uploadedImage,
     state.workflow.visualSelection.brushSize,
+    state.workflow.visualSelections,
     updateActiveSelection
   ]);
 
@@ -980,6 +1191,41 @@ const StandardCanvas: React.FC = () => {
       const latestPoint = pendingPointRef.current;
       pendingPointRef.current = null;
       if (!latestPoint) return;
+
+      if (selectionMode === 'adjust') {
+        const drag = selectionAdjustDragRef.current;
+        if (!drag) return;
+        const nextBounds = getAdjustedSelectionBounds(
+          drag.originalBounds,
+          drag.handle,
+          drag.startPoint,
+          latestPoint
+        );
+        const changed =
+          Math.abs(nextBounds.minX - drag.originalBounds.minX) > 0.5 ||
+          Math.abs(nextBounds.minY - drag.originalBounds.minY) > 0.5 ||
+          Math.abs(nextBounds.maxX - drag.originalBounds.maxX) > 0.5 ||
+          Math.abs(nextBounds.maxY - drag.originalBounds.maxY) > 0.5;
+        if (!changed) return;
+        const nextSelections = transformSelectionsToBounds(
+          drag.originalSelections,
+          drag.originalBounds,
+          nextBounds
+        );
+        const payload: any = {
+          visualSelections: nextSelections,
+          visualSelectionRedoStack: [],
+        };
+        if (!drag.undoApplied) {
+          payload.visualSelectionUndoStack = [...state.workflow.visualSelectionUndoStack, drag.originalSelections];
+        }
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload,
+        });
+        drag.undoApplied = true;
+        return;
+      }
 
       if (selectionMode === 'erase') {
         applySelectionEraseAtPoint(latestPoint);
@@ -1014,7 +1260,16 @@ const StandardCanvas: React.FC = () => {
         });
       }
     });
-  }, [applySelectionEraseAtPoint, getSelectionPoint, selectionMode, updateActiveSelection]);
+  }, [
+    applySelectionEraseAtPoint,
+    dispatch,
+    getAdjustedSelectionBounds,
+    getSelectionPoint,
+    selectionMode,
+    state.workflow.visualSelectionUndoStack,
+    transformSelectionsToBounds,
+    updateActiveSelection
+  ]);
 
   const updateBoundaryPath = useCallback((e: React.MouseEvent) => {
     const point = getSelectionPoint(e, true);
@@ -1055,6 +1310,13 @@ const StandardCanvas: React.FC = () => {
     pendingPointRef.current = null;
     lastPointRef.current = null;
     selectionPreviewLastPointRef.current = null;
+    if (selectionMode === 'adjust') {
+      selectionAdjustDragRef.current = null;
+      setSelectionAdjustHandle(null);
+      updateActiveSelection(null);
+      selectionFullPointsRef.current = [];
+      return;
+    }
     if (selectionMode === 'erase') {
       resetEraseState();
       updateActiveSelection(null);
@@ -1231,6 +1493,25 @@ const StandardCanvas: React.FC = () => {
     sceneComposeReferences,
   ]);
 
+  const updateSelectionAdjustHover = useCallback((e: React.MouseEvent) => {
+    const bounds = getSelectionBounds(state.workflow.visualSelections);
+    if (!bounds) {
+      setSelectionAdjustHandle(null);
+      return;
+    }
+    const point = getSelectionPoint(e);
+    if (!point) {
+      setSelectionAdjustHandle(null);
+      return;
+    }
+    setSelectionAdjustHandle(getSelectionAdjustHandleAtPoint(point, bounds));
+  }, [
+    getSelectionAdjustHandleAtPoint,
+    getSelectionBounds,
+    getSelectionPoint,
+    state.workflow.visualSelections
+  ]);
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (isSceneComposePlacementArmed) {
       handleSceneComposePlacement(e);
@@ -1260,6 +1541,8 @@ const StandardCanvas: React.FC = () => {
     if (isSelectTool) {
       if (isSelecting) {
         updateSelectionPath(e);
+      } else if (selectionMode === 'adjust') {
+        updateSelectionAdjustHover(e);
       }
       return;
     }
@@ -1273,6 +1556,9 @@ const StandardCanvas: React.FC = () => {
     if (isSelectTool && isSelecting) {
       finishSelection();
     }
+    if (selectionMode === 'adjust') {
+      setSelectionAdjustHandle(null);
+    }
     endPan();
   };
 
@@ -1282,6 +1568,9 @@ const StandardCanvas: React.FC = () => {
     }
     if (isSelectTool && isSelecting) {
       finishSelection();
+    }
+    if (selectionMode === 'adjust') {
+      setSelectionAdjustHandle(null);
     }
     endPan();
   };
@@ -1584,6 +1873,24 @@ const StandardCanvas: React.FC = () => {
     state.mode === 'visual-edit'
       ? [...state.workflow.visualSelections, ...(activeSelection ? [activeSelection] : [])]
       : [];
+  const selectionAdjustBounds = isSelectionAdjustMode
+    ? getSelectionBounds(state.workflow.visualSelections)
+    : null;
+  const getSelectionAdjustCursor = (handle: SelectionAdjustHandle | null) => {
+    switch (handle) {
+      case 'move': return 'move';
+      case 'n':
+      case 's': return 'ns-resize';
+      case 'e':
+      case 'w': return 'ew-resize';
+      case 'ne':
+      case 'sw': return 'nesw-resize';
+      case 'nw':
+      case 'se': return 'nwse-resize';
+      default: return 'default';
+    }
+  };
+  const canvasCursor = isSelectionAdjustMode ? getSelectionAdjustCursor(selectionAdjustHandle) : undefined;
   const boundaryPoints = isMasterplan
     ? (isBoundarySelecting && activeBoundary ? activeBoundary : state.workflow.mpBoundary.points)
     : [];
@@ -1669,6 +1976,59 @@ const StandardCanvas: React.FC = () => {
         strokeLinejoin="round"
         fill={fill}
       />
+    );
+  };
+
+  const renderSelectionAdjustHandles = () => {
+    if (!currentImageLayout || !selectionAdjustBounds) return null;
+    const topLeft = mapPoint({ x: selectionAdjustBounds.minX, y: selectionAdjustBounds.minY });
+    const bottomRight = mapPoint({ x: selectionAdjustBounds.maxX, y: selectionAdjustBounds.maxY });
+    const x = topLeft.x;
+    const y = topLeft.y;
+    const width = bottomRight.x - topLeft.x;
+    const height = bottomRight.y - topLeft.y;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    const radius = Math.max(4.5, 5.5 / state.canvas.zoom);
+    const handlePoints: Array<{ handle: SelectionAdjustHandle; x: number; y: number }> = [
+      { handle: 'nw', x, y },
+      { handle: 'n', x: centerX, y },
+      { handle: 'ne', x: x + width, y },
+      { handle: 'e', x: x + width, y: centerY },
+      { handle: 'se', x: x + width, y: y + height },
+      { handle: 's', x: centerX, y: y + height },
+      { handle: 'sw', x, y: y + height },
+      { handle: 'w', x, y: centerY },
+    ];
+
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill="none"
+          stroke="rgba(14, 165, 233, 0.92)"
+          strokeWidth={selectionStroke}
+          strokeDasharray="6 4"
+          rx={6}
+        />
+        {handlePoints.map((point) => {
+          const active = selectionAdjustHandle === point.handle;
+          return (
+            <circle
+              key={`adjust-handle-${point.handle}`}
+              cx={point.x}
+              cy={point.y}
+              r={active ? radius * 1.22 : radius}
+              fill={active ? '#0ea5e9' : '#ffffff'}
+              stroke="#0ea5e9"
+              strokeWidth={Math.max(1.5, selectionStroke)}
+            />
+          );
+        })}
+      </g>
     );
   };
 
@@ -1797,6 +2157,7 @@ const StandardCanvas: React.FC = () => {
                 ? "cursor-grabbing"
                 : "cursor-grab"
          )}
+         style={canvasCursor ? { cursor: canvasCursor } : undefined}
          onWheel={handleWheel}
          onMouseDown={handleCanvasMouseDown}
          onMouseMove={handleCanvasMouseMove}
@@ -2125,6 +2486,7 @@ const StandardCanvas: React.FC = () => {
                                               {renderSelectionShape(shape, shape.id === 'active')}
                                             </g>
                                           ))}
+                                          {isSelectionAdjustMode && renderSelectionAdjustHandles()}
                                           {isSceneCompose && renderSceneComposePins()}
                                        </svg>
                                     </div>
