@@ -457,6 +457,24 @@ async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
   return `${bucket}/${path}`;
 }
 
+async function deleteFeedbackSnapshotFromStorage(env, snapshotStoragePath) {
+  if (!snapshotStoragePath) return;
+
+  const [bucket, ...rest] = String(snapshotStoragePath).split('/');
+  const objectPath = rest.join('/');
+  if (!bucket || !objectPath) return;
+
+  const encodedPath = objectPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const resp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
+    method: 'DELETE',
+  });
+
+  if (!resp.ok && resp.status !== 404) {
+    const errText = await resp.text();
+    throw new Error(`Snapshot storage delete failed (${resp.status}): ${errText.slice(0, 500)}`);
+  }
+}
+
 // ─── Supabase REST Helpers ────────────────────────────────────────────────────
 
 async function supabaseQuery(env, path, options = {}) {
@@ -2942,6 +2960,53 @@ async function handleFeedbackUpdate(request, env, reportId, isAdmin, user) {
   }
 }
 
+async function handleFeedbackDelete(request, env, reportId, isAdmin) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const rows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?select=id,snapshot_storage_path&id=eq.${encodeURIComponent(reportId)}&limit=1`
+    );
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+    }
+
+    const report = rows[0];
+
+    await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?id=eq.${encodeURIComponent(reportId)}`,
+      {
+        method: 'DELETE',
+        headers: { Prefer: 'return=minimal' },
+      }
+    );
+
+    let deletedSnapshotStorage = false;
+    if (report.snapshot_storage_path) {
+      try {
+        await deleteFeedbackSnapshotFromStorage(env, report.snapshot_storage_path);
+        deletedSnapshotStorage = true;
+      } catch (storageError) {
+        console.warn('[feedback] failed to delete snapshot object after report delete', {
+          reportId,
+          error: String(storageError?.message || storageError || '').slice(0, 500),
+        });
+      }
+    }
+
+    return corsResponse(origin, {
+      success: true,
+      reportId,
+      deletedSnapshotStorage,
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to delete feedback report.' }, { status: 500 });
+  }
+}
+
 async function handleFeedbackActivityCreate(request, env, reportId, isAdmin, user) {
   const origin = request.headers.get('Origin') || '';
   if (!isAdmin) return forbidden(origin, 'Admin access required.');
@@ -3056,6 +3121,9 @@ export default {
     }
     if (feedbackReportMatch && request.method === 'PATCH') {
       return handleFeedbackUpdate(request, env, feedbackReportMatch[1], feedbackAdmin, user);
+    }
+    if (feedbackReportMatch && request.method === 'DELETE') {
+      return handleFeedbackDelete(request, env, feedbackReportMatch[1], feedbackAdmin);
     }
 
     // Gemini passthrough: /api/gemini/{anything}

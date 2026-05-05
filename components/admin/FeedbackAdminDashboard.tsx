@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { FolderOpen, Loader2, RefreshCw, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
 import { useAppStore } from '../../store';
 import { feedbackService } from '../../services/feedbackService';
 import type {
+  AppState,
   FeedbackReportCategory,
   FeedbackReportDetail,
   FeedbackReportPriority,
@@ -36,6 +37,14 @@ const downloadJson = (data: unknown, fileName: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 1200);
 };
 
+const extractProjectStateFromSnapshot = (snapshot: any): AppState | null => {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const candidate = snapshot?.appState ?? snapshot;
+  if (!candidate || typeof candidate !== 'object') return null;
+  if (!('workflow' in candidate) || !('mode' in candidate)) return null;
+  return candidate as AppState;
+};
+
 export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -49,6 +58,8 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCommenting, setIsCommenting] = useState(false);
+  const [isOpeningSnapshot, setIsOpeningSnapshot] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [comment, setComment] = useState('');
   const [updateNote, setUpdateNote] = useState('');
 
@@ -64,7 +75,7 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     [reports, selectedReportId]
   );
 
-  const loadReports = async () => {
+  const loadReports = async (opts?: { forceSelectFirst?: boolean }) => {
     if (!open || !isAdmin) return;
     setIsLoading(true);
     try {
@@ -75,9 +86,18 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
         category: categoryFilter,
         search: search.trim() || undefined,
       });
-      setReports(result.reports || []);
-      if (!selectedReportId && result.reports?.[0]) {
-        setSelectedReportId(result.reports[0].id);
+      const nextReports = result.reports || [];
+      setReports(nextReports);
+      if (nextReports.length === 0) {
+        setSelectedReportId(null);
+        setSelectedDetail(null);
+        setActivity([]);
+      } else if (
+        opts?.forceSelectFirst ||
+        !selectedReportId ||
+        !nextReports.some((item) => item.id === selectedReportId)
+      ) {
+        setSelectedReportId(nextReports[0].id);
       }
     } catch (error: any) {
       dispatch({
@@ -179,6 +199,55 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
         type: 'SET_APP_ALERT',
         payload: { id: nanoid(), tone: 'error', message: error?.message || t('feedback.admin.snapshotError') },
       });
+    }
+  };
+
+  const handleOpenSnapshotInApp = async () => {
+    if (!selectedDetail) return;
+    setIsOpeningSnapshot(true);
+    try {
+      const result = await feedbackService.getSnapshot(selectedDetail.id);
+      const projectState = extractProjectStateFromSnapshot(result.snapshot);
+      if (!projectState) {
+        throw new Error(t('feedback.admin.openSnapshotInvalid'));
+      }
+
+      dispatch({ type: 'LOAD_PROJECT', payload: projectState });
+      onClose();
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'info', message: t('feedback.admin.openSnapshotSuccess') },
+      });
+    } catch (error: any) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'error', message: error?.message || t('feedback.admin.openSnapshotError') },
+      });
+    } finally {
+      setIsOpeningSnapshot(false);
+    }
+  };
+
+  const handleDeleteReport = async () => {
+    if (!selectedDetail) return;
+    const confirmed = window.confirm(t('feedback.admin.deleteConfirmBody'));
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await feedbackService.remove(selectedDetail.id);
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'info', message: t('feedback.admin.deleteSuccess') },
+      });
+      await loadReports({ forceSelectFirst: true });
+    } catch (error: any) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: { id: nanoid(), tone: 'error', message: error?.message || t('feedback.admin.deleteError') },
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -382,6 +451,22 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                         className="h-10 px-4 rounded-lg border border-border text-sm hover:bg-surface-elevated"
                       >
                         {t('feedback.admin.downloadSnapshot')}
+                      </button>
+                      <button
+                        onClick={handleOpenSnapshotInApp}
+                        disabled={isOpeningSnapshot}
+                        className="h-10 px-4 rounded-lg border border-border text-sm hover:bg-surface-elevated disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isOpeningSnapshot ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                        {t('feedback.admin.openSnapshotInApp')}
+                      </button>
+                      <button
+                        onClick={handleDeleteReport}
+                        disabled={isDeleting}
+                        className="h-10 px-4 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        {t('feedback.admin.deleteReport')}
                       </button>
                     </div>
                   </div>

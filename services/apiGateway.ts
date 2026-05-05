@@ -578,6 +578,12 @@ export interface FeedbackActivityCreateResult {
   activity: FeedbackActivityItem | null;
 }
 
+export interface FeedbackReportDeleteResult {
+  success: boolean;
+  reportId: string;
+  deletedSnapshotStorage: boolean;
+}
+
 const buildFeedbackListQuery = (params: FeedbackReportListParams = {}) => {
   const qs = new URLSearchParams();
   if (params.limit != null) qs.set('limit', String(params.limit));
@@ -630,4 +636,16 @@ export async function addFeedbackActivity(
   payload: FeedbackActivityCreatePayload
 ): Promise<FeedbackActivityCreateResult> {
   return gatewayPost(`/api/feedback/reports/${encodeURIComponent(reportId)}/activity`, payload, { timeoutMs: 30_000 });
+}
+
+export async function deleteFeedbackReport(reportId: string): Promise<FeedbackReportDeleteResult> {
+  const resp = await gatewayFetch(`/api/feedback/reports/${encodeURIComponent(reportId)}`, {
+    method: 'DELETE',
+    timeoutMs: 30_000,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: `Request failed (${resp.status})` }));
+    throw new Error(err.error || `Request failed (${resp.status})`);
+  }
+  return resp.json();
 }
