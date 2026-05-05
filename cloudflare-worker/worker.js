@@ -448,7 +448,10 @@ async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
   });
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`Snapshot storage upload failed (${resp.status}): ${errText.slice(0, 600)}`);
+    const error = new Error(`Snapshot storage upload failed (${resp.status}): ${errText.slice(0, 600)}`);
+    error.statusCode = resp.status;
+    error.responseText = errText;
+    throw error;
   }
 
   return `${bucket}/${path}`;
@@ -2646,10 +2649,31 @@ async function handleFeedbackCreate(request, env, user) {
       metadata: body?.metadata && typeof body.metadata === 'object' ? body.metadata : {},
     };
 
-    if (snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES) {
+    let snapshotStoredInline = snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES;
+
+    if (snapshotStoredInline) {
       reportPayload.snapshot_json = snapshot;
     } else {
-      reportPayload.snapshot_storage_path = await uploadFeedbackSnapshotToStorage(env, reportId, snapshotText);
+      try {
+        reportPayload.snapshot_storage_path = await uploadFeedbackSnapshotToStorage(env, reportId, snapshotText);
+      } catch (storageError) {
+        const storageErrorMessage = String(storageError?.message || storageError || '').slice(0, 500);
+        console.warn('[feedback] snapshot storage upload failed, falling back to inline JSON', {
+          reportId,
+          error: storageErrorMessage,
+        });
+
+        const existingMetadata = reportPayload.metadata && typeof reportPayload.metadata === 'object'
+          ? reportPayload.metadata
+          : {};
+        reportPayload.metadata = {
+          ...existingMetadata,
+          snapshotStorageFallback: true,
+          snapshotStorageFallbackReason: storageErrorMessage,
+        };
+        reportPayload.snapshot_json = snapshot;
+        snapshotStoredInline = true;
+      }
     }
 
     const insertedRows = await supabaseJson(env, '/rest/v1/feedback_reports?select=id,created_at,status,priority,category,title,mode,project_name,snapshot_size_bytes,snapshot_storage_path', {
@@ -2681,7 +2705,7 @@ async function handleFeedbackCreate(request, env, user) {
     return corsResponse(origin, {
       success: true,
       report: insertedRows[0],
-      snapshotStoredInline: snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES,
+      snapshotStoredInline,
     });
   } catch (error) {
     return corsResponse(origin, { error: error.message || 'Failed to submit feedback report.' }, { status: 500 });

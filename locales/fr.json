@@ -135,7 +135,7 @@
     "expectedLabel": "Comportement attendu",
     "expectedPlaceholder": "Que devait-il se passer ?",
     "snapshotNoticeTitle": "Capture snapshot",
-    "snapshotNoticeBody": "Lors de l'envoi, la configuration actuelle, l'historique de génération et l'état pertinent sont téléchargés en JSON puis stockés dans la base de diagnostic.",
+    "snapshotNoticeBody": "Lors de l'envoi, la configuration actuelle, l'historique de génération et l'état pertinent sont capturés puis stockés dans la base de diagnostic.",
     "submitting": "Envoi...",
     "submit": "Envoyer le rapport",
     "submitSuccess": "Rapport envoyé avec succès.",

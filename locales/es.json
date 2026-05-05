@@ -136,7 +136,7 @@
     "expectedLabel": "Comportamiento esperado",
     "expectedPlaceholder": "¿Qué debería haber ocurrido?",
     "snapshotNoticeTitle": "Captura de snapshot",
-    "snapshotNoticeBody": "Al enviar, la configuración actual, historial de generación y estado relevante se descargan como JSON y se guardan en la base de datos de diagnóstico.",
+    "snapshotNoticeBody": "Al enviar, la configuración actual, el historial de generación y el estado relevante se capturan y se guardan en la base de datos de diagnóstico.",
     "submitting": "Enviando...",
     "submit": "Enviar Reporte",
     "submitSuccess": "Reporte enviado correctamente.",
