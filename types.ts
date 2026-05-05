@@ -1476,3 +1476,83 @@ export type Action =
   // Document Translation
   | { type: 'UPDATE_DOCUMENT_TRANSLATE'; payload: Partial<DocumentTranslateState> }
   | { type: 'SET_PROMPT'; payload: string };
+
+export type FeedbackReportStatus = 'new' | 'triaged' | 'in_progress' | 'resolved' | 'closed';
+export type FeedbackReportPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type FeedbackReportCategory = 'bug' | 'quality' | 'ux' | 'performance' | 'feature_request' | 'other';
+
+export interface FeedbackProjectSnapshot {
+  snapshotVersion: number;
+  createdAt: string;
+  reporterEmail: string;
+  projectName: string | null;
+  mode: GenerationMode;
+  historyCount: number;
+  appState: AppState;
+  metadata: {
+    app: 'archviz-ai-studio';
+    schema: 'feedback-project-snapshot-v1';
+  };
+}
+
+export interface FeedbackActivityItem {
+  id: number;
+  created_at: string;
+  actor_email: string;
+  actor_name: string | null;
+  kind: 'created' | 'comment' | 'status_changed' | 'priority_changed' | 'system';
+  message: string;
+  from_status?: FeedbackReportStatus | null;
+  to_status?: FeedbackReportStatus | null;
+  from_priority?: FeedbackReportPriority | null;
+  to_priority?: FeedbackReportPriority | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface FeedbackReportSummary {
+  id: string;
+  created_at: string;
+  updated_at?: string;
+  last_activity_at?: string;
+  reporter_email: string;
+  reporter_name?: string | null;
+  status: FeedbackReportStatus;
+  priority: FeedbackReportPriority;
+  category: FeedbackReportCategory;
+  title: string;
+  mode?: string | null;
+  project_name?: string | null;
+  history_count?: number;
+  snapshot_size_bytes?: number;
+  snapshot_storage_path?: string | null;
+}
+
+export interface FeedbackReportDetail extends FeedbackReportSummary {
+  reporter_picture?: string | null;
+  description: string;
+  reproduction_steps?: string | null;
+  expected_behavior?: string | null;
+  app_version?: string | null;
+  user_agent?: string | null;
+  snapshot_version?: number;
+  snapshot_hash?: string;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  metadata?: Record<string, any>;
+}
+
+export interface FeedbackReportCreatePayload {
+  title: string;
+  description: string;
+  category: FeedbackReportCategory;
+  priority: FeedbackReportPriority;
+  reproductionSteps?: string;
+  expectedBehavior?: string;
+  projectName?: string;
+  mode: GenerationMode;
+  appVersion?: string;
+  userAgent?: string;
+  historyCount: number;
+  snapshotVersion: number;
+  snapshot: FeedbackProjectSnapshot;
+}

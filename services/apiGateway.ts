@@ -6,6 +6,16 @@
  */
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+import type {
+  FeedbackActivityItem,
+  FeedbackProjectSnapshot,
+  FeedbackReportCategory,
+  FeedbackReportDetail,
+  FeedbackReportPriority,
+  FeedbackReportStatus,
+  FeedbackReportSummary,
+  GenerationMode,
+} from '../types';
 
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
 
@@ -382,4 +392,134 @@ export interface FetchUrlResult {
 
 export async function fetchUrlViaGateway(url: string): Promise<FetchUrlResult> {
   return gatewayGet<FetchUrlResult>(`/api/fetch-url?url=${encodeURIComponent(url)}`, { timeoutMs: 15_000 });
+}
+
+// ─── Feedback Reporting ──────────────────────────────────────────────────────
+
+export interface SubmitFeedbackReportPayload {
+  title: string;
+  description: string;
+  category: FeedbackReportCategory;
+  priority: FeedbackReportPriority;
+  reproductionSteps?: string;
+  expectedBehavior?: string;
+  projectName?: string;
+  mode: GenerationMode;
+  appVersion?: string;
+  userAgent?: string;
+  historyCount: number;
+  snapshotVersion: number;
+  snapshot: FeedbackProjectSnapshot;
+}
+
+export interface SubmitFeedbackReportResult {
+  success: boolean;
+  report: FeedbackReportSummary;
+  snapshotStoredInline: boolean;
+}
+
+export interface FeedbackReportListParams {
+  limit?: number;
+  offset?: number;
+  status?: FeedbackReportStatus | '';
+  priority?: FeedbackReportPriority | '';
+  category?: FeedbackReportCategory | '';
+  mode?: string;
+  reporterEmail?: string;
+  search?: string;
+}
+
+export interface FeedbackReportListResult {
+  success: boolean;
+  reports: FeedbackReportSummary[];
+}
+
+export interface FeedbackReportDetailResult {
+  success: boolean;
+  report: FeedbackReportDetail;
+  activity: FeedbackActivityItem[];
+}
+
+export interface FeedbackSnapshotResult {
+  success: boolean;
+  source: 'inline' | 'storage';
+  snapshot: FeedbackProjectSnapshot;
+  snapshotHash: string;
+  snapshotSizeBytes: number;
+  snapshotVersion: number;
+}
+
+export interface FeedbackReportUpdatePayload {
+  status?: FeedbackReportStatus;
+  priority?: FeedbackReportPriority;
+  note?: string;
+}
+
+export interface FeedbackReportUpdateResult {
+  success: boolean;
+  report: Partial<FeedbackReportSummary> | null;
+}
+
+export interface FeedbackActivityCreatePayload {
+  message: string;
+  metadata?: Record<string, any>;
+}
+
+export interface FeedbackActivityCreateResult {
+  success: boolean;
+  activity: FeedbackActivityItem | null;
+}
+
+const buildFeedbackListQuery = (params: FeedbackReportListParams = {}) => {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  if (params.offset != null) qs.set('offset', String(params.offset));
+  if (params.status) qs.set('status', params.status);
+  if (params.priority) qs.set('priority', params.priority);
+  if (params.category) qs.set('category', params.category);
+  if (params.mode) qs.set('mode', params.mode);
+  if (params.reporterEmail) qs.set('reporterEmail', params.reporterEmail);
+  if (params.search) qs.set('search', params.search);
+  return qs.toString();
+};
+
+export async function submitFeedbackReport(payload: SubmitFeedbackReportPayload): Promise<SubmitFeedbackReportResult> {
+  return gatewayPost('/api/feedback/reports', payload, { timeoutMs: 180_000 });
+}
+
+export async function listFeedbackReports(params: FeedbackReportListParams = {}): Promise<FeedbackReportListResult> {
+  const query = buildFeedbackListQuery(params);
+  const path = query ? `/api/feedback/reports?${query}` : '/api/feedback/reports';
+  return gatewayGet(path, { timeoutMs: 30_000 });
+}
+
+export async function getFeedbackReport(reportId: string): Promise<FeedbackReportDetailResult> {
+  return gatewayGet(`/api/feedback/reports/${encodeURIComponent(reportId)}`, { timeoutMs: 30_000 });
+}
+
+export async function getFeedbackSnapshot(reportId: string): Promise<FeedbackSnapshotResult> {
+  return gatewayGet(`/api/feedback/reports/${encodeURIComponent(reportId)}/snapshot`, { timeoutMs: 120_000 });
+}
+
+export async function updateFeedbackReport(
+  reportId: string,
+  payload: FeedbackReportUpdatePayload
+): Promise<FeedbackReportUpdateResult> {
+  const resp = await gatewayFetch(`/api/feedback/reports/${encodeURIComponent(reportId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    timeoutMs: 30_000,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: `Request failed (${resp.status})` }));
+    throw new Error(err.error || `Request failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function addFeedbackActivity(
+  reportId: string,
+  payload: FeedbackActivityCreatePayload
+): Promise<FeedbackActivityCreateResult> {
+  return gatewayPost(`/api/feedback/reports/${encodeURIComponent(reportId)}/activity`, payload, { timeoutMs: 30_000 });
 }

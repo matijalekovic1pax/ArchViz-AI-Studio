@@ -17,6 +17,9 @@ compatibility_date = "2024-01-01"
 #   KLING_WAVESPEEDAI_API_KEY - WaveSpeedAI key for Kling video
 #   CONVERTAPI_SECRET     - ConvertAPI secret
 #   ILOVEPDF_PUBLIC_KEY   - iLovePDF public key
+#   SUPABASE_URL          - Supabase project URL
+#   SUPABASE_SERVICE_ROLE_KEY - Supabase service-role key (server-side only)
+#   SUPABASE_FEEDBACK_BUCKET  - Optional storage bucket for large snapshots
 
 [env.production]
 name = "archviz-api-gateway-prod"
