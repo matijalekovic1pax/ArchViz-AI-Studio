@@ -1,6 +1,7 @@
 import type {
   FeedbackActivityCreatePayload,
   FeedbackActivityCreateResult,
+  FeedbackReportDeleteResult,
   FeedbackReportDetailResult,
   FeedbackReportListParams,
   FeedbackReportListResult,
@@ -12,6 +13,7 @@ import type {
 } from './apiGateway';
 import {
   addFeedbackActivity,
+  deleteFeedbackReport,
   getFeedbackReport,
   getFeedbackSnapshot,
   listFeedbackReports,
@@ -37,4 +39,7 @@ export const feedbackService = {
 
   addActivity: (reportId: string, payload: FeedbackActivityCreatePayload): Promise<FeedbackActivityCreateResult> =>
     addFeedbackActivity(reportId, payload),
+
+  remove: (reportId: string): Promise<FeedbackReportDeleteResult> =>
+    deleteFeedbackReport(reportId),
 };
