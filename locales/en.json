@@ -136,7 +136,7 @@
     "expectedLabel": "Expected behavior",
     "expectedPlaceholder": "What should have happened instead?",
     "snapshotNoticeTitle": "Snapshot capture",
-    "snapshotNoticeBody": "On submit, the current project setup, generation history, and relevant app state will be downloaded as JSON and sent to our diagnostics database.",
+    "snapshotNoticeBody": "On submit, the current project setup, generation history, and relevant app state are captured and sent to our diagnostics database.",
     "submitting": "Submitting...",
     "submit": "Submit Report",
     "submitSuccess": "Feedback report submitted successfully.",

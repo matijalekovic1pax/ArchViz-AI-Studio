@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useAuth } from '../auth/AuthGate';
 import { feedbackService } from '../../services/feedbackService';
-import { downloadSnapshotJson, prepareFeedbackSnapshot } from '../../lib/projectSnapshot';
+import { prepareFeedbackSnapshot } from '../../lib/projectSnapshot';
 import type { FeedbackReportCategory, FeedbackReportPriority } from '../../types';
 
 interface FeedbackReportDialogProps {
@@ -64,7 +64,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
 
     try {
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
-      downloadSnapshotJson(snapshotPayload.snapshotJson, title);
 
       await feedbackService.submit({
         title: title.trim(),
@@ -82,6 +81,8 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         snapshot: snapshotPayload.snapshot,
       });
 
+      onClose();
+
       dispatch({
         type: 'SET_APP_ALERT',
         payload: {
@@ -90,8 +91,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
           message: t('feedback.submitSuccess'),
         },
       });
-
-      onClose();
     } catch (error: any) {
       dispatch({
         type: 'SET_APP_ALERT',
