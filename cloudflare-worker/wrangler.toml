@@ -28,6 +28,9 @@ compatibility_date = "2024-01-01"
 #   CONVERTAPI_SECRET         - ConvertAPI secret
 #   ILOVEPDF_PUBLIC_KEY       - iLovePDF public key
 #
+# ── Feedback ──────────────────────────────────────────
+#   SUPABASE_FEEDBACK_BUCKET  - Optional storage bucket for large snapshots
+#
 # ── Email ─────────────────────────────────────────────
 #   RESEND_API_KEY            - Resend API key for transactional emails
 #   EMAIL_FROM                - From address (e.g. "AVAS <noreply@avas.ai>")

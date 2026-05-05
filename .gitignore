@@ -34,3 +34,6 @@ dist-ssr
 !.dev.vars.example
 !.env.example
 .vercel
+
+# Supabase local CLI artifacts
+supabase/.temp/

@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, Zap, BookOpen } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, Zap, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -12,6 +12,8 @@ import { PLAN_LABELS } from '../../lib/stripePrices';
 import { CreditCard, Users, Settings } from 'lucide-react';
 import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
+import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
+import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
 
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
@@ -26,6 +28,8 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showControlsMenu, setShowControlsMenu] = useState(false);
   const [showSaveInfo, setShowSaveInfo] = useState(false);
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -36,6 +40,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const [isMobile, setIsMobile] = useState(false);
   const [projectName, setProjectName] = useState('');
   const { generate, cancelGeneration } = useGeneration();
+  const isFeedbackAdmin = (user?.email || '').toLowerCase() === 'matija.lekovic@1pax.com';
 
   const selectionUndoStack = state.workflow.visualSelectionUndoStack;
   const selectionRedoStack = state.workflow.visualSelectionRedoStack;
@@ -616,6 +621,22 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   referrerPolicy="no-referrer"
                   className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
                 />
+              )}
+              <button
+                onClick={() => setShowFeedbackDialog(true)}
+                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
+                title={t('feedback.reportButton')}
+              >
+                <Flag size={16} />
+              </button>
+              {isFeedbackAdmin && (
+                <button
+                  onClick={() => setShowAdminDashboard(true)}
+                  className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
+                  title={t('feedback.adminButton')}
+                >
+                  <Shield size={16} />
+                </button>
               )}
               <a
                 href="/docs/"
@@ -1433,6 +1454,27 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </button>
         </div>
 
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setShowFeedbackDialog(true)}
+            className="h-9 px-3 rounded-lg border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center gap-2 text-xs font-semibold"
+            title={t('feedback.reportButton')}
+          >
+            <Flag size={14} />
+            <span>{t('feedback.reportButton')}</span>
+          </button>
+          {isFeedbackAdmin && (
+            <button
+              onClick={() => setShowAdminDashboard(true)}
+              className="h-9 px-3 rounded-lg border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center gap-2 text-xs font-semibold"
+              title={t('feedback.adminButton')}
+            >
+              <Shield size={14} />
+              <span>{t('feedback.adminButton')}</span>
+            </button>
+          )}
+        </div>
+
         {/* Download Button Group */}
         <div className="relative shrink-0">
           <button
@@ -1773,6 +1815,16 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
          </div>
       </div>
     )}
+
+    <FeedbackReportDialog
+      open={showFeedbackDialog}
+      onClose={() => setShowFeedbackDialog(false)}
+    />
+
+    <FeedbackAdminDashboard
+      open={showAdminDashboard}
+      onClose={() => setShowAdminDashboard(false)}
+    />
     </>
   );
 };

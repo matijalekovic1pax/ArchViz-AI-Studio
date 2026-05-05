@@ -21,7 +21,8 @@
  *   KLING_PIAPI_API_KEY, KLING_ULAZAI_API_KEY, KLING_WAVESPEEDAI_API_KEY,
  *   CONVERTAPI_SECRET, ILOVEPDF_PUBLIC_KEY,
  *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
- *   RESEND_API_KEY, EMAIL_FROM
+ *   RESEND_API_KEY, EMAIL_FROM,
+ *   SUPABASE_FEEDBACK_BUCKET (optional)
  */
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -130,6 +131,12 @@ async function checkRateLimit(userId, bucket) {
   }
 }
 
+// Feedback reporting
+const FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES = 6 * 1024 * 1024; // 6MB
+const FEEDBACK_ALLOWED_STATUSES = new Set(['new', 'triaged', 'in_progress', 'resolved', 'closed']);
+const FEEDBACK_ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
+const FEEDBACK_ALLOWED_CATEGORIES = new Set(['bug', 'quality', 'ux', 'performance', 'feature_request', 'other']);
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sleep(ms) {
@@ -187,6 +194,15 @@ function base64UrlDecode(str) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return bytesToHex(new Uint8Array(digest));
 }
 
 // ─── Vertex AI Service Account Token ──────────────────────────────────────────
@@ -349,6 +365,93 @@ function unauthorized(origin, message = 'Unauthorized') {
 /** Return 403 response */
 function forbidden(origin, message = 'Forbidden') {
   return corsResponse(origin, { error: message }, { status: 403 });
+}
+
+function badRequest(origin, message = 'Bad request') {
+  return corsResponse(origin, { error: message }, { status: 400 });
+}
+
+function sanitizeText(value, maxLen = 4000) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, maxLen);
+}
+
+function sanitizeEnum(value, allowedSet, fallback) {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim();
+  return allowedSet.has(normalized) ? normalized : fallback;
+}
+
+function resolveSupabaseUrl(env) {
+  if (!env.SUPABASE_URL) throw new Error('SUPABASE_URL is not configured');
+  return env.SUPABASE_URL.replace(/\/+$/, '');
+}
+
+function resolveSupabaseKey(env) {
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+  return env.SUPABASE_SERVICE_ROLE_KEY;
+}
+
+async function supabaseFetch(env, path, init = {}) {
+  const baseUrl = resolveSupabaseUrl(env);
+  const serviceKey = resolveSupabaseKey(env);
+  const headers = new Headers(init.headers || {});
+  if (!headers.has('apikey')) headers.set('apikey', serviceKey);
+  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${serviceKey}`);
+  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+  return fetch(`${baseUrl}${path}`, { ...init, headers });
+}
+
+async function supabaseJson(env, path, init = {}) {
+  const resp = await supabaseFetch(env, path, init);
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Supabase request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  if (resp.status === 204) return null;
+  const text = await resp.text();
+  if (!text) return null;
+  return JSON.parse(text);
+}
+
+async function isFeedbackAdmin(env, email) {
+  if (!email) return false;
+  try {
+    const rows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_admins?select=email&email=eq.${encodeURIComponent(email)}&is_active=eq.true&limit=1`
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (error) {
+    console.error('[feedback] admin check failed', error?.message || error);
+    return false;
+  }
+}
+
+async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
+  const bucket = (env.SUPABASE_FEEDBACK_BUCKET || 'feedback-snapshots').trim();
+  const path = `${reportId}/snapshot.json`;
+  const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const storagePath = `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`;
+
+  const resp = await supabaseFetch(env, storagePath, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-upsert': 'true',
+    },
+    body: snapshotText,
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Snapshot storage upload failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+
+  return `${bucket}/${path}`;
 }
 
 // ─── Supabase REST Helpers ────────────────────────────────────────────────────
@@ -2474,6 +2577,388 @@ async function handleVertexDiag(request, env) {
   return corsResponse(origin, { ...result, ok: true });
 }
 
+// ─── Feedback Reporting API ───────────────────────────────────────────────────
+
+async function handleFeedbackCreate(request, env, user) {
+  const origin = request.headers.get('Origin') || '';
+
+  try {
+    const body = await request.json();
+    const title = sanitizeText(body?.title, 200);
+    const description = sanitizeText(body?.description, 12000);
+
+    if (!title) return badRequest(origin, 'Feedback title is required.');
+    if (!description) return badRequest(origin, 'Feedback description is required.');
+    if (!user?.email) return unauthorized(origin, 'Missing authenticated user email.');
+
+    const snapshot = body?.snapshot;
+    if (!snapshot || typeof snapshot !== 'object') {
+      return badRequest(origin, 'A valid project snapshot is required.');
+    }
+
+    const snapshotText = JSON.stringify(snapshot);
+    const snapshotSizeBytes = new TextEncoder().encode(snapshotText).length;
+    if (snapshotSizeBytes <= 0) {
+      return badRequest(origin, 'Snapshot cannot be empty.');
+    }
+
+    const snapshotHash = await sha256Hex(snapshotText);
+    const snapshotVersionRaw = Number(body?.snapshotVersion);
+    const snapshotVersion = Number.isFinite(snapshotVersionRaw) && snapshotVersionRaw > 0
+      ? Math.floor(snapshotVersionRaw)
+      : 1;
+
+    const category = sanitizeEnum(body?.category, FEEDBACK_ALLOWED_CATEGORIES, 'bug');
+    const priority = sanitizeEnum(body?.priority, FEEDBACK_ALLOWED_PRIORITIES, 'normal');
+    const mode = sanitizeText(body?.mode || body?.appContext?.mode, 64);
+    const appVersion = sanitizeText(body?.appVersion || body?.appContext?.appVersion, 128);
+    const projectName = sanitizeText(body?.projectName || body?.appContext?.projectName, 200);
+    const userAgent = sanitizeText(body?.userAgent || request.headers.get('User-Agent') || '', 512);
+    const reproductionSteps = sanitizeText(body?.reproductionSteps, 12000);
+    const expectedBehavior = sanitizeText(body?.expectedBehavior, 12000);
+
+    const historyCountRaw = Number(body?.historyCount ?? body?.appContext?.historyCount ?? 0);
+    const historyCount = Number.isFinite(historyCountRaw)
+      ? Math.max(0, Math.min(Math.floor(historyCountRaw), 100000))
+      : 0;
+
+    const reportId = crypto.randomUUID();
+    const reportPayload = {
+      id: reportId,
+      reporter_email: user.email,
+      reporter_name: sanitizeText(user?.name || '', 200),
+      reporter_picture: sanitizeText(user?.picture || '', 2000),
+      status: 'new',
+      priority,
+      category,
+      title,
+      description,
+      reproduction_steps: reproductionSteps,
+      expected_behavior: expectedBehavior,
+      mode,
+      app_version: appVersion,
+      user_agent: userAgent,
+      project_name: projectName,
+      history_count: historyCount,
+      snapshot_version: snapshotVersion,
+      snapshot_hash: snapshotHash,
+      snapshot_size_bytes: snapshotSizeBytes,
+      metadata: body?.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+    };
+
+    if (snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES) {
+      reportPayload.snapshot_json = snapshot;
+    } else {
+      reportPayload.snapshot_storage_path = await uploadFeedbackSnapshotToStorage(env, reportId, snapshotText);
+    }
+
+    const insertedRows = await supabaseJson(env, '/rest/v1/feedback_reports?select=id,created_at,status,priority,category,title,mode,project_name,snapshot_size_bytes,snapshot_storage_path', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify(reportPayload),
+    });
+
+    if (!Array.isArray(insertedRows) || insertedRows.length === 0) {
+      throw new Error('Failed to insert feedback report.');
+    }
+
+    await supabaseJson(env, '/rest/v1/feedback_activity', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        report_id: reportId,
+        actor_email: user.email,
+        actor_name: sanitizeText(user?.name || '', 200),
+        kind: 'created',
+        message: 'Feedback report created.',
+        metadata: {
+          source: 'in_app_report',
+          snapshotSizeBytes,
+        },
+      }),
+    });
+
+    return corsResponse(origin, {
+      success: true,
+      report: insertedRows[0],
+      snapshotStoredInline: snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES,
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to submit feedback report.' }, { status: 500 });
+  }
+}
+
+async function handleFeedbackList(request, env, user, isAdmin) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const url = new URL(request.url);
+    const limitRaw = Number(url.searchParams.get('limit') || 50);
+    const offsetRaw = Number(url.searchParams.get('offset') || 0);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 200)) : 50;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+
+    const status = sanitizeEnum(url.searchParams.get('status'), FEEDBACK_ALLOWED_STATUSES, null);
+    const priority = sanitizeEnum(url.searchParams.get('priority'), FEEDBACK_ALLOWED_PRIORITIES, null);
+    const category = sanitizeEnum(url.searchParams.get('category'), FEEDBACK_ALLOWED_CATEGORIES, null);
+    const mode = sanitizeText(url.searchParams.get('mode'), 64);
+    const reporterEmail = sanitizeText(url.searchParams.get('reporterEmail'), 320);
+    const search = sanitizeText(url.searchParams.get('search'), 120);
+
+    const params = new URLSearchParams();
+    params.set('select', 'id,created_at,updated_at,last_activity_at,reporter_email,reporter_name,status,priority,category,title,mode,project_name,history_count,snapshot_size_bytes,snapshot_storage_path');
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    if (status) params.set('status', `eq.${status}`);
+    if (priority) params.set('priority', `eq.${priority}`);
+    if (category) params.set('category', `eq.${category}`);
+    if (mode) params.set('mode', `eq.${mode}`);
+    if (reporterEmail) params.set('reporter_email', `eq.${reporterEmail}`);
+    if (search) {
+      const safeSearch = search.replace(/[*,]/g, '');
+      params.set('or', `(title.ilike.*${safeSearch}*,description.ilike.*${safeSearch}*,reporter_email.ilike.*${safeSearch}*)`);
+    }
+
+    const data = await supabaseJson(env, `/rest/v1/feedback_reports?${params.toString()}`, {
+      headers: { Prefer: 'count=exact' },
+    });
+
+    return corsResponse(origin, {
+      success: true,
+      reports: Array.isArray(data) ? data : [],
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to load feedback reports.' }, { status: 500 });
+  }
+}
+
+async function handleFeedbackDetail(request, env, reportId, isAdmin, user) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const reportRows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?select=id,created_at,updated_at,last_activity_at,reporter_email,reporter_name,reporter_picture,status,priority,category,title,description,reproduction_steps,expected_behavior,mode,app_version,user_agent,project_name,history_count,snapshot_version,snapshot_hash,snapshot_size_bytes,snapshot_storage_path,resolved_at,resolved_by,metadata&id=eq.${encodeURIComponent(reportId)}&limit=1`
+    );
+
+    if (!Array.isArray(reportRows) || reportRows.length === 0) {
+      return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+    }
+
+    const activityRows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_activity?select=id,created_at,actor_email,actor_name,kind,message,from_status,to_status,from_priority,to_priority,metadata&report_id=eq.${encodeURIComponent(reportId)}&order=created_at.asc`
+    );
+
+    return corsResponse(origin, {
+      success: true,
+      report: reportRows[0],
+      activity: Array.isArray(activityRows) ? activityRows : [],
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to load feedback report.' }, { status: 500 });
+  }
+}
+
+async function handleFeedbackSnapshot(request, env, reportId, isAdmin) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const rows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?select=id,snapshot_json,snapshot_storage_path,snapshot_hash,snapshot_size_bytes,snapshot_version&id=eq.${encodeURIComponent(reportId)}&limit=1`
+    );
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+    }
+
+    const report = rows[0];
+    if (report.snapshot_json) {
+      return corsResponse(origin, {
+        success: true,
+        source: 'inline',
+        snapshot: report.snapshot_json,
+        snapshotHash: report.snapshot_hash,
+        snapshotSizeBytes: report.snapshot_size_bytes,
+        snapshotVersion: report.snapshot_version,
+      });
+    }
+
+    if (!report.snapshot_storage_path) {
+      return corsResponse(origin, { error: 'No snapshot found for this report.' }, { status: 404 });
+    }
+
+    const [bucket, ...rest] = String(report.snapshot_storage_path).split('/');
+    const objectPath = rest.join('/');
+    const encodedPath = objectPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+    const storageResp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!storageResp.ok) {
+      const errText = await storageResp.text();
+      throw new Error(`Snapshot download failed (${storageResp.status}): ${errText.slice(0, 500)}`);
+    }
+
+    const snapshot = await storageResp.json();
+    return corsResponse(origin, {
+      success: true,
+      source: 'storage',
+      snapshot,
+      snapshotHash: report.snapshot_hash,
+      snapshotSizeBytes: report.snapshot_size_bytes,
+      snapshotVersion: report.snapshot_version,
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to load snapshot.' }, { status: 500 });
+  }
+}
+
+async function handleFeedbackUpdate(request, env, reportId, isAdmin, user) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const body = await request.json();
+    const nextStatus = sanitizeEnum(body?.status, FEEDBACK_ALLOWED_STATUSES, null);
+    const nextPriority = sanitizeEnum(body?.priority, FEEDBACK_ALLOWED_PRIORITIES, null);
+    const adminNote = sanitizeText(body?.note, 12000);
+
+    if (!nextStatus && !nextPriority && !adminNote) {
+      return badRequest(origin, 'No update fields provided.');
+    }
+
+    const currentRows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?select=id,status,priority&id=eq.${encodeURIComponent(reportId)}&limit=1`
+    );
+    if (!Array.isArray(currentRows) || currentRows.length === 0) {
+      return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+    }
+    const current = currentRows[0];
+
+    const patchPayload = {
+      last_activity_at: new Date().toISOString(),
+    };
+    if (nextStatus) patchPayload.status = nextStatus;
+    if (nextPriority) patchPayload.priority = nextPriority;
+    if (nextStatus === 'resolved' || nextStatus === 'closed') {
+      patchPayload.resolved_at = new Date().toISOString();
+      patchPayload.resolved_by = user?.email || null;
+    }
+
+    const updatedRows = await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?id=eq.${encodeURIComponent(reportId)}&select=id,status,priority,updated_at,last_activity_at,resolved_at,resolved_by`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify(patchPayload),
+      }
+    );
+
+    const activityInserts = [];
+    const actorEmail = user?.email || 'unknown';
+    const actorName = sanitizeText(user?.name || '', 200);
+
+    if (nextStatus && nextStatus !== current.status) {
+      activityInserts.push({
+        report_id: reportId,
+        actor_email: actorEmail,
+        actor_name: actorName,
+        kind: 'status_changed',
+        message: `Status changed from ${current.status} to ${nextStatus}.`,
+        from_status: current.status,
+        to_status: nextStatus,
+        metadata: {},
+      });
+    }
+    if (nextPriority && nextPriority !== current.priority) {
+      activityInserts.push({
+        report_id: reportId,
+        actor_email: actorEmail,
+        actor_name: actorName,
+        kind: 'priority_changed',
+        message: `Priority changed from ${current.priority} to ${nextPriority}.`,
+        from_priority: current.priority,
+        to_priority: nextPriority,
+        metadata: {},
+      });
+    }
+    if (adminNote) {
+      activityInserts.push({
+        report_id: reportId,
+        actor_email: actorEmail,
+        actor_name: actorName,
+        kind: 'comment',
+        message: adminNote,
+        metadata: {},
+      });
+    }
+
+    if (activityInserts.length > 0) {
+      await supabaseJson(env, '/rest/v1/feedback_activity', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify(activityInserts),
+      });
+    }
+
+    return corsResponse(origin, {
+      success: true,
+      report: Array.isArray(updatedRows) && updatedRows.length > 0 ? updatedRows[0] : null,
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to update feedback report.' }, { status: 500 });
+  }
+}
+
+async function handleFeedbackActivityCreate(request, env, reportId, isAdmin, user) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const body = await request.json();
+    const message = sanitizeText(body?.message, 12000);
+    if (!message) return badRequest(origin, 'Comment message is required.');
+
+    const rows = await supabaseJson(env, '/rest/v1/feedback_activity?select=id,created_at,actor_email,actor_name,kind,message,metadata', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        report_id: reportId,
+        actor_email: user?.email || 'unknown',
+        actor_name: sanitizeText(user?.name || '', 200),
+        kind: 'comment',
+        message,
+        metadata: body?.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+      }),
+    });
+
+    await supabaseJson(
+      env,
+      `/rest/v1/feedback_reports?id=eq.${encodeURIComponent(reportId)}`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ last_activity_at: new Date().toISOString() }),
+      }
+    );
+
+    return corsResponse(origin, {
+      success: true,
+      activity: Array.isArray(rows) && rows.length > 0 ? rows[0] : null,
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to add feedback activity.' }, { status: 500 });
+  }
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export default {
@@ -2517,7 +3002,39 @@ export default {
     const user = await authenticateRequest(request, env);
     if (!user) return unauthorized(origin);
 
-    // ── Gemini passthrough: /api/gemini/{anything} ──
+    const isFeedbackRoute = path.startsWith('/api/feedback/');
+    const needsFeedbackAdmin = isFeedbackRoute && !(path === '/api/feedback/reports' && request.method === 'POST');
+    let feedbackAdmin = false;
+    if (needsFeedbackAdmin) {
+      feedbackAdmin = await isFeedbackAdmin(env, user.email);
+    }
+
+    if (path === '/api/feedback/reports' && request.method === 'POST') {
+      return handleFeedbackCreate(request, env, user);
+    }
+    if (path === '/api/feedback/reports' && request.method === 'GET') {
+      return handleFeedbackList(request, env, user, feedbackAdmin);
+    }
+
+    const feedbackReportSnapshotMatch = path.match(/^\/api\/feedback\/reports\/([0-9a-fA-F-]{36})\/snapshot$/);
+    if (feedbackReportSnapshotMatch && request.method === 'GET') {
+      return handleFeedbackSnapshot(request, env, feedbackReportSnapshotMatch[1], feedbackAdmin);
+    }
+
+    const feedbackReportActivityMatch = path.match(/^\/api\/feedback\/reports\/([0-9a-fA-F-]{36})\/activity$/);
+    if (feedbackReportActivityMatch && request.method === 'POST') {
+      return handleFeedbackActivityCreate(request, env, feedbackReportActivityMatch[1], feedbackAdmin, user);
+    }
+
+    const feedbackReportMatch = path.match(/^\/api\/feedback\/reports\/([0-9a-fA-F-]{36})$/);
+    if (feedbackReportMatch && request.method === 'GET') {
+      return handleFeedbackDetail(request, env, feedbackReportMatch[1], feedbackAdmin, user);
+    }
+    if (feedbackReportMatch && request.method === 'PATCH') {
+      return handleFeedbackUpdate(request, env, feedbackReportMatch[1], feedbackAdmin, user);
+    }
+
+    // Gemini passthrough: /api/gemini/{anything}
     if (path.startsWith('/api/gemini/')) {
       const subpath = path.replace('/api/gemini/', '') + url.search;
       return handleGeminiProxy(request, env, subpath, user);
