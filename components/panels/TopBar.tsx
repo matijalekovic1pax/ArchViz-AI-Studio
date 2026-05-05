@@ -1431,20 +1431,20 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => setShowFeedbackDialog(true)}
-            className="h-9 px-3 rounded-lg border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center gap-2 text-xs font-semibold"
+            aria-label={t('feedback.reportButton')}
+            className="h-9 w-9 rounded-full border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center justify-center"
             title={t('feedback.reportButton')}
           >
-            <Flag size={14} />
-            <span>{t('feedback.reportButton')}</span>
+            <Flag size={15} />
           </button>
           {isFeedbackAdmin && (
             <button
               onClick={() => setShowAdminDashboard(true)}
-              className="h-9 px-3 rounded-lg border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center gap-2 text-xs font-semibold"
+              aria-label={t('feedback.adminButton')}
+              className="h-9 w-9 rounded-full border border-border text-foreground-secondary hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center justify-center"
               title={t('feedback.adminButton')}
             >
-              <Shield size={14} />
-              <span>{t('feedback.adminButton')}</span>
+              <Shield size={15} />
             </button>
           )}
         </div>
