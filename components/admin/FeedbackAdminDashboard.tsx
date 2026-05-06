@@ -78,6 +78,12 @@ const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
     .map((item, index) => {
       const sourceType = item?.sourceType;
       if (sourceType !== 'source' && sourceType !== 'current' && sourceType !== 'history') return null;
+      const previewDataUrl =
+        typeof item?.previewDataUrl === 'string' &&
+        item.previewDataUrl.startsWith('data:image/') &&
+        item.previewDataUrl.length <= 3_000_000
+          ? item.previewDataUrl
+          : undefined;
 
       const markups = Array.isArray(item?.markups)
         ? item.markups
@@ -121,6 +127,7 @@ const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
         id: String(item?.id || `annotation-${index + 1}`),
         sourceType,
         label: String(item?.label || `Image ${index + 1}`),
+        previewDataUrl,
         historyId: item?.historyId ? String(item.historyId) : null,
         historyIndex: Number.isFinite(Number(item?.historyIndex)) ? Math.floor(Number(item.historyIndex)) : null,
         mode: item?.mode ? String(item.mode) as GenerationMode : null,
@@ -247,7 +254,13 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
       setActivity(detail.activity || []);
       setUpdateNote('');
       setComment('');
-      void loadSnapshotForReport(reportId);
+
+      const needsSnapshotImageFallback = sanitizeImageAnnotations(detail.report?.metadata?.imageFeedback).some(
+        (item) => !item.previewDataUrl
+      );
+      if (needsSnapshotImageFallback) {
+        void loadSnapshotForReport(reportId);
+      }
     } catch (error: any) {
       dispatch({
         type: 'SET_APP_ALERT',

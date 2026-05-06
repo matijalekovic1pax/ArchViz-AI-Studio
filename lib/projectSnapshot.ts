@@ -1,4 +1,5 @@
 import type { AppState, FeedbackProjectSnapshot } from '../types';
+import { createFeedbackJpegCompressor } from './feedbackImageCompression';
 
 export const FEEDBACK_SNAPSHOT_VERSION = 1;
 
@@ -17,6 +18,41 @@ export interface PreparedFeedbackSnapshot {
   snapshotSizeBytes: number;
   snapshotVersion: number;
 }
+
+const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppState> => {
+  const compressToLowJpeg = createFeedbackJpegCompressor({
+    quality: 0.05,
+    maxDimension: 640,
+    convertRemoteToDataUrl: false,
+  });
+
+  const compressDataImage = async (value: string | null): Promise<string | null> => {
+    if (!value || !value.startsWith('data:image/')) return value;
+    const compressed = await compressToLowJpeg(value);
+    if (!compressed) return value;
+    return compressed.length < value.length ? compressed : value;
+  };
+
+  const [uploadedImage, sourceImage] = await Promise.all([
+    compressDataImage(state.uploadedImage),
+    compressDataImage(state.sourceImage),
+  ]);
+
+  const history = await Promise.all(
+    state.history.map(async (item) => {
+      const thumbnail = await compressDataImage(item.thumbnail);
+      if (thumbnail === item.thumbnail) return item;
+      return { ...item, thumbnail: thumbnail || item.thumbnail };
+    })
+  );
+
+  return {
+    ...state,
+    uploadedImage,
+    sourceImage,
+    history,
+  };
+};
 
 export const createFeedbackProjectSnapshot = (
   state: AppState,
@@ -43,7 +79,8 @@ export const prepareFeedbackSnapshot = async (
   reporterEmail: string,
   projectName?: string | null
 ): Promise<PreparedFeedbackSnapshot> => {
-  const snapshot = createFeedbackProjectSnapshot(state, reporterEmail, projectName);
+  const compactState = await compressStateForFeedbackSnapshot(state);
+  const snapshot = createFeedbackProjectSnapshot(compactState, reporterEmail, projectName);
   const snapshotJson = JSON.stringify(snapshot);
   const snapshotHash = await sha256Hex(snapshotJson);
   const snapshotSizeBytes = new TextEncoder().encode(snapshotJson).length;
