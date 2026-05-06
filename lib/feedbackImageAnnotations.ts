@@ -31,34 +31,14 @@ export const collectFeedbackImageCandidates = (state: AppState): FeedbackImageCa
     candidates.push(candidate);
   };
 
-  if (state.sourceImage) {
-    pushCandidate({
-      id: 'source-image',
-      sourceType: 'source',
-      label: `Source • ${formatModeFallback(state.mode)}`,
-      previewUrl: state.sourceImage,
-      mode: state.mode,
-      timestamp: null,
-    });
-  }
-
-  if (state.uploadedImage) {
-    pushCandidate({
-      id: 'current-image',
-      sourceType: 'current',
-      label: `Current Canvas • ${formatModeFallback(state.mode)}`,
-      previewUrl: state.uploadedImage,
-      mode: state.mode,
-      timestamp: Date.now(),
-    });
-  }
-
   state.history.forEach((item: HistoryItem, index) => {
     if (!item.thumbnail) return;
+    const baseLabel = `Step ${index + 1}`;
+    const modeLabel = formatModeFallback(item.mode);
     pushCandidate({
       id: `history-${item.id || index}`,
       sourceType: 'history',
-      label: `History #${index + 1} • ${formatModeFallback(item.mode)}`,
+      label: `${baseLabel} • ${modeLabel}`,
       previewUrl: item.thumbnail,
       historyId: item.id,
       historyIndex: index,
@@ -66,6 +46,21 @@ export const collectFeedbackImageCandidates = (state: AppState): FeedbackImageCa
       timestamp: item.timestamp ?? null,
     });
   });
+
+  // Fallback for sessions with no history entries yet.
+  if (candidates.length === 0) {
+    const fallbackUrl = state.uploadedImage || state.sourceImage;
+    if (fallbackUrl) {
+      pushCandidate({
+        id: 'current-image',
+        sourceType: 'current',
+        label: `Step 1 • ${formatModeFallback(state.mode)}`,
+        previewUrl: fallbackUrl,
+        mode: state.mode,
+        timestamp: Date.now(),
+      });
+    }
+  }
 
   return candidates;
 };

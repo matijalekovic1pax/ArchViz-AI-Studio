@@ -82,6 +82,26 @@ const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
       const markups = Array.isArray(item?.markups)
         ? item.markups
             .map((markup: any, markupIndex: number) => {
+              if (Array.isArray(markup?.points)) {
+                const points = markup.points
+                  .map((point: any) => {
+                    const x = Number(point?.x);
+                    const y = Number(point?.y);
+                    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+                    return { x, y };
+                  })
+                  .filter(Boolean);
+
+                if (points.length >= 3) {
+                  return {
+                    id: String(markup?.id || `markup-${index + 1}-${markupIndex + 1}`),
+                    points,
+                  };
+                }
+              }
+
+              // Legacy circle fallback
               const x = Number(markup?.x);
               const y = Number(markup?.y);
               const radius = Number(markup?.radius);
@@ -559,7 +579,6 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                                 imageUrl={item.imageUrl}
                                 markups={item.markups}
                                 readOnly
-                                className="max-h-[360px]"
                               />
                             ) : (
                               <p className="text-xs text-foreground-muted">{t('feedback.admin.imageMarkupImageMissing')}</p>

@@ -413,6 +413,25 @@ function sanitizeFeedbackImageAnnotations(input) {
         ? entry.markups
             .slice(0, 120)
             .map((markup, markupIndex) => {
+              if (Array.isArray(markup?.points)) {
+                const points = markup.points
+                  .slice(0, 500)
+                  .map((point) => {
+                    const x = clampNumber(point?.x, 0, 1, null);
+                    const y = clampNumber(point?.y, 0, 1, null);
+                    if (x == null || y == null) return null;
+                    return { x, y };
+                  })
+                  .filter(Boolean);
+                if (points.length >= 3) {
+                  return {
+                    id: sanitizeText(markup?.id, 120) || `markup-${index + 1}-${markupIndex + 1}`,
+                    points,
+                  };
+                }
+              }
+
+              // Legacy circle support
               const x = clampNumber(markup?.x, 0, 1, null);
               const y = clampNumber(markup?.y, 0, 1, null);
               const radius = clampNumber(markup?.radius, 0.001, 1, null);

@@ -1484,12 +1484,24 @@ export type FeedbackReportPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type FeedbackReportCategory = 'bug' | 'quality' | 'ux' | 'performance' | 'feature_request' | 'other';
 export type FeedbackImageSourceType = 'source' | 'current' | 'history';
 
-export interface FeedbackImageMarkupCircle {
+export interface FeedbackImageMarkupLassoPoint {
+  x: number; // normalized 0-1
+  y: number; // normalized 0-1
+}
+
+export interface FeedbackImageMarkupLasso {
+  id: string;
+  points: FeedbackImageMarkupLassoPoint[];
+}
+
+export interface FeedbackImageMarkupCircleLegacy {
   id: string;
   x: number; // normalized 0-1
   y: number; // normalized 0-1
   radius: number; // normalized 0-1
 }
+
+export type FeedbackImageMarkupShape = FeedbackImageMarkupLasso | FeedbackImageMarkupCircleLegacy;
 
 export interface FeedbackImageAnnotation {
   id: string;
@@ -1500,7 +1512,7 @@ export interface FeedbackImageAnnotation {
   mode?: GenerationMode | null;
   timestamp?: number | null;
   note?: string;
-  markups: FeedbackImageMarkupCircle[];
+  markups: FeedbackImageMarkupShape[];
 }
 
 export interface FeedbackProjectSnapshot {
