@@ -136,8 +136,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     );
   }, [open, state]);
 
-  if (!open) return null;
-
   const updateImageDraft = (id: string, updater: (item: FeedbackImageAnnotationDraft) => FeedbackImageAnnotationDraft) => {
     setImageAnnotations((prev) => prev.map((item) => (item.id === id ? updater(item) : item)));
   };
@@ -283,6 +281,8 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
       setIsSubmitting(false);
     }
   };
+
+  if (!open) return null;
 
   return (
     <>
