@@ -379,6 +379,27 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowLanguageMenu(false);
   };
 
+  const closeTopBarOverlays = () => {
+    setShowDownloadMenu(false);
+    setShowControlsMenu(false);
+    setShowSaveInfo(false);
+    setShowFeedbackDialog(false);
+    setShowAdminDashboard(false);
+    setShowClearConfirm(false);
+    setShowLanguageMenu(false);
+    setShowProjectMenu(false);
+  };
+
+  const isEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    const tagName = target.tagName.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return true;
+    if (target.isContentEditable) return true;
+    if (target.closest('[contenteditable="true"]')) return true;
+    if (target.getAttribute('role') === 'textbox') return true;
+    return false;
+  };
+
   useEffect(() => {
     if (!showControlsMenu) return;
     const handleClickOutside = (event: MouseEvent) => {
@@ -429,6 +450,62 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLanguageMenu]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (
+          showDownloadMenu ||
+          showControlsMenu ||
+          showSaveInfo ||
+          showFeedbackDialog ||
+          showAdminDashboard ||
+          showClearConfirm ||
+          showLanguageMenu ||
+          showProjectMenu
+        ) {
+          event.preventDefault();
+          closeTopBarOverlays();
+        }
+        return;
+      }
+
+      if (isEditableTarget(event.target)) return;
+
+      const hasModifier = event.metaKey || event.ctrlKey;
+      if (!hasModifier || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'z' && !event.shiftKey) {
+        if (!canUndoSelection) return;
+        event.preventDefault();
+        handleUndoSelection();
+        return;
+      }
+
+      if (key === 'y' || (key === 'z' && event.shiftKey)) {
+        if (!canRedoSelection) return;
+        event.preventDefault();
+        handleRedoSelection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    canRedoSelection,
+    canUndoSelection,
+    handleRedoSelection,
+    handleUndoSelection,
+    showAdminDashboard,
+    showClearConfirm,
+    showControlsMenu,
+    showDownloadMenu,
+    showFeedbackDialog,
+    showLanguageMenu,
+    showProjectMenu,
+    showSaveInfo,
+  ]);
 
   const getLanguageLabel = () => {
     const lang = (i18n.language || 'en').split('-')[0];
@@ -1275,6 +1352,63 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </div>
           )}
         </div>
+
+        {/* Language Selector */}
+        <div className="relative shrink-0">
+          <button
+            ref={languageButtonRef}
+            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
+            title={t('topBar.language')}
+          >
+            <span>{getLanguageLabel()}</span>
+            <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
+          </button>
+
+          {showLanguageMenu && (
+            <div
+              ref={languageMenuRef}
+              className="absolute left-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-left"
+            >
+              <button
+                onClick={() => handleLanguageChange('en')}
+                className={cn(
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
+                  i18n.language === 'en'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+                title="English"
+              >
+                EN
+              </button>
+              <button
+                onClick={() => handleLanguageChange('es')}
+                className={cn(
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
+                  i18n.language === 'es'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+                title="Spanish"
+              >
+                ES
+              </button>
+              <button
+                onClick={() => handleLanguageChange('fr')}
+                className={cn(
+                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
+                  i18n.language === 'fr'
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                )}
+                title="French"
+              >
+                FR
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Center: Generate Button (Hidden in generate-text mode) */}
@@ -1341,63 +1475,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
       {/* Right: Actions */}
       <div className="flex items-center justify-end gap-3 flex-1 min-w-0 relative">
-        {/* Language Selector */}
-        <div className="relative shrink-0">
-          <button
-            ref={languageButtonRef}
-            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
-            title={t('topBar.language')}
-          >
-            <span>{getLanguageLabel()}</span>
-            <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
-          </button>
-
-          {showLanguageMenu && (
-            <div
-              ref={languageMenuRef}
-              className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right"
-            >
-              <button
-                onClick={() => handleLanguageChange('en')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'en'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="English"
-              >
-                EN
-              </button>
-              <button
-                onClick={() => handleLanguageChange('es')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'es'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="Spanish"
-              >
-                ES
-              </button>
-              <button
-                onClick={() => handleLanguageChange('fr')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'fr'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="French"
-              >
-                FR
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Subtle Project Management Tools */}
         <div className="flex items-center gap-1 mr-2 shrink-0">
             <button
