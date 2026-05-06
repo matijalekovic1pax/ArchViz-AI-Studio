@@ -10,6 +10,7 @@ import { collectFeedbackImageCandidates } from '../../lib/feedbackImageAnnotatio
 import { createFeedbackJpegCompressor } from '../../lib/feedbackImageCompression';
 import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas';
 import type {
+  FeedbackDocumentAttachment,
   FeedbackImageAnnotation,
   FeedbackImageMarkupShape,
   FeedbackReportCategory,
@@ -61,6 +62,24 @@ const WORKFLOW_LABEL_KEY_BY_MODE: Record<GenerationMode, string> = {
 const cleanNote = (value: string): string | undefined => {
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
+};
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const estimateDataUrlSize = (dataUrl: string): number => {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return 0;
+  const payload = dataUrl.slice(commaIndex + 1);
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+};
+
+const buildTranslatedFileName = (sourceName: string, sourceType: 'pdf' | 'docx' | 'xlsx'): string => {
+  const extension = sourceType === 'xlsx' ? '.xlsx' : '.docx';
+  const dotIndex = sourceName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? sourceName.slice(0, dotIndex) : sourceName;
+  return `${baseName}-translated${extension}`;
 };
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -240,6 +259,37 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
           })
       );
 
+      const documentFeedback: FeedbackDocumentAttachment[] = [];
+      if (state.mode === 'document-translate') {
+        const docTranslate = state.workflow.documentTranslate;
+        const sourceDocument = docTranslate.sourceDocument;
+
+        if (sourceDocument?.dataUrl?.startsWith('data:')) {
+          documentFeedback.push({
+            id: `${sourceDocument.id}-original`,
+            kind: 'original',
+            name: sourceDocument.name,
+            mimeType: sourceDocument.mimeType,
+            size: Number.isFinite(sourceDocument.size) ? sourceDocument.size : estimateDataUrlSize(sourceDocument.dataUrl),
+            dataUrl: sourceDocument.dataUrl,
+            sourceDocumentId: sourceDocument.id,
+          });
+        }
+
+        if (sourceDocument && docTranslate.translatedDocumentUrl?.startsWith('data:')) {
+          const translatedMimeType = sourceDocument.type === 'xlsx' ? XLSX_MIME : DOCX_MIME;
+          documentFeedback.push({
+            id: `${sourceDocument.id}-translated`,
+            kind: 'translated',
+            name: buildTranslatedFileName(sourceDocument.name, sourceDocument.type),
+            mimeType: translatedMimeType,
+            size: estimateDataUrlSize(docTranslate.translatedDocumentUrl),
+            dataUrl: docTranslate.translatedDocumentUrl,
+            sourceDocumentId: sourceDocument.id,
+          });
+        }
+      }
+
       await feedbackService.submit({
         title: title.trim(),
         description: description.trim(),
@@ -257,6 +307,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         reportedFeatureKey: state.mode,
         reportedFeatureLabel: featureLabel,
         imageFeedback,
+        documentFeedback: documentFeedback.length > 0 ? documentFeedback : undefined,
       });
 
       onClose();

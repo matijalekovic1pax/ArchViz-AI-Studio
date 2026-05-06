@@ -1514,6 +1514,18 @@ export interface FeedbackImageAnnotation {
   markups: FeedbackImageMarkupShape[];
 }
 
+export type FeedbackDocumentAttachmentKind = 'original' | 'translated';
+
+export interface FeedbackDocumentAttachment {
+  id: string;
+  kind: FeedbackDocumentAttachmentKind;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  sourceDocumentId?: string | null;
+}
+
 export interface FeedbackProjectSnapshot {
   snapshotVersion: number;
   createdAt: string;
@@ -1591,4 +1603,5 @@ export interface FeedbackReportCreatePayload {
   reportedFeatureKey?: string;
   reportedFeatureLabel?: string;
   imageFeedback?: FeedbackImageAnnotation[];
+  documentFeedback?: FeedbackDocumentAttachment[];
 }

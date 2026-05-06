@@ -83,16 +83,34 @@ function stripPreviewData(imageFeedback, includePreviewData = false) {
   });
 }
 
-function withParsedImageFeedback(report, includePreviewData = false) {
+function stripDocumentData(documentFeedback, includeDocumentData = false) {
+  if (!Array.isArray(documentFeedback)) return [];
+
+  return documentFeedback.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const dataUrl = typeof item.dataUrl === 'string' ? item.dataUrl : null;
+    if (includeDocumentData || !dataUrl) return item;
+
+    return {
+      ...item,
+      dataUrl: undefined,
+      dataUrlBytes: dataUrl.length,
+    };
+  });
+}
+
+function withParsedImageFeedback(report, includePreviewData = false, includeDocumentData = false) {
   if (!report || typeof report !== 'object') return report;
   const metadata = report.metadata && typeof report.metadata === 'object' ? report.metadata : {};
   const imageFeedback = stripPreviewData(metadata.imageFeedback, includePreviewData);
+  const documentFeedback = stripDocumentData(metadata.documentFeedback, includeDocumentData);
 
   return {
     ...report,
     metadata: {
       ...metadata,
       imageFeedback,
+      documentFeedback,
     },
   };
 }
@@ -567,6 +585,7 @@ mcp.registerTool(
           reportedFeatureKey: metadata.reportedFeatureKey || null,
           reportedFeatureLabel: metadata.reportedFeatureLabel || null,
           imageFeedbackCount: Array.isArray(metadata.imageFeedback) ? metadata.imageFeedback.length : 0,
+          documentFeedbackCount: Array.isArray(metadata.documentFeedback) ? metadata.documentFeedback.length : 0,
         };
       });
 
@@ -657,16 +676,18 @@ mcp.registerTool(
       reportId: z.string().describe('Feedback report UUID'),
       includeActivity: z.boolean().optional(),
       includePreviewData: z.boolean().optional(),
+      includeDocumentData: z.boolean().optional(),
     },
   },
   async (args) => {
     try {
       const includePreviewData = args.includePreviewData === true;
+      const includeDocumentData = args.includeDocumentData === true;
       const includeActivity = args.includeActivity !== false;
       const detail = await backend.getReport(args.reportId);
       return toolResult({
         success: true,
-        report: withParsedImageFeedback(detail.report, includePreviewData),
+        report: withParsedImageFeedback(detail.report, includePreviewData, includeDocumentData),
         activity: includeActivity ? detail.activity || [] : undefined,
       });
     } catch (error) {
