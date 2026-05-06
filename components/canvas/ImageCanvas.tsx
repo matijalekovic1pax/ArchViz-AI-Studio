@@ -2234,7 +2234,7 @@ const StandardCanvas: React.FC = () => {
               type="button"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={handleClearImage}
-              className="absolute top-4 right-4 z-40 h-10 w-10 rounded-full border border-white/70 bg-white/90 text-foreground-secondary shadow-lg ring-1 ring-black/5 backdrop-blur-xl flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-600 hover:border-red-200 hover:shadow-xl active:scale-95"
+              className="absolute top-4 right-4 z-20 h-10 w-10 rounded-full border border-white/70 bg-white/90 text-foreground-secondary shadow-lg ring-1 ring-black/5 backdrop-blur-xl flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-600 hover:border-red-200 hover:shadow-xl active:scale-95"
               title={t('topBar.clearImage')}
               aria-label={t('topBar.clearImage')}
             >
