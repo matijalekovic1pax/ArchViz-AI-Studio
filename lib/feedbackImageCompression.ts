@@ -1,11 +1,13 @@
 export interface FeedbackImageCompressionOptions {
   quality?: number;
   maxDimension?: number;
+  scale?: number;
   convertRemoteToDataUrl?: boolean;
 }
 
-const DEFAULT_QUALITY = 0.06;
-const DEFAULT_MAX_DIMENSION = 720;
+const DEFAULT_QUALITY = 0.85;
+const DEFAULT_MAX_DIMENSION = 4096;
+const DEFAULT_SCALE = 0.5;
 
 const DATA_IMAGE_PREFIX = /^data:image\//i;
 const HTTP_IMAGE_PREFIX = /^https?:\/\//i;
@@ -23,14 +25,20 @@ const loadImage = (src: string): Promise<HTMLImageElement> =>
     image.src = src;
   });
 
-const renderAsJpeg = (image: HTMLImageElement, quality: number, maxDimension: number): string | null => {
+const renderAsJpeg = (
+  image: HTMLImageElement,
+  quality: number,
+  maxDimension: number,
+  scale: number
+): string | null => {
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
   if (!sourceWidth || !sourceHeight) return null;
 
-  const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const fitScale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+  const finalScale = Math.min(1, Math.max(0.1, scale)) * fitScale;
+  const width = Math.max(1, Math.round(sourceWidth * finalScale));
+  const height = Math.max(1, Math.round(sourceHeight * finalScale));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -52,8 +60,9 @@ const renderAsJpeg = (image: HTMLImageElement, quality: number, maxDimension: nu
 };
 
 export const createFeedbackJpegCompressor = (options: FeedbackImageCompressionOptions = {}) => {
-  const quality = Math.max(0.01, Math.min(0.4, options.quality ?? DEFAULT_QUALITY));
-  const maxDimension = Math.max(160, Math.min(4096, Math.floor(options.maxDimension ?? DEFAULT_MAX_DIMENSION)));
+  const quality = Math.max(0.1, Math.min(0.95, options.quality ?? DEFAULT_QUALITY));
+  const maxDimension = Math.max(320, Math.min(8192, Math.floor(options.maxDimension ?? DEFAULT_MAX_DIMENSION)));
+  const scale = Math.max(0.1, Math.min(1, options.scale ?? DEFAULT_SCALE));
   const convertRemoteToDataUrl = options.convertRemoteToDataUrl === true;
 
   const cache = new Map<string, Promise<string | null>>();
@@ -70,7 +79,7 @@ export const createFeedbackJpegCompressor = (options: FeedbackImageCompressionOp
     const pending = (async (): Promise<string | null> => {
       try {
         const image = await loadImage(normalized);
-        return renderAsJpeg(image, quality, maxDimension);
+        return renderAsJpeg(image, quality, maxDimension, scale);
       } catch {
         return null;
       }

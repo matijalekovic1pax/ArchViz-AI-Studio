@@ -20,15 +20,16 @@ export interface PreparedFeedbackSnapshot {
 }
 
 const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppState> => {
-  const compressToLowJpeg = createFeedbackJpegCompressor({
-    quality: 0.05,
-    maxDimension: 640,
+  const compressToMediumJpeg = createFeedbackJpegCompressor({
+    quality: 0.85,
+    scale: 0.5,
+    maxDimension: 4096,
     convertRemoteToDataUrl: false,
   });
 
   const compressDataImage = async (value: string | null): Promise<string | null> => {
     if (!value || !value.startsWith('data:image/')) return value;
-    const compressed = await compressToLowJpeg(value);
+    const compressed = await compressToMediumJpeg(value);
     if (!compressed) return value;
     return compressed.length < value.length ? compressed : value;
   };
