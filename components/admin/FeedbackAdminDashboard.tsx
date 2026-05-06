@@ -139,11 +139,6 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
 
   const isAdmin = (user?.email || '').toLowerCase() === ADMIN_EMAIL;
 
-  const selectedSummary = useMemo(
-    () => reports.find((item) => item.id === selectedReportId) || null,
-    [reports, selectedReportId]
-  );
-
   const imageAnnotations = useMemo(
     () => sanitizeImageAnnotations(selectedDetail?.metadata?.imageFeedback),
     [selectedDetail]
