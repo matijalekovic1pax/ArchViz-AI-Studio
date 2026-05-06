@@ -216,8 +216,9 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
 
       const compactPreview = createFeedbackJpegCompressor({
-        quality: 0.04,
-        maxDimension: 640,
+        quality: 0.85,
+        scale: 0.5,
+        maxDimension: 4096,
         convertRemoteToDataUrl: true,
       });
 
