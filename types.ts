@@ -1480,6 +1480,26 @@ export type Action =
 export type FeedbackReportStatus = 'new' | 'triaged' | 'in_progress' | 'resolved' | 'closed';
 export type FeedbackReportPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type FeedbackReportCategory = 'bug' | 'quality' | 'ux' | 'performance' | 'feature_request' | 'other';
+export type FeedbackImageSourceType = 'source' | 'current' | 'history';
+
+export interface FeedbackImageMarkupCircle {
+  id: string;
+  x: number; // normalized 0-1
+  y: number; // normalized 0-1
+  radius: number; // normalized 0-1
+}
+
+export interface FeedbackImageAnnotation {
+  id: string;
+  sourceType: FeedbackImageSourceType;
+  label: string;
+  historyId?: string | null;
+  historyIndex?: number | null;
+  mode?: GenerationMode | null;
+  timestamp?: number | null;
+  note?: string;
+  markups: FeedbackImageMarkupCircle[];
+}
 
 export interface FeedbackProjectSnapshot {
   snapshotVersion: number;
@@ -1555,4 +1575,7 @@ export interface FeedbackReportCreatePayload {
   historyCount: number;
   snapshotVersion: number;
   snapshot: FeedbackProjectSnapshot;
+  reportedFeatureKey?: string;
+  reportedFeatureLabel?: string;
+  imageFeedback?: FeedbackImageAnnotation[];
 }

@@ -1,0 +1,100 @@
+import type {
+  AppState,
+  FeedbackImageAnnotation,
+  FeedbackImageSourceType,
+  FeedbackProjectSnapshot,
+  GenerationMode,
+  HistoryItem,
+} from '../types';
+
+export interface FeedbackImageCandidate {
+  id: string;
+  sourceType: FeedbackImageSourceType;
+  label: string;
+  previewUrl: string;
+  historyId?: string | null;
+  historyIndex?: number | null;
+  mode?: GenerationMode | null;
+  timestamp?: number | null;
+}
+
+const formatModeFallback = (mode: GenerationMode | null | undefined): string =>
+  String(mode || 'unknown')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+export const collectFeedbackImageCandidates = (state: AppState): FeedbackImageCandidate[] => {
+  const candidates: FeedbackImageCandidate[] = [];
+
+  const pushCandidate = (candidate: FeedbackImageCandidate) => {
+    if (!candidate.previewUrl) return;
+    candidates.push(candidate);
+  };
+
+  if (state.sourceImage) {
+    pushCandidate({
+      id: 'source-image',
+      sourceType: 'source',
+      label: `Source • ${formatModeFallback(state.mode)}`,
+      previewUrl: state.sourceImage,
+      mode: state.mode,
+      timestamp: null,
+    });
+  }
+
+  if (state.uploadedImage) {
+    pushCandidate({
+      id: 'current-image',
+      sourceType: 'current',
+      label: `Current Canvas • ${formatModeFallback(state.mode)}`,
+      previewUrl: state.uploadedImage,
+      mode: state.mode,
+      timestamp: Date.now(),
+    });
+  }
+
+  state.history.forEach((item: HistoryItem, index) => {
+    if (!item.thumbnail) return;
+    pushCandidate({
+      id: `history-${item.id || index}`,
+      sourceType: 'history',
+      label: `History #${index + 1} • ${formatModeFallback(item.mode)}`,
+      previewUrl: item.thumbnail,
+      historyId: item.id,
+      historyIndex: index,
+      mode: item.mode,
+      timestamp: item.timestamp ?? null,
+    });
+  });
+
+  return candidates;
+};
+
+export const resolveFeedbackAnnotationImageUrl = (
+  annotation: FeedbackImageAnnotation,
+  snapshot: FeedbackProjectSnapshot | null | undefined
+): string | null => {
+  const appState = snapshot?.appState;
+  if (!appState) return null;
+
+  if (annotation.sourceType === 'source') {
+    return appState.sourceImage || appState.uploadedImage || null;
+  }
+
+  if (annotation.sourceType === 'current') {
+    return appState.uploadedImage || appState.sourceImage || null;
+  }
+
+  const history = Array.isArray(appState.history) ? appState.history : [];
+  if (annotation.historyId) {
+    const byId = history.find((item) => item.id === annotation.historyId);
+    if (byId?.thumbnail) return byId.thumbnail;
+  }
+
+  if (annotation.historyIndex != null) {
+    const byIndex = history[annotation.historyIndex];
+    if (byIndex?.thumbnail) return byIndex.thumbnail;
+  }
+
+  return null;
+};

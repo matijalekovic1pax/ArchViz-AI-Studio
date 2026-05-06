@@ -8,6 +8,7 @@
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import type {
   FeedbackActivityItem,
+  FeedbackImageAnnotation,
   FeedbackProjectSnapshot,
   FeedbackReportCategory,
   FeedbackReportDetail,
@@ -410,6 +411,9 @@ export interface SubmitFeedbackReportPayload {
   historyCount: number;
   snapshotVersion: number;
   snapshot: FeedbackProjectSnapshot;
+  reportedFeatureKey?: string;
+  reportedFeatureLabel?: string;
+  imageFeedback?: FeedbackImageAnnotation[];
 }
 
 export interface SubmitFeedbackReportResult {

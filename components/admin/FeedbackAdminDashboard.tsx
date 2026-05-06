@@ -5,13 +5,18 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
 import { useAppStore } from '../../store';
 import { feedbackService } from '../../services/feedbackService';
+import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas';
+import { resolveFeedbackAnnotationImageUrl } from '../../lib/feedbackImageAnnotations';
 import type {
   AppState,
+  FeedbackImageAnnotation,
   FeedbackReportCategory,
   FeedbackReportDetail,
   FeedbackReportPriority,
   FeedbackReportStatus,
   FeedbackReportSummary,
+  FeedbackProjectSnapshot,
+  GenerationMode,
 } from '../../types';
 
 interface FeedbackAdminDashboardProps {
@@ -24,6 +29,27 @@ const PRIORITY_OPTIONS: FeedbackReportPriority[] = ['low', 'normal', 'high', 'ur
 const CATEGORY_OPTIONS: Array<FeedbackReportCategory | ''> = ['', 'bug', 'quality', 'ux', 'performance', 'feature_request', 'other'];
 
 const ADMIN_EMAIL = 'matija.lekovic@1pax.com';
+
+const WORKFLOW_LABEL_KEY_BY_MODE: Record<GenerationMode, string> = {
+  'generate-text': 'workflows.generateText',
+  'render-3d': 'workflows.render3d',
+  'scene-compose': 'workflows.sceneCompose',
+  'render-cad': 'workflows.renderCad',
+  'masterplan': 'workflows.masterplan',
+  'visual-edit': 'workflows.visualEdit',
+  'exploded': 'workflows.exploded',
+  'section': 'workflows.section',
+  'render-sketch': 'workflows.renderSketch',
+  'multi-angle': 'workflows.multiAngle',
+  'upscale': 'workflows.upscale',
+  'img-to-cad': 'workflows.imgToCad',
+  'img-to-3d': 'workflows.imgTo3d',
+  'video': 'workflows.video',
+  'material-validation': 'workflows.materialValidation',
+  'document-translate': 'workflows.documentTranslate',
+  'pdf-compression': 'workflows.pdfCompression',
+  'headshot': 'workflows.headshot',
+};
 
 const downloadJson = (data: unknown, fileName: string) => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -45,6 +71,47 @@ const extractProjectStateFromSnapshot = (snapshot: any): AppState | null => {
   return candidate as AppState;
 };
 
+const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      const sourceType = item?.sourceType;
+      if (sourceType !== 'source' && sourceType !== 'current' && sourceType !== 'history') return null;
+
+      const markups = Array.isArray(item?.markups)
+        ? item.markups
+            .map((markup: any, markupIndex: number) => {
+              const x = Number(markup?.x);
+              const y = Number(markup?.y);
+              const radius = Number(markup?.radius);
+              if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(radius)) return null;
+              if (x < 0 || x > 1 || y < 0 || y > 1 || radius <= 0 || radius > 1) return null;
+              return {
+                id: String(markup?.id || `markup-${index + 1}-${markupIndex + 1}`),
+                x,
+                y,
+                radius,
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      return {
+        id: String(item?.id || `annotation-${index + 1}`),
+        sourceType,
+        label: String(item?.label || `Image ${index + 1}`),
+        historyId: item?.historyId ? String(item.historyId) : null,
+        historyIndex: Number.isFinite(Number(item?.historyIndex)) ? Math.floor(Number(item.historyIndex)) : null,
+        mode: item?.mode ? String(item.mode) as GenerationMode : null,
+        timestamp: Number.isFinite(Number(item?.timestamp)) ? Math.floor(Number(item.timestamp)) : null,
+        note: item?.note ? String(item.note) : undefined,
+        markups,
+      } as FeedbackImageAnnotation;
+    })
+    .filter(Boolean) as FeedbackImageAnnotation[];
+};
+
 export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -60,6 +127,8 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
   const [isCommenting, setIsCommenting] = useState(false);
   const [isOpeningSnapshot, setIsOpeningSnapshot] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<FeedbackProjectSnapshot | null>(null);
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [comment, setComment] = useState('');
   const [updateNote, setUpdateNote] = useState('');
 
@@ -74,6 +143,46 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     () => reports.find((item) => item.id === selectedReportId) || null,
     [reports, selectedReportId]
   );
+
+  const imageAnnotations = useMemo(
+    () => sanitizeImageAnnotations(selectedDetail?.metadata?.imageFeedback),
+    [selectedDetail]
+  );
+
+  const annotationViews = useMemo(
+    () =>
+      imageAnnotations.map((annotation) => ({
+        ...annotation,
+        imageUrl: resolveFeedbackAnnotationImageUrl(annotation, selectedSnapshot),
+      })),
+    [imageAnnotations, selectedSnapshot]
+  );
+
+  const getModeLabel = (mode: string | null | undefined): string => {
+    if (!mode) return '-';
+    const key = WORKFLOW_LABEL_KEY_BY_MODE[mode as GenerationMode];
+    return key ? t(key) : mode;
+  };
+
+  const getFeatureLabel = (report: FeedbackReportDetail | null): string => {
+    if (!report) return '-';
+    const metadataLabel = typeof report.metadata?.reportedFeatureLabel === 'string' ? report.metadata.reportedFeatureLabel.trim() : '';
+    if (metadataLabel) return metadataLabel;
+    return getModeLabel(report.mode);
+  };
+
+  const loadSnapshotForReport = async (reportId: string) => {
+    if (!isAdmin) return;
+    setIsSnapshotLoading(true);
+    try {
+      const snapshotResult = await feedbackService.getSnapshot(reportId);
+      setSelectedSnapshot(snapshotResult.snapshot || null);
+    } catch {
+      setSelectedSnapshot(null);
+    } finally {
+      setIsSnapshotLoading(false);
+    }
+  };
 
   const loadReports = async (opts?: { forceSelectFirst?: boolean }) => {
     if (!open || !isAdmin) return;
@@ -91,6 +200,7 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
       if (nextReports.length === 0) {
         setSelectedReportId(null);
         setSelectedDetail(null);
+        setSelectedSnapshot(null);
         setActivity([]);
       } else if (
         opts?.forceSelectFirst ||
@@ -115,12 +225,14 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
 
   const loadDetail = async (reportId: string) => {
     setIsDetailLoading(true);
+    setSelectedSnapshot(null);
     try {
       const detail = await feedbackService.get(reportId);
       setSelectedDetail(detail.report);
       setActivity(detail.activity || []);
       setUpdateNote('');
       setComment('');
+      void loadSnapshotForReport(reportId);
     } catch (error: any) {
       dispatch({
         type: 'SET_APP_ALERT',
@@ -206,8 +318,8 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     if (!selectedDetail) return;
     setIsOpeningSnapshot(true);
     try {
-      const result = await feedbackService.getSnapshot(selectedDetail.id);
-      const projectState = extractProjectStateFromSnapshot(result.snapshot);
+      const snapshot = selectedSnapshot || (await feedbackService.getSnapshot(selectedDetail.id)).snapshot;
+      const projectState = extractProjectStateFromSnapshot(snapshot);
       if (!projectState) {
         throw new Error(t('feedback.admin.openSnapshotInvalid'));
       }
@@ -360,6 +472,7 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                         <p className="mt-1 text-sm font-semibold text-foreground line-clamp-2">{report.title}</p>
                         <div className="mt-2 text-[11px] text-foreground-muted flex items-center justify-between gap-2">
                           <span>{report.reporter_email}</span>
+                          <span>{getModeLabel(report.mode)}</span>
                           <span>{t(`feedback.priority.${report.priority}`)}</span>
                         </div>
                       </button>
@@ -423,10 +536,53 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                     )}
                     <div className="pt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-foreground-muted">
                       <span>{t('feedback.admin.reporter')}: {selectedDetail.reporter_email}</span>
+                      <span>{t('feedback.admin.feature')}: {getFeatureLabel(selectedDetail)}</span>
                       <span>{t('feedback.admin.mode')}: {selectedDetail.mode || '-'}</span>
                       <span>{t('feedback.admin.project')}: {selectedDetail.project_name || '-'}</span>
                       <span>{t('feedback.admin.historyCount')}: {selectedDetail.history_count ?? 0}</span>
                     </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4 bg-surface space-y-3">
+                    <p className="text-sm font-semibold text-foreground">{t('feedback.admin.imageMarkupTitle')}</p>
+                    {isSnapshotLoading ? (
+                      <div className="h-20 flex items-center justify-center"><Loader2 size={18} className="animate-spin" /></div>
+                    ) : annotationViews.length === 0 ? (
+                      <p className="text-sm text-foreground-muted">{t('feedback.admin.imageMarkupEmpty')}</p>
+                    ) : (
+                      <div className="space-y-4 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
+                        {annotationViews.map((item) => (
+                          <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-semibold text-foreground truncate" title={item.label}>{item.label}</span>
+                              {!!item.mode && (
+                                <span className="text-[11px] text-foreground-muted">{getModeLabel(item.mode)}</span>
+                              )}
+                            </div>
+                            {item.imageUrl ? (
+                              <FeedbackImageMarkupCanvas
+                                imageUrl={item.imageUrl}
+                                markups={item.markups}
+                                readOnly
+                                className="max-h-[360px]"
+                              />
+                            ) : (
+                              <p className="text-xs text-foreground-muted">{t('feedback.admin.imageMarkupImageMissing')}</p>
+                            )}
+                            <div className="flex items-center justify-between text-[11px] text-foreground-muted gap-2">
+                              <span>{t('feedback.imageMarkupCount', { count: item.markups.length })}</span>
+                              {!!item.timestamp && <span>{new Date(item.timestamp).toLocaleString()}</span>}
+                            </div>
+                            {!!item.note && (
+                              <div className="rounded-md border border-border bg-surface px-2.5 py-2">
+                                <p className="text-xs text-foreground-muted mb-1">{t('feedback.imageSpecificFeedback')}</p>
+                                <p className="text-sm text-foreground-secondary whitespace-pre-wrap">{item.note}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-border p-4 bg-surface space-y-3">
