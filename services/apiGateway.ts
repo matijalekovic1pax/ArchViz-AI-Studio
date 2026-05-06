@@ -12,6 +12,7 @@ import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { supabase } from '../lib/supabaseClient';
 import type {
   FeedbackActivityItem,
+  FeedbackDocumentAttachment,
   FeedbackImageAnnotation,
   FeedbackProjectSnapshot,
   FeedbackReportCategory,
@@ -522,6 +523,7 @@ export interface SubmitFeedbackReportPayload {
   reportedFeatureKey?: string;
   reportedFeatureLabel?: string;
   imageFeedback?: FeedbackImageAnnotation[];
+  documentFeedback?: FeedbackDocumentAttachment[];
 }
 
 export interface SubmitFeedbackReportResult {

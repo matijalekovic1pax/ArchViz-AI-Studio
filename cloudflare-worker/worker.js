@@ -137,6 +137,7 @@ const FEEDBACK_ALLOWED_STATUSES = new Set(['new', 'triaged', 'in_progress', 'res
 const FEEDBACK_ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
 const FEEDBACK_ALLOWED_CATEGORIES = new Set(['bug', 'quality', 'ux', 'performance', 'feature_request', 'other']);
 const FEEDBACK_ALLOWED_IMAGE_SOURCES = new Set(['source', 'current', 'history']);
+const FEEDBACK_ALLOWED_DOCUMENT_KINDS = new Set(['original', 'translated']);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -394,6 +395,15 @@ function sanitizeDataImageUrl(value, maxLen = 3000000) {
   return normalized;
 }
 
+function sanitizeDataFileUrl(value, maxLen = 50000000) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > maxLen) return null;
+  if (!/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,/i.test(normalized)) return null;
+  return normalized;
+}
+
 function clampNumber(value, min, max, fallback = null) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
@@ -467,6 +477,35 @@ function sanitizeFeedbackImageAnnotations(input) {
         note: note || null,
         previewDataUrl: previewDataUrl || null,
         markups,
+      };
+    })
+    .filter(Boolean);
+}
+
+function sanitizeFeedbackDocumentAttachments(input) {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .slice(0, 8)
+    .map((entry, index) => {
+      const kind = sanitizeEnum(entry?.kind, FEEDBACK_ALLOWED_DOCUMENT_KINDS, null);
+      const name = sanitizeText(entry?.name, 240);
+      const mimeType = sanitizeText(entry?.mimeType, 200);
+      const dataUrl = sanitizeDataFileUrl(entry?.dataUrl, 50000000);
+      if (!kind || !name || !mimeType || !dataUrl) return null;
+
+      const sizeRaw = clampNumber(entry?.size, 0, 500000000, null);
+      const size = sizeRaw == null ? null : Math.floor(sizeRaw);
+      const sourceDocumentId = sanitizeText(entry?.sourceDocumentId, 120);
+
+      return {
+        id: sanitizeText(entry?.id, 120) || `document-feedback-${index + 1}`,
+        kind,
+        name,
+        mimeType,
+        size,
+        dataUrl,
+        sourceDocumentId: sourceDocumentId || null,
       };
     })
     .filter(Boolean);
@@ -2736,12 +2775,14 @@ async function handleFeedbackCreate(request, env, user) {
     const reportedFeatureKey = sanitizeText(body?.reportedFeatureKey || body?.mode || mode, 120);
     const reportedFeatureLabel = sanitizeText(body?.reportedFeatureLabel, 200);
     const imageFeedback = sanitizeFeedbackImageAnnotations(body?.imageFeedback);
+    const documentFeedback = sanitizeFeedbackDocumentAttachments(body?.documentFeedback);
 
     const reportMetadata = {
       ...metadataInput,
       reportedFeatureKey: reportedFeatureKey || null,
       reportedFeatureLabel: reportedFeatureLabel || null,
       imageFeedback,
+      documentFeedback,
     };
 
     const reportPayload = {
