@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, Loader2, RefreshCw, ShieldCheck, Trash2, XCircle } from 'lucide-react';
+import { Download, ExternalLink, FileText, FolderOpen, Loader2, RefreshCw, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
@@ -9,6 +9,7 @@ import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas
 import { resolveFeedbackAnnotationImageUrl } from '../../lib/feedbackImageAnnotations';
 import type {
   AppState,
+  FeedbackDocumentAttachment,
   FeedbackImageAnnotation,
   FeedbackReportCategory,
   FeedbackReportDetail,
@@ -69,6 +70,21 @@ const extractProjectStateFromSnapshot = (snapshot: any): AppState | null => {
   if (!candidate || typeof candidate !== 'object') return null;
   if (!('workflow' in candidate) || !('mode' in candidate)) return null;
   return candidate as AppState;
+};
+
+const estimateDataUrlSize = (dataUrl: string): number => {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return 0;
+  const payload = dataUrl.slice(commaIndex + 1);
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+};
+
+const formatFileSize = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
@@ -139,6 +155,41 @@ const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
     .filter(Boolean) as FeedbackImageAnnotation[];
 };
 
+const sanitizeDocumentAttachments = (value: any): FeedbackDocumentAttachment[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      const kind = item?.kind === 'translated' ? 'translated' : item?.kind === 'original' ? 'original' : null;
+      const name = typeof item?.name === 'string' ? item.name.trim() : '';
+      const mimeType = typeof item?.mimeType === 'string' ? item.mimeType.trim() : '';
+      const dataUrl =
+        typeof item?.dataUrl === 'string' &&
+        item.dataUrl.startsWith('data:') &&
+        item.dataUrl.length <= 50_000_000
+          ? item.dataUrl
+          : '';
+
+      if (!kind || !name || !mimeType || !dataUrl) return null;
+
+      const parsedSize = Number(item?.size);
+      const size = Number.isFinite(parsedSize) && parsedSize > 0
+        ? Math.floor(parsedSize)
+        : estimateDataUrlSize(dataUrl);
+
+      return {
+        id: String(item?.id || `document-${index + 1}`),
+        kind,
+        name,
+        mimeType,
+        size,
+        dataUrl,
+        sourceDocumentId: item?.sourceDocumentId ? String(item.sourceDocumentId) : null,
+      } as FeedbackDocumentAttachment;
+    })
+    .filter(Boolean) as FeedbackDocumentAttachment[];
+};
+
 export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -178,6 +229,11 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
         imageUrl: resolveFeedbackAnnotationImageUrl(annotation, selectedSnapshot),
       })),
     [imageAnnotations, selectedSnapshot]
+  );
+
+  const documentAttachments = useMemo(
+    () => sanitizeDocumentAttachments(selectedDetail?.metadata?.documentFeedback),
+    [selectedDetail]
   );
 
   const getModeLabel = (mode: string | null | undefined): string => {
@@ -575,10 +631,49 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                     <p className="text-sm font-semibold text-foreground">{t('feedback.admin.imageMarkupTitle')}</p>
                     {isSnapshotLoading ? (
                       <div className="h-20 flex items-center justify-center"><Loader2 size={18} className="animate-spin" /></div>
-                    ) : annotationViews.length === 0 ? (
-                      <p className="text-sm text-foreground-muted">{t('feedback.admin.imageMarkupEmpty')}</p>
+                    ) : annotationViews.length === 0 && documentAttachments.length === 0 ? (
+                      <p className="text-sm text-foreground-muted">{t('feedback.admin.mediaMarkupEmpty')}</p>
                     ) : (
                       <div className="space-y-4 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
+                        {documentAttachments.map((item) => (
+                          <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-semibold text-foreground truncate" title={item.name}>{item.name}</span>
+                              <span className="text-[11px] text-foreground-muted">
+                                {item.kind === 'original' ? t('feedback.documentOriginal') : t('feedback.documentTranslated')}
+                              </span>
+                            </div>
+                            <div className="rounded-md border border-border-subtle bg-surface h-[140px] flex flex-col items-center justify-center gap-2">
+                              <FileText size={22} className="text-foreground-muted" />
+                              <span className="text-[11px] text-foreground-muted uppercase tracking-wide">
+                                {(item.mimeType.split('/')[1] || 'file').toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-foreground-muted gap-2">
+                              <span>{formatFileSize(item.size)}</span>
+                              <span className="truncate" title={item.mimeType}>{item.mimeType}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={item.dataUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken inline-flex items-center gap-1"
+                              >
+                                <ExternalLink size={12} />
+                                <span>{t('feedback.documentOpen')}</span>
+                              </a>
+                              <a
+                                href={item.dataUrl}
+                                download={item.name}
+                                className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken inline-flex items-center gap-1"
+                              >
+                                <Download size={12} />
+                                <span>{t('feedback.documentDownload')}</span>
+                              </a>
+                            </div>
+                          </div>
+                        ))}
                         {annotationViews.map((item) => (
                           <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
                             <div className="flex items-center justify-between gap-2">

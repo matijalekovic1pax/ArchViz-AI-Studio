@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bug, Loader2, MessageSquareWarning, Send, Wrench, XCircle } from 'lucide-react';
+import { AlertTriangle, Bug, Download, ExternalLink, FileText, Loader2, MessageSquareWarning, Send, Wrench, XCircle } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
@@ -82,6 +82,13 @@ const buildTranslatedFileName = (sourceName: string, sourceType: 'pdf' | 'docx' 
   return `${baseName}-translated${extension}`;
 };
 
+const formatFileSize = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName.toLowerCase();
@@ -123,6 +130,41 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     () => imageAnnotations.find((item) => item.id === activeMarkupId) || null,
     [imageAnnotations, activeMarkupId]
   );
+
+  const documentAttachments = useMemo<FeedbackDocumentAttachment[]>(() => {
+    if (state.mode !== 'document-translate') return [];
+
+    const docTranslate = state.workflow.documentTranslate;
+    const sourceDocument = docTranslate.sourceDocument;
+    const next: FeedbackDocumentAttachment[] = [];
+
+    if (sourceDocument?.dataUrl?.startsWith('data:')) {
+      next.push({
+        id: `${sourceDocument.id}-original`,
+        kind: 'original',
+        name: sourceDocument.name,
+        mimeType: sourceDocument.mimeType,
+        size: Number.isFinite(sourceDocument.size) ? sourceDocument.size : estimateDataUrlSize(sourceDocument.dataUrl),
+        dataUrl: sourceDocument.dataUrl,
+        sourceDocumentId: sourceDocument.id,
+      });
+    }
+
+    if (sourceDocument && docTranslate.translatedDocumentUrl?.startsWith('data:')) {
+      const translatedMimeType = sourceDocument.type === 'xlsx' ? XLSX_MIME : DOCX_MIME;
+      next.push({
+        id: `${sourceDocument.id}-translated`,
+        kind: 'translated',
+        name: buildTranslatedFileName(sourceDocument.name, sourceDocument.type),
+        mimeType: translatedMimeType,
+        size: estimateDataUrlSize(docTranslate.translatedDocumentUrl),
+        dataUrl: docTranslate.translatedDocumentUrl,
+        sourceDocumentId: sourceDocument.id,
+      });
+    }
+
+    return next;
+  }, [state.mode, state.workflow.documentTranslate]);
 
   useEffect(() => {
     if (!open) return;
@@ -259,37 +301,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
           })
       );
 
-      const documentFeedback: FeedbackDocumentAttachment[] = [];
-      if (state.mode === 'document-translate') {
-        const docTranslate = state.workflow.documentTranslate;
-        const sourceDocument = docTranslate.sourceDocument;
-
-        if (sourceDocument?.dataUrl?.startsWith('data:')) {
-          documentFeedback.push({
-            id: `${sourceDocument.id}-original`,
-            kind: 'original',
-            name: sourceDocument.name,
-            mimeType: sourceDocument.mimeType,
-            size: Number.isFinite(sourceDocument.size) ? sourceDocument.size : estimateDataUrlSize(sourceDocument.dataUrl),
-            dataUrl: sourceDocument.dataUrl,
-            sourceDocumentId: sourceDocument.id,
-          });
-        }
-
-        if (sourceDocument && docTranslate.translatedDocumentUrl?.startsWith('data:')) {
-          const translatedMimeType = sourceDocument.type === 'xlsx' ? XLSX_MIME : DOCX_MIME;
-          documentFeedback.push({
-            id: `${sourceDocument.id}-translated`,
-            kind: 'translated',
-            name: buildTranslatedFileName(sourceDocument.name, sourceDocument.type),
-            mimeType: translatedMimeType,
-            size: estimateDataUrlSize(docTranslate.translatedDocumentUrl),
-            dataUrl: docTranslate.translatedDocumentUrl,
-            sourceDocumentId: sourceDocument.id,
-          });
-        }
-      }
-
       await feedbackService.submit({
         title: title.trim(),
         description: description.trim(),
@@ -307,7 +318,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         reportedFeatureKey: state.mode,
         reportedFeatureLabel: featureLabel,
         imageFeedback,
-        documentFeedback: documentFeedback.length > 0 ? documentFeedback : undefined,
+        documentFeedback: documentAttachments.length > 0 ? documentAttachments : undefined,
       });
 
       onClose();
@@ -452,10 +463,47 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
                 </div>
               </div>
 
-              {imageAnnotations.length === 0 ? (
-                <p className="text-sm text-foreground-muted">{t('feedback.imageMarkupEmpty')}</p>
+              {imageAnnotations.length === 0 && documentAttachments.length === 0 ? (
+                <p className="text-sm text-foreground-muted">{t('feedback.mediaMarkupEmpty')}</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[340px] overflow-y-auto custom-scrollbar pr-1">
+                  {documentAttachments.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs px-2 py-1 rounded-md border border-border text-foreground">
+                          {item.kind === 'original' ? t('feedback.documentOriginal') : t('feedback.documentTranslated')}
+                        </span>
+                        <span className="text-[11px] text-foreground-muted">{formatFileSize(item.size)}</span>
+                      </div>
+                      <div className="rounded-md border border-border-subtle bg-surface h-[140px] flex flex-col items-center justify-center gap-2">
+                        <FileText size={22} className="text-foreground-muted" />
+                        <span className="text-[11px] text-foreground-muted uppercase tracking-wide">
+                          {(item.mimeType.split('/')[1] || 'file').toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-foreground truncate" title={item.name}>{item.name}</p>
+                      <p className="text-[11px] text-foreground-muted truncate" title={item.mimeType}>{item.mimeType}</p>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={item.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken inline-flex items-center gap-1"
+                        >
+                          <ExternalLink size={12} />
+                          <span>{t('feedback.documentOpen')}</span>
+                        </a>
+                        <a
+                          href={item.dataUrl}
+                          download={item.name}
+                          className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken inline-flex items-center gap-1"
+                        >
+                          <Download size={12} />
+                          <span>{t('feedback.documentDownload')}</span>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
                   {imageAnnotations.map((item) => (
                     <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
