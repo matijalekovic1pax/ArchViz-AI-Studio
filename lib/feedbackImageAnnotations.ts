@@ -69,6 +69,10 @@ export const resolveFeedbackAnnotationImageUrl = (
   annotation: FeedbackImageAnnotation,
   snapshot: FeedbackProjectSnapshot | null | undefined
 ): string | null => {
+  if (annotation.previewDataUrl) {
+    return annotation.previewDataUrl;
+  }
+
   const appState = snapshot?.appState;
   if (!appState) return null;
 

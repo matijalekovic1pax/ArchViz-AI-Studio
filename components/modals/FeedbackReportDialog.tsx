@@ -7,9 +7,11 @@ import { useAuth } from '../auth/AuthGate';
 import { feedbackService } from '../../services/feedbackService';
 import { prepareFeedbackSnapshot } from '../../lib/projectSnapshot';
 import { collectFeedbackImageCandidates } from '../../lib/feedbackImageAnnotations';
+import { createFeedbackJpegCompressor } from '../../lib/feedbackImageCompression';
 import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas';
 import type {
   FeedbackImageAnnotation,
+  FeedbackImageMarkupShape,
   FeedbackReportCategory,
   FeedbackReportPriority,
   GenerationMode,
@@ -61,6 +63,16 @@ const cleanNote = (value: string): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  if (target.isContentEditable) return true;
+  if (target.closest('[contenteditable="true"]')) return true;
+  if (target.getAttribute('role') === 'textbox') return true;
+  return false;
+};
+
 export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const { state, dispatch } = useAppStore();
@@ -75,6 +87,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
   const [priority, setPriority] = useState<FeedbackReportPriority>('normal');
   const [imageAnnotations, setImageAnnotations] = useState<FeedbackImageAnnotationDraft[]>([]);
   const [activeMarkupId, setActiveMarkupId] = useState<string | null>(null);
+  const [markupRedoStacks, setMarkupRedoStacks] = useState<Record<string, FeedbackImageMarkupShape[]>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const featureLabel = useMemo(() => {
@@ -104,6 +117,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     setPriority('normal');
     setIsSubmitting(false);
     setActiveMarkupId(null);
+    setMarkupRedoStacks({});
 
     const candidates = collectFeedbackImageCandidates(state);
     setImageAnnotations(
@@ -128,6 +142,73 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     setImageAnnotations((prev) => prev.map((item) => (item.id === id ? updater(item) : item)));
   };
 
+  const setImageMarkups = (id: string, markups: FeedbackImageMarkupShape[]) => {
+    updateImageDraft(id, (prev) => ({ ...prev, markups }));
+  };
+
+  const handleMarkupChange = (id: string, markups: FeedbackImageMarkupShape[]) => {
+    setImageMarkups(id, markups);
+    setMarkupRedoStacks((prev) => ({ ...prev, [id]: [] }));
+  };
+
+  const handleMarkupUndo = (id: string) => {
+    const current = imageAnnotations.find((item) => item.id === id);
+    if (!current || current.markups.length === 0) return;
+    const removed = current.markups[current.markups.length - 1];
+    setImageMarkups(id, current.markups.slice(0, -1));
+    setMarkupRedoStacks((prev) => ({ ...prev, [id]: [...(prev[id] || []), removed] }));
+  };
+
+  const handleMarkupRedo = (id: string) => {
+    const current = imageAnnotations.find((item) => item.id === id);
+    if (!current) return;
+    const stack = markupRedoStacks[id] || [];
+    if (stack.length === 0) return;
+    const restored = stack[stack.length - 1];
+    setMarkupRedoStacks((prev) => ({ ...prev, [id]: stack.slice(0, -1) }));
+    setImageMarkups(id, [...current.markups, restored]);
+  };
+
+  const handleMarkupClear = (id: string) => {
+    setImageMarkups(id, []);
+    setMarkupRedoStacks((prev) => ({ ...prev, [id]: [] }));
+  };
+
+  useEffect(() => {
+    if (!activeMarkupItem) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setActiveMarkupId(null);
+        return;
+      }
+
+      if (isEditableTarget(event.target)) return;
+
+      const hasModifier = event.metaKey || event.ctrlKey;
+      if (!hasModifier || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'z' && !event.shiftKey) {
+        if (activeMarkupItem.markups.length === 0) return;
+        event.preventDefault();
+        handleMarkupUndo(activeMarkupItem.id);
+        return;
+      }
+
+      if (key === 'y' || (key === 'z' && event.shiftKey)) {
+        const stack = markupRedoStacks[activeMarkupItem.id] || [];
+        if (stack.length === 0) return;
+        event.preventDefault();
+        handleMarkupRedo(activeMarkupItem.id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeMarkupItem, markupRedoStacks]);
+
   const handleSubmit = async () => {
     if (!canSubmit || !user?.email) return;
 
@@ -136,12 +217,29 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     try {
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
 
-      const imageFeedback = imageAnnotations
-        .map(({ previewUrl, ...item }) => ({
-          ...item,
-          note: cleanNote(item.note || ''),
-        }))
-        .filter((item) => item.markups.length > 0 || !!item.note);
+      const compactPreview = createFeedbackJpegCompressor({
+        quality: 0.04,
+        maxDimension: 640,
+        convertRemoteToDataUrl: true,
+      });
+
+      const imageFeedback = await Promise.all(
+        imageAnnotations
+          .map(({ previewUrl, ...item }) => ({
+            ...item,
+            note: cleanNote(item.note || ''),
+            _previewUrl: previewUrl,
+          }))
+          .filter((item) => item.markups.length > 0 || !!item.note)
+          .map(async (item) => {
+            const previewDataUrl = await compactPreview(item._previewUrl);
+            const { _previewUrl, ...rest } = item;
+            return {
+              ...rest,
+              previewDataUrl: previewDataUrl || undefined,
+            };
+          })
+      );
 
       await feedbackService.submit({
         title: title.trim(),
@@ -316,8 +414,13 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
                           {t('feedback.imageOpenMarkup')}
                         </button>
                       </div>
-                      <div className="aspect-[16/10] rounded-md overflow-hidden border border-border-subtle bg-black/5">
-                        <img src={item.previewUrl} alt={item.label} className="w-full h-full object-cover" />
+                      <div className="rounded-md overflow-hidden border border-border-subtle bg-black/5">
+                        <FeedbackImageMarkupCanvas
+                          imageUrl={item.previewUrl}
+                          markups={item.markups}
+                          readOnly
+                          className="border-0 rounded-none"
+                        />
                       </div>
                       <p className="text-xs font-medium text-foreground truncate" title={item.label}>{item.label}</p>
                       <p className="text-[11px] text-foreground-muted">
@@ -381,24 +484,26 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
               <FeedbackImageMarkupCanvas
                 imageUrl={activeMarkupItem.previewUrl}
                 markups={activeMarkupItem.markups}
-                onChange={(next) => updateImageDraft(activeMarkupItem.id, (prev) => ({ ...prev, markups: next }))}
+                onChange={(next) => handleMarkupChange(activeMarkupItem.id, next)}
               />
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    updateImageDraft(activeMarkupItem.id, (prev) => ({
-                      ...prev,
-                      markups: prev.markups.slice(0, -1),
-                    }))
-                  }
+                  onClick={() => handleMarkupUndo(activeMarkupItem.id)}
                   disabled={activeMarkupItem.markups.length === 0}
                   className="h-9 px-3 rounded-lg border border-border text-sm text-foreground hover:bg-surface-sunken disabled:opacity-50"
                 >
                   {t('feedback.imageUndoMarkup')}
                 </button>
                 <button
-                  onClick={() => updateImageDraft(activeMarkupItem.id, (prev) => ({ ...prev, markups: [] }))}
+                  onClick={() => handleMarkupRedo(activeMarkupItem.id)}
+                  disabled={(markupRedoStacks[activeMarkupItem.id]?.length || 0) === 0}
+                  className="h-9 px-3 rounded-lg border border-border text-sm text-foreground hover:bg-surface-sunken disabled:opacity-50"
+                >
+                  {t('topBar.redo')}
+                </button>
+                <button
+                  onClick={() => handleMarkupClear(activeMarkupItem.id)}
                   disabled={activeMarkupItem.markups.length === 0}
                   className="h-9 px-3 rounded-lg border border-border text-sm text-foreground hover:bg-surface-sunken disabled:opacity-50"
                 >

@@ -1507,6 +1507,7 @@ export interface FeedbackImageAnnotation {
   id: string;
   sourceType: FeedbackImageSourceType;
   label: string;
+  previewDataUrl?: string;
   historyId?: string | null;
   historyIndex?: number | null;
   mode?: GenerationMode | null;

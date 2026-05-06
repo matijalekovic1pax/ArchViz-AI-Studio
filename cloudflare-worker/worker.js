@@ -385,6 +385,15 @@ function sanitizeEnum(value, allowedSet, fallback) {
   return allowedSet.has(normalized) ? normalized : fallback;
 }
 
+function sanitizeDataImageUrl(value, maxLen = 3000000) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > maxLen) return null;
+  if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(normalized)) return null;
+  return normalized;
+}
+
 function clampNumber(value, min, max, fallback = null) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
@@ -408,6 +417,7 @@ function sanitizeFeedbackImageAnnotations(input) {
       const timestampRaw = clampNumber(entry?.timestamp, 0, 9999999999999, null);
       const timestamp = timestampRaw == null ? null : Math.floor(timestampRaw);
       const note = sanitizeText(entry?.note, 12000);
+      const previewDataUrl = sanitizeDataImageUrl(entry?.previewDataUrl, 3000000);
 
       const markups = Array.isArray(entry?.markups)
         ? entry.markups
@@ -455,6 +465,7 @@ function sanitizeFeedbackImageAnnotations(input) {
         mode: mode || null,
         timestamp,
         note: note || null,
+        previewDataUrl: previewDataUrl || null,
         markups,
       };
     })

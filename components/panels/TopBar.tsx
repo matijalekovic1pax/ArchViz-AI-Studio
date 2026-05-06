@@ -489,6 +489,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
         return;
       }
 
+      if (showFeedbackDialog || showAdminDashboard || showSaveInfo || showClearConfirm) {
+        return;
+      }
+
       if (isEditableTarget(event.target)) return;
 
       const hasModifier = event.metaKey || event.ctrlKey;
