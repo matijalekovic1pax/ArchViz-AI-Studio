@@ -136,6 +136,7 @@ const FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES = 6 * 1024 * 1024; // 6MB
 const FEEDBACK_ALLOWED_STATUSES = new Set(['new', 'triaged', 'in_progress', 'resolved', 'closed']);
 const FEEDBACK_ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent']);
 const FEEDBACK_ALLOWED_CATEGORIES = new Set(['bug', 'quality', 'ux', 'performance', 'feature_request', 'other']);
+const FEEDBACK_ALLOWED_IMAGE_SOURCES = new Set(['source', 'current', 'history']);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -382,6 +383,63 @@ function sanitizeEnum(value, allowedSet, fallback) {
   if (typeof value !== 'string') return fallback;
   const normalized = value.trim();
   return allowedSet.has(normalized) ? normalized : fallback;
+}
+
+function clampNumber(value, min, max, fallback = null) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(min, Math.min(max, num));
+}
+
+function sanitizeFeedbackImageAnnotations(input) {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .slice(0, 80)
+    .map((entry, index) => {
+      const sourceType = sanitizeEnum(entry?.sourceType, FEEDBACK_ALLOWED_IMAGE_SOURCES, null);
+      if (!sourceType) return null;
+
+      const label = sanitizeText(entry?.label, 200) || `${sourceType}-${index + 1}`;
+      const historyId = sanitizeText(entry?.historyId, 120);
+      const historyIndexRaw = clampNumber(entry?.historyIndex, 0, 99999, null);
+      const historyIndex = historyIndexRaw == null ? null : Math.floor(historyIndexRaw);
+      const mode = sanitizeText(entry?.mode, 64);
+      const timestampRaw = clampNumber(entry?.timestamp, 0, 9999999999999, null);
+      const timestamp = timestampRaw == null ? null : Math.floor(timestampRaw);
+      const note = sanitizeText(entry?.note, 12000);
+
+      const markups = Array.isArray(entry?.markups)
+        ? entry.markups
+            .slice(0, 120)
+            .map((markup, markupIndex) => {
+              const x = clampNumber(markup?.x, 0, 1, null);
+              const y = clampNumber(markup?.y, 0, 1, null);
+              const radius = clampNumber(markup?.radius, 0.001, 1, null);
+              if (x == null || y == null || radius == null) return null;
+              return {
+                id: sanitizeText(markup?.id, 120) || `markup-${index + 1}-${markupIndex + 1}`,
+                x,
+                y,
+                radius,
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      return {
+        id: sanitizeText(entry?.id, 120) || `image-feedback-${index + 1}`,
+        sourceType,
+        label,
+        historyId: historyId || null,
+        historyIndex,
+        mode: mode || null,
+        timestamp,
+        note: note || null,
+        markups,
+      };
+    })
+    .filter(Boolean);
 }
 
 function resolveSupabaseUrl(env) {
@@ -2644,6 +2702,18 @@ async function handleFeedbackCreate(request, env, user) {
       : 0;
 
     const reportId = crypto.randomUUID();
+    const metadataInput = body?.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+    const reportedFeatureKey = sanitizeText(body?.reportedFeatureKey || body?.mode || mode, 120);
+    const reportedFeatureLabel = sanitizeText(body?.reportedFeatureLabel, 200);
+    const imageFeedback = sanitizeFeedbackImageAnnotations(body?.imageFeedback);
+
+    const reportMetadata = {
+      ...metadataInput,
+      reportedFeatureKey: reportedFeatureKey || null,
+      reportedFeatureLabel: reportedFeatureLabel || null,
+      imageFeedback,
+    };
+
     const reportPayload = {
       id: reportId,
       reporter_email: user.email,
@@ -2664,7 +2734,7 @@ async function handleFeedbackCreate(request, env, user) {
       snapshot_version: snapshotVersion,
       snapshot_hash: snapshotHash,
       snapshot_size_bytes: snapshotSizeBytes,
-      metadata: body?.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+      metadata: reportMetadata,
     };
 
     let snapshotStoredInline = snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES;
