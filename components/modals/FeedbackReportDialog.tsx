@@ -22,7 +22,6 @@ interface FeedbackReportDialogProps {
 
 interface FeedbackImageAnnotationDraft extends FeedbackImageAnnotation {
   previewUrl: string;
-  selected: boolean;
 }
 
 const CATEGORIES: Array<{ value: FeedbackReportCategory; icon: React.ReactNode }> = [
@@ -83,11 +82,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     return key ? t(key) : state.mode;
   }, [state.mode, t]);
 
-  const selectedImageCount = useMemo(
-    () => imageAnnotations.filter((item) => item.selected).length,
-    [imageAnnotations]
-  );
-
   const canSubmit = useMemo(
     () => title.trim().length > 0 && description.trim().length > 0 && !isSubmitting,
     [title, description, isSubmitting]
@@ -124,7 +118,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         note: '',
         markups: [],
         previewUrl: candidate.previewUrl,
-        selected: false,
       }))
     );
   }, [open, state]);
@@ -144,11 +137,11 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
 
       const imageFeedback = imageAnnotations
-        .filter((item) => item.selected)
-        .map(({ selected, previewUrl, ...item }) => ({
+        .map(({ previewUrl, ...item }) => ({
           ...item,
           note: cleanNote(item.note || ''),
-        }));
+        }))
+        .filter((item) => item.markups.length > 0 || !!item.note);
 
       await feedbackService.submit({
         title: title.trim(),
@@ -307,9 +300,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
                   <p className="text-sm font-semibold text-foreground">{t('feedback.imageMarkupTitle')}</p>
                   <p className="text-xs text-foreground-muted mt-1">{t('feedback.imageMarkupSubtitle')}</p>
                 </div>
-                <span className="text-xs font-semibold text-foreground-muted">
-                  {t('feedback.imageSelectedCount', { count: selectedImageCount })}
-                </span>
               </div>
 
               {imageAnnotations.length === 0 ? (
@@ -320,19 +310,8 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
                     <div key={item.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <button
-                          onClick={() => updateImageDraft(item.id, (prev) => ({ ...prev, selected: !prev.selected }))}
-                          className={`text-xs px-2 py-1 rounded-md border transition-colors ${
-                            item.selected
-                              ? 'bg-foreground text-background border-foreground'
-                              : 'border-border text-foreground-muted hover:bg-surface-sunken'
-                          }`}
-                        >
-                          {item.selected ? t('feedback.imageSelected') : t('feedback.imageSelect')}
-                        </button>
-                        <button
                           onClick={() => setActiveMarkupId(item.id)}
-                          disabled={!item.selected}
-                          className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken disabled:opacity-50"
+                          className="text-xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-sunken"
                         >
                           {t('feedback.imageOpenMarkup')}
                         </button>
@@ -403,7 +382,6 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
                 imageUrl={activeMarkupItem.previewUrl}
                 markups={activeMarkupItem.markups}
                 onChange={(next) => updateImageDraft(activeMarkupItem.id, (prev) => ({ ...prev, markups: next }))}
-                className="max-h-[62vh]"
               />
 
               <div className="flex items-center gap-2">
