@@ -55,6 +55,9 @@ export interface GenerationConfig {
   abortSignal?: AbortSignal;
   responseModalities?: Array<'TEXT' | 'IMAGE'>;
   imageConfig?: ImageConfig;
+  responseFormat?: {
+    image?: ImageConfig;
+  };
   thinkingConfig?: {
     thinkingBudget?: number;
     thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
@@ -404,6 +407,15 @@ export class GeminiService {
           referenceInstructions
         ].join(' ')
       : `Return a complete edited image preserving the original camera, framing, and perspective unless the request explicitly changes the canvas or aspect ratio.${referenceInstructions}`;
+    const highFidelityEnhanceInstructions = [
+      'Perform a conservative restoration and quality pass, not a redraw or redesign.',
+      'Treat the source image as the exact visual blueprint: same object count, same object positions, same silhouettes, same scale relationships, same crop, same camera, and same perspective.',
+      'Preserve fine architectural details exactly: ceiling slats, panels, mullions, columns, signage blocks, lights, railings, furniture, plants, reflections, floor joints, texture patterns, material colors, and material finishes.',
+      'Preserve every person exactly in count, location, pose, clothing color, and silhouette. Do not merge people, remove people, invent faces, alter limbs, or simplify crowds.',
+      'Preserve signage and text marks as source-faithful shapes. Do not rewrite, translate, invent, or make illegible text newly readable unless it is already readable in the source.',
+      'Allowed changes are only optical-quality improvements: reduce noise and compression artifacts, recover local contrast, sharpen existing edges, clarify already-visible microdetail, and smooth obvious rendering artifacts.',
+      'For blurry, tiny, distant, or ambiguous areas, keep the same shapes and approximate detail rather than inventing new content. When enhancement conflicts with preservation, preserve.'
+    ].join(' ');
 
     switch (request.editType) {
       case 'inpaint':
@@ -413,10 +425,10 @@ export class GeminiService {
         editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Do not change existing source pixels unless needed only at the extension seam.`;
         break;
       case 'style-transfer':
-        editPrompt = `${maskInstructions} Transform only the allowed area to have the following style or material change: ${request.prompt}. Maintain composition, geometry, and all locked pixels.`;
+        editPrompt = `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;
         break;
       case 'enhance':
-        editPrompt = `${maskInstructions} Enhance only the allowed area: ${request.prompt}. Improve quality while preserving content, geometry, and all locked pixels.`;
+        editPrompt = `${maskInstructions} ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`;
         break;
       case 'remove':
         editPrompt = `${maskInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
@@ -543,6 +555,7 @@ export class GeminiService {
 
     let accumulatedText = '';
     const accumulatedImages: GeneratedImage[] = [];
+    let lastThoughtImage: GeneratedImage | null = null;
 
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
@@ -574,7 +587,9 @@ export class GeminiService {
             const parts = chunk.candidates?.[0]?.content?.parts || [];
 
             for (const part of parts) {
-              if ('text' in part && part.text) {
+              const isThought = this.isThoughtPart(part);
+
+              if (!isThought && 'text' in part && part.text) {
                 accumulatedText += part.text;
               }
               const imageData = part.inlineData || part.inline_data;
@@ -582,18 +597,28 @@ export class GeminiService {
                 const mimeType = imageData.mimeType as ImageMimeType;
                 const base64 = imageData.data as string;
                 if (base64) {
-                  accumulatedImages.push({
+                  const generatedImage = {
                     base64,
                     mimeType,
                     dataUrl: `data:${mimeType};base64,${base64}`
-                  });
+                  };
+                  if (isThought) {
+                    lastThoughtImage = generatedImage;
+                  } else {
+                    accumulatedImages.push(generatedImage);
+                  }
                 }
               }
             }
 
+            const visibleImages = accumulatedImages.length > 0
+              ? accumulatedImages
+              : lastThoughtImage
+                ? [lastThoughtImage]
+                : [];
             yield {
               text: accumulatedText || null,
-              images: accumulatedImages
+              images: visibleImages
             };
           } catch {
             // Skip malformed SSE chunks
@@ -610,7 +635,9 @@ export class GeminiService {
           const chunk = JSON.parse(jsonStr);
           const parts = chunk.candidates?.[0]?.content?.parts || [];
           for (const part of parts) {
-            if ('text' in part && part.text) {
+            const isThought = this.isThoughtPart(part);
+
+            if (!isThought && 'text' in part && part.text) {
               accumulatedText += part.text;
             }
             const imageData = part.inlineData || part.inline_data;
@@ -618,17 +645,27 @@ export class GeminiService {
               const mimeType = imageData.mimeType as ImageMimeType;
               const base64 = imageData.data as string;
               if (base64) {
-                accumulatedImages.push({
+                const generatedImage = {
                   base64,
                   mimeType,
                   dataUrl: `data:${mimeType};base64,${base64}`
-                });
+                };
+                if (isThought) {
+                  lastThoughtImage = generatedImage;
+                } else {
+                  accumulatedImages.push(generatedImage);
+                }
               }
             }
           }
+          const visibleImages = accumulatedImages.length > 0
+            ? accumulatedImages
+            : lastThoughtImage
+              ? [lastThoughtImage]
+              : [];
           yield {
             text: accumulatedText || null,
-            images: accumulatedImages
+            images: visibleImages
           };
         } catch {
           // Skip malformed final chunk
@@ -680,12 +717,20 @@ export class GeminiService {
   ): Record<string, any> {
     if (!config) return { responseModalities: defaultModalities };
 
-    const { abortSignal, imageConfig, ...rest } = config;
+    const { abortSignal, imageConfig, responseFormat, ...rest } = config;
     const result: Record<string, any> = {
       ...rest,
       responseModalities: config.responseModalities || defaultModalities,
     };
-    if (imageConfig) result.imageConfig = imageConfig;
+
+    const imageResponseFormat = imageConfig || responseFormat?.image;
+    if (imageResponseFormat) {
+      result.responseFormat = {
+        ...(responseFormat || {}),
+        image: imageResponseFormat,
+      };
+    }
+
     return result;
   }
 
@@ -763,12 +808,15 @@ export class GeminiService {
       images: [],
       finishReason: chunks[chunks.length - 1]?.candidates?.[0]?.finishReason
     };
+    const thoughtImages: GeneratedImage[] = [];
 
     for (const chunk of chunks) {
       const parts = chunk.candidates?.[0]?.content?.parts || [];
 
       for (const part of parts) {
-        if ('text' in part && part.text) {
+        const isThought = this.isThoughtPart(part);
+
+        if (!isThought && 'text' in part && part.text) {
           result.text = (result.text || '') + part.text;
         }
 
@@ -777,17 +825,30 @@ export class GeminiService {
           const mimeType = imageData.mimeType as ImageMimeType;
           const base64 = imageData.data as string;
           if (base64) {
-            result.images.push({
+            const generatedImage = {
               base64,
               mimeType,
               dataUrl: `data:${mimeType};base64,${base64}`
-            });
+            };
+            if (isThought) {
+              thoughtImages.push(generatedImage);
+            } else {
+              result.images.push(generatedImage);
+            }
           }
         }
       }
     }
 
+    if (result.images.length === 0 && thoughtImages.length > 0) {
+      result.images.push(thoughtImages[thoughtImages.length - 1]);
+    }
+
     return result;
+  }
+
+  private isThoughtPart(part: any): boolean {
+    return part?.thought === true;
   }
 }
 

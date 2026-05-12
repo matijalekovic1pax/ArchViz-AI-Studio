@@ -1994,21 +1994,21 @@ export const VisualEditPanel = () => {
     }
 
     if (preset === 'auto') {
-      updateAdjust({ exposure: 10, contrast: 8, highlights: -5, shadows: 8, clarity: 10, vibrance: 10, dehaze: 4 });
+      updateAdjust({ exposure: 8, contrast: 14, highlights: -22, shadows: 24, whites: 8, blacks: -12, clarity: 18, vibrance: 12, dehaze: 6 });
       return;
     }
 
     if (preset === 'vivid') {
-      updateAdjust({ contrast: 18, saturation: 20, vibrance: 25, clarity: 12, texture: 8 });
+      updateAdjust({ contrast: 24, saturation: 18, vibrance: 28, whites: 10, blacks: -14, clarity: 18, texture: 10 });
       return;
     }
 
     if (preset === 'soft') {
-      updateAdjust({ contrast: -10, highlights: 10, shadows: 12, clarity: -8, texture: -6 });
+      updateAdjust({ contrast: -12, highlights: -12, shadows: 28, whites: -6, blacks: 10, clarity: -8, texture: -6 });
       return;
     }
 
-    updateAdjust({ contrast: 22, saturation: 8, clarity: 18, vignette: 20, grain: 10, dehaze: 10 });
+    updateAdjust({ exposure: -4, contrast: 30, highlights: -28, shadows: -10, whites: 12, blacks: -24, saturation: 8, clarity: 24, vignette: 20, grain: 8, dehaze: 12 });
   };
 
   const renderToolOptions = () => {
