@@ -1710,8 +1710,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     const material = workflow.visualMaterial;
     const selectedMaterial = getMaterialById(material.materialId);
-    if (workflow.visualMaterial.surfaceType === 'auto') {
-      parts.push('Intelligently detect and target the appropriate surfaces regardless of selection boundaries.');
+    const hasAuthoritativeSelection = selectionCount > 0 || Boolean(workflow.visualSelectionMask);
+    if (hasAuthoritativeSelection) {
+      parts.push('The selection mask is authoritative: change material only inside the selected white pixels. Do not expand the edit to nearby, connected, or visually similar surfaces outside the selection.');
+      parts.push('Treat the edit as a surface finish replacement on the existing selected geometry. Preserve the exact outline, floor inlay shape, seams, joints, perspective, reflections, and shadow structure of the selected area.');
+    } else if (workflow.visualMaterial.surfaceType === 'auto') {
+      parts.push('No mask is provided, so infer the target only from the user instruction and modify only existing objects or surfaces that clearly match that target.');
+      parts.push('For object-specific requests such as machines, counters, kiosks, appliances, panels, doors, or fixtures, change only the visible finish of those existing target objects. Do not edit surrounding queues, posts, belts, floors, walls, ceilings, signage, luggage, furniture, people, or reflections except for physically consistent reflections on the target object itself.');
+      parts.push('If the target object is ambiguous, make the smallest conservative material-only change to the clearly matching area and leave all uncertain areas unchanged.');
     } else {
       parts.push('Apply the new material strictly within the defined selection boundaries.');
     }
@@ -1752,7 +1758,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Maintain realistic reflections that match the environment.');
     }
 
-    parts.push('Critical constraints: only the surface appearance may change. The geometry, edge profiles, joints, seams, and overall UV orientation must remain exactly as they are. Do not affect any adjacent materials or introduce new objects.');
+    parts.push('Critical constraints: only the surface appearance may change. The geometry, edge profiles, joints, seams, material layout, selected region shape, and overall UV orientation must remain exactly as they are. Do not affect any adjacent materials, redraw the room, blur details, lower image resolution, add objects, remove objects, duplicate objects, or alter object positions.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -3196,130 +3202,30 @@ function generateUpscalePrompt(state: AppState): string {
     return `${high} (very high)`;
   };
 
-  parts.push('Ultra-premium cinematic enhancement and extreme-resolution upscaling with absolute content preservation.');
-  parts.push('The input image is the single, immutable source of truth.');
-  parts.push(`Target upscale factor: ${workflow.upscaleFactor}.`);
-  parts.push('Upscaler control settings (must be reflected in the result):');
-  parts.push(`Output resolution target: ${outputResolution}.`);
-  parts.push(`Sharpness: ${workflow.upscaleSharpness}/100 (${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}).`);
-  parts.push(`Clarity: ${workflow.upscaleClarity}/100 (${describeSlider(workflow.upscaleClarity, 'low', 'high')}).`);
-  parts.push(`Edge definition: ${workflow.upscaleEdgeDefinition}/100 (${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}).`);
-  parts.push(`Fine detail: ${workflow.upscaleFineDetail}/100 (${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}).`);
+  parts.push('Conservative architectural image restoration and upscale.');
+  parts.push('The input image is the only source of truth. Produce the same image at higher apparent quality, as if the original render were exported at a higher resolution with cleaner sampling.');
+  parts.push(`Target upscale factor: ${workflow.upscaleFactor}. Treat this as a clarity goal only; do not zoom, crop, extend, or reframe the canvas.`);
+  parts.push(`Output resolution target: ${outputResolution}. If the API caps output below this target, use the highest supported size and prioritize faithful detail preservation.`);
+  parts.push('Allowed operations: reduce noise and compression artifacts, gently deblur, sharpen existing edges, recover local contrast, clarify already-visible microtexture, and improve anti-aliasing.');
+  parts.push('Forbidden operations: redraw the scene, redesign architecture, invent details, remove details, simplify crowded areas, add objects, remove objects, replace materials, alter colors, alter lighting direction, beautify faces, change clothing, or rewrite signage.');
+  parts.push('Frame lock: preserve crop, aspect ratio, camera position, perspective, scale, geometry, object count, object locations, and all spatial relationships exactly.');
+  parts.push('Architectural detail lock: preserve ceiling slats, wall panels, columns, mullions, railings, floor joints, reflections, signage blocks, lighting fixtures, furniture, screens, plants, vehicles, and distant objects in their exact positions and proportions.');
+  parts.push('People lock: preserve every person exactly in count, position, pose, clothing color, silhouette, and scale. Do not merge people, delete people, create new people, distort limbs, or invent facial detail.');
+  parts.push('Material lock: preserve original material color, texture pattern, grain direction, reflectivity, transparency, polish level, and finish. Sharpen what exists; do not substitute or stylize materials.');
+  parts.push('Text and signage lock: keep existing text/signage shapes source-faithful. Do not translate, correct, invent, or make unreadable text newly readable. If text is tiny or blurry in the source, keep it visually consistent rather than fabricating letters.');
+  parts.push('Ambiguity rule: when an area is blurry, tiny, occluded, or uncertain, preserve its original shape and approximate texture. Better slightly soft and correct than sharp and wrong.');
+  parts.push('Slider intent:');
+  parts.push(`Sharpness: ${workflow.upscaleSharpness}/100 (${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}) using restrained edge sharpening only.`);
+  parts.push(`Clarity: ${workflow.upscaleClarity}/100 (${describeSlider(workflow.upscaleClarity, 'low', 'high')}) using local contrast without changing exposure or mood.`);
+  parts.push(`Edge definition: ${workflow.upscaleEdgeDefinition}/100 (${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}) preserving all line positions.`);
+  parts.push(`Fine detail: ${workflow.upscaleFineDetail}/100 (${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}) enhancing only details already visible in the source.`);
 
   if (userPrompt) {
-    parts.push(`User notes: ${userPrompt}.`);
+    parts.push(`User notes, subordinate to preservation rules: ${userPrompt}.`);
   }
 
-  parts.push('1. ABSOLUTE CONTENT & FRAME LOCK -- NON-NEGOTIABLE');
-  parts.push('Preserve the original image exactly as it is, edge to edge.');
-  parts.push('No cropping, no zooming, no shifting, no reframing.');
-  parts.push('No aspect-ratio changes.');
-  parts.push('Composition, perspective, and camera position are fully locked.');
-  parts.push('Do not add, remove, replace, or reinterpret anything:');
-  parts.push('No new or missing people.');
-  parts.push('No altered architecture or geometry.');
-  parts.push('No substituted materials.');
-  parts.push('All proportions, spacing, and relationships must remain pixel-identical to the source image.');
-
-  parts.push('2. RESOLUTION & PERCEPTUAL DETAIL -- PUSH TO THE LIMIT');
-  parts.push('Upscale to true ultra-HD clarity (8K-12K perceptual detail).');
-  parts.push('Every edge must be surgically sharp and perfectly clean.');
-  parts.push('Fine lines, joints, seams, and structural details must read clearly, even at distance.');
-  parts.push('Zero blur, zero softness, zero noise, zero compression artifacts.');
-  parts.push('The image should feel as if it were rendered with infinite samples and flawless precision.');
-
-  parts.push('3. VISUAL GOAL -- "CINEMATIC FUTURE REALISM"');
-  parts.push('Aim for a flagship sci-fi airport terminal look:');
-  parts.push('High-budget cinematic realism.');
-  parts.push('Competition-grade architectural visualization.');
-  parts.push('Hyper-real and physically plausible.');
-  parts.push('Not stylized. Not painterly. Not cartoonish.');
-  parts.push('More real than reality -- but never fake.');
-
-  parts.push('4. LIFE & MICRO-DETAILS -- THIS IS CRITICAL');
-  parts.push('Small elements are what make the scene feel alive.');
-  parts.push('Enhance them carefully, without changing or inventing anything:');
-  parts.push('Trees & vegetation: clearer silhouettes, refined leaves, natural depth and layering.');
-  parts.push('People: crisp outlines, readable posture, natural scale -- no smoothing or distortion.');
-  parts.push('Cars & vehicles: sharper body lines, cleaner reflections, readable details.');
-  parts.push('Planes & distant objects: enhanced clarity and definition, not exaggerated scale.');
-  parts.push('Street elements (signage, lights, markings): legible, precise, and grounded.');
-  parts.push('Nothing new is added -- only clarity, presence, and realism are increased.');
-
-  parts.push('5. COLOR & CINEMATIC ENERGY');
-  parts.push('Elevate the image with controlled cinematic richness:');
-  parts.push('Selective, intelligent saturation -- never flat, never overdone.');
-  parts.push('Whites should feel clean, luminous, and premium.');
-  parts.push('Shadows should be deep but detailed, never crushed.');
-  parts.push('Strong local contrast to separate forms and layers.');
-  parts.push('Use subtle glow only where physically justified (lighting, glass, reflections).');
-  parts.push('The image should feel vibrant, alive, and high-end -- not neutral or dull.');
-
-  parts.push('6. LIGHTING -- INTENTIONAL & ART-DIRECTED');
-  parts.push('Lighting must feel designed, not accidental:');
-  parts.push('Balanced exposure across the entire frame.');
-  parts.push('Clear depth separation: foreground, midground, background.');
-  parts.push('Materials must read cleanly under light -- no muddy or flat surfaces.');
-
-  parts.push('7. MATERIAL & SURFACE FIDELITY -- CRITICAL FOR ARCHITECTURAL PRESENTATIONS');
-  parts.push('ABSOLUTE PRIORITY: PRESERVE ORIGINAL MATERIAL COLORS AND TEXTURES EXACTLY AS THEY APPEAR.');
-  parts.push('Materials define the architectural design -- any change to color or texture destroys the presentation.');
-  parts.push('');
-  parts.push('MANDATORY COLOR PRESERVATION:');
-  parts.push('The exact color of every material MUST be retained pixel-perfect.');
-  parts.push('No color shifts, no tint changes, no saturation adjustments to materials.');
-  parts.push('No warming or cooling of material colors.');
-  parts.push('No color "corrections" or "improvements" to materials.');
-  parts.push('If a material is beige, it stays beige. If it is grey, it stays grey. If it is white, it stays white.');
-  parts.push('Color accuracy is non-negotiable -- match the source image exactly.');
-  parts.push('');
-  parts.push('MANDATORY TEXTURE PRESERVATION:');
-  parts.push('The exact texture pattern of every material MUST be retained exactly.');
-  parts.push('No texture substitution, no pattern changes, no detail invention.');
-  parts.push('Grain direction, pattern scale, and texture rhythm must match the original precisely.');
-  parts.push('Do not add texture detail where none exists -- only sharpen what is already there.');
-  parts.push('Do not smooth or simplify existing textures.');
-  parts.push('');
-  parts.push('WHERE MATERIALS ARE CLEARLY VISIBLE:');
-  parts.push('Color and texture are LOCKED -- absolutely zero modifications allowed.');
-  parts.push('The exact appearance of applied materials is sacred -- this is architectural presentation work.');
-  parts.push('Only enhance sharpness and resolution -- never change color, texture, or finish.');
-  parts.push('Think: "I am scanning this at higher resolution, not redesigning it."');
-  parts.push('');
-  parts.push('WHERE MATERIALS ARE DIFFICULT TO RECOGNIZE (blurry, distant, or unclear):');
-  parts.push('You may make small modifications only if absolutely necessary for clarity.');
-  parts.push('Stay as close to the original color and texture as humanly possible.');
-  parts.push('Match the approximate color tone, texture pattern, and surface character visible in the original.');
-  parts.push('When in doubt, preserve rather than enhance -- better slightly blurry than wrong.');
-  parts.push('');
-  parts.push('MATERIAL-SPECIFIC GUIDELINES:');
-  parts.push('Metal: preserve exact color (grey/bronze/black/etc.), exact finish (brushed/polished/matte), reflection character.');
-  parts.push('Glass: maintain exact transparency level, exact tint color, and reflection properties.');
-  parts.push('Wood: preserve exact wood tone, exact grain pattern, exact finish without adding or removing detail.');
-  parts.push('Stone/Concrete: maintain exact color, exact texture pattern, exact surface character.');
-  parts.push('Floors: preserve exact material color, exact texture, exact polish level, exact reflection characteristics.');
-  parts.push('Fabrics/Textiles: maintain exact color, exact weave pattern, exact surface texture without invention.');
-  parts.push('Paint/Coatings: preserve exact color and exact finish (matte/satin/gloss) as shown.');
-  parts.push('Skin & clothing: crisp silhouettes, natural texture, no AI smearing.');
-  parts.push('');
-  parts.push('REMEMBER: The materials shown were carefully selected by architects and designers.');
-  parts.push('Your job is to upscale, not to redesign. Preserve color and texture with absolute fidelity.');
-
-  parts.push('8. STRICT ANTI-AI RULES');
-  parts.push('Do not hallucinate or invent details.');
-  parts.push('Do not introduce textures, objects, or people.');
-  parts.push('If something is unclear, improve clarity, not content.');
-  parts.push('No painterly effects, no fantasy lighting, no AI artifacts.');
-
-  parts.push('FINAL QUALITY BAR');
-  parts.push('The final image must look like:');
-  parts.push('A hero shot from a top-tier sci-fi architectural competition.');
-  parts.push('A magazine-cover-ready, print-grade visualization.');
-  parts.push('It should make viewers think: "This looks impossibly sharp, alive, and premium."');
-
-  parts.push('OVERRIDING RULE');
-  parts.push('If there is ever a conflict between enhancement and preservation: PRESERVE THE IMAGE EXACTLY AS PROVIDED. ALWAYS.');
-  parts.push('This is super important, when i zoom in i want to be able to see every detail.');
+  parts.push('Final check before returning: compare against the source and reject any change in composition, object count, person placement, material color, signage layout, plant shape, ceiling pattern, floor reflection, or architectural geometry.');
+  parts.push('If enhancement and fidelity conflict, preserve the source image exactly.');
 
   return parts.filter(p => p.trim()).join('\n');
 }

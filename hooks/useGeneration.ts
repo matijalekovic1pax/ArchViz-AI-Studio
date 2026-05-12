@@ -31,6 +31,11 @@ import { isConvertApiConfigured } from '../services/convertApiService';
 import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
 import { getMaterialById } from '../lib/materialCatalog';
+import {
+  applyMaskedMaterialReplacement,
+  applyPromptTargetedMaterialReplacement,
+  applyVisualPostProduction
+} from '../lib/visualPostProcessing';
 import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
@@ -52,6 +57,11 @@ const generatedImageFromDataUrl = (dataUrl: string): GeneratedImage => {
     mimeType: (match?.[1] as GeneratedImage['mimeType']) || 'image/png',
     base64: match?.[2] || dataUrl.split(',')[1] || ''
   };
+};
+
+const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
+  if (!images || images.length === 0) return null;
+  return images[images.length - 1];
 };
 
 const drawMaskImageData = (
@@ -1426,13 +1436,12 @@ export function useGeneration(): UseGenerationReturn {
           })
         );
 
-        if (!gridResult.images?.[0]) {
+        const gridImage = pickFinalImage(gridResult.images);
+        if (!gridImage) {
           throw new Error('No grid image generated');
         }
 
         updateProgress(70);
-
-        const gridImage = gridResult.images[0];
 
         // TODO: Split the grid into individual panels
         // For now, just store the full grid
@@ -1577,12 +1586,13 @@ export function useGeneration(): UseGenerationReturn {
                 })
               ]);
 
-              if (upscaleResult.images?.[0]) {
-                const outputUrl = upscaleResult.images[0].dataUrl;
+              const finalUpscaleImage = pickFinalImage(upscaleResult.images);
+              if (finalUpscaleImage) {
+                const outputUrl = finalUpscaleImage.dataUrl;
                 queued[0] = { ...item, status: 'done', url: outputUrl, retryCount: attempt };
                 imagesOut.push({
-                  base64: upscaleResult.images[0].base64,
-                  mimeType: upscaleResult.images[0].mimeType,
+                  base64: finalUpscaleImage.base64,
+                  mimeType: finalUpscaleImage.mimeType,
                   dataUrl: outputUrl
                 });
 
@@ -1685,6 +1695,7 @@ export function useGeneration(): UseGenerationReturn {
         const maskImage = editableMaskDataUrl
           ? dataUrlToImageData(editableMaskDataUrl)
           : null;
+        let visualMaskHandledLocally = false;
 
         const editTypeMap: Record<string, ImageEditRequest['editType']> = {
           select: 'inpaint',
@@ -1702,20 +1713,77 @@ export function useGeneration(): UseGenerationReturn {
         const materialReference = activeVisualTool === 'material'
           ? getMaterialById(state.workflow.visualMaterial.materialId)
           : null;
-        const materialReferenceImage = materialReference
+        const hasLocalMaskedMaterialEdit = Boolean(
+          activeVisualTool === 'material' &&
+          shouldUseSelectionMask &&
+          selectedMaskDataUrl &&
+          materialReference
+        );
+        const materialReferenceImage = materialReference && !hasLocalMaskedMaterialEdit
           ? await materialPreviewToImageData(materialReference.previewUrl)
           : null;
 
-        result = await runWithRetry('image edit', () => service.editImage({
-          sourceImage,
-          maskImage: maskImage || undefined,
-          referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-          prompt: basePrompt,
-          editType,
-          generationConfig: generationConfigWithAbort
-        }));
+        const adjust = state.workflow.visualAdjust;
+        const hasAdjustGeometryChange = activeVisualTool === 'adjust' && (
+          adjust.aspectRatio !== 'same' ||
+          adjust.transformRotate !== 0 ||
+          adjust.transformHorizontal !== 0 ||
+          adjust.transformVertical !== 0 ||
+          adjust.transformDistortion !== 0 ||
+          adjust.transformPerspective !== 0
+        );
 
-        if (shouldUseSelectionMask && selectedMaskDataUrl && result.images?.length) {
+        if (hasLocalMaskedMaterialEdit && selectedMaskDataUrl && materialReference) {
+          const materialImage = await applyMaskedMaterialReplacement(
+            sourceImageUrl!,
+            selectedMaskDataUrl,
+            materialReference,
+            state.workflow.visualMaterial
+          );
+          result = { text: null, images: [materialImage] };
+          visualMaskHandledLocally = true;
+          updateProgress(90);
+        } else if (activeVisualTool === 'material' && !shouldUseSelectionMask && materialReference && state.workflow.visualPrompt.trim()) {
+          const materialImage = await applyPromptTargetedMaterialReplacement(
+            sourceImageUrl!,
+            materialReference,
+            state.workflow.visualMaterial,
+            state.workflow.visualPrompt
+          );
+          if (materialImage) {
+            result = { text: null, images: [materialImage] };
+            updateProgress(90);
+          } else {
+            result = await runWithRetry('image edit', () => service.editImage({
+              sourceImage,
+              maskImage: maskImage || undefined,
+              referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
+              prompt: basePrompt,
+              editType,
+              generationConfig: generationConfigWithAbort
+            }));
+          }
+        } else if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
+          const adjustedImage = await applyVisualPostProduction(
+            sourceImageUrl!,
+            adjust,
+            shouldUseSelectionMask ? selectedMaskDataUrl : null
+          );
+          result = { text: null, images: [adjustedImage] };
+          visualMaskHandledLocally = shouldUseSelectionMask;
+          updateProgress(90);
+        } else {
+          result = await runWithRetry('image edit', () => service.editImage({
+            sourceImage,
+            maskImage: maskImage || undefined,
+            referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
+            prompt: basePrompt,
+            editType,
+            generationConfig: generationConfigWithAbort
+          }));
+        }
+
+        if (!visualMaskHandledLocally && shouldUseSelectionMask && selectedMaskDataUrl && result.images?.length) {
           result = {
             ...result,
             images: await Promise.all(
@@ -1907,8 +1975,9 @@ export function useGeneration(): UseGenerationReturn {
               });
             }
 
-        // Set the first generated image as the main image
-        const generatedImageUrl = result.images[0].dataUrl;
+        // Use the final image part as the main image. Gemini 3 image models can
+        // emit interim image parts before the finished render.
+        const generatedImageUrl = pickFinalImage(result.images)?.dataUrl || result.images[0].dataUrl;
         dispatch({ type: 'SET_IMAGE', payload: generatedImageUrl });
         dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
         dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
