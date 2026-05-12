@@ -1716,6 +1716,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Treat the edit as a surface finish replacement on the existing selected geometry. Preserve the exact outline, floor inlay shape, seams, joints, perspective, reflections, and shadow structure of the selected area.');
     } else if (workflow.visualMaterial.surfaceType === 'auto') {
       parts.push('No mask is provided, so infer the target only from the user instruction and modify only existing objects or surfaces that clearly match that target.');
+      parts.push('If the user names a color-specific area such as the green portion of the floor, treat that visible colored region as the boundary. Do not spread the edit to the rest of the same surface, reshape the boundary, or recolor adjacent areas.');
       parts.push('For object-specific requests such as machines, counters, kiosks, appliances, panels, doors, or fixtures, change only the visible finish of those existing target objects. Do not edit surrounding queues, posts, belts, floors, walls, ceilings, signage, luggage, furniture, people, or reflections except for physically consistent reflections on the target object itself.');
       parts.push('If the target object is ambiguous, make the smallest conservative material-only change to the clearly matching area and leave all uncertain areas unchanged.');
     } else {
