@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 
 export interface AppUser {
@@ -23,8 +23,16 @@ export interface AppUser {
 // Owner account — always superadmin regardless of what the DB row says
 const OWNER_EMAIL = 'matija.lekovic@gmail.com';
 
+function assertSupabaseConfigured() {
+  if (!isSupabaseConfigured) {
+    throw new Error('Authentication is not configured yet. Add SUPABASE_URL and SUPABASE_ANON_KEY to the environment.');
+  }
+}
+
 /** Fetch full user profile from public.users + org membership */
 export async function fetchAppUser(userId: string): Promise<AppUser | null> {
+  if (!isSupabaseConfigured) return null;
+
   const { data: user, error } = await supabase
     .from('users')
     .select('*')
@@ -69,6 +77,8 @@ export async function fetchAppUser(userId: string): Promise<AppUser | null> {
 
 /** Sign in with Google OAuth */
 export async function signInWithGoogle(): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -81,12 +91,16 @@ export async function signInWithGoogle(): Promise<void> {
 
 /** Sign in with email + password */
 export async function signInWithEmail(email: string, password: string): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
 }
 
 /** Sign up with email + password */
 export async function signUpWithEmail(email: string, password: string, name: string): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -97,6 +111,8 @@ export async function signUpWithEmail(email: string, password: string, name: str
 
 /** Send password reset email */
 export async function sendPasswordReset(email: string): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/app?reset=true`,
   });
@@ -105,17 +121,23 @@ export async function sendPasswordReset(email: string): Promise<void> {
 
 /** Update password (called after reset link) */
 export async function updatePassword(newPassword: string): Promise<void> {
+  assertSupabaseConfigured();
+
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw new Error(error.message);
 }
 
 /** Sign out */
 export async function signOut(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
   await supabase.auth.signOut();
 }
 
 /** Get current Supabase session */
 export async function getSession(): Promise<Session | null> {
+  if (!isSupabaseConfigured) return null;
+
   const { data } = await supabase.auth.getSession();
   return data.session;
 }

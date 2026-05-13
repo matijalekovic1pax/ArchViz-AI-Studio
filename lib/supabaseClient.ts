@@ -2,18 +2,23 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = (import.meta as any).env?.SUPABASE_URL as string;
 const supabaseAnonKey = (import.meta as any).env?.SUPABASE_ANON_KEY as string;
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables');
+if (!isSupabaseConfigured) {
+  console.warn('Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase = createClient(
+  supabaseUrl || 'https://example.supabase.co',
+  supabaseAnonKey || 'public-anon-key',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
 export type Database = {
   public: {

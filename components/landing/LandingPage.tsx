@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Check,
-  ChevronRight,
-  FileText,
-  PlayCircle,
+  ChevronDown,
+  Download,
+  Languages,
   Sparkles,
   Wand2,
   X,
@@ -14,6 +14,7 @@ import { CREDITS_PER_MODE, PLAN_CREDITS, PLAN_PRICES_USD, VIDEO_PRICES_CENTS } f
 import { cn } from '../../lib/utils';
 
 type PublicRoute = 'home' | 'pricing' | 'terms';
+type FeatureKey = 'render' | 'styles' | 'documents' | 'teams';
 
 type Plan = {
   id: 'starter' | 'professional' | 'studio';
@@ -21,322 +22,139 @@ type Plan = {
   price: number;
   credits: number;
   tagline: string;
+  bestFor: string;
   highlight?: boolean;
   features: string[];
 };
 
+type WorkflowMode = {
+  mode: keyof typeof CREDITS_PER_MODE;
+  label: string;
+  summary: string;
+};
+
+const SCREENSHOTS = {
+  render: '/landing/app-render-output.png',
+  styles: '/landing/style-library.png',
+  source: '/landing/source-wireframe.png',
+} as const;
+
 const NAV_ITEMS: Array<{ label: string; route: PublicRoute }> = [
-  { label: 'Home', route: 'home' },
+  { label: 'Product', route: 'home' },
   { label: 'Pricing', route: 'pricing' },
   { label: 'Terms', route: 'terms' },
 ];
 
-const FEATURE_COLUMNS = [
+const HERO_STATS = [
+  ['3D, CAD, sketch', 'project inputs'],
+  ['18+', 'production workflows'],
+  ['PDF, DOCX, XLSX', 'document support'],
+  ['Kling + Veo', 'motion outputs'],
+];
+
+const PRODUCT_PILLARS = [
   {
-    title: 'Generate',
-    subtitle: 'From concept to polished outputs',
     icon: Sparkles,
-    items: [
-      '3D Render, CAD to Render, Masterplan, and Sketch to Render',
-      'Consistent multi-angle generation and AI upscale for delivery assets',
-      'Fast iterations with style, material, and camera control',
-    ],
+    title: 'Render from real project inputs',
+    body: 'Upload Rhino views, CAD drawings, sketches, plans, or references and produce polished image options without rebuilding the scene in a separate render tool.',
   },
   {
-    title: 'Edit',
-    subtitle: 'Precise control after generation',
     icon: Wand2,
-    items: [
-      'Visual Edit for object-level removal, replacement, and enhancement',
-      'Exploded and Section views for technical communication',
-      'Headshot mode for team profile assets in the same visual system',
-    ],
+    title: 'Edit visuals after generation',
+    body: 'Refine materials, furniture, landscape, lighting, composition, and image quality with focused tools made for architecture review cycles.',
   },
   {
-    title: 'Deliver',
-    subtitle: 'Production-ready outputs',
-    icon: FileText,
-    items: [
-      'Document Translate and PDF Compression for project handoff',
-      'Material Validation for schedule and compliance checks',
-      'Video generation via Kling and Veo, billed pay-per-generation',
-    ],
+    icon: Languages,
+    title: 'Deliver more than images',
+    body: 'Translate documents, compress large PDFs, validate material schedules, and create short motion assets in the same account workflow.',
   },
 ];
 
-const WORKFLOW_STEPS = [
+const FEATURE_EXPLORER: Record<
+  FeatureKey,
   {
-    title: 'Upload source',
-    description: 'Bring in sketches, CAD exports, plans, renders, or documents.',
-  },
-  {
-    title: 'Choose mode',
-    description: 'Pick the exact workflow for rendering, editing, translation, or video.',
-  },
-  {
-    title: 'Tune output',
-    description: 'Set materials, style, camera, language, and output quality.',
-  },
-  {
-    title: 'Generate and iterate',
-    description: 'Download, refine, and regenerate in seconds from the same workspace.',
-  },
-];
-
-type ModePricingKey = keyof typeof CREDITS_PER_MODE;
-
-type WorkflowGroup = {
-  title: string;
-  description: string;
-  items: Array<{
-    mode: ModePricingKey;
     label: string;
-    summary: string;
-    useCase: string;
-  }>;
+    title: string;
+    description: string;
+    image?: string;
+    imageLabel?: string;
+    bullets: string[];
+  }
+> = {
+  render: {
+    label: 'Rendering',
+    title: 'Move from source model to client image in one browser workspace.',
+    description:
+      'ArchViz Studio keeps the model view, style controls, generation mode, prompt, and final output close together so a team can iterate while the client direction is still fresh.',
+    image: SCREENSHOTS.render,
+    imageLabel: 'Rendered output inside the product workspace',
+    bullets: ['3D to Render, CAD to Render, Sketch to Render, and Masterplan modes', 'Enhance, Stylize, Hybrid, Strict Realism, and Concept Push generation options', 'Download-ready visuals for proposals, listings, presentations, and review decks'],
+  },
+  styles: {
+    label: 'Style Library',
+    title: 'Sell options instead of a single interpretation.',
+    description:
+      'A dedicated style library lets users move between contemporary, cultural, commercial, residential, sustainable, and conceptual directions without losing the project context.',
+    image: SCREENSHOTS.styles,
+    imageLabel: 'The in-app style library with real product categories',
+    bullets: ['Searchable style library with category filters', 'Reusable visual directions for repeat client work', 'Consistent previews across render, edit, and scene workflows'],
+  },
+  documents: {
+    label: 'Documents',
+    title: 'Keep delivery work in the same commercial service.',
+    description:
+      'The product is not just image generation. It supports the document and coordination tasks that often decide whether a studio can ship work on time.',
+    bullets: ['Translate PDF, DOCX, and XLSX files for international handoffs', 'Validate BoQ and material schedules across PDF, CSV, XLS, and XLSX files', 'Compress large PDF packages before sending them to clients or contractors'],
+  },
+  teams: {
+    label: 'Teams',
+    title: 'Built for studios that pay, assign, review, and deliver together.',
+    description:
+      'Commercial accounts need credit visibility, member access, billing controls, and a clean sign-in path. The SaaS layer exposes those foundations without burying the product.',
+    bullets: ['Monthly credit pools for image, document, validation, and utility workflows', 'Studio plans for shared access and team administration', 'Credit and video pricing shown before launch so users understand cost'],
+  },
 };
 
-const WORKFLOW_GROUPS: WorkflowGroup[] = [
+const WORKFLOW_GROUPS: Array<{
+  title: string;
+  description: string;
+  modes: WorkflowMode[];
+}> = [
   {
-    title: 'Design Generation',
-    description: 'Core creation modes for turning references, sketches, and planning input into client-ready visuals.',
-    items: [
-      {
-        mode: 'generate-text',
-        label: 'Generate',
-        summary: 'Draft visual concepts and prompt foundations before image production.',
-        useCase: 'Early concept alignment with clients and internal design reviews.',
-      },
-      {
-        mode: 'render-3d',
-        label: '3D to Render',
-        summary: 'Convert 3D model views into polished photoreal imagery with controlled lighting and material intent.',
-        useCase: 'Fast marketing and competition visuals from existing model geometry.',
-      },
-      {
-        mode: 'render-cad',
-        label: 'CAD to Render',
-        summary: 'Transform technical plans, sections, and elevations into styled perspective outputs.',
-        useCase: 'Upgrade drawing-heavy deliverables into presentation visuals.',
-      },
-      {
-        mode: 'render-sketch',
-        label: 'Sketch to Render',
-        summary: 'Translate hand-drawn or conceptual sketches into realistic design imagery.',
-        useCase: 'Concept storytelling before full BIM/CAD development.',
-      },
-      {
-        mode: 'masterplan',
-        label: 'Masterplans',
-        summary: 'Generate large-scale site and zoning visuals with boundary and context controls.',
-        useCase: 'Urban design pitches, planning submissions, and early-stage massing studies.',
-      },
+    title: 'Visual production',
+    description: 'For concepts, proposals, marketing visuals, and fast option studies.',
+    modes: [
+      { mode: 'render-3d', label: '3D to Render', summary: 'Turn model views into polished architectural renders.' },
+      { mode: 'render-cad', label: 'CAD to Render', summary: 'Transform linework into image directions for client review.' },
+      { mode: 'render-sketch', label: 'Sketch to Render', summary: 'Develop early ideas into persuasive visual concepts.' },
+      { mode: 'masterplan', label: 'Masterplan', summary: 'Present site plans with clearer atmosphere and context.' },
+      { mode: 'scene-compose', label: 'Scene Compose', summary: 'Combine project references, backgrounds, and direction.' },
+      { mode: 'multi-angle', label: 'Multi-angle', summary: 'Create consistent image sets from one visual direction.' },
     ],
   },
   {
-    title: 'Refinement and Technical Views',
-    description: 'Precision workflows for iteration, post-production, consistency, and technical communication.',
-    items: [
-      {
-        mode: 'visual-edit',
-        label: 'Visual Editor',
-        summary: 'Apply targeted object edits, material swaps, background updates, and in-place cleanup.',
-        useCase: 'Revision cycles without re-running full scene generation.',
-      },
-      {
-        mode: 'exploded',
-        label: 'Exploded Views',
-        summary: 'Create exploded compositions and animation-ready separations for assemblies and systems.',
-        useCase: 'Construction logic communication and technical coordination.',
-      },
-      {
-        mode: 'section',
-        label: 'Render to Section',
-        summary: 'Build section visuals with cut controls, hatch strategy, line weight, and reveal options.',
-        useCase: 'Section diagrams and presentation-grade technical storytelling.',
-      },
-      {
-        mode: 'multi-angle',
-        label: 'Multi-Angle',
-        summary: 'Generate consistent viewpoints while preserving style, lighting, and design identity.',
-        useCase: 'Client decks requiring coherent perspectives of the same proposal.',
-      },
-      {
-        mode: 'upscale',
-        label: 'Image Upscaler',
-        summary: 'Increase resolution and detail for print, boards, and close-in review.',
-        useCase: 'Final delivery assets that need sharper output quality.',
-      },
+    title: 'Refinement',
+    description: 'For the detail changes that happen after the first promising output.',
+    modes: [
+      { mode: 'visual-edit', label: 'Visual Edit', summary: 'Replace, remove, or improve selected image areas.' },
+      { mode: 'upscale', label: 'Upscale', summary: 'Increase output resolution for delivery and print use.' },
+      { mode: 'exploded', label: 'Exploded View', summary: 'Create explanatory assembly visuals.' },
+      { mode: 'section', label: 'Section View', summary: 'Generate readable cut-through presentation images.' },
+      { mode: 'img-to-cad', label: 'Image to CAD', summary: 'Extract drawing-ready structure from visual references.' },
+      { mode: 'img-to-3d', label: 'Image to 3D', summary: 'Move selected images toward 3D handoff.' },
     ],
   },
   {
-    title: 'Conversion and Project Delivery',
-    description: 'Production workflows that connect visuals with documentation, translation, and validation tasks.',
-    items: [
-      {
-        mode: 'img-to-cad',
-        label: 'Image to CAD',
-        summary: 'Vectorize raster references toward CAD-ready linework outputs.',
-        useCase: 'Move scan-based references into drafting and documentation pipelines.',
-      },
-      {
-        mode: 'img-to-3d',
-        label: 'Image to 3D',
-        summary: 'Generate and preview 3D model outputs from still imagery.',
-        useCase: 'Rapid 3D ideation from references before detailed modeling.',
-      },
-      {
-        mode: 'document-translate',
-        label: 'Doc Translator',
-        summary: 'Translate PDF, DOCX, and XLSX project files while preserving structure.',
-        useCase: 'Cross-border collaboration across consultants, clients, and vendors.',
-      },
-      {
-        mode: 'material-validation',
-        label: 'Material Validation',
-        summary: 'Cross-check BoQ and specification documents against extracted material data.',
-        useCase: 'Pre-handoff QA for procurement and technical compliance.',
-      },
-      {
-        mode: 'pdf-compression',
-        label: 'PDF Compressor',
-        summary: 'Batch-compress heavy PDF packs with configurable quality preferences.',
-        useCase: 'Submit-ready document bundles for email, portals, and approvals.',
-      },
+    title: 'Commercial delivery',
+    description: 'For files, checks, and motion assets that support paid client work.',
+    modes: [
+      { mode: 'document-translate', label: 'Document Translate', summary: 'Translate PDF, DOCX, and XLSX deliverables.' },
+      { mode: 'material-validation', label: 'Material Validation', summary: 'Check schedules and specification files for mismatches.' },
+      { mode: 'pdf-compression', label: 'PDF Compression', summary: 'Reduce bulky PDF packages before handoff.' },
+      { mode: 'video', label: 'Video', summary: 'Generate short Kling or Veo motion outputs.' },
+      { mode: 'generate-text', label: 'Generate', summary: 'Build prompt foundations and concept directions.' },
+      { mode: 'headshot', label: 'Headshot', summary: 'Create team assets aligned with the studio brand.' },
     ],
-  },
-  {
-    title: 'Brand and Media Output',
-    description: 'Presentation-facing workflows for motion content and polished team assets.',
-    items: [
-      {
-        mode: 'video',
-        label: 'Video Studio',
-        summary: 'Generate short-form architectural motion using Kling and Veo pipelines.',
-        useCase: 'Social clips, hero banners, and narrative walkthrough teasers.',
-      },
-      {
-        mode: 'headshot',
-        label: 'Headshot Studio',
-        summary: 'Create consistent professional headshots from one to three reference angles.',
-        useCase: 'Unified team profile imagery for websites and proposal decks.',
-      },
-    ],
-  },
-];
-
-const USE_CASE_PLAYBOOK = [
-  {
-    title: 'Concept Sprint to Client Deck',
-    summary: 'Move from rough idea to presentation-ready stills in one session.',
-    sequence: ['Generate', 'Sketch to Render', 'Multi-Angle', 'Image Upscaler'],
-  },
-  {
-    title: 'Technical Narrative for Design Reviews',
-    summary: 'Pair expressive renders with explanatory technical graphics.',
-    sequence: ['3D to Render', 'Exploded Views', 'Render to Section', 'Visual Editor'],
-  },
-  {
-    title: 'International Bid and Handoff Package',
-    summary: 'Prepare visuals and translated documentation for distributed teams.',
-    sequence: ['CAD to Render', 'Doc Translator', 'Material Validation', 'PDF Compressor'],
-  },
-  {
-    title: 'Campaign-Ready Launch Assets',
-    summary: 'Build promotional stills, motion, and team identity from one workspace.',
-    sequence: ['3D to Render', 'Video Studio', 'Headshot Studio', 'Image Upscaler'],
-  },
-];
-
-const PLATFORM_PILLARS = [
-  {
-    title: 'Prompt and History Control',
-    points: [
-      'The bottom panel keeps generated prompts editable so teams can refine or reuse creative direction.',
-      'History thumbnails let you instantly reload previous outputs and continue iteration without re-uploading.',
-      'Mode-specific timeline, legend, and edit stack views surface context exactly where decisions happen.',
-    ],
-  },
-  {
-    title: 'Commercial Billing Clarity',
-    points: [
-      'Each workflow has an explicit credit cost, visible before generation.',
-      'Video is handled separately as pay-per-generation through Stripe.',
-      'Teams can top up credits and monitor usage without leaving the product workspace.',
-    ],
-  },
-  {
-    title: 'Team-Ready Operations',
-    points: [
-      'Studio organizations use shared credit pools and seat limits for coordinated output.',
-      'Owner/admin roles can manage members, invitations, and subscription controls.',
-      'Generation history is persisted per account for cross-session continuity.',
-    ],
-  },
-];
-
-const FILE_COMPATIBILITY = [
-  {
-    feature: 'Document Translate',
-    formats: ['PDF', 'DOCX', 'XLSX'],
-    support: 'PDF, DOCX, XLSX input with translated output rebuilt in matching office-friendly formats.',
-  },
-  {
-    feature: 'Material Validation',
-    formats: ['PDF', 'CSV', 'XLS', 'XLSX'],
-    support: 'PDF, CSV, XLS, and XLSX uploads for BoQ/spec cross-checking and discrepancy reporting.',
-  },
-  {
-    feature: 'PDF Compression',
-    formats: ['PDF', 'Batch'],
-    support: 'Batch queue support for up to 20 PDFs per compression run.',
-  },
-  {
-    feature: 'Image Pipelines',
-    formats: ['Images', 'History'],
-    support: 'Reference images flow across generation, editing, multi-angle, and upscaling workflows.',
-  },
-  {
-    feature: 'Video Delivery',
-    formats: ['Kling', 'Veo', 'MP4'],
-    support: 'Kling and Veo generation with downloadable MP4 outputs.',
-  },
-];
-
-function formatModeCost(mode: ModePricingKey): string {
-  if (mode === 'video') return 'Pay per generation';
-  const credits = CREDITS_PER_MODE[mode];
-  return `${credits} ${credits === 1 ? 'credit' : 'credits'} per run`;
-}
-
-const FAQ_ITEMS = [
-  {
-    q: 'How do credits work?',
-    a: 'Credits are consumed per generation mode. Most render modes are 4 credits per run, upscale is 3, and PDF compression is 1.',
-  },
-  {
-    q: 'Is video included in monthly credits?',
-    a: 'No. Video is billed separately by generation through Stripe, so you pay only when you run video jobs.',
-  },
-  {
-    q: 'Can outputs be used commercially?',
-    a: 'Yes. Generated outputs are intended for commercial architectural and marketing workflows.',
-  },
-  {
-    q: 'Do teams share usage?',
-    a: 'Studio plan supports shared credits and team seats with role-based management in the dashboard.',
-  },
-  {
-    q: 'Which files are supported for delivery workflows?',
-    a: 'Document Translate supports PDF, DOCX, and XLSX. Material Validation supports PDF, CSV, XLS, and XLSX. PDF Compression supports batch PDF queues.',
-  },
-  {
-    q: 'Is generation history saved between sessions?',
-    a: 'Yes. Generated outputs are stored with account history so teams can resume work, reload assets, and continue iteration later.',
-  },
-  {
-    q: 'Can I use ArchViz AI Studio for both marketing and technical deliverables?',
-    a: 'Yes. The product includes visualization modes for client-facing imagery and technical modes such as sections, exploded views, material validation, and document translation.',
   },
 ];
 
@@ -346,182 +164,178 @@ const PLANS: Plan[] = [
     label: 'Starter',
     price: PLAN_PRICES_USD.starter,
     credits: PLAN_CREDITS.starter,
-    tagline: 'For independent architects and small studios.',
-    features: [
-      `${PLAN_CREDITS.starter} credits per month`,
-      'Core image generation modes',
-      'Headshot mode included',
-      'Video pay-per-generation enabled',
-      'Email support',
-    ],
+    tagline: 'For freelancers and small proposal teams.',
+    bestFor: 'Solo operators',
+    features: ['600 monthly credits', 'Core rendering workflows', 'Visual edit and upscale', 'Credit history', 'Email support'],
   },
   {
     id: 'professional',
     label: 'Professional',
     price: PLAN_PRICES_USD.professional,
     credits: PLAN_CREDITS.professional,
-    tagline: 'For teams needing full production workflows.',
+    tagline: 'For studios shipping client visuals every week.',
+    bestFor: 'Most architecture teams',
     highlight: true,
-    features: [
-      `${PLAN_CREDITS.professional} credits per month`,
-      'Everything in Starter',
-      'img-to-CAD and img-to-3D',
-      'Document Translate and Material Validation',
-      'PDF Compression and advanced workflows',
-      '50% monthly rollover',
-    ],
+    features: ['2,000 monthly credits', 'Document translation', 'Material validation', 'Image to CAD and Image to 3D', 'Priority support'],
   },
   {
     id: 'studio',
     label: 'Studio',
     price: PLAN_PRICES_USD.studio,
     credits: PLAN_CREDITS.studio,
-    tagline: 'For commercial teams sharing one workspace.',
-    features: [
-      `${PLAN_CREDITS.studio} credits per month`,
-      'Everything in Professional',
-      'Up to 5 team seats',
-      'Shared credit pool',
-      'Team admin controls',
-      'Priority support',
-    ],
+    tagline: 'For teams that need shared volume and billing control.',
+    bestFor: 'Commercial production teams',
+    features: ['6,000 shared credits', 'Team member management', 'Centralized billing', 'Production-ready workflows', 'Priority onboarding'],
   },
 ];
 
-const TERMS_SECTIONS: Array<{ id: string; title: string; paragraphs: string[] }> = [
+const VIDEO_PRICING = Object.entries(VIDEO_PRICES_CENTS).map(([key, cents]) => {
+  const [provider, quality, duration] = key.split('-');
+  return {
+    label: `${provider.toUpperCase()} ${quality} ${duration}`,
+    price: cents / 100,
+  };
+});
+
+const FAQ_ITEMS = [
   {
-    id: 'acceptance',
-    title: '1. Acceptance of Terms',
+    question: 'Can a customer use this without a rendering specialist?',
+    answer:
+      'Yes. The interface is designed around clear project inputs, generation modes, style selection, and downloadable outputs so non-specialist team members can produce strong first passes.',
+  },
+  {
+    question: 'How do credits work?',
+    answer:
+      'Image, document, validation, compression, and utility workflows consume credits. The app displays costs before launch. Video jobs are priced separately by provider and duration.',
+  },
+  {
+    question: 'Which files are supported?',
+    answer:
+      'Visual workflows use image-based project inputs and references. Document tools support PDF, DOCX, XLSX, CSV, and XLS depending on the workflow.',
+  },
+  {
+    question: 'Is this only for concept renders?',
+    answer:
+      'No. Concept images are one workflow, but the service also handles edits, upscales, sections, exploded views, document translation, material validation, PDF compression, and video generation.',
+  },
+];
+
+const TERMS_SECTIONS = [
+  {
+    id: 'service',
+    title: '1. Service',
     paragraphs: [
-      'By accessing or using ArchViz AI Studio, you agree to these Terms of Service. If you do not agree, do not use the service.',
-      'You represent that you have authority to accept these terms on your own behalf or on behalf of the entity you represent.',
+      'ArchViz Studio provides AI-assisted rendering, visual editing, document processing, validation, compression, and video generation tools for architecture and design teams.',
+      'Users are responsible for ensuring that uploaded project files, references, prompts, and generated outputs can be used for their intended client or commercial purpose.',
     ],
   },
   {
     id: 'accounts',
-    title: '2. Accounts and Eligibility',
+    title: '2. Accounts and billing',
     paragraphs: [
-      'You are responsible for maintaining the security of your account credentials and for all activity that occurs under your account.',
-      'You must provide accurate registration and billing details and keep them current.',
+      'Paid plans include a recurring monthly credit allocation. Credits are consumed when eligible workflows are launched. Video jobs are billed separately where applicable.',
+      'Organizations are responsible for managing account access, team members, payment details, and any usage initiated by invited users.',
     ],
   },
   {
-    id: 'billing',
-    title: '3. Subscriptions, Credits, and Billing',
+    id: 'outputs',
+    title: '3. Generated outputs',
     paragraphs: [
-      'Paid plans are billed in advance on a recurring monthly cycle unless otherwise agreed in writing.',
-      'Credits are consumed according to active mode pricing. Video generations are billed separately on a pay-per-generation basis.',
-      'Fees are non-refundable except where required by law or explicitly stated by ArchViz AI Studio.',
-    ],
-  },
-  {
-    id: 'use',
-    title: '4. Acceptable Use',
-    paragraphs: [
-      'You may not use the service for unlawful, abusive, or deceptive activities, including infringement of third-party rights.',
-      'You may not attempt to reverse engineer, disrupt, overload, or bypass security controls of the platform.',
-    ],
-  },
-  {
-    id: 'content',
-    title: '5. Content and Intellectual Property',
-    paragraphs: [
-      'You retain ownership of the source files and materials you submit to the service.',
-      'Subject to these Terms and applicable law, outputs generated for your account are licensed to you for commercial use.',
-      'You grant ArchViz AI Studio a limited right to process submitted content solely to operate, secure, and improve the service.',
+      'AI outputs may require professional review before being used in construction, permitting, procurement, marketing, or client delivery.',
+      'ArchViz Studio does not guarantee that generated images, documents, or validation reports are free from omissions, hallucinations, or project-specific inaccuracies.',
     ],
   },
   {
     id: 'privacy',
-    title: '6. Privacy and Data Handling',
+    title: '4. Privacy and data',
     paragraphs: [
-      'We process personal and project data to provide account access, generation workflows, billing, and support operations.',
-      'You are responsible for ensuring you have rights and permissions for any content you upload or process through the platform.',
+      'Uploaded files and generated assets are processed to provide the requested service. Account data, billing data, and generation history may be stored to operate the product.',
+      'Do not upload confidential, regulated, or third-party restricted materials unless you have the required rights and approvals.',
     ],
   },
   {
-    id: 'availability',
-    title: '7. Service Availability and Changes',
+    id: 'acceptable-use',
+    title: '5. Acceptable use',
     paragraphs: [
-      'We may update, change, or discontinue features at any time to improve reliability, performance, or security.',
-      'We do not guarantee uninterrupted availability and are not liable for downtime caused by third-party infrastructure providers.',
+      'Users may not use the service for unlawful content, misleading impersonation, credential theft, malware, or attempts to bypass platform limits and security controls.',
+      'ArchViz Studio may suspend or restrict access when usage threatens service reliability, violates these terms, or creates legal or safety risk.',
     ],
   },
   {
     id: 'liability',
-    title: '8. Disclaimer and Limitation of Liability',
+    title: '6. Limitation of liability',
     paragraphs: [
-      'The service is provided on an “as is” and “as available” basis without warranties of any kind, express or implied.',
-      'To the maximum extent permitted by law, ArchViz AI Studio is not liable for indirect, incidental, special, consequential, or punitive damages.',
-    ],
-  },
-  {
-    id: 'termination',
-    title: '9. Termination',
-    paragraphs: [
-      'You may stop using the service at any time. We may suspend or terminate access for material breach, abuse, or unlawful use.',
-      'Sections that by nature should survive termination remain in effect, including payment, liability, and intellectual property terms.',
-    ],
-  },
-  {
-    id: 'law',
-    title: '10. Governing Law and Contact',
-    paragraphs: [
-      'These terms are governed by the laws applicable in the jurisdiction where ArchViz AI Studio operates, without regard to conflict of law rules.',
-      'For legal and account questions, contact hello@archviz.ai.',
+      'The service is provided on an as-available basis. To the maximum extent permitted by law, ArchViz Studio is not liable for indirect damages, lost profits, project delays, or downstream decisions made from generated outputs.',
+      'These terms are a commercial placeholder and should be reviewed by legal counsel before public launch.',
     ],
   },
 ];
 
 function routeFromPath(pathname: string): PublicRoute {
-  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
-  if (normalizedPath === '/pricing') return 'pricing';
-  if (normalizedPath === '/terms') return 'terms';
+  if (pathname.startsWith('/pricing')) return 'pricing';
+  if (pathname.startsWith('/terms')) return 'terms';
   return 'home';
 }
 
-function pathFromRoute(route: PublicRoute): string {
+function pathFromRoute(route: PublicRoute) {
   if (route === 'pricing') return '/pricing';
   if (route === 'terms') return '/terms';
   return '/';
 }
 
-function Brand() {
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
+  }).format(value);
+}
+
+function Brand({ tone = 'dark' }: { tone?: 'dark' | 'light' }) {
+  const light = tone === 'light';
+
   return (
-    <span className="text-sm font-bold tracking-tight text-foreground">
-      ArchViz <span className="font-normal text-foreground-muted">AI Studio</span>
-    </span>
+    <div className="flex items-center gap-3 select-none">
+      <span
+        className={cn(
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-subtle',
+          light ? 'bg-white text-foreground' : 'bg-foreground text-surface-elevated'
+        )}
+      >
+        <span className="text-sm font-bold leading-none">AV</span>
+      </span>
+      <span className="flex flex-col text-left">
+        <span className={cn('text-sm font-bold leading-tight', light ? 'text-white' : 'text-foreground')}>ArchViz Studio</span>
+        <span className={cn('text-[11px] leading-tight', light ? 'text-white/55' : 'text-foreground-muted')}>AI rendering service</span>
+      </span>
+    </div>
   );
 }
 
-type SiteHeaderProps = {
+function SiteHeader({
+  route,
+  scrolled,
+  onNavigate,
+  onOpenAuth,
+}: {
   route: PublicRoute;
   scrolled: boolean;
   onNavigate: (route: PublicRoute) => void;
   onOpenAuth: () => void;
-};
-
-function SiteHeader({ route, scrolled, onNavigate, onOpenAuth }: SiteHeaderProps) {
+}) {
   return (
     <header
       className={cn(
         'sticky top-0 z-50 border-b transition-all duration-300',
-        scrolled
-          ? 'bg-background/90 backdrop-blur-lg border-border shadow-subtle'
-          : 'bg-background/70 backdrop-blur-sm border-border/60'
+        scrolled ? 'border-border bg-background/92 shadow-subtle backdrop-blur-xl' : 'border-border/80 bg-background/86 backdrop-blur-lg'
       )}
     >
-      <div className="max-w-6xl mx-auto h-16 px-5 sm:px-6 flex items-center justify-between gap-4">
-        <button
-          type="button"
-          onClick={() => onNavigate('home')}
-          className="inline-flex items-center hover:opacity-85 transition-opacity"
-          aria-label="Go to homepage"
-        >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <button type="button" onClick={() => onNavigate('home')} className="shrink-0" aria-label="Go to homepage">
           <Brand />
         </button>
 
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="hidden items-center gap-1 md:flex">
           {NAV_ITEMS.map((item) => (
             <a
               key={item.route}
@@ -531,10 +345,8 @@ function SiteHeader({ route, scrolled, onNavigate, onOpenAuth }: SiteHeaderProps
                 onNavigate(item.route);
               }}
               className={cn(
-                'px-3.5 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors',
-                route === item.route
-                  ? 'text-foreground bg-surface-sunken'
-                  : 'text-foreground-muted hover:text-foreground hover:bg-surface-sunken'
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                route === item.route ? 'bg-surface-sunken text-foreground' : 'text-foreground-muted hover:bg-surface-sunken hover:text-foreground'
               )}
             >
               {item.label}
@@ -546,17 +358,17 @@ function SiteHeader({ route, scrolled, onNavigate, onOpenAuth }: SiteHeaderProps
           <button
             type="button"
             onClick={onOpenAuth}
-            className="h-9 px-3.5 text-xs font-semibold text-foreground-muted hover:text-foreground transition-colors"
+            className="hidden h-9 items-center rounded-lg px-3 text-sm font-semibold text-foreground-muted transition-colors hover:text-foreground sm:inline-flex"
           >
             Sign in
           </button>
           <button
             type="button"
             onClick={onOpenAuth}
-            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-semibold hover:bg-foreground/90 transition-colors"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-foreground px-4 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
           >
-            Start free
-            <ArrowRight size={12} />
+            Start now
+            <ArrowRight size={14} />
           </button>
         </div>
       </div>
@@ -564,704 +376,540 @@ function SiteHeader({ route, scrolled, onNavigate, onOpenAuth }: SiteHeaderProps
   );
 }
 
-type SiteFooterProps = {
-  onNavigate: (route: PublicRoute) => void;
-};
-
-function SiteFooter({ onNavigate }: SiteFooterProps) {
+function HeroSection({
+  heroReady,
+  onOpenAuth,
+  onNavigatePricing,
+}: {
+  heroReady: boolean;
+  onOpenAuth: () => void;
+  onNavigatePricing: () => void;
+}) {
   return (
-    <footer className="border-t border-border bg-surface-sunken/50">
-      <div className="max-w-6xl mx-auto px-5 sm:px-6 py-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <Brand />
-          <p className="mt-2 text-xs text-foreground-muted max-w-sm">
-            Commercial AI workspace for architecture teams: generate, edit, and deliver visual assets faster.
+    <section className="relative isolate overflow-hidden bg-foreground text-white">
+      <img
+        src={SCREENSHOTS.render}
+        alt="ArchViz Studio rendering workspace showing a client-ready interior render"
+        className={cn(
+          'absolute inset-0 h-full w-full object-cover object-center transition duration-700',
+          heroReady ? 'scale-100 opacity-55' : 'scale-[1.03] opacity-0'
+        )}
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/62 to-black/20" />
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent" />
+
+      <div className="relative mx-auto flex min-h-[74svh] max-w-7xl flex-col justify-end px-5 pb-8 pt-24 sm:px-6 lg:min-h-[78svh] lg:pb-10">
+        <div className="max-w-3xl">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/80 backdrop-blur-md">
+            <Sparkles size={14} />
+            AI rendering, editing, and delivery for architecture teams
+          </div>
+          <h1 className="text-5xl font-semibold leading-[0.95] tracking-normal text-white sm:text-6xl lg:text-7xl">ArchViz Studio</h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/76 sm:text-lg">
+            Create client-ready architectural visuals from real project files, then handle edits, translated documents, material checks,
+            compressed PDFs, and short video outputs from the same commercial workspace.
           </p>
-          <p className="mt-3 text-[11px] text-foreground-muted">© {new Date().getFullYear()} ArchViz AI Studio</p>
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-semibold text-foreground transition-colors hover:bg-white/90"
+            >
+              Start rendering
+              <ArrowRight size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={onNavigatePricing}
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-white/25 bg-white/8 px-5 text-sm font-semibold text-white backdrop-blur-md transition-colors hover:bg-white/14"
+            >
+              View pricing
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-          <a
-            href="/"
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate('home');
-            }}
-            className="text-foreground-muted hover:text-foreground transition-colors"
-          >
-            Home
-          </a>
-          <a
-            href="/pricing"
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate('pricing');
-            }}
-            className="text-foreground-muted hover:text-foreground transition-colors"
-          >
-            Pricing
-          </a>
-          <a
-            href="/terms"
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate('terms');
-            }}
-            className="text-foreground-muted hover:text-foreground transition-colors"
-          >
-            Terms
-          </a>
-          <a href="mailto:hello@archviz.ai" className="text-foreground-muted hover:text-foreground transition-colors">
-            Contact
-          </a>
+        <div className="mt-10 grid gap-px overflow-hidden rounded-xl border border-white/14 bg-white/14 sm:grid-cols-2 lg:grid-cols-4">
+          {HERO_STATS.map(([value, label]) => (
+            <div key={label} className="bg-black/28 px-4 py-4 backdrop-blur-md">
+              <p className="text-sm font-semibold text-white">{value}</p>
+              <p className="mt-1 text-xs text-white/58">{label}</p>
+            </div>
+          ))}
         </div>
       </div>
-    </footer>
+    </section>
   );
 }
 
-type HomePageProps = {
-  heroReady: boolean;
-  scrollY: number;
-  onNavigatePricing: () => void;
-  onOpenAuth: () => void;
-  openFaq: number | null;
-  setOpenFaq: (value: number | null) => void;
-};
-
-function HomePage({
-  heroReady,
-  scrollY,
-  onNavigatePricing,
-  onOpenAuth,
-  openFaq,
-  setOpenFaq,
-}: HomePageProps) {
+function ProductPillars() {
   return (
-    <>
-      <section className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(22,163,74,0.16),transparent_44%),radial-gradient(circle_at_76%_22%,rgba(26,26,26,0.09),transparent_36%),linear-gradient(to_bottom,#fafaf8,#f5f5f3)]" />
-        <div
-          className="absolute inset-0 opacity-40"
-          style={{ transform: `translateY(${Math.min(scrollY * 0.08, 36)}px)` }}
-          aria-hidden
-        >
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="hero-grid" width="44" height="44" patternUnits="userSpaceOnUse">
-                <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#d8d8d2" strokeWidth="1" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#hero-grid)" />
-          </svg>
+    <section className="bg-background py-12 sm:py-14">
+      <div className="mx-auto max-w-7xl px-5 sm:px-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          {PRODUCT_PILLARS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <article key={item.title} className="rounded-lg border border-border bg-surface-elevated p-5 shadow-subtle">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground text-background">
+                  <Icon size={18} />
+                </div>
+                <h2 className="mt-5 text-lg font-semibold text-foreground">{item.title}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-foreground-secondary">{item.body}</p>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScreenshotFrame({
+  src,
+  alt,
+  label,
+  caption,
+  dark,
+}: {
+  src: string;
+  alt: string;
+  label: string;
+  caption: string;
+  dark?: boolean;
+}) {
+  return (
+    <figure className={cn('overflow-hidden rounded-xl border shadow-elevated', dark ? 'border-white/12 bg-white/6' : 'border-border bg-surface-elevated')}>
+      <div className={cn('flex items-center justify-between border-b px-4 py-3', dark ? 'border-white/12 text-white/75' : 'border-border text-foreground-muted')}>
+        <span className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</span>
+        <span className={cn('h-2 w-2 rounded-full', dark ? 'bg-emerald-300' : 'bg-accent')} />
+      </div>
+      <img src={src} alt={alt} className="aspect-[16/9] w-full object-cover object-top" />
+      <figcaption className={cn('px-4 py-3 text-sm leading-relaxed', dark ? 'text-white/68' : 'text-foreground-secondary')}>{caption}</figcaption>
+    </figure>
+  );
+}
+
+function SourceToRenderSection() {
+  return (
+    <section id="product" className="bg-surface-elevated py-16 sm:py-20">
+      <div className="mx-auto max-w-7xl px-5 sm:px-6">
+        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">Actual product flow</p>
+            <h2 className="mt-4 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
+              From source model to client presentation image.
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-foreground-secondary">
+              A model view comes in, the user selects generation behavior and style direction, and the service produces a polished render that can be sent to a client.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ScreenshotFrame
+              src={SCREENSHOTS.source}
+              alt="ArchViz Studio source model view before rendering"
+              label="Input"
+              caption="A Rhino-style model view with source settings, style selection, and generation controls."
+            />
+            <ScreenshotFrame
+              src={SCREENSHOTS.render}
+              alt="ArchViz Studio generated interior render"
+              label="Output"
+              caption="A finished render previewed inside the same workspace and ready for export."
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureExplorer() {
+  const [active, setActive] = useState<FeatureKey>('render');
+  const item = FEATURE_EXPLORER[active];
+
+  return (
+    <section className="bg-foreground py-16 text-white sm:py-20">
+      <div className="mx-auto max-w-7xl px-5 sm:px-6">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Feature coverage</p>
+          <h2 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">The commercial product has to show the breadth of the studio.</h2>
+          <p className="mt-4 text-base leading-relaxed text-white/65">
+            Customers should immediately understand that this is a paid service for visual production, project iteration, and delivery work.
+          </p>
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-16 lg:pt-24 lg:pb-20">
-          <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-10 items-end">
-            <div
-              className={cn(
-                'transition-all duration-700 ease-out',
-                heroReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'
-              )}
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent mb-5">Commercial Edition</p>
-              <h1
-                className="text-[46px] leading-[0.96] sm:text-[66px] lg:text-[78px] text-foreground tracking-tight"
-                style={{ fontFamily: 'Cormorant Garamond, serif' }}
+        <div className="mt-10 grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="space-y-2">
+            {(Object.keys(FEATURE_EXPLORER) as FeatureKey[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActive(key)}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors',
+                  active === key ? 'border-white/20 bg-white text-foreground' : 'border-white/12 bg-white/6 text-white/68 hover:bg-white/10 hover:text-white'
+                )}
               >
-                Architecture AI,
-                <br />
-                built for
-                <span className="italic text-accent"> real delivery.</span>
-              </h1>
-              <p className="mt-6 max-w-xl text-sm sm:text-base text-foreground-secondary leading-relaxed">
-                ArchViz AI Studio turns sketches, CAD files, reference renders, and documents into production-ready
-                visuals. One workspace for generation, refinement, translation, validation, and client-facing output.
-              </p>
+                {FEATURE_EXPLORER[key].label}
+                <ArrowRight size={14} className={cn(active === key ? 'text-foreground' : 'text-white/35')} />
+              </button>
+            ))}
+          </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div>
+              {item.image ? (
+                <ScreenshotFrame src={item.image} alt={item.imageLabel || item.title} label={item.label} caption={item.imageLabel || item.title} dark />
+              ) : (
+                <div className="rounded-xl border border-white/12 bg-white/6 p-5 shadow-elevated">
+                  <div className="rounded-lg border border-white/10 bg-black/24 p-4">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <span className="text-sm font-semibold text-white">Delivery queue</span>
+                      <span className="rounded-full bg-emerald-300 px-2 py-1 text-[11px] font-semibold text-foreground">Ready</span>
+                    </div>
+                    {[
+                      ['translated-specifications.docx', 'Document Translate'],
+                      ['boq-validation-report.xlsx', 'Material Validation'],
+                      ['client-presentation-compressed.pdf', 'PDF Compression'],
+                      ['walkthrough-preview.mp4', 'Video'],
+                    ].map(([file, mode]) => (
+                      <div key={file} className="flex items-center justify-between border-b border-white/8 py-3 last:border-0">
+                        <div>
+                          <p className="text-sm font-medium text-white">{file}</p>
+                          <p className="mt-1 text-xs text-white/45">{mode}</p>
+                        </div>
+                        <Download size={15} className="text-white/45" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-semibold leading-tight text-white">{item.title}</h3>
+              <p className="mt-4 text-sm leading-relaxed text-white/66">{item.description}</p>
+              <ul className="mt-6 space-y-3">
+                {item.bullets.map((bullet) => (
+                  <li key={bullet} className="flex gap-3 text-sm leading-relaxed text-white/76">
+                    <Check size={16} className="mt-0.5 shrink-0 text-emerald-300" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkflowGrid() {
+  return (
+    <section className="bg-background py-16 sm:py-20">
+      <div className="mx-auto max-w-7xl px-5 sm:px-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">What customers can buy</p>
+            <h2 className="mt-4 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">A complete production menu, not a single render demo.</h2>
+          </div>
+          <p className="max-w-md text-sm leading-relaxed text-foreground-secondary">
+            Pricing and feature copy should make the service legible to firms comparing tools, budgets, and team workflows.
+          </p>
+        </div>
+
+        <div className="mt-10 grid gap-5 lg:grid-cols-3">
+          {WORKFLOW_GROUPS.map((group) => (
+            <article key={group.title} className="rounded-lg border border-border bg-surface-elevated p-5 shadow-subtle">
+              <h3 className="text-lg font-semibold text-foreground">{group.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-foreground-muted">{group.description}</p>
+              <div className="mt-5 space-y-3">
+                {group.modes.map((mode) => (
+                  <div key={mode.label} className="rounded-lg border border-border bg-background px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-foreground">{mode.label}</p>
+                      <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-1 text-[11px] font-semibold text-foreground-muted">
+                        {mode.mode === 'video' ? 'paid' : `${CREDITS_PER_MODE[mode.mode]} cr`}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-foreground-muted">{mode.summary}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CustomerOutcomeSection() {
+  const outcomes = [
+    ['Proposal speed', 'Produce first-pass imagery while the commercial direction is still being discussed.'],
+    ['Visual control', 'Use style categories, generation modes, targeted edits, and upscales to improve the exact output a client sees.'],
+    ['Delivery support', 'Translate, validate, compress, and package project files without forcing the team into another service.'],
+    ['Team economics', 'Credits, video pricing, plan levels, and shared studio access are visible before the customer commits.'],
+  ];
+
+  return (
+    <section className="bg-surface-elevated py-16 sm:py-20">
+      <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">Customer value</p>
+          <h2 className="mt-4 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">Built around the work clients actually pay for.</h2>
+          <p className="mt-4 text-base leading-relaxed text-foreground-secondary">
+            Upload project material, generate stronger visual options, edit them quickly, and deliver files the client can use.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {outcomes.map(([title, body]) => (
+            <article key={title} className="rounded-lg border border-border bg-background p-5">
+              <h3 className="text-base font-semibold text-foreground">{title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-foreground-secondary">{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CTASection({ onOpenAuth, onNavigatePricing }: { onOpenAuth: () => void; onNavigatePricing: () => void }) {
+  return (
+    <section className="bg-background py-16 sm:py-20">
+      <div className="mx-auto max-w-7xl px-5 sm:px-6">
+        <div className="overflow-hidden rounded-xl bg-foreground text-white shadow-elevated">
+          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_420px] lg:p-10">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Ready for commercial use</p>
+              <h2 className="mt-4 max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
+                Start producing client-ready architecture visuals today.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/66">
+                Use real project inputs, select the right visual direction, refine the output, and deliver the files your client needs from one commercial workspace.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={onOpenAuth}
-                  className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center gap-2 hover:bg-foreground/90 transition-colors"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-semibold text-foreground transition-colors hover:bg-white/90"
                 >
-                  Create free account
-                  <ArrowRight size={14} />
+                  Start now
+                  <ArrowRight size={15} />
                 </button>
                 <button
                   type="button"
                   onClick={onNavigatePricing}
-                  className="h-11 px-6 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-surface-sunken transition-colors"
+                  className="inline-flex h-11 items-center justify-center rounded-lg border border-white/18 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/8"
                 >
-                  View plans
+                  Compare plans
                 </button>
               </div>
-
-              <div className="mt-10 pt-6 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  ['18+', 'workflows'],
-                  ['< 30s', 'avg output cycle'],
-                  ['50+', 'language coverage'],
-                  ['3', 'commercial plans'],
-                ].map(([value, label]) => (
-                  <div key={label}>
-                    <p className="text-2xl font-semibold text-foreground">{value}</p>
-                    <p className="text-[10px] uppercase tracking-wider text-foreground-muted mt-1">{label}</p>
-                  </div>
-                ))}
-              </div>
             </div>
-
-            <div
-              className={cn(
-                'transition-all duration-700 delay-150 ease-out',
-                heroReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-              )}
-            >
-              <div className="rounded-2xl border border-border bg-surface-elevated shadow-elevated overflow-hidden">
-                <div className="h-11 border-b border-border bg-background flex items-center px-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted">Studio Session</div>
-                  <div className="ml-auto flex gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
-                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
-                    <span className="h-2 w-2 rounded-full bg-surface-sunken" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-[56px_1fr_140px] min-h-[340px]">
-                  <div className="border-r border-border bg-background p-2.5 flex flex-col gap-2">
-                    {['bg-foreground', 'bg-surface-sunken', 'bg-surface-sunken', 'bg-surface-sunken', 'bg-surface-sunken'].map(
-                      (clazz, index) => (
-                        <span key={index} className={cn('h-8 w-8 rounded-lg', clazz)} />
-                      )
-                    )}
-                  </div>
-
-                  <div className="p-4 bg-background-secondary relative overflow-hidden">
-                    <div className="absolute inset-4 rounded-xl border border-border bg-[linear-gradient(135deg,#e8e8e2_0%,#f2f2ed_45%,#ecece7_100%)]" />
-                    <div className="absolute inset-8 rounded-lg border border-white/60 bg-white/35 backdrop-blur-sm" />
-                    <div className="absolute bottom-8 left-8 right-8 h-12 rounded-lg border border-white/70 bg-white/45 flex items-center px-3">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">Prompt · Camera · Materials</span>
-                    </div>
-                  </div>
-
-                  <div className="border-l border-border bg-background p-3 flex flex-col gap-3">
-                    <div className="space-y-1.5">
-                      <div className="h-2 w-14 rounded-full bg-surface-sunken" />
-                      <div className="h-7 rounded-lg bg-surface-sunken" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="h-2 w-16 rounded-full bg-surface-sunken" />
-                      <div className="h-7 rounded-lg bg-surface-sunken" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="h-2 w-12 rounded-full bg-surface-sunken" />
-                      <div className="h-7 rounded-lg bg-surface-sunken" />
-                    </div>
-                    <button className="mt-auto h-9 rounded-lg bg-foreground text-background text-[11px] font-semibold inline-flex items-center justify-center gap-1.5">
-                      Generate
-                      <Sparkles size={12} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2.5 text-[11px]">
-                {[
-                  ['3D Render', 'Photoreal output'],
-                  ['Visual Edit', 'Targeted refinement'],
-                  ['Video', 'Walkthrough clips'],
-                ].map(([title, subtitle]) => (
-                  <div key={title} className="rounded-xl border border-border bg-surface-elevated px-3 py-2.5">
-                    <p className="font-semibold text-foreground leading-tight">{title}</p>
-                    <p className="text-foreground-muted mt-1">{subtitle}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-border bg-background py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="mb-8 sm:mb-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Platform</p>
-            <h2 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold">
-              One product surface, full project lifecycle.
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 border border-border rounded-2xl overflow-hidden bg-surface-elevated">
-            {FEATURE_COLUMNS.map((column, index) => {
-              const Icon = column.icon;
-              return (
-                <div
-                  key={column.title}
-                  className={cn(
-                    'p-6 sm:p-7',
-                    index < FEATURE_COLUMNS.length - 1 && 'md:border-r border-border',
-                    index > 0 && 'border-t md:border-t-0 border-border'
-                  )}
-                >
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="h-8 w-8 rounded-lg bg-surface-sunken inline-flex items-center justify-center text-foreground-muted">
-                      <Icon size={14} />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{column.title}</p>
-                      <p className="text-sm font-semibold text-foreground">{column.subtitle}</p>
-                    </div>
-                  </div>
-
-                  <ul className="space-y-3 text-sm text-foreground-secondary leading-relaxed">
-                    {column.items.map((item) => (
-                      <li key={item} className="flex items-start gap-2">
-                        <Check size={14} className="mt-0.5 shrink-0 text-accent" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-border bg-surface-sunken/35 py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="mb-8 sm:mb-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Workflow Library</p>
-            <h3 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold max-w-4xl">
-              Every mode in the app, mapped to what it does and when to use it.
-            </h3>
-            <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-3xl leading-relaxed">
-              ArchViz AI Studio is organized as specialized workflows, not one generic generator. Teams can select the
-              exact mode for concept creation, technical output, document handling, or media delivery.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-3 mb-6">
-            {[
-              [`${Object.keys(CREDITS_PER_MODE).length}`, 'workflows in the commercial app'],
-              [`${WORKFLOW_GROUPS.length}`, 'workflow families'],
-              ['2', 'billing models (credits + pay-per-gen)'],
-            ].map(([value, label]) => (
-              <div key={label} className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
-                <p className="text-2xl font-semibold text-foreground tracking-tight">{value}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-foreground-muted">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-5">
-            {WORKFLOW_GROUPS.map((group, groupIndex) => (
-              <article key={group.title} className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated">
-                <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-accent/10 blur-2xl" aria-hidden />
-                <div className="relative px-5 py-5 sm:px-6 sm:py-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
-                    <div className="flex items-start gap-3">
-                      <span className="h-8 w-8 shrink-0 rounded-lg border border-border bg-background inline-flex items-center justify-center text-[10px] font-semibold tracking-wider text-foreground-muted">
-                        {String(groupIndex + 1).padStart(2, '0')}
-                      </span>
-                      <div>
-                        <p className="text-lg font-semibold tracking-tight text-foreground">{group.title}</p>
-                        <p className="mt-1 text-sm text-foreground-secondary max-w-3xl leading-relaxed">{group.description}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {group.items.map((item) => (
-                      <article
-                        key={item.mode}
-                        className="group rounded-xl border border-border bg-background/75 backdrop-blur-sm p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:border-foreground/40"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-foreground leading-tight">{item.label}</p>
-                          <span className="rounded-full border border-border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted whitespace-nowrap">
-                            {formatModeCost(item.mode)}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
-                        <div className="mt-4 pt-3 border-t border-border">
-                          <p className="text-[10px] uppercase tracking-wider font-semibold text-foreground-muted">Best for</p>
-                          <p className="mt-1.5 text-xs text-foreground-secondary leading-relaxed">{item.useCase}</p>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-border bg-surface-sunken/45 py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">How It Works</p>
-              <h3 className="mt-3 text-2xl sm:text-[34px] text-foreground font-semibold tracking-tight">Fast by default. Precise when needed.</h3>
-            </div>
-            <button
-              type="button"
-              onClick={onOpenAuth}
-              className="h-10 px-4 rounded-lg border border-border text-xs font-semibold uppercase tracking-wider text-foreground hover:bg-surface-sunken transition-colors inline-flex items-center gap-1.5"
-            >
-              Try it now
-              <PlayCircle size={13} />
-            </button>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-4">
-            {WORKFLOW_STEPS.map((step, index) => (
-              <div key={step.title} className="rounded-xl border border-border bg-background p-5">
-                <p className="text-[11px] uppercase tracking-widest text-accent font-semibold">0{index + 1}</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{step.title}</p>
-                <p className="mt-2 text-sm text-foreground-muted leading-relaxed">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-border bg-background py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="mb-8 sm:mb-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Studio Use Cases</p>
-            <h3 className="mt-3 text-3xl sm:text-[38px] leading-tight tracking-tight text-foreground font-semibold max-w-4xl">
-              Practical workflows teams run from kickoff to final handoff.
-            </h3>
-          </div>
-
-          <div className="space-y-4">
-            {USE_CASE_PLAYBOOK.map((item, index) => (
-              <article
-                key={item.title}
-                className="rounded-2xl border border-border bg-[linear-gradient(150deg,#ffffff_0%,#f5f5f1_85%)] p-5 sm:p-6"
-              >
-                <div className="flex flex-wrap items-start gap-4">
-                  <span className="h-8 w-8 shrink-0 rounded-full border border-border bg-background inline-flex items-center justify-center text-[10px] font-semibold tracking-wider text-foreground-muted">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <div className="flex-1 min-w-[220px]">
-                    <h4 className="text-lg font-semibold tracking-tight text-foreground">{item.title}</h4>
-                    <p className="mt-2 text-sm text-foreground-secondary leading-relaxed">{item.summary}</p>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2">
-                  {item.sequence.map((step, stepIndex) => (
-                    <React.Fragment key={`${item.title}-${step}`}>
-                      <span className="rounded-full border border-border bg-background px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
-                        {step}
-                      </span>
-                      {stepIndex < item.sequence.length - 1 && (
-                        <ChevronRight size={12} className="text-foreground-muted" />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-border bg-surface-sunken/40 py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-5 lg:gap-6">
-          <article className="rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Workspace Operations</p>
-            <h3 className="mt-3 text-2xl sm:text-[32px] leading-tight tracking-tight text-foreground font-semibold">
-              Built for commercial teams, not one-off demos.
-            </h3>
-
-            <div className="mt-6 grid sm:grid-cols-3 gap-3">
-              {PLATFORM_PILLARS.map((pillar) => (
-                <div key={pillar.title} className="rounded-xl border border-border bg-background p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{pillar.title}</p>
-                  <ul className="mt-3 space-y-2">
-                    {pillar.points.map((point) => (
-                      <li key={point} className="flex items-start gap-2 text-xs text-foreground-secondary leading-relaxed">
-                        <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Compatibility</p>
-            <h3 className="mt-3 text-2xl sm:text-[30px] leading-tight tracking-tight text-foreground font-semibold">
-              Inputs and outputs by workflow.
-            </h3>
-            <div className="mt-5 divide-y divide-border">
-              {FILE_COMPATIBILITY.map((row) => (
-                <div key={row.feature} className="py-3.5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">{row.feature}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {row.formats.map((format) => (
-                      <span
-                        key={`${row.feature}-${format}`}
-                        className="rounded-full border border-border bg-background px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted"
-                      >
-                        {format}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="mt-1.5 text-sm text-foreground-secondary leading-relaxed">{row.support}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="border-b border-border py-16 sm:py-20">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="rounded-2xl border border-border bg-[linear-gradient(160deg,#ffffff_0%,#f4f4f0_100%)] p-6 sm:p-8 lg:p-10">
-            <div className="grid lg:grid-cols-[1.15fr_0.85fr] gap-8 lg:gap-10 items-end">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Commercial Plans</p>
-                <h3 className="mt-3 text-3xl sm:text-[38px] tracking-tight text-foreground font-semibold">Pricing that scales from solo to studio.</h3>
-                <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-2xl leading-relaxed">
-                  Pick monthly credits for images and documents, then add video generation when needed. Clear unit economics,
-                  no hidden fees.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={onNavigatePricing}
-                className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors"
-              >
-                See full pricing
-                <ChevronRight size={15} />
-              </button>
-            </div>
-
-            <div className="mt-8 grid sm:grid-cols-3 gap-3">
-              {PLANS.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    'rounded-xl border px-4 py-4',
-                    plan.highlight
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border bg-surface-elevated'
-                  )}
-                >
-                  <p className={cn('text-[10px] uppercase tracking-widest font-semibold', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
-                    {plan.label}
-                  </p>
-                  <p className={cn('mt-1 text-2xl font-semibold', plan.highlight ? 'text-background' : 'text-foreground')}>
-                    ${plan.price}
-                    <span className={cn('text-xs font-medium ml-1', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
-                      /mo
-                    </span>
-                  </p>
-                  <p className={cn('mt-1 text-xs', plan.highlight ? 'text-background/70' : 'text-foreground-muted')}>
-                    {plan.credits.toLocaleString()} credits
-                  </p>
+            <div className="rounded-lg border border-white/12 bg-white/6 p-4">
+              {[
+                ['Starter', `${PLAN_CREDITS.starter.toLocaleString()} credits`],
+                ['Professional', `${PLAN_CREDITS.professional.toLocaleString()} credits`],
+                ['Studio', `${PLAN_CREDITS.studio.toLocaleString()} shared credits`],
+              ].map(([name, detail]) => (
+                <div key={name} className="flex items-center justify-between border-b border-white/10 py-3 first:pt-0 last:border-0 last:pb-0">
+                  <span className="text-sm font-semibold text-white">{name}</span>
+                  <span className="text-sm text-white/55">{detail}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      <section className="py-16 sm:py-20">
-        <div className="max-w-3xl mx-auto px-5 sm:px-6">
-          <div className="text-center mb-8">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">FAQ</p>
-            <h3 className="mt-3 text-3xl sm:text-[36px] text-foreground tracking-tight font-semibold">Before you start</h3>
-          </div>
-
-          <div className="divide-y divide-border border-y border-border bg-surface-elevated rounded-xl">
-            {FAQ_ITEMS.map((item, index) => (
-              <div key={item.q} className="px-4 sm:px-6">
-                <button
-                  type="button"
-                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  className="w-full py-4 text-left flex items-start justify-between gap-4"
-                >
-                  <span className="text-sm font-medium text-foreground">{item.q}</span>
-                  <span className="text-xs text-foreground-muted mt-1">{openFaq === index ? '−' : '+'}</span>
-                </button>
-                {openFaq === index && <p className="pb-4 text-sm text-foreground-muted leading-relaxed">{item.a}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+function HomePage({
+  heroReady,
+  onNavigatePricing,
+  onOpenAuth,
+}: {
+  heroReady: boolean;
+  onNavigatePricing: () => void;
+  onOpenAuth: () => void;
+}) {
+  return (
+    <>
+      <HeroSection heroReady={heroReady} onOpenAuth={onOpenAuth} onNavigatePricing={onNavigatePricing} />
+      <ProductPillars />
+      <SourceToRenderSection />
+      <FeatureExplorer />
+      <WorkflowGrid />
+      <CustomerOutcomeSection />
+      <CTASection onOpenAuth={onOpenAuth} onNavigatePricing={onNavigatePricing} />
     </>
   );
 }
 
-type PricingPageProps = {
-  onOpenAuth: () => void;
-  onNavigateHome: () => void;
-};
+function PlanCard({ plan, onOpenAuth }: { plan: Plan; onOpenAuth: () => void }) {
+  return (
+    <article
+      className={cn(
+        'relative flex flex-col rounded-xl border p-6 shadow-subtle',
+        plan.highlight ? 'border-foreground bg-foreground text-white shadow-elevated' : 'border-border bg-surface-elevated text-foreground'
+      )}
+    >
+      {plan.highlight && (
+        <div className="absolute right-5 top-5 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-foreground">Recommended</div>
+      )}
+      <p className={cn('text-sm font-semibold', plan.highlight ? 'text-white/70' : 'text-foreground-muted')}>{plan.bestFor}</p>
+      <h2 className="mt-3 text-2xl font-semibold">{plan.label}</h2>
+      <p className={cn('mt-2 min-h-[44px] text-sm leading-relaxed', plan.highlight ? 'text-white/65' : 'text-foreground-secondary')}>{plan.tagline}</p>
 
-function PricingPage({ onOpenAuth, onNavigateHome }: PricingPageProps) {
+      <div className="mt-6 flex items-end gap-2">
+        <span className="text-4xl font-semibold">{formatCurrency(plan.price)}</span>
+        <span className={cn('pb-1 text-sm', plan.highlight ? 'text-white/55' : 'text-foreground-muted')}>/month</span>
+      </div>
+      <p className={cn('mt-2 text-sm', plan.highlight ? 'text-white/65' : 'text-foreground-muted')}>
+        {plan.credits.toLocaleString()} credits included
+      </p>
+
+      <button
+        type="button"
+        onClick={onOpenAuth}
+        className={cn(
+          'mt-6 inline-flex h-11 items-center justify-center rounded-lg text-sm font-semibold transition-colors',
+          plan.highlight ? 'bg-white text-foreground hover:bg-white/90' : 'bg-foreground text-background hover:bg-foreground/90'
+        )}
+      >
+        Choose {plan.label}
+      </button>
+
+      <ul className="mt-6 space-y-3">
+        {plan.features.map((feature) => (
+          <li key={feature} className={cn('flex gap-3 text-sm leading-relaxed', plan.highlight ? 'text-white/72' : 'text-foreground-secondary')}>
+            <Check size={16} className={cn('mt-0.5 shrink-0', plan.highlight ? 'text-emerald-300' : 'text-accent')} />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+function CreditEconomics() {
+  const rows = [
+    ['Most render and edit workflows', `${CREDITS_PER_MODE['render-3d']} credits/run`],
+    ['Upscale', `${CREDITS_PER_MODE['upscale']} credits/run`],
+    ['PDF Compression', `${CREDITS_PER_MODE['pdf-compression']} credit/run`],
+    ['Document Translate', `${CREDITS_PER_MODE['document-translate']} credits/run`],
+    ['Material Validation', `${CREDITS_PER_MODE['material-validation']} credits/run`],
+  ];
+
+  return (
+    <section className="bg-surface-elevated py-16 sm:py-20">
+      <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">Credit clarity</p>
+          <h2 className="mt-4 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">Customers can understand cost before they click generate.</h2>
+          <p className="mt-4 text-base leading-relaxed text-foreground-secondary">
+            The SaaS layer should make the commercial model obvious: monthly plans include credits, video is priced by provider, and high-cost workflows are clearly labeled.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <article className="rounded-lg border border-border bg-background p-5">
+            <h3 className="text-lg font-semibold text-foreground">Workflow credits</h3>
+            <div className="mt-4 space-y-3">
+              {rows.map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-4 border-b border-border pb-3 text-sm last:border-0 last:pb-0">
+                  <span className="text-foreground-secondary">{label}</span>
+                  <span className="font-semibold text-foreground">{value}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="rounded-lg border border-border bg-background p-5">
+            <h3 className="text-lg font-semibold text-foreground">Video pricing</h3>
+            <div className="mt-4 space-y-3">
+              {VIDEO_PRICING.map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-4 border-b border-border pb-3 text-sm last:border-0 last:pb-0">
+                  <span className="text-foreground-secondary">{item.label}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(item.price)}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PricingPage({ onOpenAuth, onNavigateHome }: { onOpenAuth: () => void; onNavigateHome: () => void }) {
   return (
     <>
-      <section className="border-b border-border bg-[radial-gradient(circle_at_22%_10%,rgba(22,163,74,0.18),transparent_38%),linear-gradient(to_bottom,#fafaf8,#f5f5f3)]">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-16">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Pricing & Plans</p>
-          <h1 className="mt-3 text-4xl sm:text-[54px] leading-[1.02] tracking-tight text-foreground font-semibold max-w-4xl">
-            Predictable monthly credits for teams shipping architectural visuals.
-          </h1>
-          <p className="mt-5 max-w-2xl text-sm sm:text-base text-foreground-secondary leading-relaxed">
-            Choose the plan that fits your output volume. Image and document workflows consume credits, while video is
-            billed separately by generation.
-          </p>
+      <section className="bg-foreground text-white">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Pricing</p>
+            <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-5xl">Plans for firms that need repeatable visual production.</h1>
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/66">
+              Start with a monthly credit plan, add video generation when a project needs motion, and move to Studio when multiple people need shared access.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-semibold text-foreground transition-colors hover:bg-white/90"
+              >
+                Create account
+                <ArrowRight size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-white/18 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/8"
+              >
+                See product
+              </button>
+            </div>
+          </div>
+          <ScreenshotFrame
+            src={SCREENSHOTS.styles}
+            alt="ArchViz Studio style library used for pricing page product context"
+            label="Product context"
+            caption="Pricing is attached to a real workspace with rendering, style selection, documents, and delivery tools."
+            dark
+          />
         </div>
       </section>
 
-      <section className="border-b border-border py-14 sm:py-16 bg-background">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6">
-          <div className="grid lg:grid-cols-3 gap-4">
+      <section className="bg-background py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6">
+          <div className="grid gap-5 lg:grid-cols-3">
             {PLANS.map((plan) => (
-              <article
-                key={plan.id}
-                className={cn(
-                  'rounded-2xl border p-6 flex flex-col',
-                  plan.highlight
-                    ? 'border-foreground bg-foreground text-background shadow-elevated'
-                    : 'border-border bg-surface-elevated'
-                )}
-              >
-                <div className="flex items-start justify-between gap-4 mb-5">
-                  <div>
-                    <p className={cn('text-[11px] font-semibold uppercase tracking-[0.16em]', plan.highlight ? 'text-background/65' : 'text-foreground-muted')}>
-                      {plan.label}
-                    </p>
-                    <p className={cn('mt-2 text-4xl font-semibold tracking-tight', plan.highlight ? 'text-background' : 'text-foreground')}>
-                      ${plan.price}
-                      <span className={cn('text-xs font-medium ml-1', plan.highlight ? 'text-background/65' : 'text-foreground-muted')}>
-                        /month
-                      </span>
-                    </p>
-                    <p className={cn('mt-2 text-sm', plan.highlight ? 'text-background/75' : 'text-foreground-secondary')}>
-                      {plan.tagline}
-                    </p>
-                  </div>
-                  {plan.highlight && (
-                    <span className="h-7 px-3 rounded-full bg-accent text-white text-[10px] font-semibold uppercase tracking-wider inline-flex items-center">
-                      Most Popular
-                    </span>
-                  )}
-                </div>
-
-                <p className={cn('text-sm mb-5', plan.highlight ? 'text-background/75' : 'text-foreground-muted')}>
-                  {plan.credits.toLocaleString()} credits included each month.
-                </p>
-
-                <ul className="space-y-2.5 text-sm flex-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className={cn('flex items-start gap-2', plan.highlight ? 'text-background/85' : 'text-foreground-secondary')}>
-                      <Check size={14} className={cn('mt-0.5 shrink-0', plan.highlight ? 'text-background/75' : 'text-accent')} />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  type="button"
-                  onClick={onOpenAuth}
-                  className={cn(
-                    'mt-6 h-10 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors',
-                    plan.highlight
-                      ? 'bg-background text-foreground hover:bg-background/90'
-                      : 'bg-foreground text-background hover:bg-foreground/90'
-                  )}
-                >
-                  Start {plan.label}
-                  <ArrowRight size={14} />
-                </button>
-              </article>
+              <PlanCard key={plan.id} plan={plan} onOpenAuth={onOpenAuth} />
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-b border-border py-14 sm:py-16 bg-surface-sunken/45">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-2 gap-8">
-          <div className="rounded-2xl border border-border bg-surface-elevated p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Credit Guide</h2>
-            <div className="space-y-3 text-sm text-foreground-secondary">
-              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
-                <span>Standard image generation modes</span>
-                <strong className="text-foreground">4 credits</strong>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
-                <span>Upscale</span>
-                <strong className="text-foreground">3 credits</strong>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
-                <span>PDF compression</span>
-                <strong className="text-foreground">1 credit</strong>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
-                <span>Document translate</span>
-                <strong className="text-foreground">8 credits</strong>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span>Material validation</span>
-                <strong className="text-foreground">12 credits</strong>
-              </div>
-            </div>
-          </div>
+      <CreditEconomics />
 
-          <div className="rounded-2xl border border-border bg-surface-elevated p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Video (Pay Per Generation)</h2>
-            <div className="space-y-3 text-sm text-foreground-secondary">
-              {[
-                ['kling-standard-5s', 'Kling Standard 5s'],
-                ['kling-standard-10s', 'Kling Standard 10s'],
-                ['kling-pro-10s', 'Kling Pro 10s'],
-                ['veo-fast-5s', 'Veo Fast 5s'],
-                ['veo-standard-8s', 'Veo Standard 8s'],
-              ].map(([key, label]) => (
-                <div key={key} className="flex items-center justify-between gap-4 border-b border-border pb-2 last:border-b-0 last:pb-0">
-                  <span>{label}</span>
-                  <strong className="text-foreground">${((VIDEO_PRICES_CENTS[key] ?? 0) / 100).toFixed(2)}</strong>
-                </div>
-              ))}
-            </div>
+      <section className="bg-background py-16 sm:py-20">
+        <div className="mx-auto max-w-4xl px-5 sm:px-6">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">Questions</p>
+            <h2 className="mt-4 text-3xl font-semibold text-foreground sm:text-4xl">Common buying questions</h2>
           </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-20">
-        <div className="max-w-5xl mx-auto px-5 sm:px-6 text-center">
-          <h3 className="text-3xl sm:text-[40px] tracking-tight text-foreground font-semibold">Need a faster pilot for your team?</h3>
-          <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-2xl mx-auto leading-relaxed">
-            Start with a commercial plan today and move your first client workflow through the platform in one afternoon.
-          </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={onOpenAuth}
-              className="h-11 px-6 rounded-xl bg-foreground text-background text-sm font-semibold inline-flex items-center gap-2 hover:bg-foreground/90 transition-colors"
-            >
-              Create free account
-              <ArrowRight size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="h-11 px-6 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-surface-sunken transition-colors"
-            >
-              Back to homepage
-            </button>
+          <div className="mt-8 space-y-3">
+            {FAQ_ITEMS.map((item, index) => (
+              <details key={item.question} className="group rounded-lg border border-border bg-surface-elevated p-5 shadow-subtle" open={index === 0}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-base font-semibold text-foreground">
+                  {item.question}
+                  <ChevronDown size={17} className="shrink-0 text-foreground-muted transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-foreground-secondary">{item.answer}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
@@ -1272,29 +920,24 @@ function PricingPage({ onOpenAuth, onNavigateHome }: PricingPageProps) {
 function TermsPage() {
   return (
     <>
-      <section className="border-b border-border bg-[linear-gradient(to_bottom,#fafaf8,#f4f4f0)]">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-20 pb-14">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Legal</p>
-          <h1 className="mt-3 text-4xl sm:text-[52px] tracking-tight leading-[1.03] text-foreground font-semibold">Terms of Service</h1>
-          <p className="mt-4 text-sm sm:text-base text-foreground-secondary max-w-3xl leading-relaxed">
-            These terms govern access to and use of ArchViz AI Studio for commercial and professional usage.
+      <section className="bg-foreground text-white">
+        <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Terms</p>
+          <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl">Terms of service for ArchViz Studio.</h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/66">
+            Plain-language commercial terms for customers using the rendering, document, validation, compression, and video tools.
           </p>
-          <p className="mt-3 text-xs text-foreground-muted">Last updated: April 21, 2026</p>
         </div>
       </section>
 
-      <section className="py-12 sm:py-14">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-[240px_1fr] gap-8 lg:gap-12">
+      <section className="bg-background py-14 sm:py-16">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="hidden lg:block">
-            <div className="sticky top-24 rounded-xl border border-border bg-surface-elevated p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground-muted mb-3">Sections</p>
+            <div className="sticky top-24 rounded-lg border border-border bg-surface-elevated p-4 shadow-subtle">
+              <p className="mb-3 text-sm font-semibold text-foreground">Sections</p>
               <nav className="space-y-2">
                 {TERMS_SECTIONS.map((section) => (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    className="block text-sm text-foreground-muted hover:text-foreground transition-colors"
-                  >
+                  <a key={section.id} href={`#${section.id}`} className="block text-sm leading-relaxed text-foreground-muted transition-colors hover:text-foreground">
                     {section.title}
                   </a>
                 ))}
@@ -1302,13 +945,13 @@ function TermsPage() {
             </div>
           </aside>
 
-          <div className="space-y-8">
+          <div className="space-y-4">
             {TERMS_SECTIONS.map((section) => (
-              <article key={section.id} id={section.id} className="rounded-xl border border-border bg-surface-elevated p-5 sm:p-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-foreground tracking-tight">{section.title}</h2>
+              <article key={section.id} id={section.id} className="rounded-lg border border-border bg-surface-elevated p-5 shadow-subtle sm:p-6">
+                <h2 className="text-xl font-semibold text-foreground">{section.title}</h2>
                 <div className="mt-3 space-y-3">
                   {section.paragraphs.map((paragraph) => (
-                    <p key={paragraph} className="text-sm text-foreground-secondary leading-relaxed">
+                    <p key={paragraph} className="text-sm leading-relaxed text-foreground-secondary">
                       {paragraph}
                     </p>
                   ))}
@@ -1322,13 +965,46 @@ function TermsPage() {
   );
 }
 
+function SiteFooter({ onNavigate }: { onNavigate: (route: PublicRoute) => void }) {
+  return (
+    <footer className="border-t border-border bg-foreground text-background">
+      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-10 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <Brand tone="light" />
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-white/66">
+            AI rendering, visual editing, document processing, validation, and motion generation for architecture teams.
+          </p>
+          <p className="mt-4 text-xs text-white/45">Copyright {new Date().getFullYear()} ArchViz Studio</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {NAV_ITEMS.map((item) => (
+            <a
+              key={item.route}
+              href={pathFromRoute(item.route)}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(item.route);
+              }}
+              className="text-white/58 transition-colors hover:text-white"
+            >
+              {item.label}
+            </a>
+          ))}
+          <a href="mailto:hello@archviz.ai" className="text-white/58 transition-colors hover:text-white">
+            Contact
+          </a>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
 export function LandingPage() {
   const [route, setRoute] = useState<PublicRoute>(() => routeFromPath(window.location.pathname));
   const [showAuth, setShowAuth] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [heroReady, setHeroReady] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const navigate = useCallback((nextRoute: PublicRoute) => {
     const targetPath = pathFromRoute(nextRoute);
@@ -1353,12 +1029,7 @@ export function LandingPage() {
       setRoute(routeFromPath(window.location.pathname));
       window.scrollTo({ top: 0 });
     };
-
-    const onScroll = () => {
-      const y = window.scrollY;
-      setScrolled(y > 8);
-      setScrollY(y);
-    };
+    const onScroll = () => setScrolled(window.scrollY > 8);
 
     window.addEventListener('popstate', onPopState);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -1371,8 +1042,8 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setHeroReady(true), 60);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setHeroReady(true), 60);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const content = useMemo(() => {
@@ -1382,39 +1053,28 @@ export function LandingPage() {
     if (route === 'terms') {
       return <TermsPage />;
     }
-    return (
-      <HomePage
-        heroReady={heroReady}
-        scrollY={scrollY}
-        onNavigatePricing={() => navigate('pricing')}
-        onOpenAuth={() => setShowAuth(true)}
-        openFaq={openFaq}
-        setOpenFaq={setOpenFaq}
-      />
-    );
-  }, [route, heroReady, scrollY, openFaq, navigate]);
+    return <HomePage heroReady={heroReady} onNavigatePricing={() => navigate('pricing')} onOpenAuth={() => setShowAuth(true)} />;
+  }, [route, heroReady, navigate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       <SiteHeader route={route} scrolled={scrolled} onNavigate={navigate} onOpenAuth={() => setShowAuth(true)} />
-
       <main>{content}</main>
-
       <SiteFooter onNavigate={navigate} />
 
       {showAuth && (
-        <div className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-surface-elevated shadow-elevated overflow-hidden relative">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-elevated">
             <button
               type="button"
               onClick={() => setShowAuth(false)}
-              className="absolute top-4 right-4 h-8 w-8 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors inline-flex items-center justify-center"
+              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
               aria-label="Close sign in dialog"
             >
               <X size={15} />
             </button>
 
-            <div className="px-7 pt-7 pb-5 border-b border-border">
+            <div className="border-b border-border px-7 pb-5 pt-7">
               <Brand />
             </div>
 
@@ -1423,7 +1083,7 @@ export function LandingPage() {
             </div>
 
             <div className="px-7 pb-6 text-center">
-              <p className="text-[11px] text-foreground-muted">
+              <p className="text-[11px] leading-relaxed text-foreground-muted">
                 By continuing you agree to our{' '}
                 <a
                   href="/terms"
@@ -1432,26 +1092,11 @@ export function LandingPage() {
                     setShowAuth(false);
                     navigate('terms');
                   }}
-                  className="underline hover:text-foreground transition-colors"
+                  className="underline transition-colors hover:text-foreground"
                 >
                   Terms
                 </a>{' '}
-                and{' '}
-                <a
-                  href="/terms#privacy"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setShowAuth(false);
-                    navigate('terms');
-                    setTimeout(() => {
-                      document.getElementById('privacy')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 50);
-                  }}
-                  className="underline hover:text-foreground transition-colors"
-                >
-                  Privacy
-                </a>
-                .
+                and privacy terms.
               </p>
             </div>
           </div>
