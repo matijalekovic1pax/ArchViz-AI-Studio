@@ -3,11 +3,11 @@ import { useAppStore } from '../store';
 import { FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
-import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
 import * as XLSX from 'xlsx';
 import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
 import { PptxSlideViewer } from './ui/PptxSlideViewer';
+import { DocxPageViewer } from './ui/DocxPageViewer';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -15,14 +15,12 @@ export const DocumentTranslateView: React.FC = () => {
   const { sourceDocument, progress, translatedDocumentUrl, error } = state.workflow.documentTranslate;
 
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
-  const [docxHtmlContent, setDocxHtmlContent] = useState<string | null>(null);
   const [xlsxHtmlContent, setXlsxHtmlContent] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => {
     if (!sourceDocument) {
       setDocumentPreviewUrl(null);
-      setDocxHtmlContent(null);
       setXlsxHtmlContent(null);
       return;
     }
@@ -36,7 +34,6 @@ export const DocumentTranslateView: React.FC = () => {
     // XLSX preview
     if (isXlsx) {
       setDocumentPreviewUrl(null);
-      setDocxHtmlContent(null);
       setIsConverting(true);
 
       const convertXlsx = async () => {
@@ -87,7 +84,6 @@ export const DocumentTranslateView: React.FC = () => {
     // PPTX preview is rendered directly by PptxSlideViewer in the canvas.
     if (isPptx) {
       setDocumentPreviewUrl(null);
-      setDocxHtmlContent(null);
       setXlsxHtmlContent(null);
       setIsConverting(false);
       return;
@@ -102,47 +98,12 @@ export const DocumentTranslateView: React.FC = () => {
     if (!isDocxPreview && sourceDocument.type === 'pdf') {
       // Show original PDF in iframe (before translation)
       setDocumentPreviewUrl(previewDataUrl);
-      setDocxHtmlContent(null);
       return;
     }
 
-    // Preview DOCX content (original docx or translated output)
+    // DOCX previews render directly through DocxPageViewer.
     setDocumentPreviewUrl(null);
-    setIsConverting(true);
-
-    const convertDocx = async () => {
-      try {
-        const base64Match = previewDataUrl.match(/^data:[^;]+;base64,(.+)$/);
-        if (!base64Match) {
-          throw new Error('Invalid data URL');
-        }
-
-        const base64 = base64Match[1];
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-
-        const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-        if (!cancelled) {
-          setDocxHtmlContent(DOMPurify.sanitize(result.value));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsConverting(false);
-        }
-      }
-    };
-
-    convertDocx();
-    return () => {
-      cancelled = true;
-    };
+    setIsConverting(false);
   }, [sourceDocument, translatedDocumentUrl, progress.phase]);
 
   const renderDocumentPreview = () => {
@@ -242,75 +203,14 @@ export const DocumentTranslateView: React.FC = () => {
       );
     }
 
-    // DOCX Preview (rendered as HTML) - for docx input or translated output
+    // DOCX Preview (rendered as Word-like pages) - for docx input or translated output
     if (showAsDocx) {
-      // Still converting
-      if (isConverting) {
-        return (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 size={32} className="animate-spin text-accent" />
-              <p className="text-sm text-foreground-muted">Loading document preview...</p>
-            </div>
-          </div>
-        );
-      }
-
-      // Converted and ready to display
-      if (docxHtmlContent) {
-        return (
-          <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg mb-6 sm:mb-8">
-              {/* Document header with filename */}
-              <div className="bg-blue-50 px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                  <FileText size={18} className="text-blue-600" />
-                  <h3 className="text-sm font-medium text-gray-800">{sourceDocument.name}</h3>
-                </div>
-              </div>
-
-              {/* Document content */}
-              <div className="p-4 sm:p-8">
-                <style>{`
-                  .document-content p { margin: 0.5em 0; }
-                  .document-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-                  .document-content td, .document-content th { border: 1px solid #ddd; padding: 8px; }
-                  .document-content ul, .document-content ol { margin: 0.5em 0; padding-left: 2em; }
-                  .document-content li { margin: 0.25em 0; }
-                  .document-content h1 { font-size: 2em; margin: 0.5em 0; font-weight: bold; }
-                  .document-content h2 { font-size: 1.5em; margin: 0.5em 0; font-weight: bold; }
-                  .document-content h3 { font-size: 1.25em; margin: 0.5em 0; font-weight: bold; }
-                  .document-content strong { font-weight: bold; }
-                  .document-content em { font-style: italic; }
-                `}</style>
-                <div
-                  className="document-content"
-                  dangerouslySetInnerHTML={{ __html: docxHtmlContent }}
-                  style={{
-                    fontFamily: 'Calibri, Arial, sans-serif',
-                    fontSize: '11pt',
-                    lineHeight: '1.6',
-                    color: '#000000',
-                    backgroundColor: '#ffffff',
-                    minHeight: '100px',
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // Conversion failed
       return (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center max-w-md px-4 sm:px-6">
-            <FileText size={64} className="mx-auto mb-4 opacity-20 text-red-500" />
-            <h3 className="text-lg font-semibold mb-2 text-foreground">Failed to load document</h3>
-            <p className="text-sm text-foreground-muted">
-              Unable to preview this document. You can still translate it.
-            </p>
-          </div>
+        <div className="absolute inset-0">
+          <DocxPageViewer
+            dataUrl={(progress.phase === 'complete' && translatedDocumentUrl) ? translatedDocumentUrl : sourceDocument.dataUrl}
+            className="h-full w-full"
+          />
         </div>
       );
     }
