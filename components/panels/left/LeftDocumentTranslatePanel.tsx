@@ -7,6 +7,10 @@ import { cn } from '../../../lib/utils';
 import type { DocumentTranslateDocument } from '../../../types';
 import { nanoid } from 'nanoid';
 
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
 const SUPPORTED_LANGUAGES = [
   { code: 'auto', labelKey: 'documentTranslate.languages.auto' },
   { code: 'en', labelKey: 'documentTranslate.languages.en' },
@@ -36,13 +40,19 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
 
       const reader = new FileReader();
       reader.onload = () => {
+        const lowerName = file.name.toLowerCase();
         const isPdf = file.type === 'application/pdf';
-        const isXlsx = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx');
+        const isXlsx = file.type === XLSX_MIME || lowerName.endsWith('.xlsx');
+        const isPptx = file.type === PPTX_MIME || lowerName.endsWith('.pptx');
+        const type = isPdf ? 'pdf' : isXlsx ? 'xlsx' : isPptx ? 'pptx' : 'docx';
+        const mimeType =
+          file.type ||
+          (type === 'pdf' ? 'application/pdf' : type === 'xlsx' ? XLSX_MIME : type === 'pptx' ? PPTX_MIME : DOCX_MIME);
         const doc: DocumentTranslateDocument = {
           id: nanoid(),
           name: file.name,
-          type: isPdf ? 'pdf' : isXlsx ? 'xlsx' : 'docx',
-          mimeType: file.type as DocumentTranslateDocument['mimeType'],
+          type,
+          mimeType: mimeType as DocumentTranslateDocument['mimeType'],
           size: file.size,
           dataUrl: reader.result as string,
           uploadedAt: Date.now(),
@@ -55,7 +65,7 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
             translatedDocumentUrl: null,
             warnings: null,
             xlsxStats: null,
-            preserveFormatting: isXlsx ? true : docTranslate.preserveFormatting,
+            preserveFormatting: isXlsx || isPptx ? true : docTranslate.preserveFormatting,
           },
         });
       };
@@ -114,6 +124,8 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
                     ? 'bg-red-50 text-red-600'
                     : docTranslate.sourceDocument.type === 'xlsx'
                     ? 'bg-green-50 text-green-600'
+                    : docTranslate.sourceDocument.type === 'pptx'
+                    ? 'bg-orange-50 text-orange-600'
                     : 'bg-blue-50 text-blue-600'
                 )}
               >
@@ -142,7 +154,7 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".pdf,.docx,.xlsx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               onChange={handleFileSelect}
             />
             <button

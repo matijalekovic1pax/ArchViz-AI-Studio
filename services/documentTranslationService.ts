@@ -3,7 +3,8 @@
  * Orchestrates document parsing, translation via Gemini, and rebuilding.
  * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX.
  * For XLSX: Parses cells, translates, and rebuilds as XLSX.
- * Output matches input format (DOCX for Word/PDF, XLSX for Excel).
+ * For PPTX: Parses slide text, translates, and rebuilds as PPTX.
+ * Output matches input format (DOCX for Word/PDF, XLSX for Excel, PPTX for PowerPoint).
  *
  * Pipeline: parse → filter → analyze context → batch → translate → map → rebuild
  */
@@ -13,6 +14,8 @@ import { parseDocx } from './docxParserService';
 import { rebuildDocx } from './docxRebuilderService';
 import { parseXlsx } from './xlsxParserService';
 import { rebuildXlsx } from './xlsxRebuilderService';
+import { parsePptx } from './pptxParserService';
+import { rebuildPptx } from './pptxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
 import type {
   DocumentTranslateDocument,
@@ -22,6 +25,7 @@ import type {
   TextSegment,
   ParsedLegalDocx,
   ParsedXlsx,
+  ParsedPptx,
   XlsxSkippedCell,
   XlsxTranslationStats,
 } from '../types';
@@ -76,10 +80,16 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
   }
 
   const isXlsx = sourceDocument.type === 'xlsx';
+  const isPptx = sourceDocument.type === 'pptx';
 
   // Route to xlsx-specific pipeline
   if (isXlsx) {
     return translateXlsxDocument(options);
+  }
+
+  // Route to pptx-specific pipeline
+  if (isPptx) {
+    return translatePptxDocument(options);
   }
 
   const service = getGeminiService();
@@ -186,6 +196,81 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
   return {
     dataUrl: outputDataUrl,
     warnings: null,
+    xlsxStats: null,
+  };
+}
+
+// ============================================================================
+// PPTX Translation Pipeline
+// ============================================================================
+
+async function translatePptxDocument(options: TranslationOptions): Promise<DocumentTranslationResult> {
+  const {
+    sourceDocument,
+    sourceLanguage,
+    targetLanguage,
+    onProgress,
+    abortSignal,
+    translationQuality,
+  } = options;
+
+  // Phase 1: Parse PPTX
+  onProgress({
+    phase: 'parsing',
+    currentSegment: 0,
+    totalSegments: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Parsing presentation...',
+  });
+
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
+
+  const parseResult: ParsedPptx = await parsePptx(sourceDocument.dataUrl);
+  const segmentsToTranslate = parseResult.segments;
+
+  if (segmentsToTranslate.length === 0) {
+    throw new Error('No translatable text found in presentation.');
+  }
+
+  const translations = await runTranslationPipeline(
+    segmentsToTranslate,
+    segmentsToTranslate,
+    sourceLanguage,
+    targetLanguage,
+    translationQuality,
+    onProgress,
+    abortSignal
+  );
+
+  // Phase: Rebuild PPTX
+  onProgress({
+    phase: 'rebuilding',
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Rebuilding presentation...',
+  });
+
+  if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
+
+  const rebuilt = await rebuildPptx(parseResult, translations);
+
+  onProgress({
+    phase: 'complete',
+    currentSegment: segmentsToTranslate.length,
+    totalSegments: segmentsToTranslate.length,
+    currentBatch: 0,
+    totalBatches: 0,
+    message: 'Translation complete!',
+  });
+
+  return {
+    dataUrl: rebuilt.dataUrl,
+    warnings: rebuilt.missingTargetCount > 0
+      ? [`Skipped ${rebuilt.missingTargetCount} presentation text segment(s) that could not be safely replaced.`]
+      : null,
     xlsxStats: null,
   };
 }

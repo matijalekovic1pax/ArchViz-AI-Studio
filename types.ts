@@ -1075,8 +1075,12 @@ export interface MaterialValidationResult {
 export interface DocumentTranslateDocument {
   id: string;
   name: string;
-  type: 'pdf' | 'docx' | 'xlsx';
-  mimeType: 'application/pdf' | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  type: 'pdf' | 'docx' | 'xlsx' | 'pptx';
+  mimeType:
+    | 'application/pdf'
+    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    | 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   size: number;
   dataUrl: string;
   uploadedAt: number;
@@ -1156,6 +1160,21 @@ export interface ParsedXlsx {
   skippedCells: XlsxSkippedCell[];
   detectedTextCount: number;
   sheetCount: number;
+  metadata: DocumentMetadata;
+}
+
+export interface PptxTranslationTarget {
+  xmlPath: string;
+  textElements: Element[];
+}
+
+export interface ParsedPptx {
+  zipInstance: any; // JSZip instance
+  xmlDocuments: Map<string, Document>;
+  segments: TextSegment[];
+  targetMap: Map<string, PptxTranslationTarget>;
+  detectedTextCount: number;
+  slideCount: number;
   metadata: DocumentMetadata;
 }
 

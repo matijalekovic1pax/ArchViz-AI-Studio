@@ -254,7 +254,7 @@
   "documentTranslate": {
     "uploadDocument": "Document",
     "dropOrClick": "Glissez ou cliquez pour télécharger",
-    "supportedFormats": "PDF, Word (.docx), Excel (.xlsx)",
+    "supportedFormats": "PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx)",
     "removeDocument": "Supprimer le document",
     "languagesTitle": "Langues",
     "sourceLanguage": "De",
@@ -304,6 +304,7 @@
       "sr": "Serbe"
     },
     "xlsxPreserveFormattingLocked": "Pour les fichiers Excel, le mode de preservation de structure est toujours active.",
+    "pptxPreserveFormattingLocked": "Pour les fichiers PowerPoint, le mode de preservation de structure est toujours active.",
     "xlsxWarningsTitle": "Avertissements de Conservation de Structure",
     "xlsxStatsTitle": "Resume de Traduction Excel",
     "xlsxStatsTranslated": "Cellules traduites: {{count}}",

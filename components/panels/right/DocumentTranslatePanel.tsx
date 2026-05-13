@@ -7,6 +7,10 @@ import { SegmentedControl } from '../../ui/SegmentedControl';
 import { isConvertApiConfigured } from '../../../services/convertApiService';
 import { downloadFile } from '../../../lib/download';
 
+const DOCX_MIME_EXTENSION = 'docx';
+const XLSX_MIME_EXTENSION = 'xlsx';
+const PPTX_MIME_EXTENSION = 'pptx';
+
 export const DocumentTranslatePanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
@@ -25,13 +29,20 @@ export const DocumentTranslatePanel: React.FC = () => {
 
     const originalName = docTranslate.sourceDocument.name;
     const baseName = originalName.substring(0, originalName.lastIndexOf('.'));
-    const ext = docTranslate.sourceDocument.type === 'xlsx' ? 'xlsx' : 'docx';
+    const ext =
+      docTranslate.sourceDocument.type === 'xlsx'
+        ? XLSX_MIME_EXTENSION
+        : docTranslate.sourceDocument.type === 'pptx'
+        ? PPTX_MIME_EXTENSION
+        : DOCX_MIME_EXTENSION;
     const filename = `${baseName}_${docTranslate.targetLanguage}.${ext}`;
     downloadFile(docTranslate.translatedDocumentUrl, filename);
   };
 
   const isXlsx = docTranslate.sourceDocument?.type === 'xlsx';
-  const preserveFormattingChecked = isXlsx ? true : docTranslate.preserveFormatting;
+  const isPptx = docTranslate.sourceDocument?.type === 'pptx';
+  const isStructurePreservingArchive = isXlsx || isPptx;
+  const preserveFormattingChecked = isStructurePreservingArchive ? true : docTranslate.preserveFormatting;
 
   const qualityOptions = [
     { value: 'fast', label: t('documentTranslate.qualityOptions.fast.label') },
@@ -121,8 +132,8 @@ export const DocumentTranslatePanel: React.FC = () => {
         </div>
       )}
 
-      {/* XLSX warnings */}
-      {progress.phase === 'complete' && isXlsx && docTranslate.warnings && docTranslate.warnings.length > 0 && (
+      {/* Structure preservation warnings */}
+      {progress.phase === 'complete' && isStructurePreservingArchive && docTranslate.warnings && docTranslate.warnings.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle size={16} className="text-amber-600" />
@@ -236,7 +247,7 @@ export const DocumentTranslatePanel: React.FC = () => {
           <Toggle
             label={t('documentTranslate.preserveFormattingLabel')}
             checked={preserveFormattingChecked}
-            disabled={isXlsx}
+            disabled={isStructurePreservingArchive}
             onChange={(checked) =>
               dispatch({
                 type: 'UPDATE_DOCUMENT_TRANSLATE',
@@ -245,12 +256,14 @@ export const DocumentTranslatePanel: React.FC = () => {
             }
           />
           <p className="text-[10px] text-foreground-muted leading-relaxed">
-            {isXlsx
-              ? t('documentTranslate.xlsxPreserveFormattingLocked')
+            {isStructurePreservingArchive
+              ? isPptx
+                ? t('documentTranslate.pptxPreserveFormattingLocked')
+                : t('documentTranslate.xlsxPreserveFormattingLocked')
               : t('documentTranslate.preserveFormattingDesc')}
           </p>
 
-          {!isXlsx && (
+          {!isStructurePreservingArchive && (
             <>
               <Toggle
                 label="Translate Headers & Footers"
@@ -305,6 +318,13 @@ export const DocumentTranslatePanel: React.FC = () => {
       {isXlsx && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
           <strong>Excel Translation:</strong> All text cells across every sheet will be translated. Numbers, dates, formulas, and formatting are preserved. The output is a translated Excel file (.xlsx).
+        </div>
+      )}
+
+      {/* PowerPoint Info */}
+      {isPptx && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-800">
+          <strong>PowerPoint Translation:</strong> Slide, layout, master, speaker-note, chart, and diagram text will be translated in place. Media, animations, slide order, and presentation structure are preserved. The output is a translated PowerPoint file (.pptx).
         </div>
       )}
     </div>

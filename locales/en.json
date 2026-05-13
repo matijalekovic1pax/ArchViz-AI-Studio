@@ -255,7 +255,7 @@
   "documentTranslate": {
     "uploadDocument": "Document",
     "dropOrClick": "Drop or click to upload",
-    "supportedFormats": "PDF, Word (.docx), Excel (.xlsx)",
+    "supportedFormats": "PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx)",
     "removeDocument": "Remove document",
     "languagesTitle": "Languages",
     "sourceLanguage": "From",
@@ -269,6 +269,7 @@
     "preserveFormattingLabel": "Preserve Formatting",
     "preserveFormattingDesc": "Maintains original fonts, styles, and layout where possible.",
     "xlsxPreserveFormattingLocked": "For Excel files, structure-preserving mode is always enabled.",
+    "pptxPreserveFormattingLocked": "For PowerPoint files, structure-preserving mode is always enabled.",
     "xlsxWarningsTitle": "Structure Preservation Warnings",
     "xlsxStatsTitle": "Excel Translation Summary",
     "xlsxStatsTranslated": "Translated cells: {{count}}",

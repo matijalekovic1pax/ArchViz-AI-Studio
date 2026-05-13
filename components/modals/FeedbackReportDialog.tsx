@@ -66,6 +66,7 @@ const cleanNote = (value: string): string | undefined => {
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 const estimateDataUrlSize = (dataUrl: string): number => {
   const commaIndex = dataUrl.indexOf(',');
@@ -75,8 +76,8 @@ const estimateDataUrlSize = (dataUrl: string): number => {
   return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
 };
 
-const buildTranslatedFileName = (sourceName: string, sourceType: 'pdf' | 'docx' | 'xlsx'): string => {
-  const extension = sourceType === 'xlsx' ? '.xlsx' : '.docx';
+const buildTranslatedFileName = (sourceName: string, sourceType: 'pdf' | 'docx' | 'xlsx' | 'pptx'): string => {
+  const extension = sourceType === 'xlsx' ? '.xlsx' : sourceType === 'pptx' ? '.pptx' : '.docx';
   const dotIndex = sourceName.lastIndexOf('.');
   const baseName = dotIndex > 0 ? sourceName.slice(0, dotIndex) : sourceName;
   return `${baseName}-translated${extension}`;
@@ -151,7 +152,12 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     }
 
     if (sourceDocument && docTranslate.translatedDocumentUrl?.startsWith('data:')) {
-      const translatedMimeType = sourceDocument.type === 'xlsx' ? XLSX_MIME : DOCX_MIME;
+      const translatedMimeType =
+        sourceDocument.type === 'xlsx'
+          ? XLSX_MIME
+          : sourceDocument.type === 'pptx'
+          ? PPTX_MIME
+          : DOCX_MIME;
       next.push({
         id: `${sourceDocument.id}-translated`,
         kind: 'translated',
