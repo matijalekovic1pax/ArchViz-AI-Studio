@@ -720,19 +720,11 @@ export class GeminiService {
   ): Record<string, any> {
     if (!config) return { responseModalities: defaultModalities };
 
-    const { abortSignal, imageConfig, responseFormat, ...rest } = config;
+    const { abortSignal, responseFormat, ...rest } = config;
     const result: Record<string, any> = {
       ...rest,
       responseModalities: config.responseModalities || defaultModalities,
     };
-
-    const imageResponseFormat = imageConfig || responseFormat?.image;
-    if (imageResponseFormat) {
-      result.responseFormat = {
-        ...(responseFormat || {}),
-        image: imageResponseFormat,
-      };
-    }
 
     return result;
   }

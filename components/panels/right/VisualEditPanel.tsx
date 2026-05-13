@@ -102,6 +102,125 @@ const selectionExamples = [
   'Add people walking',
 ];
 
+type PeopleChipOption = { value: string; label: string };
+
+const toggleChip = (items: string[], value: string) =>
+  items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
+
+const Chip = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "px-1.5 py-1 text-[10px] font-medium rounded border transition-all duration-150 text-center leading-tight truncate min-w-0",
+      active
+        ? "bg-foreground text-background border-foreground"
+        : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
+    )}
+  >
+    {label}
+  </button>
+);
+
+const ChipGrid2 = ({ items, selected, onToggle }: { items: PeopleChipOption[]; selected: string[]; onToggle: (val: string) => void }) => (
+  <div className="grid grid-cols-2 gap-1">
+    {items.map((item) => (
+      <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
+    ))}
+  </div>
+);
+
+const ChipGrid3 = ({ items, selected, onToggle }: { items: PeopleChipOption[]; selected: string[]; onToggle: (val: string) => void }) => (
+  <div className="grid grid-cols-3 gap-1">
+    {items.map((item) => (
+      <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
+    ))}
+  </div>
+);
+
+const SingleChipGrid2 = ({ items, value, onChange }: { items: PeopleChipOption[]; value: string; onChange: (val: string) => void }) => (
+  <div className="grid grid-cols-2 gap-1">
+    {items.map((item) => (
+      <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
+    ))}
+  </div>
+);
+
+const SingleChipGrid3 = ({ items, value, onChange }: { items: PeopleChipOption[]; value: string; onChange: (val: string) => void }) => (
+  <div className="grid grid-cols-3 gap-1">
+    {items.map((item) => (
+      <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
+    ))}
+  </div>
+);
+
+const PeopleSection = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="border-t border-border-subtle pt-1.5">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between py-1 group">
+        <span className="text-[10px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground-secondary transition-colors">{title}</span>
+        <span className={cn("text-[9px] text-foreground-muted transition-transform duration-150", open ? "rotate-0" : "-rotate-90")}>&#9660;</span>
+      </button>
+      {open && <div className="space-y-2.5 pt-1.5 pb-0.5">{children}</div>}
+    </div>
+  );
+};
+
+const SectionLabel = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
+  <div className="flex items-center justify-between">
+    <span className="text-[11px] text-foreground-secondary">{children}</span>
+    {right}
+  </div>
+);
+
+const AllToggle = ({ count, total, onToggle }: { count: number; total: number; onToggle: () => void }) => (
+  <button onClick={onToggle} className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors">
+    {count === total ? 'Clear' : 'All'}
+  </button>
+);
+
+const regionOptions: PeopleChipOption[] = [
+  { value: 'european', label: 'European' },
+  { value: 'east-asian', label: 'East Asian' },
+  { value: 'south-asian', label: 'South Asian' },
+  { value: 'southeast-asian', label: 'SE Asian' },
+  { value: 'middle-eastern', label: 'Mid. Eastern' },
+  { value: 'african', label: 'African' },
+  { value: 'latin-american', label: 'Latin Amer.' },
+  { value: 'pacific-islander', label: 'Pacific Isl.' },
+  { value: 'central-asian', label: 'Central Asian' },
+];
+
+const activityOptions: PeopleChipOption[] = [
+  { value: 'walking', label: 'Walking' },
+  { value: 'standing', label: 'Standing' },
+  { value: 'sitting', label: 'Sitting' },
+  { value: 'rushing', label: 'Rushing' },
+  { value: 'queuing', label: 'Queuing' },
+  { value: 'browsing-shops', label: 'Shopping' },
+  { value: 'eating', label: 'Eating' },
+  { value: 'phone-use', label: 'On Phone' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'conversation', label: 'Chatting' },
+  { value: 'sleeping', label: 'Sleeping' },
+  { value: 'working-laptop', label: 'Laptop' },
+  { value: 'taking-photos', label: 'Photos' },
+  { value: 'pushing-stroller', label: 'Stroller' },
+  { value: 'wheelchair', label: 'Wheelchair' },
+];
+
+const luggageTypeOptions: PeopleChipOption[] = [
+  { value: 'rolling-suitcase', label: 'Roller' },
+  { value: 'backpack', label: 'Backpack' },
+  { value: 'carry-on', label: 'Carry-on' },
+  { value: 'duffel-bag', label: 'Duffel' },
+  { value: 'oversized', label: 'Oversized' },
+  { value: 'shopping-bags', label: 'Shopping' },
+  { value: 'duty-free', label: 'Duty Free' },
+  { value: 'briefcase', label: 'Briefcase' },
+  { value: 'garment-bag', label: 'Garment' },
+];
+
 type ObjectCategory = 'People' | 'Vehicles' | 'Furniture' | 'Vegetation' | 'Props';
 
 const objectCategoryOptions: Array<{
@@ -2485,122 +2604,6 @@ export const VisualEditPanel = () => {
         );
       case 'people': {
         const people = wf.visualPeople;
-        const toggleChip = (arr: string[], value: string) =>
-          arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
-
-        const Chip = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
-          <button
-            onClick={onClick}
-            className={cn(
-              "px-1.5 py-1 text-[10px] font-medium rounded border transition-all duration-150 text-center leading-tight truncate min-w-0",
-              active
-                ? "bg-foreground text-background border-foreground"
-                : "bg-surface-sunken text-foreground-muted border-border-subtle hover:border-border hover:text-foreground-secondary"
-            )}
-          >
-            {label}
-          </button>
-        );
-
-        const ChipGrid2 = ({ items, selected, onToggle }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void }) => (
-          <div className="grid grid-cols-2 gap-1">
-            {items.map(item => (
-              <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
-            ))}
-          </div>
-        );
-
-        const ChipGrid3 = ({ items, selected, onToggle }: { items: { value: string; label: string }[]; selected: string[]; onToggle: (val: string) => void }) => (
-          <div className="grid grid-cols-3 gap-1">
-            {items.map(item => (
-              <Chip key={item.value} active={selected.includes(item.value)} label={item.label} onClick={() => onToggle(item.value)} />
-            ))}
-          </div>
-        );
-
-        const SingleChipGrid2 = ({ items, value, onChange }: { items: { value: string; label: string }[]; value: string; onChange: (val: string) => void }) => (
-          <div className="grid grid-cols-2 gap-1">
-            {items.map(item => (
-              <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
-            ))}
-          </div>
-        );
-
-        const SingleChipGrid3 = ({ items, value, onChange }: { items: { value: string; label: string }[]; value: string; onChange: (val: string) => void }) => (
-          <div className="grid grid-cols-3 gap-1">
-            {items.map(item => (
-              <Chip key={item.value} active={value === item.value} label={item.label} onClick={() => onChange(item.value)} />
-            ))}
-          </div>
-        );
-
-        const PeopleSection = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
-          const [open, setOpen] = React.useState(defaultOpen);
-          return (
-            <div className="border-t border-border-subtle pt-1.5">
-              <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between py-1 group">
-                <span className="text-[10px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground-secondary transition-colors">{title}</span>
-                <span className={cn("text-[9px] text-foreground-muted transition-transform duration-150", open ? "rotate-0" : "-rotate-90")}>&#9660;</span>
-              </button>
-              {open && <div className="space-y-2.5 pt-1.5 pb-0.5">{children}</div>}
-            </div>
-          );
-        };
-
-        const SectionLabel = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-foreground-secondary">{children}</span>
-            {right}
-          </div>
-        );
-
-        const AllToggle = ({ count, total, onToggle }: { count: number; total: number; onToggle: () => void }) => (
-          <button onClick={onToggle} className="text-[9px] text-foreground-muted hover:text-foreground-secondary transition-colors">
-            {count === total ? 'Clear' : 'All'}
-          </button>
-        );
-
-        const regionOptions = [
-          { value: 'european', label: 'European' },
-          { value: 'east-asian', label: 'East Asian' },
-          { value: 'south-asian', label: 'South Asian' },
-          { value: 'southeast-asian', label: 'SE Asian' },
-          { value: 'middle-eastern', label: 'Mid. Eastern' },
-          { value: 'african', label: 'African' },
-          { value: 'latin-american', label: 'Latin Amer.' },
-          { value: 'pacific-islander', label: 'Pacific Isl.' },
-          { value: 'central-asian', label: 'Central Asian' },
-        ];
-
-        const activityOptions = [
-          { value: 'walking', label: 'Walking' },
-          { value: 'standing', label: 'Standing' },
-          { value: 'sitting', label: 'Sitting' },
-          { value: 'rushing', label: 'Rushing' },
-          { value: 'queuing', label: 'Queuing' },
-          { value: 'browsing-shops', label: 'Shopping' },
-          { value: 'eating', label: 'Eating' },
-          { value: 'phone-use', label: 'On Phone' },
-          { value: 'reading', label: 'Reading' },
-          { value: 'conversation', label: 'Chatting' },
-          { value: 'sleeping', label: 'Sleeping' },
-          { value: 'working-laptop', label: 'Laptop' },
-          { value: 'taking-photos', label: 'Photos' },
-          { value: 'pushing-stroller', label: 'Stroller' },
-          { value: 'wheelchair', label: 'Wheelchair' },
-        ];
-
-        const luggageTypeOptions = [
-          { value: 'rolling-suitcase', label: 'Roller' },
-          { value: 'backpack', label: 'Backpack' },
-          { value: 'carry-on', label: 'Carry-on' },
-          { value: 'duffel-bag', label: 'Duffel' },
-          { value: 'oversized', label: 'Oversized' },
-          { value: 'shopping-bags', label: 'Shopping' },
-          { value: 'duty-free', label: 'Duty Free' },
-          { value: 'briefcase', label: 'Briefcase' },
-          { value: 'garment-bag', label: 'Garment' },
-        ];
 
         return (
           <div className="space-y-2 animate-fade-in">
