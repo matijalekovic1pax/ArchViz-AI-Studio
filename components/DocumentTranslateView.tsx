@@ -7,7 +7,7 @@ import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
 import * as XLSX from 'xlsx';
 import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
-import { parsePptxPreview } from '../services/pptxParserService';
+import { PptxSlideViewer } from './ui/PptxSlideViewer';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -17,7 +17,6 @@ export const DocumentTranslateView: React.FC = () => {
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [docxHtmlContent, setDocxHtmlContent] = useState<string | null>(null);
   const [xlsxHtmlContent, setXlsxHtmlContent] = useState<string | null>(null);
-  const [pptxHtmlContent, setPptxHtmlContent] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => {
@@ -25,7 +24,6 @@ export const DocumentTranslateView: React.FC = () => {
       setDocumentPreviewUrl(null);
       setDocxHtmlContent(null);
       setXlsxHtmlContent(null);
-      setPptxHtmlContent(null);
       return;
     }
 
@@ -39,7 +37,6 @@ export const DocumentTranslateView: React.FC = () => {
     if (isXlsx) {
       setDocumentPreviewUrl(null);
       setDocxHtmlContent(null);
-      setPptxHtmlContent(null);
       setIsConverting(true);
 
       const convertXlsx = async () => {
@@ -87,63 +84,17 @@ export const DocumentTranslateView: React.FC = () => {
       };
     }
 
-    // PPTX text-outline preview
+    // PPTX preview is rendered directly by PptxSlideViewer in the canvas.
     if (isPptx) {
       setDocumentPreviewUrl(null);
       setDocxHtmlContent(null);
       setXlsxHtmlContent(null);
-      setIsConverting(true);
-
-      const convertPptx = async () => {
-        try {
-          const preview = await parsePptxPreview(previewDataUrl);
-          const htmlParts: string[] = [];
-          preview.sections.forEach(({ texts, label }) => {
-            htmlParts.push(
-              `<section class="pptx-section"><h3 class="pptx-title">${DOMPurify.sanitize(label)}</h3>${texts
-                .map((text) => `<p>${DOMPurify.sanitize(text)}</p>`)
-                .join('')}</section>`
-            );
-          });
-
-          if (preview.truncated) {
-            htmlParts.push(
-              '<section class="pptx-section"><p class="pptx-note">Preview limited for performance. The full presentation will still be processed for translation.</p></section>'
-            );
-          }
-
-          if (!cancelled) {
-            setPptxHtmlContent(
-              DOMPurify.sanitize(
-                htmlParts.length > 0
-                  ? htmlParts.join('')
-                  : '<p>No previewable text was found in this presentation.</p>'
-              )
-            );
-          }
-        } catch (error) {
-          console.error('Failed to load presentation preview', error);
-          if (!cancelled) {
-            setPptxHtmlContent(
-              '<p style="color: red;">Preview is unavailable for this presentation. You can still translate it.</p>'
-            );
-          }
-        } finally {
-          if (!cancelled) {
-            setIsConverting(false);
-          }
-        }
-      };
-
-      convertPptx();
-      return () => {
-        cancelled = true;
-      };
+      setIsConverting(false);
+      return;
     }
 
     // Reset xlsx state for non-xlsx
     setXlsxHtmlContent(null);
-    setPptxHtmlContent(null);
 
     // After translation completes, the output is DOCX (even if input was PDF)
     const isDocxPreview = isTranslated || sourceDocument.type === 'docx';
@@ -268,55 +219,12 @@ export const DocumentTranslateView: React.FC = () => {
 
     // PPTX Preview
     if (sourceDocument.type === 'pptx') {
-      if (isConverting) {
-        return (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 size={32} className="animate-spin text-accent" />
-              <p className="text-sm text-foreground-muted">Loading presentation preview...</p>
-            </div>
-          </div>
-        );
-      }
-
-      if (pptxHtmlContent) {
-        return (
-          <div className="absolute inset-0 overflow-y-auto bg-gray-100 p-4 sm:p-8">
-            <div className="max-w-5xl mx-auto bg-white shadow-lg rounded-lg mb-6 sm:mb-8">
-              <div className="bg-orange-50 px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                  <FileText size={18} className="text-orange-600" />
-                  <h3 className="text-sm font-medium text-gray-800">{sourceDocument.name}</h3>
-                </div>
-              </div>
-              <div className="p-4 sm:p-6">
-                <style>{`
-                  .pptx-preview .pptx-section { border-bottom: 1px solid #e5e7eb; padding: 1rem 0; }
-                  .pptx-preview .pptx-section:first-child { padding-top: 0; }
-                  .pptx-preview .pptx-section:last-child { border-bottom: 0; padding-bottom: 0; }
-                  .pptx-preview .pptx-title { font-size: 0.9rem; font-weight: 700; color: #c2410c; margin-bottom: 0.5rem; }
-                  .pptx-preview p { color: #1f2937; font-size: 0.9rem; line-height: 1.5; margin: 0.35rem 0; }
-                  .pptx-preview .pptx-note { color: #9a3412; font-weight: 600; }
-                `}</style>
-                <div
-                  className="pptx-preview"
-                  dangerouslySetInnerHTML={{ __html: pptxHtmlContent }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
-
       return (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center max-w-md px-4 sm:px-6">
-            <FileText size={64} className="mx-auto mb-4 opacity-20 text-red-500" />
-            <h3 className="text-lg font-semibold mb-2 text-foreground">Failed to load presentation</h3>
-            <p className="text-sm text-foreground-muted">
-              Unable to preview this presentation. You can still translate it.
-            </p>
-          </div>
+        <div className="absolute inset-0">
+          <PptxSlideViewer
+            dataUrl={(progress.phase === 'complete' && translatedDocumentUrl) ? translatedDocumentUrl : sourceDocument.dataUrl}
+            className="h-full w-full"
+          />
         </div>
       );
     }
