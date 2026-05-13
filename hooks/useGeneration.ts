@@ -100,6 +100,17 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean): 
   return drawMaskImageData(mask, width, height, { invert })?.toDataURL('image/png') || maskDataUrl;
 };
 
+const STRICT_VISUAL_MASK_TOOLS = new Set(['material', 'adjust', 'background']);
+
+const getVisualMaskMode = (
+  activeVisualTool: string,
+  shouldUseSelectionMask: boolean,
+  editOutsideSelection: boolean
+): ImageEditRequest['maskMode'] | undefined => {
+  if (!shouldUseSelectionMask) return undefined;
+  return editOutsideSelection || STRICT_VISUAL_MASK_TOOLS.has(activeVisualTool) ? 'strict' : 'guided';
+};
+
 const materialPreviewToImageData = async (previewUrl: string): Promise<ImageData | null> => {
   try {
     const preview = await loadCanvasImage(previewUrl);
@@ -1695,6 +1706,7 @@ export function useGeneration(): UseGenerationReturn {
         const maskImage = editableMaskDataUrl
           ? dataUrlToImageData(editableMaskDataUrl)
           : null;
+        const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
         let visualMaskHandledLocally = false;
 
         const editTypeMap: Record<string, ImageEditRequest['editType']> = {
@@ -1757,6 +1769,7 @@ export function useGeneration(): UseGenerationReturn {
             result = await runWithRetry('image edit', () => service.editImage({
               sourceImage,
               maskImage: maskImage || undefined,
+              maskMode,
               referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
               prompt: basePrompt,
               editType,
@@ -1776,6 +1789,7 @@ export function useGeneration(): UseGenerationReturn {
           result = await runWithRetry('image edit', () => service.editImage({
             sourceImage,
             maskImage: maskImage || undefined,
+            maskMode,
             referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
             prompt: basePrompt,
             editType,
@@ -1783,7 +1797,7 @@ export function useGeneration(): UseGenerationReturn {
           }));
         }
 
-        if (!visualMaskHandledLocally && shouldUseSelectionMask && selectedMaskDataUrl && result.images?.length) {
+        if (!visualMaskHandledLocally && shouldUseSelectionMask && maskMode === 'strict' && selectedMaskDataUrl && result.images?.length) {
           result = {
             ...result,
             images: await Promise.all(

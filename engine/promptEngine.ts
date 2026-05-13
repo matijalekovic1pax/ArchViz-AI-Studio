@@ -1598,7 +1598,7 @@ const buildSelectionBounds = (
     .filter((item) => item);
 };
 
-type SelectionContextRole = 'edit' | 'preserve';
+type SelectionContextRole = 'edit' | 'preserve' | 'guide';
 
 const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionContextRole = 'edit') => {
   const selectionCount = workflow.visualSelections.length;
@@ -1608,6 +1608,8 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
     parts.push(
       role === 'preserve'
         ? 'No protected area has been selected, so background replacement should be applied thoughtfully where appropriate.'
+        : role === 'guide'
+          ? 'No specific target area has been selected, so infer the best edit target from the tool settings and user instruction while preserving unrelated scene content.'
         : 'No specific area has been selected, so the edits should be applied thoughtfully across the entire image where appropriate.'
     );
   } else {
@@ -1631,6 +1633,8 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
 
     if (role === 'preserve') {
       parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define the protected region that must remain unchanged. Apply edits only outside this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
+    } else if (role === 'guide') {
+      parts.push(`The user has selected ${summaryParts.join(' and ')} as spatial guidance for the primary target area. Use the selection to identify where the edit belongs, but do not treat the boundary as a hard cutout or paste edge; allow natural reconstruction and blending slightly beyond it when needed.`);
     } else {
       parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define exactly where changes should occur. Apply all edits precisely within this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
     }
@@ -1639,13 +1643,19 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
       parts.push(
         role === 'preserve'
           ? 'A selection mask is provided to identify the protected selected region; the app may invert it before editing so only unselected pixels are changed.'
+          : role === 'guide'
+            ? 'A selection mask is provided as target guidance. White areas indicate the user intended focus area, but the final edit must blend naturally and must not show the mask, a white patch, an outline, or a hard-edged silhouette.'
           : 'A selection mask is provided where white areas indicate the only regions to be edited.'
       );
     }
 
     const bounds = buildSelectionBounds(workflow.visualSelections, workflow.visualSelectionMaskSize);
     if (bounds.length > 0) {
-      parts.push(`Selection geometry summary in normalized image coordinates for reference only; the mask remains authoritative: ${JSON.stringify(bounds)}.`);
+      parts.push(
+        role === 'guide'
+          ? `Selection geometry summary in normalized image coordinates for reference only; use it as target guidance rather than a literal output boundary: ${JSON.stringify(bounds)}.`
+          : `Selection geometry summary in normalized image coordinates for reference only; the mask remains authoritative: ${JSON.stringify(bounds)}.`
+      );
     }
   }
 
@@ -1666,6 +1676,8 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
   parts.push(
     role === 'preserve'
       ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Preserve every pixel inside the selected region exactly. Confine modifications strictly to the unselected background/tool scope and blend naturally at the selection edge.'
+      : role === 'guide'
+        ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep edits focused on the selected target area while preserving unrelated architecture, layout, materials, people, and signage. Natural texture continuation, cleanup, reflections, contact shadows, and occlusion may extend slightly beyond the selection only when required for a seamless result.'
       : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Confine all modifications strictly to the intended selection or tool scope. Leave unrelated architectural elements, layout, and materials completely untouched. Ensure all edges blend seamlessly and naturally into the surrounding image.'
   );
 
@@ -1677,7 +1689,8 @@ const generateVisualEditPrompt = (state: AppState): string => {
   const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
   const selectionCount = workflow.visualSelections.length;
   const userPrompt = workflow.visualPrompt?.trim();
-  const selectionParts = buildSelectionContext(workflow);
+  const selectionParts = buildSelectionContext(workflow, 'guide');
+  const strictSelectionParts = buildSelectionContext(workflow);
   const parts: string[] = [];
 
   // User's creative intent
@@ -1696,16 +1709,16 @@ const generateVisualEditPrompt = (state: AppState): string => {
     if (userPrompt) {
       parts.push(`Edit instruction: "${userPrompt}".`);
     }
-    parts.push('Apply the edit ONLY inside the selected area. Do not alter any pixels outside the selection.');
-    parts.push('Keep everything outside the selection identical to the original image: geometry, lighting, materials, perspective, and composition must remain unchanged.');
+    parts.push('Use the selected area as the primary target for this edit, while allowing natural blending just beyond the selection edge when the image needs it.');
+    parts.push('Keep unrelated architecture, lighting, materials, perspective, and composition stable outside the target area.');
     parts.push(...selectionParts);
-    parts.push('Strict constraint: no edits, relighting, retouching, or cleanup outside the selected area. Preserve the rest of the image exactly.');
+    parts.push('Do not create a hard-edged cutout, visible mask shape, blank patch, or pasted-looking boundary.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'material') {
     parts.push('Transform the surface materials within the selected area while preserving the underlying architectural form.');
-    parts.push(...selectionParts);
+    parts.push(...strictSelectionParts);
     parts.push(describeUserIntent(userPrompt));
 
     const material = workflow.visualMaterial;
@@ -2279,6 +2292,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     }
 
     parts.push('Constraints: remove only what is specified. Reconstruct the revealed background using materials, textures, and patterns consistent with the surrounding area. Maintain straight lines where architectural elements continue behind removed objects. Never remove structural or important architectural elements unless they are explicitly selected for removal.');
+    parts.push('The removed area must not become a white, empty, blurred, or flat blank spot. Continue floor joints, reflections, lighting, shadows, perspective, and surrounding texture so the result looks as if the removed content was never present.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -2487,8 +2501,8 @@ const generateVisualEditPrompt = (state: AppState): string => {
     // Final constraints
     parts.push(
       adjust.aspectRatio && adjust.aspectRatio !== 'same'
-        ? '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, or perspective beyond specified transform corrections. If a selection mask is active, limit ALL adjustments strictly to that masked region only, with smooth natural blending at edges.'
-        : '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, perspective, or crop/resize the image in any way. If a selection mask is active, limit ALL adjustments strictly to that masked region only, with smooth natural blending at edges.'
+        ? '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, or perspective beyond specified transform corrections. If a selection mask is active, use it to focus the adjustment target and blend naturally without a hard boundary.'
+        : '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, perspective, or crop/resize the image in any way. If a selection mask is active, use it to focus the adjustment target and blend naturally without a hard boundary.'
     );
     return parts.filter(Boolean).join(' ');
   }

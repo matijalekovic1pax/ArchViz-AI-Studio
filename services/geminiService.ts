@@ -102,6 +102,7 @@ export interface BatchTextOptions {
 export interface ImageEditRequest {
   sourceImage: ImageData;
   maskImage?: ImageData;
+  maskMode?: 'strict' | 'guided';
   referenceImages?: ImageData[];
   prompt: string;
   editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace' | 'people';
@@ -392,9 +393,21 @@ export class GeminiService {
   async editImage(request: ImageEditRequest): Promise<GeminiResponse> {
     let editPrompt = request.prompt;
     const referenceCount = request.referenceImages?.length || 0;
+    const maskMode = request.maskMode ?? 'strict';
     const referenceInstructions = referenceCount > 0
       ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and mask' : ''}. Use ${referenceCount > 1 ? 'these references' : 'this reference'} only as visual target material data for color, pattern, texture scale, roughness, reflectivity, grain direction, joints, and seams. Do not copy reference-image framing, add the reference as an object, or change scene geometry.`
       : '';
+    const maskScopeInstructions = maskMode === 'guided'
+      ? [
+          'Use the white mask pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout or alpha edge.',
+          'You may naturally reconstruct and blend nearby pixels just beyond the mask where required for texture continuation, shadows, reflections, occlusion, or cleanup.',
+          'Preserve unrelated architecture, materials, people, signage, camera, perspective, and overall composition.',
+          'Never draw, expose, fill, or preserve the black-and-white mask itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
+        ].join(' ')
+      : [
+          'White mask pixels are the ONLY editable pixels. Black mask pixels are locked and must remain visually identical to the original source image.',
+          'Never draw, expose, fill, or preserve the black-and-white mask itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
+        ].join(' ');
     const maskInstructions = request.maskImage
       ? [
           referenceCount > 0
@@ -402,7 +415,7 @@ export class GeminiService {
             : 'You are given two input images in this exact order:',
           '1. The original source image.',
           '2. A black-and-white selection mask with the same framing as the source image.',
-          'White mask pixels are the ONLY editable pixels. Black mask pixels are locked and must remain visually identical to the original source image.',
+          maskScopeInstructions,
           'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
           referenceInstructions
         ].join(' ')
@@ -419,7 +432,9 @@ export class GeminiService {
 
     switch (request.editType) {
       case 'inpaint':
-        editPrompt = `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Apply the requested edit to the target indicated by the selection mask: ${request.prompt}. Keep the edit focused on the selected content while allowing seamless reconstruction beyond the mask edge when visually necessary.`
+          : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
         editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Do not change existing source pixels unless needed only at the extension seam.`;
@@ -428,16 +443,24 @@ export class GeminiService {
         editPrompt = `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;
         break;
       case 'enhance':
-        editPrompt = `${maskInstructions} ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Apply the enhancement primarily to the target indicated by the selection mask. ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`
+          : `${maskInstructions} ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`;
         break;
       case 'remove':
-        editPrompt = `${maskInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Remove the unwanted content indicated by the selection mask as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
+          : `${maskInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
         break;
       case 'replace':
-        editPrompt = `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Replace the target indicated by the selection mask with: ${request.prompt}. Keep the replacement anchored to the selected content while allowing natural blending, contact shadows, reflections, and occlusion beyond the mask edge where necessary.`
+          : `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
         break;
       case 'people':
-        editPrompt = `${maskInstructions} Edit only human figures and their immediate personal accessories inside the allowed masked area according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the selected people only; preserve architecture, floors, furniture, signage, lighting, camera, perspective, and every locked pixel. Selected non-person pixels are context and must be naturally reconstructed, not filled with text or decorative marks.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Edit the human figures and their immediate personal accessories indicated by the selection mask according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the targeted people only; preserve architecture, floors, furniture, signage, lighting, camera, and perspective. Selected non-person pixels are context and must be naturally reconstructed around the people, not filled with text, white shapes, or decorative marks.`
+          : `${maskInstructions} Edit only human figures and their immediate personal accessories inside the allowed masked area according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the selected people only; preserve architecture, floors, furniture, signage, lighting, camera, perspective, and every locked pixel. Selected non-person pixels are context and must be naturally reconstructed, not filled with text or decorative marks.`;
         break;
     }
 
