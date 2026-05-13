@@ -1882,9 +1882,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
     parts.push('Focus exclusively on 3D people in this architectural airport render. Preserve all architecture, materials, landscaping, vehicles, signage, and background elements exactly.');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
+    if (userPrompt) {
+      parts.push('The user-entered people instruction is the primary goal for this edit. Use the People panel settings only as supporting context when they do not conflict with that instruction.');
+    }
 
     if (selectionCount === 0) {
       parts.push('No selection is provided; auto-detect all people across the frame and target them only.');
+    } else {
+      parts.push('Within the selected area, identify existing human figures and replace or refine those people only. Treat selected floors, furniture, walls, and background pixels as context to reconstruct naturally around the edited people, not as content to overwrite.');
     }
 
     // Operation mode
@@ -2197,7 +2202,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Remove AI artifacts: extra limbs, warped faces, smeared textures, missing hands, or inconsistent silhouettes.');
     }
 
-    parts.push('Critical constraints: ONLY modify people and their immediate accessories. Do not change the building, landscape, vehicles, sky, signage, or materials. Keep camera, perspective, and composition locked. Any edits must integrate seamlessly with the original render.');
+    parts.push('Critical constraints: ONLY modify people and their immediate accessories. Do not change the building, landscape, vehicles, sky, signage, or materials. Keep camera, perspective, and composition locked. Do not add visible text, labels, captions, handwriting, UI, or prompt wording into the image. Any edits must integrate seamlessly with the original render.');
     return parts.filter(Boolean).join(' ');
   }
 

@@ -1702,12 +1702,12 @@ export function useGeneration(): UseGenerationReturn {
           material: 'style-transfer',
           lighting: 'enhance',
           object: 'replace',
-          people: 'replace',
           sky: 'replace',
           remove: 'remove',
           replace: 'replace',
           adjust: 'enhance',
           extend: 'outpaint',
+          people: 'people',
         };
         const editType = editTypeMap[activeVisualTool] || 'replace';
         const materialReference = activeVisualTool === 'material'

@@ -2616,6 +2616,16 @@ export const VisualEditPanel = () => {
               </div>
             </div>
 
+            <div>
+              <label className="text-xs font-medium text-foreground mb-2 block">People Instruction</label>
+              <textarea
+                value={wf.visualPrompt}
+                onChange={(event) => updateWf({ visualPrompt: event.target.value })}
+                placeholder="Replace the selected people with an East Asian father and daughter..."
+                className="w-full min-h-[76px] resize-none bg-surface-elevated border border-border rounded text-xs p-2 leading-relaxed focus:outline-none focus:border-accent"
+              />
+            </div>
+
             {/* Operation Mode */}
             <SegmentedControl
               value={people.mode}

@@ -104,7 +104,7 @@ export interface ImageEditRequest {
   maskImage?: ImageData;
   referenceImages?: ImageData[];
   prompt: string;
-  editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace';
+  editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace' | 'people';
   generationConfig?: GenerationConfig;
 }
 
@@ -435,6 +435,9 @@ export class GeminiService {
         break;
       case 'replace':
         editPrompt = `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
+        break;
+      case 'people':
+        editPrompt = `${maskInstructions} Edit only human figures and their immediate personal accessories inside the allowed masked area according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the selected people only; preserve architecture, floors, furniture, signage, lighting, camera, perspective, and every locked pixel. Selected non-person pixels are context and must be naturally reconstructed, not filled with text or decorative marks.`;
         break;
     }
 
