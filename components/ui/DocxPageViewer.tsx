@@ -17,6 +17,7 @@ export const DocxPageViewer: React.FC<DocxPageViewerProps> = ({ dataUrl, classNa
     if (!container) return;
 
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
 
     const renderDocument = async () => {
       setLoading(true);
@@ -46,6 +47,21 @@ export const DocxPageViewer: React.FC<DocxPageViewerProps> = ({ dataUrl, classNa
           useBase64URL: false,
         });
 
+        if (cancelled) return;
+
+        const fitPages = () => fitPagesToContainer(container);
+        fitPages();
+        requestAnimationFrame(fitPages);
+        window.setTimeout(fitPages, 150);
+        window.setTimeout(fitPages, 600);
+
+        resizeObserver = new ResizeObserver(fitPages);
+        resizeObserver.observe(container);
+
+        container.querySelectorAll('img').forEach((image) => {
+          image.addEventListener('load', fitPages, { once: true });
+        });
+
         if (!cancelled) {
           setLoading(false);
         }
@@ -62,6 +78,7 @@ export const DocxPageViewer: React.FC<DocxPageViewerProps> = ({ dataUrl, classNa
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       container.innerHTML = '';
     };
   }, [dataUrl]);
@@ -70,7 +87,7 @@ export const DocxPageViewer: React.FC<DocxPageViewerProps> = ({ dataUrl, classNa
     <div className={`relative h-full w-full overflow-hidden bg-gray-200 ${className ?? ''}`}>
       <div
         ref={containerRef}
-        className="docx-page-viewer-host h-full w-full overflow-auto px-4 py-6 sm:px-8"
+        className="docx-page-viewer-host h-full w-full overflow-y-auto overflow-x-hidden px-3 py-6 sm:px-5"
       />
 
       {loading && (
@@ -96,19 +113,107 @@ export const DocxPageViewer: React.FC<DocxPageViewerProps> = ({ dataUrl, classNa
       )}
 
       <style>{`
-        .docx-page-viewer-host .docx-wrapper {
+        .docx-page-viewer-host .docx-wrapper,
+        .docx-page-viewer-host .docx-page-preview-wrapper {
           background: transparent !important;
           padding: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          overflow: visible !important;
+        }
+        .docx-page-viewer-host .docx-page-scale-frame {
+          flex: 0 0 auto !important;
+          margin: 0 auto 24px !important;
+          overflow: visible !important;
+          position: relative !important;
         }
         .docx-page-viewer-host section.docx-page-preview,
         .docx-page-viewer-host .docx-page-preview-wrapper section.docx-page-preview {
           box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16) !important;
-          margin: 0 auto 24px !important;
+          margin: 0 !important;
+          max-width: none !important;
         }
       `}</style>
     </div>
   );
 };
+
+function fitPagesToContainer(container: HTMLElement) {
+  const wrapper = container.querySelector<HTMLElement>('.docx-page-preview-wrapper, .docx-wrapper');
+  const pages = Array.from(container.querySelectorAll<HTMLElement>('section.docx-page-preview'));
+
+  if (!wrapper || pages.length === 0) {
+    return;
+  }
+
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.width = '100%';
+  wrapper.style.maxWidth = '100%';
+  wrapper.style.minWidth = '0';
+  wrapper.style.overflow = 'visible';
+
+  const containerStyles = window.getComputedStyle(container);
+  const horizontalPadding =
+    parseFloat(containerStyles.paddingLeft || '0') + parseFloat(containerStyles.paddingRight || '0');
+  const availableWidth = Math.max(240, container.clientWidth - horizontalPadding - 8);
+  const pageSizes = pages.map((page) => getPageSize(page));
+  const widestPage = Math.max(...pageSizes.map((size) => size.width));
+  const scale = widestPage > 0 ? Math.min(1, availableWidth / widestPage) : 1;
+
+  pages.forEach((page, index) => {
+    const size = pageSizes[index];
+    const frame = ensureScaleFrame(page);
+
+    frame.style.width = `${Math.round(size.width * scale)}px`;
+    frame.style.height = `${Math.round(size.height * scale)}px`;
+    frame.style.margin = index === pages.length - 1 ? '0 auto' : '0 auto 24px';
+
+    page.style.position = 'absolute';
+    page.style.left = '0';
+    page.style.top = '0';
+    page.style.width = `${size.width}px`;
+    page.style.height = `${size.height}px`;
+    page.style.margin = '0';
+    page.style.transform = `scale(${scale})`;
+    page.style.transformOrigin = 'top left';
+  });
+}
+
+function ensureScaleFrame(page: HTMLElement): HTMLElement {
+  const parent = page.parentElement;
+  if (parent?.classList.contains('docx-page-scale-frame')) {
+    return parent;
+  }
+
+  const frame = document.createElement('div');
+  frame.className = 'docx-page-scale-frame';
+  page.before(frame);
+  frame.appendChild(page);
+  return frame;
+}
+
+function getPageSize(page: HTMLElement) {
+  const storedWidth = Number(page.dataset.docxOriginalWidth);
+  const storedHeight = Number(page.dataset.docxOriginalHeight);
+
+  if (storedWidth > 0 && storedHeight > 0) {
+    return { width: storedWidth, height: storedHeight };
+  }
+
+  const width = Math.ceil(page.offsetWidth || page.scrollWidth || page.getBoundingClientRect().width);
+  const height = Math.ceil(page.offsetHeight || page.scrollHeight || page.getBoundingClientRect().height);
+
+  page.dataset.docxOriginalWidth = String(width);
+  page.dataset.docxOriginalHeight = String(height);
+
+  return { width, height };
+}
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
   const commaIndex = dataUrl.indexOf(',');
