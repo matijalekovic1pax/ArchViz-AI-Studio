@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
 import { PptxSlideViewer } from './ui/PptxSlideViewer';
 import { DocxPageViewer } from './ui/DocxPageViewer';
+import { convertDocxToPdfPreview } from '../services/docxPreviewService';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -17,11 +18,16 @@ export const DocumentTranslateView: React.FC = () => {
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [xlsxHtmlContent, setXlsxHtmlContent] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [docxPreviewMessage, setDocxPreviewMessage] = useState<string | null>(null);
+  const [docxPreviewError, setDocxPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sourceDocument) {
       setDocumentPreviewUrl(null);
       setXlsxHtmlContent(null);
+      setDocxPreviewMessage(null);
+      setDocxPreviewError(null);
+      setIsConverting(false);
       return;
     }
 
@@ -34,6 +40,8 @@ export const DocumentTranslateView: React.FC = () => {
     // XLSX preview
     if (isXlsx) {
       setDocumentPreviewUrl(null);
+      setDocxPreviewMessage(null);
+      setDocxPreviewError(null);
       setIsConverting(true);
 
       const convertXlsx = async () => {
@@ -85,6 +93,8 @@ export const DocumentTranslateView: React.FC = () => {
     if (isPptx) {
       setDocumentPreviewUrl(null);
       setXlsxHtmlContent(null);
+      setDocxPreviewMessage(null);
+      setDocxPreviewError(null);
       setIsConverting(false);
       return;
     }
@@ -96,14 +106,52 @@ export const DocumentTranslateView: React.FC = () => {
     const isDocxPreview = isTranslated || sourceDocument.type === 'docx';
 
     if (!isDocxPreview && sourceDocument.type === 'pdf') {
-      // Show original PDF in iframe (before translation)
+      // Show original PDF before translation.
       setDocumentPreviewUrl(previewDataUrl);
+      setDocxPreviewMessage(null);
+      setDocxPreviewError(null);
+      setIsConverting(false);
       return;
     }
 
-    // DOCX previews render directly through DocxPageViewer.
+    // DOCX previews are converted to PDF first so the canvas can render true pages.
     setDocumentPreviewUrl(null);
-    setIsConverting(false);
+    setDocxPreviewError(null);
+    setDocxPreviewMessage('Preparing Word page preview...');
+    setIsConverting(true);
+
+    const convertDocxPreview = async () => {
+      try {
+        const pdfPreviewUrl = await convertDocxToPdfPreview(previewDataUrl, (previewProgress) => {
+          if (!cancelled) {
+            setDocxPreviewMessage(previewProgress.message);
+          }
+        });
+
+        if (!cancelled) {
+          setDocumentPreviewUrl(pdfPreviewUrl);
+        }
+      } catch (previewError) {
+        if (!cancelled) {
+          setDocxPreviewError(
+            previewError instanceof Error
+              ? previewError.message
+              : 'Failed to render Word document as pages.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsConverting(false);
+          setDocxPreviewMessage(null);
+        }
+      }
+    };
+
+    convertDocxPreview();
+
+    return () => {
+      cancelled = true;
+    };
   }, [sourceDocument, translatedDocumentUrl, progress.phase]);
 
   const renderDocumentPreview = () => {
@@ -203,14 +251,51 @@ export const DocumentTranslateView: React.FC = () => {
       );
     }
 
-    // DOCX Preview (rendered as Word-like pages) - for docx input or translated output
+    // DOCX Preview (converted to PDF first for true paged rendering)
     if (showAsDocx) {
+      if (documentPreviewUrl) {
+        return (
+          <div className="absolute inset-0">
+            <PdfCanvasViewer dataUrl={documentPreviewUrl} className="h-full w-full" />
+          </div>
+        );
+      }
+
+      if (isConverting) {
+        return (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+            <div className="flex flex-col items-center gap-3 text-center px-4">
+              <Loader2 size={32} className="animate-spin text-accent" />
+              <p className="text-sm text-foreground-muted">
+                {docxPreviewMessage ?? 'Preparing Word page preview...'}
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      if (docxPreviewError) {
+        return (
+          <div className="absolute inset-0">
+            <DocxPageViewer
+              dataUrl={(progress.phase === 'complete' && translatedDocumentUrl) ? translatedDocumentUrl : sourceDocument.dataUrl}
+              className="h-full w-full"
+            />
+            <div className="absolute left-4 right-4 top-4 mx-auto max-w-xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+              Word page rendering is temporarily unavailable, so this is the browser fallback preview. {docxPreviewError}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="absolute inset-0">
-          <DocxPageViewer
-            dataUrl={(progress.phase === 'complete' && translatedDocumentUrl) ? translatedDocumentUrl : sourceDocument.dataUrl}
-            className="h-full w-full"
-          />
+          <div className="flex h-full items-center justify-center bg-gray-100">
+            <div className="flex flex-col items-center gap-3 text-center px-4">
+              <Loader2 size={32} className="animate-spin text-accent" />
+              <p className="text-sm text-foreground-muted">Preparing Word page preview...</p>
+            </div>
+          </div>
         </div>
       );
     }

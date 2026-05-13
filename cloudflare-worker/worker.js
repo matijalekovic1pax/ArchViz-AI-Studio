@@ -1097,9 +1097,9 @@ async function handleKlingStatus(request, env) {
   }
 }
 
-// ─── Route: POST /api/convert/pdf-to-docx ───────────────────────────────────
+// ─── Route: POST /api/convert/* ──────────────────────────────────────────────
 
-async function handleConvertApi(request, env) {
+async function handleConvertApi(request, env, inputFormat = 'pdf', outputFormat = 'docx') {
   const origin = request.headers.get('Origin') || '';
   try {
     const body = await request.json();
@@ -1108,10 +1108,10 @@ async function handleConvertApi(request, env) {
     if (!fileData) return corsResponse(origin, { error: 'Missing fileData (base64)' }, { status: 400 });
 
     const convertBody = JSON.stringify({
-      Parameters: [{ Name: 'File', FileValue: { Name: fileName || 'document.pdf', Data: fileData } }],
+      Parameters: [{ Name: 'File', FileValue: { Name: fileName || `document.${inputFormat}`, Data: fileData } }],
     });
     const resp = await fetchWithRetry(
-      (signal) => fetch(`${CONVERTAPI_BASE}/convert/pdf/to/docx`, {
+      (signal) => fetch(`${CONVERTAPI_BASE}/convert/${inputFormat}/to/${outputFormat}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1120,7 +1120,7 @@ async function handleConvertApi(request, env) {
         body: convertBody,
         signal,
       }),
-      { maxRetries: 2, timeoutMs: 60000, label: 'ConvertAPI' },
+      { maxRetries: 2, timeoutMs: 300000, label: 'ConvertAPI' },
     );
 
     if (!resp.ok) {
@@ -2122,7 +2122,8 @@ export default {
     if (path === '/api/kling/status' && request.method === 'GET') return handleKlingStatus(request, env);
 
     // ConvertAPI
-    if (path === '/api/convert/pdf-to-docx' && request.method === 'POST') return handleConvertApi(request, env);
+    if (path === '/api/convert/pdf-to-docx' && request.method === 'POST') return handleConvertApi(request, env, 'pdf', 'docx');
+    if (path === '/api/convert/docx-to-pdf' && request.method === 'POST') return handleConvertApi(request, env, 'docx', 'pdf');
 
     // iLovePDF multi-step proxy
     if (path.startsWith('/api/ilovepdf/')) {
