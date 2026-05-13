@@ -7,7 +7,7 @@ import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
 import * as XLSX from 'xlsx';
 import { PdfCanvasViewer } from './ui/PdfCanvasViewer';
-import { parsePptx } from '../services/pptxParserService';
+import { parsePptxPreview } from '../services/pptxParserService';
 
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
@@ -29,6 +29,7 @@ export const DocumentTranslateView: React.FC = () => {
       return;
     }
 
+    let cancelled = false;
     const isTranslated = progress.phase === 'complete' && translatedDocumentUrl;
     const previewDataUrl = isTranslated ? translatedDocumentUrl : sourceDocument.dataUrl;
     const isXlsx = sourceDocument.type === 'xlsx';
@@ -66,16 +67,24 @@ export const DocumentTranslateView: React.FC = () => {
             );
           }
 
-          setXlsxHtmlContent(DOMPurify.sanitize(htmlParts.join('')));
+          if (!cancelled) {
+            setXlsxHtmlContent(DOMPurify.sanitize(htmlParts.join('')));
+          }
         } catch {
-          setXlsxHtmlContent('<p style="color: red;">Failed to load spreadsheet preview.</p>');
+          if (!cancelled) {
+            setXlsxHtmlContent('<p style="color: red;">Failed to load spreadsheet preview.</p>');
+          }
         } finally {
-          setIsConverting(false);
+          if (!cancelled) {
+            setIsConverting(false);
+          }
         }
       };
 
       convertXlsx();
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     // PPTX text-outline preview
@@ -87,41 +96,49 @@ export const DocumentTranslateView: React.FC = () => {
 
       const convertPptx = async () => {
         try {
-          const parsed = await parsePptx(previewDataUrl);
-          const groups = new Map<string, string[]>();
-
-          parsed.segments.forEach((segment) => {
-            const label = segment.context.styleInfo || segment.xmlPath;
-            if (!groups.has(label)) groups.set(label, []);
-            groups.get(label)?.push(segment.text);
-          });
-
+          const preview = await parsePptxPreview(previewDataUrl);
           const htmlParts: string[] = [];
-          groups.forEach((texts, label) => {
+          preview.sections.forEach(({ texts, label }) => {
             htmlParts.push(
               `<section class="pptx-section"><h3 class="pptx-title">${DOMPurify.sanitize(label)}</h3>${texts
-                .slice(0, 40)
                 .map((text) => `<p>${DOMPurify.sanitize(text)}</p>`)
                 .join('')}</section>`
             );
           });
 
-          setPptxHtmlContent(
-            DOMPurify.sanitize(
-              htmlParts.length > 0
-                ? htmlParts.join('')
-                : '<p>No previewable text was found in this presentation.</p>'
-            )
-          );
-        } catch {
-          setPptxHtmlContent('<p style="color: red;">Failed to load presentation preview.</p>');
+          if (preview.truncated) {
+            htmlParts.push(
+              '<section class="pptx-section"><p class="pptx-note">Preview limited for performance. The full presentation will still be processed for translation.</p></section>'
+            );
+          }
+
+          if (!cancelled) {
+            setPptxHtmlContent(
+              DOMPurify.sanitize(
+                htmlParts.length > 0
+                  ? htmlParts.join('')
+                  : '<p>No previewable text was found in this presentation.</p>'
+              )
+            );
+          }
+        } catch (error) {
+          console.error('Failed to load presentation preview', error);
+          if (!cancelled) {
+            setPptxHtmlContent(
+              '<p style="color: red;">Preview is unavailable for this presentation. You can still translate it.</p>'
+            );
+          }
         } finally {
-          setIsConverting(false);
+          if (!cancelled) {
+            setIsConverting(false);
+          }
         }
       };
 
       convertPptx();
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     // Reset xlsx state for non-xlsx
@@ -157,15 +174,24 @@ export const DocumentTranslateView: React.FC = () => {
         }
 
         const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-        setDocxHtmlContent(DOMPurify.sanitize(result.value));
+        if (!cancelled) {
+          setDocxHtmlContent(DOMPurify.sanitize(result.value));
+        }
       } catch (error) {
-        setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
+        if (!cancelled) {
+          setDocxHtmlContent('<p style="color: red;">Failed to load document preview.</p>');
+        }
       } finally {
-        setIsConverting(false);
+        if (!cancelled) {
+          setIsConverting(false);
+        }
       }
     };
 
     convertDocx();
+    return () => {
+      cancelled = true;
+    };
   }, [sourceDocument, translatedDocumentUrl, progress.phase]);
 
   const renderDocumentPreview = () => {
@@ -270,6 +296,7 @@ export const DocumentTranslateView: React.FC = () => {
                   .pptx-preview .pptx-section:last-child { border-bottom: 0; padding-bottom: 0; }
                   .pptx-preview .pptx-title { font-size: 0.9rem; font-weight: 700; color: #c2410c; margin-bottom: 0.5rem; }
                   .pptx-preview p { color: #1f2937; font-size: 0.9rem; line-height: 1.5; margin: 0.35rem 0; }
+                  .pptx-preview .pptx-note { color: #9a3412; font-weight: 600; }
                 `}</style>
                 <div
                   className="pptx-preview"

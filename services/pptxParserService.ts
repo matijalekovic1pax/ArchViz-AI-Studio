@@ -18,10 +18,12 @@ const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DEFAULT_BATCH_SIZE = 20;
 const DEFAULT_MAX_CHARS = 12000;
 
-const MAX_FILE_SIZE_MB = 100;
-const MAX_ZIP_ENTRIES = 2500;
-const MAX_DECOMPRESSED_SIZE_MB = 300;
+const MAX_FILE_SIZE_MB = 250;
+const MAX_ZIP_ENTRIES = 10000;
+const MAX_DECOMPRESSED_SIZE_MB = 2048;
 const MAX_COMPRESSION_RATIO = 150;
+const PREVIEW_MAX_XML_PARTS = 120;
+const PREVIEW_MAX_TEXTS_PER_SECTION = 40;
 
 const TRANSLATABLE_PPTX_PREFIXES = [
   'ppt/slides/',
@@ -32,15 +34,30 @@ const TRANSLATABLE_PPTX_PREFIXES = [
   'ppt/diagrams/',
 ];
 
+const PREVIEW_PPTX_PREFIXES = [
+  'ppt/slides/',
+  'ppt/notesSlides/',
+  'ppt/charts/',
+];
+
+export interface PptxPreviewSection {
+  label: string;
+  texts: string[];
+}
+
+export interface PptxPreviewResult {
+  sections: PptxPreviewSection[];
+  slideCount: number;
+  truncated: boolean;
+}
+
 /**
  * Parse a PPTX file from a data URL into paragraph-level translation segments.
  */
 export async function parsePptx(dataUrl: string): Promise<ParsedPptx> {
   const bytes = dataUrlToBytes(dataUrl);
 
-  if (bytes.length > MAX_FILE_SIZE_MB * 1024 * 1024) {
-    throw new Error(`File size exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
-  }
+  validatePptxFileSize(bytes.length);
 
   const zip = await JSZip.loadAsync(bytes);
   validateZipArchive(zip, bytes.length);
@@ -139,23 +156,98 @@ export async function parsePptx(dataUrl: string): Promise<ParsedPptx> {
   };
 }
 
+/**
+ * Build a lightweight text outline for canvas previews without preparing the
+ * full translation target map. This keeps very large decks responsive.
+ */
+export async function parsePptxPreview(dataUrl: string): Promise<PptxPreviewResult> {
+  const bytes = dataUrlToBytes(dataUrl);
+  validatePptxFileSize(bytes.length);
+
+  const zip = await JSZip.loadAsync(bytes);
+  validateZipArchive(zip, bytes.length);
+
+  if (!zip.file('ppt/presentation.xml')) {
+    throw new Error('Invalid PowerPoint file: missing presentation.xml.');
+  }
+
+  const xmlPaths = Object.keys(zip.files)
+    .filter((path) => isPreviewPptxXmlPath(path, zip.files[path].dir))
+    .sort(naturalZipPathSort);
+
+  const sections: PptxPreviewSection[] = [];
+  let truncated = false;
+  let scannedPreviewParts = 0;
+
+  for (const xmlPath of xmlPaths) {
+    if (scannedPreviewParts >= PREVIEW_MAX_XML_PARTS) {
+      truncated = true;
+      break;
+    }
+
+    const doc = await parseXmlFromZip(zip, xmlPath);
+    scannedPreviewParts++;
+    if (!doc) continue;
+
+    const texts = extractPreviewTexts(doc, xmlPath, PREVIEW_MAX_TEXTS_PER_SECTION);
+    if (texts.length === 0) continue;
+
+    sections.push({
+      label: describePptxLocation(xmlPath),
+      texts,
+    });
+  }
+
+  return {
+    sections,
+    slideCount: countSlides(zip),
+    truncated,
+  };
+}
+
 function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const base64Match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
-  if (!base64Match) {
+  const commaIndex = dataUrl.indexOf(',');
+  const metadata = commaIndex >= 0 ? dataUrl.slice(0, commaIndex).toLowerCase() : '';
+  if (dataUrl.slice(0, 5).toLowerCase() !== 'data:' || commaIndex < 0 || !metadata.includes(';base64')) {
     throw new Error('Invalid data URL format');
   }
 
-  const binary = atob(base64Match[1]);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  const base64 = dataUrl.slice(commaIndex + 1).replace(/\s/g, '');
+  return base64ToBytes(base64);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const byteLength = Math.floor((base64.length * 3) / 4) - padding;
+  const bytes = new Uint8Array(byteLength);
+  const chunkSize = 32768;
+  let offset = 0;
+
+  for (let start = 0; start < base64.length; start += chunkSize) {
+    const chunk = base64.slice(start, start + chunkSize);
+    const binary = atob(chunk);
+    for (let i = 0; i < binary.length && offset < byteLength; i++) {
+      bytes[offset++] = binary.charCodeAt(i);
+    }
   }
+
   return bytes;
 }
 
 function isTranslatablePptxXmlPath(path: string, isDir?: boolean): boolean {
   if (isDir || !path.endsWith('.xml')) return false;
   return TRANSLATABLE_PPTX_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function isPreviewPptxXmlPath(path: string, isDir?: boolean): boolean {
+  if (isDir || !path.endsWith('.xml')) return false;
+  return PREVIEW_PPTX_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function validatePptxFileSize(byteLength: number): void {
+  if (byteLength > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    throw new Error(`File size exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+  }
 }
 
 async function parseXmlFromZip(zip: JSZip, path: string): Promise<Document | null> {
@@ -180,6 +272,35 @@ function getDrawingTextElements(paragraph: Element): Element[] {
   }
 
   return textElements;
+}
+
+function extractPreviewTexts(doc: Document, xmlPath: string, limit: number): string[] {
+  const texts: string[] = [];
+
+  if (xmlPath.startsWith('ppt/charts/')) {
+    const chartValues = doc.getElementsByTagNameNS(C_NS, 'v');
+    for (let i = 0; i < chartValues.length && texts.length < limit; i++) {
+      const valueElement = chartValues[i];
+      const text = valueElement.textContent || '';
+      if (isTranslatableChartString(valueElement, text)) {
+        texts.push(text);
+      }
+    }
+    return texts;
+  }
+
+  const paragraphs = doc.getElementsByTagNameNS(A_NS, 'p');
+  for (let i = 0; i < paragraphs.length && texts.length < limit; i++) {
+    const textElements = getDrawingTextElements(paragraphs[i]);
+    if (textElements.length === 0) continue;
+
+    const text = textElements.map((el) => el.textContent || '').join('');
+    if (text.trim().length > 0) {
+      texts.push(text);
+    }
+  }
+
+  return texts;
 }
 
 function isTranslatableChartString(valueElement: Element, text: string): boolean {
