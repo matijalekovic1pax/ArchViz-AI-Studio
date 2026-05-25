@@ -10,7 +10,6 @@ import {
   Pencil,
   Maximize,
   PenTool,
-  Cuboid,
   Video,
   Sparkles,
   ClipboardCheck,
@@ -40,7 +39,6 @@ import { LeftSketchPanel } from '../left/LeftSketchPanel';
 import { LeftMultiAnglePanel } from '../left/LeftMultiAnglePanel';
 import { LeftUpscalePanel } from '../left/LeftUpscalePanel';
 import { LeftImageToCADPanel } from '../left/LeftImageToCADPanel';
-import { LeftImageTo3DPanel } from '../left/LeftImageTo3DPanel';
 import { LeftVideoPanel } from '../left/LeftVideoPanel';
 import { LeftValidationPanel } from '../left/LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from '../left/LeftDocumentTranslatePanel';
@@ -54,7 +52,6 @@ import { SectionPanel } from '../right/SectionPanel';
 import { MultiAnglePanel } from '../right/MultiAnglePanel';
 import { UpscalePanel } from '../right/UpscalePanel';
 import { ImageToCadPanel } from '../right/ImageToCadPanel';
-import { ImageTo3DPanel } from '../right/ImageTo3DPanel';
 import { VideoPanel } from '../right/VideoPanel';
 import { ValidationPanel } from '../right/ValidationPanel';
 import { DocumentTranslatePanel } from '../right/DocumentTranslatePanel';
@@ -79,7 +76,6 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'multi-angle', labelKey: 'workflows.multiAngle', icon: Camera },
   { id: 'upscale', labelKey: 'workflows.upscale', icon: Maximize },
   { id: 'img-to-cad', labelKey: 'workflows.imgToCad', icon: PenTool },
-  { id: 'img-to-3d', labelKey: 'workflows.imgTo3d', icon: Cuboid },
   { id: 'video', labelKey: 'workflows.video', icon: Video },
 ];
 
@@ -99,7 +95,6 @@ const renderLeftPanel = (mode: GenerationMode) => {
     case 'multi-angle': return <LeftMultiAnglePanel />;
     case 'upscale': return <LeftUpscalePanel />;
     case 'img-to-cad': return <LeftImageToCADPanel />;
-    case 'img-to-3d': return <LeftImageTo3DPanel />;
     case 'video': return <LeftVideoPanel />;
     default: return null;
   }
@@ -118,7 +113,6 @@ const renderRightPanel = (mode: GenerationMode) => {
     case 'multi-angle': return <MultiAnglePanel />;
     case 'upscale': return <UpscalePanel />;
     case 'img-to-cad': return <ImageToCadPanel />;
-    case 'img-to-3d': return <ImageTo3DPanel />;
     case 'video': return <VideoPanel />;
     case 'material-validation': return <ValidationPanel />;
     case 'document-translate': return <DocumentTranslatePanel />;
@@ -168,8 +162,6 @@ const getRightPanelConfig = (mode: GenerationMode, t: (key: string) => string, m
       return { title: t('rightPanel.upscale.title'), description: t('rightPanel.upscale.description'), icon: Maximize2, meta };
     case 'img-to-cad':
       return { title: t('rightPanel.imgToCad.title'), description: t('rightPanel.imgToCad.description'), icon: FileCode, meta };
-    case 'img-to-3d':
-      return { title: t('rightPanel.imgTo3d.title'), description: t('rightPanel.imgTo3d.description'), icon: Cuboid, meta };
     case 'video':
       return { title: t('rightPanel.video.title'), description: t('rightPanel.video.description'), icon: Video, meta };
     case 'material-validation':

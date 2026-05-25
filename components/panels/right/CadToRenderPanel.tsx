@@ -239,7 +239,6 @@ export const CadToRenderPanel = () => {
       />
       <Render3DPanel
         showGenerationMode={false}
-        includeCamera={false}
         accordionValue={openSection}
         onAccordionChange={setOpenSection}
         accordionIdPrefix="render3d-"

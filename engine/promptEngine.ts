@@ -1,5 +1,5 @@
 
-import { AppState, Render3DSettings, StyleConfiguration, VisualSelectionShape } from '../types';
+import { AppState, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
@@ -927,14 +927,6 @@ const formatMood = (mood: string): string => {
   return moodDescriptions[mood] || mood;
 };
 
-const getEmphasisMaterials = (emphasis: Record<string, number>): string[] => {
-  return Object.entries(emphasis)
-    .filter(([_, value]) => value > 60)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([key, _]) => key);
-};
-
 // ============================================================================
 // DESCRIPTIVE LANGUAGE HELPERS
 // These functions convert technical values into natural, human-like descriptions
@@ -1043,150 +1035,6 @@ const describeLens = (mm: number): string => {
   return `a long telephoto ${mm}mm lens - extreme compression creating layered, graphic compositions; requires considerable distance from subject`;
 };
 
-const describeFOV = (fov: number): string => {
-  // Field of view with precise spatial implications
-  if (fov < 30) return `an extremely narrow ${fov}° field of view - tight framing isolating specific details, creating compressed layered compositions`;
-  if (fov < 45) return `a narrow ${fov}° field of view - selective framing capturing focused vignettes of the architecture`;
-  if (fov < 60) return `a moderate ${fov}° field of view - balanced framing showing the subject in context without excessive peripheral information`;
-  if (fov < 75) return `a standard-wide ${fov}° field of view - comfortable spatial capture typical of professional architectural photography`;
-  if (fov < 90) return `a wide ${fov}° field of view - expansive framing encompassing full elevations or complete interior volumes`;
-  if (fov < 110) return `a very wide ${fov}° field of view - immersive capture stretching to peripheral vision, requiring distortion management`;
-  return `an ultra-wide ${fov}° field of view - panoramic capture creating dramatic spatial exaggeration and immersive perspectives`;
-};
-
-const describeDepthOfField = (aperture: number, focusDist: number): string => {
-  // Precise aperture and focus distance mapping
-  const dofDesc = aperture < 1.8
-    ? `extremely shallow depth of field (f/${aperture}) - razor-thin focus plane with pronounced optical bokeh, only millimeters in focus`
-    : aperture < 2.8
-      ? `very shallow depth of field (f/${aperture}) - clearly defined subject separation with creamy out-of-focus areas`
-      : aperture < 4
-        ? `shallow depth of field (f/${aperture}) - noticeable background softening while maintaining subject clarity`
-        : aperture < 5.6
-          ? `moderate-shallow depth of field (f/${aperture}) - gentle subject separation with slightly softened distant elements`
-          : aperture < 8
-            ? `moderate depth of field (f/${aperture}) - balanced sharpness with subtle depth falloff in far background`
-            : aperture < 11
-              ? `extended depth of field (f/${aperture}) - most of the scene sharp, only very distant elements softening`
-              : aperture < 16
-                ? `deep depth of field (f/${aperture}) - near-complete sharpness from foreground to background`
-                : `maximum depth of field (f/${aperture}) - everything in focus from closest elements to infinity`;
-
-  const focusDesc = focusDist < 2
-    ? `focus point set at very close range (${focusDist}m) - macro-level detail emphasis`
-    : focusDist < 5
-      ? `focus point at near distance (${focusDist}m) - foreground elements in critical focus`
-      : focusDist < 10
-        ? `focus point at mid-ground (${focusDist}m) - optimal for capturing building details`
-        : focusDist < 25
-          ? `focus point at standard architectural distance (${focusDist}m) - balanced for full building capture`
-          : focusDist < 50
-            ? `focus point at medium distance (${focusDist}m) - optimized for full elevation views`
-            : `focus point at far distance (${focusDist}m) - hyperfocal setting for maximum depth`;
-
-  return `${dofDesc}; ${focusDesc}`;
-};
-
-const describeEdgeMode = (mode: string): string => {
-  const descriptions: Record<string, string> = {
-    'soft': 'softly antialiased edges with gentle transitions - lines appear organic and painterly, suitable for artistic interpretations',
-    'medium': 'balanced edge definition with natural antialiasing - professional quality that avoids both harshness and excessive softness',
-    'sharp': 'crisp, precisely defined edges with minimal antialiasing - clean delineation emphasizing architectural precision and drafting quality',
-    'architectural': 'technically precise edges typical of professional archviz - sharp where materials meet, softer where natural weathering occurs',
-    'natural': 'photographically authentic edges as they appear in reality - varying sharpness based on material, distance, and lighting conditions',
-  };
-  return descriptions[mode] || `${mode} edge treatment with appropriate antialiasing`;
-};
-
-const describeLOD = (level: string): string => {
-  const descriptions: Record<string, string> = {
-    'minimal': 'minimal detail level - focus on pure form, massing, and silhouette without surface articulation; suitable for early concept visualization',
-    'low': 'reduced detail level - primary architectural elements visible but fine details simplified; window frames suggested rather than fully modeled',
-    'medium': 'balanced detail level - all significant architectural features present including window mullions, door panels, visible structural elements; standard for presentation renders',
-    'high': 'rich detail level - fine architectural craftsmanship visible including hardware, gaskets, weatherstripping, mortar joints, and subtle material variations',
-    'ultra': 'extraordinary detail level - microscopic surface characteristics visible; every screw head, grain pattern, surface imperfection, and material nuance rendered with forensic precision',
-  };
-  return descriptions[level] || `${level} level of detail with proportionate surface articulation`;
-};
-
-const describeSmoothing = (intensity: number, preserveHardEdges: boolean): string => {
-  const smoothDesc = intensity < 20
-    ? `minimal surface smoothing (${intensity}%) - raw, unrefined surfaces maintaining construction authenticity and material honesty`
-    : intensity < 40
-      ? `light surface smoothing (${intensity}%) - subtle refinement reducing obvious mesh faceting while preserving surface character`
-      : intensity < 60
-        ? `moderate surface smoothing (${intensity}%) - balanced refinement for professional visualization, natural-looking curved surfaces`
-        : intensity < 80
-          ? `significant surface smoothing (${intensity}%) - polished appearance with idealized surface continuity`
-          : `heavy surface smoothing (${intensity}%) - highly refined, almost porcelain-like surface quality`;
-
-  const edgeNote = preserveHardEdges
-    ? '; CRITICAL: intentional hard edges at material transitions, corners, and architectural details must remain crisp and unsmoothed'
-    : '; smoothing applied uniformly including corners and transitions';
-
-  return `${smoothDesc}${edgeNote}`;
-};
-
-const describeDepthLayers = (fg: number, mg: number, bg: number): string => {
-  const descLayer = (value: number, name: string) => {
-    if (value > 85) return `${name} rendered with maximum emphasis (${value}%) - full detail and contrast`;
-    if (value > 70) return `${name} prominently rendered (${value}%) - high detail and presence`;
-    if (value > 50) return `${name} clearly defined (${value}%) - balanced detail and visibility`;
-    if (value > 30) return `${name} moderately present (${value}%) - visible but not dominating`;
-    if (value > 15) return `${name} subtly suggested (${value}%) - soft presence adding depth`;
-    return `${name} minimal (${value}%) - barely perceptible, creating atmospheric depth`;
-  };
-
-  return `layered spatial depth: ${descLayer(fg, 'foreground elements')}; ${descLayer(mg, 'middle ground')}; ${descLayer(bg, 'background/sky')}`;
-};
-
-const describeDisplacement = (scale: string, strength: number, adaptToMaterial: boolean): string => {
-  const scaleDescriptions: Record<string, string> = {
-    'fine': 'fine-scale displacement (sub-millimeter) - micro surface relief for textures like fabric weave, fine wood grain, brushed metal striations',
-    'medium': 'medium-scale displacement (millimeter range) - visible surface relief for textures like brick courses, stone weathering, concrete board marks',
-    'coarse': 'coarse-scale displacement (centimeter range) - pronounced relief for features like masonry joints, deep wood grain, rough stone faces',
-  };
-
-  const base = scaleDescriptions[scale] || `${scale}-scale displacement`;
-
-  const strengthDesc = strength > 80
-    ? `applied at maximum strength (${strength}%) - dramatic, almost sculptural surface relief`
-    : strength > 60
-      ? `applied strongly (${strength}%) - clearly visible depth and shadow-catching relief`
-      : strength > 40
-        ? `applied moderately (${strength}%) - perceptible but subtle surface variation`
-        : strength > 20
-          ? `applied gently (${strength}%) - understated surface texture`
-          : `applied minimally (${strength}%) - barely perceptible, adding only slight tactility`;
-
-  const adaptNote = adaptToMaterial
-    ? '; displacement automatically calibrated per-material (stronger on rough stone, gentler on polished surfaces)'
-    : '; uniform displacement strength across all materials';
-
-  return `${base}, ${strengthDesc}${adaptNote}`;
-};
-
-const describeReflectivity = (value: number): string => {
-  if (value < 30) return 'matte, light-absorbing surfaces with minimal reflections';
-  if (value < 50) return 'naturally reflective surfaces as found in real materials';
-  if (value < 70) return 'enhanced reflections bringing surfaces to life';
-  return 'highly reflective surfaces with mirror-like qualities';
-};
-
-const describeRoughness = (value: number): string => {
-  if (value < 30) return 'smooth, polished surfaces with refined finish';
-  if (value < 50) return 'naturally textured surfaces with authentic feel';
-  if (value < 70) return 'pleasantly rough surfaces with tactile character';
-  return 'heavily textured, rugged surfaces with strong physical presence';
-};
-
-const describeWeathering = (intensity: number): string => {
-  if (intensity < 25) return 'subtle signs of age and use adding authenticity';
-  if (intensity < 50) return 'moderate weathering showing the passage of time';
-  if (intensity < 75) return 'significant patina and wear telling a rich story';
-  return 'heavily weathered surfaces with dramatic aging and character';
-};
-
 const describeAtmosphericMood = (mood: string, temp: number): string => {
   const moodDescriptions: Record<string, string> = {
     'natural': 'a balanced, true-to-life atmosphere',
@@ -1252,17 +1100,6 @@ const describeResolution = (res: string): string => {
   return descriptions[res] || res;
 };
 
-const describeQuality = (quality: string): string => {
-  const descriptions: Record<string, string> = {
-    'draft': 'quick draft quality for rapid iteration',
-    'preview': 'preview quality balancing speed and detail',
-    'standard': 'production-ready quality with professional finish',
-    'high': 'high-fidelity quality with refined details',
-    'ultra': 'ultra-premium quality with flawless execution',
-  };
-  return descriptions[quality] || quality;
-};
-
 const describeAspectRatio = (ratio: string): string => {
   const descriptions: Record<string, string> = {
     '16:9': 'in cinematic widescreen format',
@@ -1277,31 +1114,13 @@ const describeAspectRatio = (ratio: string): string => {
 
 const describeRenderMode = (mode: string): string => {
   const descriptions: Record<string, string> = {
-    'enhance': 'Enhance the existing image by refining textures, enriching lighting, and elevating material quality while faithfully preserving every aspect of the original geometry and composition.',
+    'enhance': 'Enhance the existing image by refining lighting, visual clarity, and overall render polish while staying true to the source composition.',
     'stylize': 'Apply artistic interpretation that transforms the visual style while maintaining the fundamental architectural accuracy and spatial relationships of the original.',
-    'hybrid': 'Strike a thoughtful balance between structural precision and creative enhancement, allowing materials and lighting to be reimagined while respecting the core architectural form.',
-    'strict-realism': 'Achieve maximum photographic authenticity with minimal creative interpretation, rendering the scene exactly as a high-end camera would capture it.',
-    'concept-push': 'Explore creative possibilities freely, allowing for form refinement, artistic material choices, and imaginative details that elevate the architectural concept.',
+    'hybrid': 'Strike a thoughtful balance between source accuracy and creative enhancement, allowing atmosphere and lighting to be reimagined.',
+    'strict-realism': 'Achieve maximum photographic authenticity with minimal creative interpretation.',
+    'concept-push': 'Explore creative possibilities freely, allowing imaginative details that elevate the architectural concept.',
   };
   return descriptions[mode] || '';
-};
-
-const describeGeometryFidelity = (strictMode: boolean): string[] => {
-  const notes = [
-    'Treat the input image as the definitive source of truth for all geometry and camera positioning.',
-    'Faithfully re-render this exact model without reinterpretation or redesign of any elements.',
-    'Preserve the silhouette, proportions, massing, roofline profile, window and door openings, and facade rhythm precisely as shown.',
-    'Maintain the exact camera viewpoint including lens characteristics, horizon line, and framing without any perspective or cropping changes.',
-    'Lock the perspective completely: identical azimuth, elevation, roll angles, vanishing points, and horizon placement.',
-    'Match the original framing and foreshortening exactly; the camera position and target point must not shift.',
-    'Only the surface materials, lighting conditions, reflections, and overall render quality may be enhanced to achieve photorealism.'
-  ];
-
-  if (strictMode) {
-    notes.push('Apply absolute geometry lock: no elements may be added, removed, or reshaped under any circumstances. When in doubt, preserve the original exactly.');
-  }
-
-  return notes;
 };
 
 // Generate comprehensive prompt for 3D Render mode
@@ -1332,7 +1151,7 @@ function generate3DRenderPrompt(state: AppState): string {
     'exterior': 'Create a stunning exterior visualization that captures the building\'s presence in its environment',
     'interior': 'Create an immersive interior visualization that conveys the spatial quality and atmosphere',
     'aerial': 'Create a commanding aerial visualization that reveals the building\'s form and urban context',
-    'detail': 'Create a focused detail visualization that celebrates the craftsmanship and material quality',
+    'detail': 'Create a focused detail visualization that celebrates the craftsmanship and presentation quality',
   };
 
   const viewIntro = viewDescriptions[workflow.viewType] || 'Create a photorealistic architectural visualization';
@@ -1349,43 +1168,6 @@ function generate3DRenderPrompt(state: AppState): string {
 
   // 3. GENERATION MODE - Use descriptive helper
   parts.push(describeRenderMode(workflow.renderMode));
-
-  // 3b. GEOMETRY FIDELITY - Use descriptive helper
-  const geometryLock = workflow.renderMode === 'strict-realism' || r3d.geometry.strictPreservation;
-  const fidelityNotes = describeGeometryFidelity(geometryLock);
-  parts.push(fidelityNotes.join(' '));
-
-  // 4. GEOMETRY - Descriptive language
-  const geo = r3d.geometry;
-  const geoDescParts: string[] = [];
-
-  geoDescParts.push(`The rendering features ${describeEdgeMode(geo.edgeMode)}`);
-  if (geo.strictPreservation) {
-    geoDescParts.push('with absolute fidelity to the original geometry');
-  }
-  geoDescParts.push(`and ${describeLOD(geo.lod.level)}`);
-
-  const lodFeatures: string[] = [];
-  if (geo.lod.preserveOrnaments) lodFeatures.push('decorative ornaments');
-  if (geo.lod.preserveMoldings) lodFeatures.push('molding profiles');
-  if (geo.lod.preserveTrim) lodFeatures.push('trim details');
-  if (lodFeatures.length > 0) {
-    geoDescParts.push(`while carefully preserving the ${lodFeatures.join(', ')}`);
-  }
-
-  if (geo.smoothing.enabled) {
-    geoDescParts.push(`. Surfaces are rendered with ${describeSmoothing(geo.smoothing.intensity, geo.smoothing.preserveHardEdges)}`);
-  }
-
-  if (geo.depthLayers.enabled) {
-    geoDescParts.push(`. The scene has ${describeDepthLayers(geo.depthLayers.foreground, geo.depthLayers.midground, geo.depthLayers.background)}`);
-  }
-
-  if (geo.displacement.enabled) {
-    geoDescParts.push(`. Materials feature ${describeDisplacement(geo.displacement.scale, geo.displacement.strength, geo.displacement.adaptToMaterial)}`);
-  }
-
-  parts.push(`${geoDescParts.join('')}.`);
 
   if (workflow.prioritizationEnabled) {
     const problemAreas = [...workflow.detectedElements]
@@ -1425,47 +1207,6 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   parts.push(`${lightParts.join('')}.`);
-
-  // 6. CAMERA - Natural language description
-  const cam = r3d.camera;
-  const camParts: string[] = [];
-
-  camParts.push(`The view is captured through ${describeLens(cam.lens)}, offering ${describeFOV(cam.fov)}`);
-
-  if (cam.autoCorrect) {
-    camParts.push(', with vertical lines corrected to appear perfectly straight as in professional architectural photography');
-  }
-
-  if (cam.dof.enabled) {
-    camParts.push(`. The image has ${describeDepthOfField(cam.dof.aperture, cam.dof.focusDist)}`);
-  }
-
-  parts.push(`${camParts.join('')}.`);
-
-  // 7. MATERIALS - Evocative descriptions
-  const mat = r3d.materials;
-  const matParts: string[] = [];
-
-  const emphasizedMats = getEmphasisMaterials(mat.emphasis);
-  if (emphasizedMats.length > 0) {
-    matParts.push(`The material palette prominently features ${emphasizedMats.join(', ')}, rendered with exceptional attention to their unique qualities`);
-  }
-
-  if (mat.reflectivity !== 50) {
-    matParts.push(`Surfaces exhibit ${describeReflectivity(mat.reflectivity)}`);
-  }
-
-  if (mat.roughness !== 50) {
-    matParts.push(`Materials are rendered with ${describeRoughness(mat.roughness)}`);
-  }
-
-  if (mat.weathering.enabled) {
-    matParts.push(`The surfaces show ${describeWeathering(mat.weathering.intensity)}`);
-  }
-
-  if (matParts.length > 0) {
-    parts.push(`${matParts.join('. ')}.`);
-  }
 
   // 8. ATMOSPHERE & MOOD - Immersive description
   const atm = r3d.atmosphere;
@@ -1515,14 +1256,14 @@ function generate3DRenderPrompt(state: AppState): string {
 
   // 10. RENDER FORMAT & OUTPUT - Professional finish description
   const rend = r3d.render;
-  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)} with ${describeQuality(rend.quality)}.`);
+  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
   // 11. TECHNICAL QUALITY - Aspirational closing
   const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'Every surface texture, reflection, and shadow should reward close inspection. The final image should be indistinguishable from a photograph taken by a master architectural photographer.'
-    : 'The rendering should achieve the visual quality of professional architectural photography, with believable materials, accurate lighting, and compelling composition.';
+    ? 'Every highlight, shadow, and fine visual detail should reward close inspection. The final image should be indistinguishable from a photograph taken by a master architectural photographer.'
+    : 'The rendering should achieve the visual quality of professional architectural photography, with accurate lighting, refined detail, and compelling composition.';
 
-  parts.push(`This should be a high-fidelity photorealistic architectural visualization with ray-traced global illumination and physically accurate materials. ${qualityClosing}`);
+  parts.push(`This should be a high-fidelity photorealistic architectural visualization with ray-traced global illumination. ${qualityClosing}`);
 
   return parts.filter(p => p.trim()).join(' ');
 }
@@ -2818,26 +2559,6 @@ function generateCadRenderPrompt(state: AppState): string {
   };
   parts.push(`Place this in ${envDesc[cadContext.environment] || `a ${cadContext.environment} environment`} with ${cadContext.landscape} landscaping and ${seasonDesc[cadContext.season] || `${cadContext.season} atmosphere`}.`);
 
-  // Geometry rendering
-  const geo = r3d.geometry;
-  parts.push(`Render with ${describeEdgeMode(geo.edgeMode)} and ${describeLOD(geo.lod.level)}.`);
-
-  const lodFeatures: string[] = [];
-  if (geo.lod.preserveOrnaments) lodFeatures.push('decorative ornaments');
-  if (geo.lod.preserveMoldings) lodFeatures.push('molding profiles');
-  if (geo.lod.preserveTrim) lodFeatures.push('trim details');
-  if (lodFeatures.length > 0) {
-    parts.push(`Carefully preserve ${lodFeatures.join(', ')}.`);
-  }
-
-  if (geo.smoothing.enabled) {
-    parts.push(`Apply ${describeSmoothing(geo.smoothing.intensity, geo.smoothing.preserveHardEdges)}.`);
-  }
-
-  if (geo.depthLayers.enabled) {
-    parts.push(`Create ${describeDepthLayers(geo.depthLayers.foreground, geo.depthLayers.midground, geo.depthLayers.background)}.`);
-  }
-
   // Lighting
   const light = r3d.lighting;
   parts.push(`The scene is bathed in ${formatTimePreset(light.preset)}.`);
@@ -2848,18 +2569,6 @@ function generateCadRenderPrompt(state: AppState): string {
 
   if (light.shadows.enabled) {
     parts.push(`Shadows are ${describeShadows(light.shadows.softness, light.shadows.intensity)}.`);
-  }
-
-  // Materials
-  const mat = r3d.materials;
-  const emphasis = getEmphasisMaterials(mat.emphasis);
-  if (emphasis.length > 0) {
-    parts.push(`Pay special attention to rendering the ${emphasis.join(', ')} with exceptional detail.`);
-  }
-  parts.push(`Surfaces exhibit ${describeReflectivity(mat.reflectivity)} and ${describeRoughness(mat.roughness)}.`);
-
-  if (mat.weathering.enabled) {
-    parts.push(`Materials show ${describeWeathering(mat.weathering.intensity)}.`);
   }
 
   // Atmosphere
@@ -2893,12 +2602,12 @@ function generateCadRenderPrompt(state: AppState): string {
 
   // Output quality
   const rend = r3d.render;
-  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, rendered with ${describeQuality(rend.quality)}.`);
+  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}.`);
 
   // Closing
   const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'The final image should reward close inspection, with every texture, reflection, and shadow rendered to perfection. This should be indistinguishable from professional architectural photography.'
-    : 'Create a high-fidelity photorealistic visualization with believable materials, accurate lighting, and compelling spatial quality.';
+    ? 'The final image should reward close inspection, with every highlight, reflection, and shadow rendered to perfection. This should be indistinguishable from professional architectural photography.'
+    : 'Create a high-fidelity photorealistic visualization with accurate lighting and compelling spatial quality.';
 
   parts.push(qualityClosing);
 
@@ -3060,30 +2769,6 @@ function generateSketchPrompt(state: AppState): string {
   // Render mode
   parts.push(describeRenderMode(workflow.renderMode));
 
-  // Geometry rendering
-  const geo = r3d.geometry;
-  parts.push(`Render with ${describeEdgeMode(geo.edgeMode)} and ${describeLOD(geo.lod.level)}.`);
-
-  const lodFeatures: string[] = [];
-  if (geo.lod.preserveOrnaments) lodFeatures.push('decorative ornaments');
-  if (geo.lod.preserveMoldings) lodFeatures.push('molding profiles');
-  if (geo.lod.preserveTrim) lodFeatures.push('trim elements');
-  if (lodFeatures.length > 0) {
-    parts.push(`Pay special attention to ${lodFeatures.join(', ')}.`);
-  }
-
-  if (geo.smoothing.enabled) {
-    parts.push(`Apply ${describeSmoothing(geo.smoothing.intensity, geo.smoothing.preserveHardEdges)}.`);
-  }
-
-  if (geo.depthLayers.enabled) {
-    parts.push(`Create ${describeDepthLayers(geo.depthLayers.foreground, geo.depthLayers.midground, geo.depthLayers.background)}.`);
-  }
-
-  if (geo.displacement.enabled) {
-    parts.push(`Add ${describeDisplacement(geo.displacement.scale, geo.displacement.strength, geo.displacement.adaptToMaterial)}.`);
-  }
-
   // Lighting
   const light = r3d.lighting;
   parts.push(`Illuminate the scene with ${formatTimePreset(light.preset)}.`);
@@ -3094,31 +2779,6 @@ function generateSketchPrompt(state: AppState): string {
 
   if (light.shadows.enabled) {
     parts.push(`Create ${describeShadows(light.shadows.softness, light.shadows.intensity)}.`);
-  }
-
-  // Camera
-  const cam = r3d.camera;
-  parts.push(`Render through ${describeLens(cam.lens)}, with ${describeFOV(cam.fov)}.`);
-
-  if (cam.autoCorrect) {
-    parts.push('Correct vertical lines to appear perfectly straight.');
-  }
-
-  if (cam.dof.enabled) {
-    parts.push(`Apply ${describeDepthOfField(cam.dof.aperture, cam.dof.focusDist)}.`);
-  }
-
-  // Materials
-  const mat = r3d.materials;
-  const emphasizedMats = getEmphasisMaterials(mat.emphasis);
-  if (emphasizedMats.length > 0) {
-    parts.push(`Feature ${emphasizedMats.join(', ')} prominently in the material palette.`);
-  }
-
-  parts.push(`Surfaces should exhibit ${describeReflectivity(mat.reflectivity)} and ${describeRoughness(mat.roughness)}.`);
-
-  if (mat.weathering.enabled) {
-    parts.push(`Add ${describeWeathering(mat.weathering.intensity)}.`);
   }
 
   // Atmosphere
@@ -3149,12 +2809,12 @@ function generateSketchPrompt(state: AppState): string {
 
   // Output quality
   const rend = r3d.render;
-  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, with ${describeQuality(rend.quality)}.`);
+  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}.`);
 
   // Closing
   const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'The transformation should be magical - taking rough pencil strokes and breathing photorealistic life into them. Every texture should be believable, every shadow should feel real, and the final image should be worthy of the design vision captured in the original sketch.'
-    : 'Transform this sketch into a compelling photorealistic visualization that honors the original design intent while bringing it to life with believable materials, realistic lighting, and professional quality.';
+    ? 'The transformation should be magical - taking rough pencil strokes and breathing photorealistic life into them. Every shadow should feel real, and the final image should be worthy of the design vision captured in the original sketch.'
+    : 'Transform this sketch into a compelling photorealistic visualization that honors the original design intent while bringing it to life with realistic lighting and professional quality.';
 
   parts.push(qualityClosing);
 
@@ -3247,68 +2907,6 @@ function generateUpscalePrompt(state: AppState): string {
   parts.push('If enhancement and fidelity conflict, preserve the source image exactly.');
 
   return parts.filter(p => p.trim()).join('\n');
-}
-
-function generateImageTo3DPrompt(state: AppState): string {
-  const { workflow } = state;
-  const parts: string[] = [];
-  const inputs = workflow.img3dInputs || [];
-  const primary = inputs.find((input) => input.isPrimary);
-  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
-  const userPrompt = state.prompt?.trim();
-
-  // Evocative opening
-  const inputCount = inputs.length;
-  const inputDesc = inputCount === 1 ? 'a single reference image' :
-    inputCount <= 3 ? `${inputCount} reference views` : `${inputCount} comprehensive reference views`;
-
-  parts.push(`Reconstruct a detailed 3D architectural model from ${inputDesc}, accurately capturing the building\'s form, proportions, and spatial qualities.`);
-
-  if (userPrompt) {
-    parts.push(`Specific guidance: ${userPrompt}.`);
-  }
-
-  // Describe input views
-  if (inputs.length > 0) {
-    const viewDescriptions = inputs.slice(0, 6).map((input, index) => {
-      const label = input.view?.trim() || `view ${index + 1}`;
-      return input.isPrimary ? `${label} (primary reference)` : label;
-    });
-    parts.push(`Working from ${viewDescriptions.join(', ')}${inputs.length > 6 ? ' and additional views' : ''}.`);
-
-    if (primary?.view) {
-      parts.push(`The ${primary.view} view serves as the primary reference and should be given priority when resolving any ambiguities between views.`);
-    }
-  }
-
-  // Output format description
-  const formatDesc: Record<string, string> = {
-    'obj': 'a universally compatible OBJ format',
-    'fbx': 'FBX format for seamless integration with professional 3D software',
-    'gltf': 'efficient glTF format optimized for real-time viewing',
-    'usd': 'USD format for pipeline integration',
-  };
-  parts.push(`Export the model in ${formatDesc[workflow.img3dOutputFormat.toLowerCase()] || `${workflow.img3dOutputFormat} format`}.`);
-
-  // Texture handling
-  if (workflow.img3dIncludeTextures) {
-    parts.push('Generate clean, well-organized UV maps with consistent albedo textures. Avoid visible seams at UV boundaries, texture stretching, or mismatched scale between different parts of the model. Textures should accurately represent the materials visible in the reference images.');
-  } else {
-    parts.push('Focus on creating clean, accurate geometry without fabricating textures. Organize the model with logical material groups that can be textured later, but do not invent surface details not clearly visible in the references.');
-  }
-
-  // Constraints in natural language
-  if (hasSourceImage) {
-    parts.push('The reference images establish the ground truth for appearance, proportions, and architectural character.');
-  }
-
-  parts.push('Create a single, coherent 3D model that reconciles all provided views. When views show conflicting information, prioritize the primary reference view. Maintain accurate overall scale, proper vertical alignment (walls should be truly vertical), and correct building proportions. Keep walls straight, edges crisp, and surfaces flat where they should be flat.');
-
-  parts.push('Model all visible openings including doors and windows with accurate proportions and placement. Do not invent architectural elements, structures, or props that are not clearly visible in the references. Where the building is occluded or unclear, make conservative assumptions that maintain architectural continuity and structural logic.');
-
-  parts.push('Produce clean topology suitable for export and further use. The mesh should be watertight where architecturally appropriate, without floating geometry, self-intersections, or other artifacts. Preserve the key silhouette and important facade details that define the building\'s character.');
-
-  return parts.filter(p => p.trim()).join(' ');
 }
 
 function generateMultiAnglePrompt(state: AppState): string {
@@ -3971,9 +3569,6 @@ export function generatePrompt(state: AppState): string {
   }
   if (state.mode === 'upscale') {
     return generateUpscalePrompt(state);
-  }
-  if (state.mode === 'img-to-3d') {
-    return generateImageTo3DPrompt(state);
   }
   if (state.mode === 'multi-angle') {
     return generateMultiAnglePrompt(state);

@@ -60,7 +60,6 @@
     "generateAngles": "Générer les Angles",
     "upscaleImage": "Agrandir l'Image",
     "convertToCAD": "Convertir en CAD",
-    "generate3DModel": "Générer le Modèle 3D",
     "generateVideo": "Générer la Vidéo",
     "applyEdits": "Appliquer les Modifications",
     "runValidation": "Exécuter la Validation",
@@ -83,7 +82,6 @@
     "multiAngle": "Multi-Angle",
     "upscale": "Agrandir",
     "imgToCAD": "Image vers CAD",
-    "imgTo3D": "Image vers 3D",
     "video": "Vidéo",
     "materialValidation": "Validation des Matériaux",
     "generateText": "Générer du Texte"
@@ -327,7 +325,6 @@
     "multiAngle": "Multi-Angle",
     "upscale": "Agrandisseur d'Image",
     "imgToCad": "Image vers CAD",
-    "imgTo3d": "Image vers 3D",
     "video": "Studio Video"
   },
   "leftSidebar": {
@@ -666,7 +663,7 @@
     },
     "render3d": {
       "title": "3D vers Rendu",
-      "description": "Controlez la geometrie, l'eclairage, la camera et les materiaux pour convertir les modeles 3D en rendus photorealistes."
+      "description": "Controlez l'eclairage, l'atmosphere, l'environnement et la sortie pour convertir les modeles 3D en rendus photorealistes."
     },
     "sceneCompose": {
       "title": "Composition de Scene",
@@ -694,7 +691,7 @@
     },
     "renderSketch": {
       "title": "Esquisse vers Rendu",
-      "description": "Controlez geometrie, eclairage, camera et materiaux pour l'esquisse."
+      "description": "Controlez l'eclairage, l'atmosphere, l'environnement et la sortie pour l'esquisse."
     },
     "multiAngle": {
       "title": "Multi-Angle",
@@ -707,10 +704,6 @@
     "imgToCad": {
       "title": "Image vers CAD",
       "description": "Parametres pour vectoriser des images raster en formats CAD comme DXF ou DWG."
-    },
-    "imgTo3d": {
-      "title": "Image vers 3D",
-      "description": "Previsualisez et exportez des modeles 3D generes depuis vos images."
     },
     "video": {
       "title": "Studio Vidéo",
@@ -1033,7 +1026,7 @@
       "clickToClose": "Cliquez pour fermer"
     },
     "generating": {
-      "subtitle": "Affinage de la geometrie et de l'eclairage"
+      "subtitle": "Affinage de l'eclairage"
     },
     "empty": {
       "title": "Canevas pret",
@@ -1046,7 +1039,7 @@
       "options": {
         "enhance": {
           "label": "Ameliorer",
-          "desc": "Ameliore l'eclairage et les textures tout en conservant la geometrie."
+          "desc": "Ameliore l'eclairage et la clarte generale du rendu."
         },
         "stylize": {
           "label": "Styliser",
@@ -1067,53 +1060,6 @@
       }
     },
     "sections": {
-      "geometry": {
-        "title": "Geometrie",
-        "edgeMode": {
-          "label": "Mode de bord",
-          "soft": "Doux",
-          "medium": "Moyen",
-          "sharp": "Net"
-        },
-        "preservation": {
-          "title": "Preservation",
-          "strict": "Preservation stricte de la geometrie",
-          "alteration": "Alteration de geometrie",
-          "alterationHint": "Des valeurs plus elevees permettent au modele de devier de la geometrie d'origine."
-        },
-        "detailLevel": {
-          "label": "Niveau de detail",
-          "low": "Bas",
-          "medium": "Moyen",
-          "high": "Eleve",
-          "preserveOrnaments": "Preserver les ornements",
-          "preserveMoldings": "Preserver les moulures",
-          "preserveTrim": "Preserver les finitions"
-        },
-        "smoothing": {
-          "title": "Lissage de surface",
-          "intensity": "Intensite",
-          "preserveHardEdges": "Preserver les aretes nettes",
-          "edgeThreshold": "Seuil d'arete",
-          "edgeThresholdHint": "Les angles sous le seuil restent nets."
-        },
-        "depthLayers": {
-          "title": "Couches de profondeur",
-          "foreground": "Qualite du premier plan",
-          "midground": "Qualite du plan moyen",
-          "background": "Qualite de l'arriere-plan"
-        },
-        "displacement": {
-          "title": "Deplacement",
-          "strength": "Force",
-          "scale": "Echelle",
-          "fine": "Fin",
-          "medium": "Moyen",
-          "coarse": "Grossier",
-          "adaptToMaterial": "Adapter au materiau",
-          "adaptHint": "Ajuste automatiquement selon le type de surface."
-        }
-      },
       "lighting": {
         "title": "Eclairage",
         "sunPosition": "Position du soleil",
@@ -1136,43 +1082,6 @@
             "sunsetGlow": "Lueur du coucher",
             "blueHour": "Heure bleue",
             "moonlitNight": "Nuit claire de lune"
-          }
-        }
-      },
-      "camera": {
-        "title": "Camera",
-        "lens": "Objectif (focale)",
-        "fieldOfView": "Champ de vision",
-        "autoCorrectPerspective": "Correction automatique de la perspective",
-        "depthOfField": "Profondeur de champ",
-        "aperture": "Ouverture",
-        "focusDistance": "Distance de mise au point"
-      },
-      "materials": {
-        "title": "Materiaux",
-        "emphasisLabel": "Accent sur les materiaux",
-        "emphasis": {
-          "concrete": "Beton",
-          "wood": "Bois",
-          "metal": "Metal",
-          "glass": "Verre",
-          "stone": "Pierre",
-          "brick": "Brique",
-          "tile": "Carrelage",
-          "fabric": "Tissu",
-          "paint": "Peinture",
-          "flooring": "Sol"
-        },
-        "globalReflectivity": "Reflectivite globale",
-        "surfaceRoughness": "Rugosite de surface",
-        "weathering": {
-          "title": "Vieillissement",
-          "intensity": "Intensite",
-          "options": {
-            "dirt": "Salete",
-            "moss": "Mousse",
-            "rust": "Rouille",
-            "cracks": "Fissures"
           }
         }
       },
@@ -1275,14 +1184,7 @@
       },
       "render": {
         "title": "Format de rendu",
-        "aspectRatio": "Ratio d'aspect",
-        "quality": "Qualite",
-        "qualityOptions": {
-          "draft": "Brouillon (rapide)",
-          "preview": "Apercu",
-          "production": "Production",
-          "ultra": "Ultra"
-        }
+        "aspectRatio": "Ratio d'aspect"
       }
     }
   },

@@ -528,7 +528,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       case 'multi-angle': return t('generation.generateAngles');
       case 'upscale': return t('generation.upscaleImage');
       case 'img-to-cad': return t('generation.convertToCAD');
-      case 'img-to-3d': return t('generation.generate3DModel');
       case 'video': return t('generation.generateVideo');
       case 'pdf-compression': return t('generation.compressPdfs');
       case 'visual-edit': return t('generation.applyEdits');

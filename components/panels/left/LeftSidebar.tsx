@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
-  Pencil, Maximize, PenTool, Cuboid, Video, Sparkles, ClipboardCheck, Camera,
+  Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera,
   ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -20,7 +20,6 @@ import { LeftSketchPanel } from './LeftSketchPanel';
 import { LeftMultiAnglePanel } from './LeftMultiAnglePanel';
 import { LeftUpscalePanel } from './LeftUpscalePanel';
 import { LeftImageToCADPanel } from './LeftImageToCADPanel';
-import { LeftImageTo3DPanel } from './LeftImageTo3DPanel';
 import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from './LeftDocumentTranslatePanel';
@@ -44,7 +43,6 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'multi-angle', labelKey: 'workflows.multiAngle', icon: Camera },
   { id: 'upscale', labelKey: 'workflows.upscale', icon: Maximize },
   { id: 'img-to-cad', labelKey: 'workflows.imgToCad', icon: PenTool },
-  { id: 'img-to-3d', labelKey: 'workflows.imgTo3d', icon: Cuboid },
   { id: 'video', labelKey: 'workflows.video', icon: Video },
   { id: 'headshot', labelKey: 'workflows.headshot', icon: UserCircle },
 ];
@@ -75,7 +73,6 @@ export const LeftSidebar: React.FC = () => {
       case 'multi-angle': return <LeftMultiAnglePanel />;
       case 'upscale': return <LeftUpscalePanel />;
       case 'img-to-cad': return <LeftImageToCADPanel />;
-      case 'img-to-3d': return <LeftImageTo3DPanel />;
       case 'video': return <LeftVideoPanel />;
       case 'headshot': return <LeftHeadshotPanel />;
       default: return <LeftRender3DPanel />;

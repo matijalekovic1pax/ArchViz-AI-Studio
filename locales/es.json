@@ -60,7 +60,6 @@
     "generateAngles": "Generar Ángulos",
     "upscaleImage": "Ampliar Imagen",
     "convertToCAD": "Convertir a CAD",
-    "generate3DModel": "Generar Modelo 3D",
     "generateVideo": "Generar Video",
     "compressPdfs": "Comprimir PDFs",
     "applyEdits": "Aplicar Ediciones",
@@ -83,7 +82,6 @@
     "multiAngle": "Multi-Ángulo",
     "upscale": "Ampliar",
     "imgToCAD": "Imagen a CAD",
-    "imgTo3D": "Imagen a 3D",
     "video": "Video",
     "materialValidation": "Validación de Materiales",
     "generateText": "Generar Texto",
@@ -328,7 +326,6 @@
     "multiAngle": "Multi-Ángulo",
     "upscale": "Ampliador de Imagen",
     "imgToCad": "Imagen a CAD",
-    "imgTo3d": "Imagen a 3D",
     "video": "Estudio de Video"
   },
   "leftSidebar": {
@@ -667,7 +664,7 @@
     },
     "render3d": {
       "title": "3D a Render",
-      "description": "Controla geometría, iluminación, cámara y materiales para convertir modelos 3D en renders fotorrealistas."
+      "description": "Controla iluminación, atmósfera, entorno y salida para convertir modelos 3D en renders fotorrealistas."
     },
     "sceneCompose": {
       "title": "Composición de Escena",
@@ -695,7 +692,7 @@
     },
     "renderSketch": {
       "title": "Boceto a Render",
-      "description": "Controla geometría, iluminación, cámara y materiales para boceto a render."
+      "description": "Controla iluminación, atmósfera, entorno y salida para boceto a render."
     },
     "multiAngle": {
       "title": "Multi-Ángulo",
@@ -708,10 +705,6 @@
     "imgToCad": {
       "title": "Imagen a CAD",
       "description": "Ajustes para vectorizar imágenes ráster en formatos CAD como DXF o DWG."
-    },
-    "imgTo3d": {
-      "title": "Imagen a 3D",
-      "description": "Previsualiza y exporta modelos 3D generados desde tus imágenes."
     },
     "video": {
       "title": "Estudio de Video",
@@ -1043,7 +1036,7 @@
       "clickToClose": "Haz clic para cerrar"
     },
     "generating": {
-      "subtitle": "Refinando geometría e iluminación"
+      "subtitle": "Refinando iluminación"
     },
     "empty": {
       "title": "Lienzo listo",
@@ -1056,7 +1049,7 @@
       "options": {
         "enhance": {
           "label": "Mejorar",
-          "desc": "Mejora la iluminacion y texturas manteniendo la geometria."
+          "desc": "Mejora la iluminacion y la claridad general del render."
         },
         "stylize": {
           "label": "Estilizar",
@@ -1077,53 +1070,6 @@
       }
     },
     "sections": {
-      "geometry": {
-        "title": "Geometria",
-        "edgeMode": {
-          "label": "Modo de borde",
-          "soft": "Suave",
-          "medium": "Medio",
-          "sharp": "Nitido"
-        },
-        "preservation": {
-          "title": "Preservacion",
-          "strict": "Preservacion estricta de geometria",
-          "alteration": "Alteracion de geometria",
-          "alterationHint": "Valores mas altos permiten que el modelo se desvie de la geometria original."
-        },
-        "detailLevel": {
-          "label": "Nivel de detalle",
-          "low": "Bajo",
-          "medium": "Medio",
-          "high": "Alto",
-          "preserveOrnaments": "Preservar ornamentos",
-          "preserveMoldings": "Preservar molduras",
-          "preserveTrim": "Preservar remates"
-        },
-        "smoothing": {
-          "title": "Suavizado de superficie",
-          "intensity": "Intensidad",
-          "preserveHardEdges": "Preservar bordes duros",
-          "edgeThreshold": "Umbral de borde",
-          "edgeThresholdHint": "Angulos por debajo del umbral permanecen duros."
-        },
-        "depthLayers": {
-          "title": "Capas de profundidad",
-          "foreground": "Calidad del primer plano",
-          "midground": "Calidad del plano medio",
-          "background": "Calidad del fondo"
-        },
-        "displacement": {
-          "title": "Desplazamiento",
-          "strength": "Fuerza",
-          "scale": "Escala",
-          "fine": "Fino",
-          "medium": "Medio",
-          "coarse": "Grueso",
-          "adaptToMaterial": "Adaptar al material",
-          "adaptHint": "Ajuste automatico por tipo de superficie."
-        }
-      },
       "lighting": {
         "title": "Iluminacion",
         "sunPosition": "Posicion del sol",
@@ -1146,43 +1092,6 @@
             "sunsetGlow": "Resplandor del atardecer",
             "blueHour": "Hora azul",
             "moonlitNight": "Noche con luna"
-          }
-        }
-      },
-      "camera": {
-        "title": "Camara",
-        "lens": "Lente (distancia focal)",
-        "fieldOfView": "Campo de vision",
-        "autoCorrectPerspective": "Corregir perspectiva automaticamente",
-        "depthOfField": "Profundidad de campo",
-        "aperture": "Apertura",
-        "focusDistance": "Distancia de enfoque"
-      },
-      "materials": {
-        "title": "Materiales",
-        "emphasisLabel": "Enfasis de material",
-        "emphasis": {
-          "concrete": "Concreto",
-          "wood": "Madera",
-          "metal": "Metal",
-          "glass": "Vidrio",
-          "stone": "Piedra",
-          "brick": "Ladrillo",
-          "tile": "Baldosa",
-          "fabric": "Tela",
-          "paint": "Pintura",
-          "flooring": "Pavimento"
-        },
-        "globalReflectivity": "Reflectividad global",
-        "surfaceRoughness": "Rugosidad de superficie",
-        "weathering": {
-          "title": "Envejecimiento",
-          "intensity": "Intensidad",
-          "options": {
-            "dirt": "Suciedad",
-            "moss": "Musgo",
-            "rust": "Oxido",
-            "cracks": "Grietas"
           }
         }
       },
@@ -1285,14 +1194,7 @@
       },
       "render": {
         "title": "Formato de render",
-        "aspectRatio": "Relacion de aspecto",
-        "quality": "Calidad",
-        "qualityOptions": {
-          "draft": "Borrador (rapido)",
-          "preview": "Previa",
-          "production": "Produccion",
-          "ultra": "Ultra"
-        }
+        "aspectRatio": "Relacion de aspecto"
       }
     }
   },

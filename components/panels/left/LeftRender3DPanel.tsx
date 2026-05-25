@@ -186,10 +186,7 @@ export const LeftRender3DPanel = () => {
           name: activeStyleRawName
         },
         render3d: wf.render3d,
-        geometry: state.geometry,
-        camera: state.camera,
         lighting: state.lighting,
-        materials: state.materials,
         context: state.context,
         output: state.output
       };
@@ -204,12 +201,10 @@ export const LeftRender3DPanel = () => {
         `**Current Settings:** ${JSON.stringify(settingsContext, null, 2)}`,
         '',
         '**What to Look For:**',
-        '- Complex geometry that may lose definition (ornate details, thin elements, intricate patterns)',
-        '- Areas with challenging material transitions or reflections',
+        '- Complex visual details that may lose definition (ornate details, thin elements, intricate patterns)',
         '- Regions with difficult lighting conditions (deep shadows, bright highlights, glass reflections)',
         '- Elements that commonly get distorted or hallucinated (window frames, railings, furniture details)',
-        '- Perspective-sensitive areas that may drift during generation',
-        '- Fine details that need preservation (textures, edges, proportions)',
+        '- Fine visual details that need preservation during generation',
         '',
         '**Response Format:**',
         'Return ONLY a valid JSON array with 3-8 problem areas. Each object must have:',
@@ -477,4 +472,3 @@ export const LeftRender3DPanel = () => {
     </div>
   );
 };
-

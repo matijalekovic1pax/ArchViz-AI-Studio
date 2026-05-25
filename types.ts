@@ -12,7 +12,6 @@ export type GenerationMode =
   | 'multi-angle'
   | 'upscale'
   | 'img-to-cad'
-  | 'img-to-3d'
   | 'video'
   | 'material-validation'
   | 'document-translate'
@@ -93,67 +92,11 @@ export type VisualSelectionShape =
   | { id: string; type: 'lasso'; points: VisualSelectionPoint[] };
 
 // Render 3D Panel Settings
-export interface Render3DGeometry {
-  edgeMode: 'soft' | 'medium' | 'sharp';
-  strictPreservation: boolean;
-  geometryFreedom: number;
-  lod: {
-    level: 'minimal' | 'low' | 'medium' | 'high' | 'ultra';
-    preserveOrnaments: boolean;
-    preserveMoldings: boolean;
-    preserveTrim: boolean;
-  };
-  smoothing: {
-    enabled: boolean;
-    intensity: number;
-    preserveHardEdges: boolean;
-    threshold: number;
-  };
-  depthLayers: {
-    enabled: boolean;
-    foreground: number;
-    midground: number;
-    background: number;
-  };
-  displacement: {
-    enabled: boolean;
-    strength: number;
-    scale: 'fine' | 'medium' | 'coarse';
-    adaptToMaterial: boolean;
-  };
-}
-
 export interface Render3DLighting {
   sun: { enabled: boolean; azimuth: number; elevation: number; intensity: number; colorTemp: number; softness: number };
   shadows: { enabled: boolean; intensity: number; softness: number; color: string };
   ambient: { intensity: number; occlusion: number };
   preset: string;
-}
-
-export interface Render3DCamera {
-  preset: string;
-  lens: number;
-  fov: number;
-  autoCorrect: boolean;
-  dof: { enabled: boolean; aperture: number; focusDist: number };
-}
-
-export interface Render3DMaterials {
-  emphasis: {
-    concrete: number;
-    wood: number;
-    metal: number;
-    glass: number;
-    stone: number;
-    brick: number;
-    tile: number;
-    fabric: number;
-    paint: number;
-    flooring: number;
-  };
-  reflectivity: number;
-  roughness: number;
-  weathering: { enabled: boolean; intensity: number };
 }
 
 export interface Render3DAtmosphere {
@@ -174,14 +117,10 @@ export interface Render3DFormat {
   resolution: '720p' | '1080p' | '4k' | 'print';
   aspectRatio: '16:9' | '4:3' | '3:2' | '1:1' | '21:9' | '9:16';
   viewType: string;
-  quality: 'draft' | 'preview' | 'production' | 'ultra';
 }
 
 export interface Render3DSettings {
-  geometry: Render3DGeometry;
   lighting: Render3DLighting;
-  camera: Render3DCamera;
-  materials: Render3DMaterials;
   atmosphere: Render3DAtmosphere;
   scenery: Render3DScenery;
   render: Render3DFormat;
@@ -757,22 +696,16 @@ export interface WorkflowSettings {
   imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
   imgToCadPreprocess: { guidance: string; focus: string[] };
 
-  // 11. Image to 3D
-  img3dInputs: { id: string; view: string; isPrimary: boolean; url?: string }[];
-  img3dGeneratedModel: string | null;
-  img3dOutputFormat: 'obj' | 'fbx' | 'glb' | 'usd';
-  img3dIncludeTextures: boolean;
-
-  // 12. Video Studio
+  // 11. Video Studio
   videoState: VideoState;
 
-  // 13. Document Translation
+  // 12. Document Translation
   documentTranslate: DocumentTranslateState;
 
-  // 14. PDF Compression
+  // 13. PDF Compression
   pdfCompression: PdfCompressionState;
 
-  // 15. Headshot Generator
+  // 14. Headshot Generator
   headshot: HeadshotSettings;
 }
 

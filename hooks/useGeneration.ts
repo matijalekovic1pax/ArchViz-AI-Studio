@@ -40,6 +40,7 @@ import { nanoid } from 'nanoid';
 import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProgress } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
+const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
 
 const loadCanvasImage = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -577,7 +578,9 @@ export function useGeneration(): UseGenerationReturn {
    * Build generation config based on current mode and state
    */
   const buildGenerationConfig = useCallback((state: AppState, aspectRatioOverride?: ImageConfig['aspectRatio']) => {
-    const { output } = state;
+    const usesRenderFormat = RENDER_FORMAT_MODES.includes(state.mode);
+    const aspectRatioSource = usesRenderFormat ? state.workflow.render3d.render.aspectRatio : state.output.aspectRatio;
+    const resolutionSource = usesRenderFormat ? state.workflow.render3d.render.resolution : state.output.resolution;
 
     // Map output settings to image config
     const aspectRatioMap: Record<string, ImageConfig['aspectRatio']> = {
@@ -599,13 +602,14 @@ export function useGeneration(): UseGenerationReturn {
       '1440p': '2K',
       '2k': '2K',
       '4k': '4K',
+      'print': '4K',
       '8k': '4K', // API max is 4K
     };
 
     return {
       imageConfig: {
-        aspectRatio: aspectRatioOverride || aspectRatioMap[output.aspectRatio] || '16:9',
-        imageSize: resolutionMap[output.resolution] || '2K',
+        aspectRatio: aspectRatioOverride || aspectRatioMap[aspectRatioSource] || '16:9',
+        imageSize: resolutionMap[resolutionSource] || '2K',
       }
     };
   }, []);
@@ -626,7 +630,6 @@ export function useGeneration(): UseGenerationReturn {
       'multi-angle': 'Generate a photorealistic architectural view: ',
       'upscale': 'Enhance and upscale this architectural image: ',
       'img-to-cad': 'Convert this image into a CAD drawing: ',
-      'img-to-3d': 'Generate 3D model visualization from this image: ',
       'video': 'Generate an architectural visualization video: ',
       'material-validation': 'Analyze materials in this architectural image: ',
       'generate-text': '',
@@ -755,8 +758,11 @@ export function useGeneration(): UseGenerationReturn {
       const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'
         ? state.workflow.visualAdjust.aspectRatio
         : 'same';
+      const usesRenderFormatAspectRatio = RENDER_FORMAT_MODES.includes(state.mode);
       const aspectRatioOverride = adjustAspectRatio && adjustAspectRatio !== 'same'
         ? adjustAspectRatio
+        : usesRenderFormatAspectRatio
+          ? undefined
         : inputAspectRatio || undefined;
 
       if (isSourceLockedMode && !state.sourceImage && state.uploadedImage) {

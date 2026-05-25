@@ -44,7 +44,6 @@ const WORKFLOW_LABEL_KEY_BY_MODE: Record<GenerationMode, string> = {
   'multi-angle': 'workflows.multiAngle',
   'upscale': 'workflows.upscale',
   'img-to-cad': 'workflows.imgToCad',
-  'img-to-3d': 'workflows.imgTo3d',
   'video': 'workflows.video',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',

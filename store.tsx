@@ -56,64 +56,11 @@ const initialVideoState: VideoState = {
 };
 
 const initialRender3D: Render3DSettings = {
-  geometry: {
-    edgeMode: 'medium',
-    strictPreservation: true,
-    geometryFreedom: 50,
-    lod: {
-      level: 'medium',
-      preserveOrnaments: true,
-      preserveMoldings: true,
-      preserveTrim: true,
-    },
-    smoothing: {
-      enabled: false,
-      intensity: 50,
-      preserveHardEdges: true,
-      threshold: 30,
-    },
-    depthLayers: {
-      enabled: false,
-      foreground: 100,
-      midground: 70,
-      background: 40,
-    },
-    displacement: {
-      enabled: false,
-      strength: 30,
-      scale: 'medium',
-      adaptToMaterial: true,
-    },
-  },
   lighting: {
     sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
     shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
     ambient: { intensity: 40, occlusion: 50 },
     preset: 'golden-hour',
-  },
-  camera: {
-    preset: 'eye-level',
-    lens: 35,
-    fov: 63,
-    autoCorrect: true,
-    dof: { enabled: false, aperture: 2.8, focusDist: 5 },
-  },
-  materials: {
-    emphasis: {
-      concrete: 50,
-      wood: 50,
-      metal: 50,
-      glass: 50,
-      stone: 50,
-      brick: 50,
-      tile: 50,
-      fabric: 50,
-      paint: 50,
-      flooring: 50,
-    },
-    reflectivity: 50,
-    roughness: 50,
-    weathering: { enabled: false, intensity: 30 },
   },
   atmosphere: {
     mood: 'natural',
@@ -131,7 +78,6 @@ const initialRender3D: Render3DSettings = {
     resolution: '1080p',
     aspectRatio: '16:9',
     viewType: 'passenger-pov',
-    quality: 'production',
   },
 };
 
@@ -719,22 +665,16 @@ const initialWorkflow: WorkflowSettings = {
   imgToCadFormat: 'dxf',
   imgToCadPreprocess: { guidance: '', focus: [] },
 
-  // 11. Image to 3D
-  img3dInputs: [],
-  img3dGeneratedModel: null,
-  img3dOutputFormat: 'glb',
-  img3dIncludeTextures: true,
-
-  // 12. Video Studio
+  // 11. Video Studio
   videoState: initialVideoState,
 
-  // 13. Document Translation
+  // 12. Document Translation
   documentTranslate: initialDocumentTranslate,
 
-  // 14. PDF Compression
+  // 13. PDF Compression
   pdfCompression: initialPdfCompression,
 
-  // 15. Headshot Generator
+  // 14. Headshot Generator
   headshot: initialHeadshot,
 };
 

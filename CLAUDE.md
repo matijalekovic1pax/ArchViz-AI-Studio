@@ -47,7 +47,7 @@ VITE_ILOVEPDF_PUBLIC_KEY=      # iLovePDF API key (optional)
 - `appAlert` - Global toast/banner alert
 
 ### Generation Modes
-`generate-text`, `render-3d`, `scene-compose`, `render-cad`, `masterplan`, `visual-edit`, `exploded`, `section`, `render-sketch`, `multi-angle`, `upscale`, `img-to-cad`, `img-to-3d`, `video`, `material-validation`, `document-translate`, `pdf-compression`, `headshot`
+`generate-text`, `render-3d`, `scene-compose`, `render-cad`, `masterplan`, `visual-edit`, `exploded`, `section`, `render-sketch`, `multi-angle`, `upscale`, `img-to-cad`, `video`, `material-validation`, `document-translate`, `pdf-compression`, `headshot`
 
 Authoritative list is the `GenerationMode` union in `types.ts`.
 

@@ -60,7 +60,6 @@
     "generateAngles": "Generate Angles",
     "upscaleImage": "Upscale Image",
     "convertToCAD": "Convert to CAD",
-    "generate3DModel": "Generate 3D Model",
     "generateVideo": "Generate Video",
     "compressPdfs": "Compress PDFs",
     "applyEdits": "Apply Edits",
@@ -83,7 +82,6 @@
     "multiAngle": "Multi-Angle",
     "upscale": "Upscale",
     "imgToCAD": "Image to CAD",
-    "imgTo3D": "Image to 3D",
     "video": "Video",
     "materialValidation": "Material Validation",
     "generateText": "Generate Text",
@@ -328,7 +326,6 @@
     "multiAngle": "Multi-Angle",
     "upscale": "Image Upscaler",
     "imgToCad": "Image to CAD",
-    "imgTo3d": "Image to 3D",
     "video": "Video Studio",
     "headshot": "Headshot Studio"
   },
@@ -668,7 +665,7 @@
     },
     "render3d": {
       "title": "3D to Render",
-      "description": "Control geometry preservation, lighting, camera settings, and materials for converting 3D models to photorealistic renders."
+      "description": "Control lighting, atmosphere, scenery, and output settings for converting 3D models to photorealistic renders."
     },
     "sceneCompose": {
       "title": "Scene Compose",
@@ -696,7 +693,7 @@
     },
     "renderSketch": {
       "title": "Sketch to Render",
-      "description": "Control geometry, lighting, camera, and materials for sketch-to-render conversion."
+      "description": "Control lighting, atmosphere, scenery, and output settings for sketch-to-render conversion."
     },
     "multiAngle": {
       "title": "Multi-Angle",
@@ -709,10 +706,6 @@
     "imgToCad": {
       "title": "Image to CAD",
       "description": "Settings for vectorizing raster images into CAD-ready formats like DXF or DWG."
-    },
-    "imgTo3d": {
-      "title": "Image to 3D",
-      "description": "Preview and export 3D models generated from your images using SAM AI."
     },
     "video": {
       "title": "Video Studio",
@@ -1048,7 +1041,7 @@
       "clickToClose": "Click to close"
     },
     "generating": {
-      "subtitle": "Refining geometry & lighting"
+      "subtitle": "Refining lighting"
     },
     "empty": {
       "title": "Canvas Ready",
@@ -1061,7 +1054,7 @@
       "options": {
         "enhance": {
           "label": "Enhance",
-          "desc": "Improves lighting and textures while keeping geometry."
+          "desc": "Improves lighting and overall render clarity."
         },
         "stylize": {
           "label": "Stylize",
@@ -1082,53 +1075,6 @@
       }
     },
     "sections": {
-      "geometry": {
-        "title": "Geometry",
-        "edgeMode": {
-          "label": "Edge Mode",
-          "soft": "Soft",
-          "medium": "Medium",
-          "sharp": "Sharp"
-        },
-        "preservation": {
-          "title": "Preservation",
-          "strict": "Strict Geometry Preservation",
-          "alteration": "Geometry Alteration",
-          "alterationHint": "Higher values allow the model to deviate from the original geometry."
-        },
-        "detailLevel": {
-          "label": "Detail Level",
-          "low": "Low",
-          "medium": "Medium",
-          "high": "High",
-          "preserveOrnaments": "Preserve Ornaments",
-          "preserveMoldings": "Preserve Moldings",
-          "preserveTrim": "Preserve Trim"
-        },
-        "smoothing": {
-          "title": "Surface Smoothing",
-          "intensity": "Intensity",
-          "preserveHardEdges": "Preserve Hard Edges",
-          "edgeThreshold": "Edge Threshold",
-          "edgeThresholdHint": "Angles below threshold remain hard."
-        },
-        "depthLayers": {
-          "title": "Depth Layers",
-          "foreground": "Foreground Quality",
-          "midground": "Midground Quality",
-          "background": "Background Quality"
-        },
-        "displacement": {
-          "title": "Displacement",
-          "strength": "Strength",
-          "scale": "Scale",
-          "fine": "Fine",
-          "medium": "Medium",
-          "coarse": "Coarse",
-          "adaptToMaterial": "Adapt to Material",
-          "adaptHint": "Auto-adjusts per surface type."
-        }
-      },
       "lighting": {
         "title": "Lighting",
         "sunPosition": "Sun Position",
@@ -1151,43 +1097,6 @@
             "sunsetGlow": "Sunset Glow",
             "blueHour": "Blue Hour",
             "moonlitNight": "Moonlit Night"
-          }
-        }
-      },
-      "camera": {
-        "title": "Camera",
-        "lens": "Lens (Focal Length)",
-        "fieldOfView": "Field of View",
-        "autoCorrectPerspective": "Auto-Correct Perspective",
-        "depthOfField": "Depth of Field",
-        "aperture": "Aperture",
-        "focusDistance": "Focus Dist"
-      },
-      "materials": {
-        "title": "Materials",
-        "emphasisLabel": "Material Emphasis",
-        "emphasis": {
-          "concrete": "Concrete",
-          "wood": "Wood",
-          "metal": "Metal",
-          "glass": "Glass",
-          "stone": "Stone",
-          "brick": "Brick",
-          "tile": "Tile",
-          "fabric": "Fabric",
-          "paint": "Paint",
-          "flooring": "Flooring"
-        },
-        "globalReflectivity": "Global Reflectivity",
-        "surfaceRoughness": "Surface Roughness",
-        "weathering": {
-          "title": "Weathering",
-          "intensity": "Intensity",
-          "options": {
-            "dirt": "Dirt",
-            "moss": "Moss",
-            "rust": "Rust",
-            "cracks": "Cracks"
           }
         }
       },
@@ -1290,14 +1199,7 @@
       },
       "render": {
         "title": "Render Format",
-        "aspectRatio": "Aspect Ratio",
-        "quality": "Quality",
-        "qualityOptions": {
-          "draft": "Draft (Fast)",
-          "preview": "Preview",
-          "production": "Production",
-          "ultra": "Ultra"
-        }
+        "aspectRatio": "Aspect Ratio"
       }
     }
   },

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
-  Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Cuboid, Video, CheckCircle2, Settings,
+  Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Video, CheckCircle2, Settings,
   ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -16,7 +16,6 @@ import { SectionPanel } from './SectionPanel';
 import { MultiAnglePanel } from './MultiAnglePanel';
 import { UpscalePanel } from './UpscalePanel';
 import { ImageToCadPanel } from './ImageToCadPanel';
-import { ImageTo3DPanel } from './ImageTo3DPanel';
 import { VideoPanel } from './VideoPanel';
 import { ValidationPanel } from './ValidationPanel';
 import { DocumentTranslatePanel } from './DocumentTranslatePanel';
@@ -132,12 +131,6 @@ export const RightPanel: React.FC = () => {
         panelDescription = t('rightPanel.imgToCad.description');
         panelContent = <ImageToCadPanel />; 
         break;
-      case 'img-to-3d':
-        panelTitle = t('rightPanel.imgTo3d.title');
-        PanelIcon = Cuboid;
-        panelDescription = t('rightPanel.imgTo3d.description');
-        panelContent = <ImageTo3DPanel />;
-        break;
       case 'video': 
         panelTitle = t('rightPanel.video.title'); 
         PanelIcon = Video; 
@@ -185,8 +178,7 @@ export const RightPanel: React.FC = () => {
         panelContent = <div className="p-4 text-center text-xs text-foreground-muted">{t('rightPanel.selectWorkflow')}</div>;
   }
 
-  // Use wider panel for img-to-3d mode to accommodate the 3D viewer
-  const panelWidth = mode === 'img-to-3d' ? 380 : (rightPanelWidth || 320);
+  const panelWidth = rightPanelWidth || 320;
 
   return (
     <div
