@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import { MATERIAL_CATEGORIES, MATERIAL_SWATCHES, getMaterialById } from '../../../lib/materialCatalog';
 import {
   Image as ImageIcon,
+  Palette,
   Move,
   Wrench,
   Search,
@@ -1402,6 +1403,7 @@ export const VisualEditPanel = () => {
   const [autoSelectMessage, setAutoSelectMessage] = useState('');
 
   const backgroundInputRef = useRef<HTMLInputElement>(null);
+  const materialReferenceInputRef = useRef<HTMLInputElement>(null);
   const autoSelectRequestIdRef = useRef(0);
 
   const updateWf = (payload: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
@@ -1773,6 +1775,28 @@ export const VisualEditPanel = () => {
     });
   }, [updateBackground]);
 
+  const handleMaterialReferenceUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateMaterial({
+        referenceImage: reader.result as string,
+        referenceEnabled: true,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    if (materialReferenceInputRef.current) {
+      materialReferenceInputRef.current.value = '';
+    }
+  }, [updateMaterial]);
+
+  const handleRemoveMaterialReference = useCallback(() => {
+    updateMaterial({ referenceImage: null });
+  }, [updateMaterial]);
+
   const selectionIds = useMemo(() => wf.visualSelections.map((shape) => shape.id), [wf.visualSelections]);
   const selectionCount = selectionIds.length;
   const objectPlacementMode = wf.visualObject.placementMode || 'place';
@@ -1849,6 +1873,15 @@ export const VisualEditPanel = () => {
     () => getMaterialById(wf.visualMaterial.materialId),
     [wf.visualMaterial.materialId]
   );
+
+  const displayMaterialPresets = useMemo(() => {
+    const defaultMaterials = materialSwatches.slice(0, 4);
+    const activeMaterial = materialSwatches.find((material) => material.id === wf.visualMaterial.materialId);
+    if (activeMaterial && !defaultMaterials.some((material) => material.id === activeMaterial.id)) {
+      return [...defaultMaterials.slice(0, 3), activeMaterial];
+    }
+    return defaultMaterials;
+  }, [wf.visualMaterial.materialId]);
 
   const filteredMaterials = useMemo(() => {
     const query = materialQuery.trim().toLowerCase();
@@ -2275,39 +2308,165 @@ export const VisualEditPanel = () => {
               onChange={(value) => updateMaterial({ surfaceType: value })}
             />
 
-            <div className="rounded-xl border border-border bg-surface-sunken/60 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-foreground-muted">Selected Material</div>
-                  <div className="text-sm font-semibold text-foreground mt-1">
-                    {selectedMaterial?.label || 'Custom'}
-                  </div>
-                  <div className="text-[10px] text-foreground-muted mt-0.5">{selectedMaterial?.category || wf.visualMaterial.category}</div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateMaterial({ referenceEnabled: false })}
+                  className={cn(
+                    'h-8 rounded-md border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors',
+                    !wf.visualMaterial.referenceEnabled
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+                  )}
+                >
+                  <Palette size={12} />
+                  <span>Presets</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateMaterial({ referenceEnabled: true })}
+                  className={cn(
+                    'h-8 rounded-md border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors',
+                    wf.visualMaterial.referenceEnabled
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+                  )}
+                >
+                  <ImageIcon size={12} />
+                  <span>Reference Image</span>
+                </button>
+              </div>
+
+              <input
+                ref={materialReferenceInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleMaterialReferenceUpload}
+                className="hidden"
+              />
+
+              {wf.visualMaterial.referenceEnabled ? (
+                <div className="relative h-40">
+                  <button
+                    type="button"
+                    onClick={() => materialReferenceInputRef.current?.click()}
+                    className={cn(
+                      'relative h-full w-full overflow-hidden rounded-xl border transition-all duration-200 group',
+                      'flex flex-col items-center justify-center gap-2 text-center',
+                      wf.visualMaterial.referenceImage
+                        ? 'border-border bg-surface-sunken hover:border-foreground-muted'
+                        : 'border-dashed border-border bg-surface-sunken/60 hover:border-accent/60 hover:bg-surface-elevated'
+                    )}
+                    title={wf.visualMaterial.referenceImage ? 'Change material reference' : 'Upload material reference'}
+                  >
+                    {wf.visualMaterial.referenceImage ? (
+                      <>
+                        <img
+                          src={wf.visualMaterial.referenceImage}
+                          alt="Material reference"
+                          className="absolute inset-0 z-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/75 via-black/15 to-black/10" />
+                        <div className="absolute top-2 right-2 z-10 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center shadow-sm">
+                          <Check size={10} strokeWidth={3} />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-12 h-12 rounded-full border border-border bg-surface-elevated flex items-center justify-center text-foreground-muted group-hover:text-accent transition-colors">
+                        <Upload size={20} />
+                      </div>
+                    )}
+                    <div className={cn('relative z-10 px-4', wf.visualMaterial.referenceImage ? 'text-white' : 'text-foreground')}>
+                      <p className="text-xs font-bold leading-snug">
+                        {wf.visualMaterial.referenceImage ? 'Change material reference' : 'Upload material reference'}
+                      </p>
+                      <p className={cn('mt-1 text-[10px] leading-snug', wf.visualMaterial.referenceImage ? 'text-white/75' : 'text-foreground-muted')}>
+                        Use an image to match the material color, grain, pattern, seams, and finish.
+                      </p>
+                    </div>
+                  </button>
+                  {wf.visualMaterial.referenceImage && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveMaterialReference}
+                      className="absolute top-2 left-2 z-20 w-7 h-7 flex items-center justify-center rounded-full border border-white/20 bg-black/50 text-white hover:bg-rose-500 transition-colors"
+                      title="Remove material reference"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-border overflow-hidden bg-surface-elevated">
-                    <img
-                      src={selectedMaterial?.previewUrl || fallbackMaterialPreview}
-                      decoding="sync"
-                      onError={(event) => {
-                        event.currentTarget.src = fallbackMaterialPreview;
-                      }}
-                      className="w-full h-full object-cover"
-                      alt={selectedMaterial?.label || 'Selected material'}
-                    />
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {displayMaterialPresets.map((material) => {
+                      const active = wf.visualMaterial.materialId === material.id;
+                      return (
+                        <button
+                          key={material.id}
+                          type="button"
+                          onClick={() => updateMaterial({ materialId: material.id, category: material.category, referenceEnabled: false })}
+                          className={cn(
+                            'relative h-14 rounded-md overflow-hidden border transition-all duration-200 text-left flex items-center group',
+                            active
+                              ? 'border-foreground ring-2 ring-foreground shadow-md opacity-100 z-10 scale-[1.02]'
+                              : 'border-border opacity-90 hover:opacity-100 hover:border-foreground-muted hover:scale-[1.01]'
+                          )}
+                        >
+                          <img
+                            src={material.previewUrl}
+                            decoding="sync"
+                            draggable={false}
+                            onError={(event) => {
+                              event.currentTarget.src = fallbackMaterialPreview;
+                            }}
+                            className="absolute inset-0 z-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            alt={material.label}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent z-0" />
+                          <div className="relative z-10 px-2 py-1 w-full min-w-0">
+                            <p className="text-white text-[10px] font-bold leading-tight truncate w-full">{material.label}</p>
+                            <p className="text-white/75 text-[8px] truncate font-medium">{material.category}</p>
+                          </div>
+                          {active && (
+                            <div className="absolute top-1 right-1 w-4 h-4 bg-foreground text-background rounded-full flex items-center justify-center z-20 shadow-sm">
+                              <Check size={8} strokeWidth={3} />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsMaterialBrowserOpen(true)}
-                    className={cn(
-                      'h-8 px-3 text-[11px] rounded-md border transition-colors',
-                      'border-border bg-surface-elevated text-foreground-muted hover:text-foreground hover:border-foreground-muted'
-                    )}
+                    className="w-full h-8 flex items-center justify-center gap-2 rounded-md border border-dashed border-border text-xs text-foreground-muted hover:text-foreground hover:border-foreground-muted hover:bg-surface-elevated transition-all"
                   >
-                    Browse
+                    <Search size={12} />
+                    <span>Browse all materials</span>
                   </button>
+                  {selectedMaterial && (
+                    <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-sunken/50 p-2">
+                      <div className="h-8 w-8 rounded-md border border-border overflow-hidden bg-surface-elevated shrink-0">
+                        <img
+                          src={selectedMaterial.previewUrl || fallbackMaterialPreview}
+                          decoding="sync"
+                          onError={(event) => {
+                            event.currentTarget.src = fallbackMaterialPreview;
+                          }}
+                          className="w-full h-full object-cover"
+                          alt={selectedMaterial.label}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[9px] uppercase tracking-wider text-foreground-muted">Selected Material</div>
+                        <div className="text-xs font-semibold text-foreground truncate">{selectedMaterial.label}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="space-y-3 pt-2 border-t border-border-subtle">
@@ -3523,7 +3682,7 @@ export const VisualEditPanel = () => {
           const resolveRatioValue = (ratioKey: string) =>
             ratioKey === 'custom' ? customRatioValue : ratioMap[ratioKey] ?? baseRatio;
 
-          const computeTargetSize = (ratioKey: string, amount: number, lockAspect: boolean) => {
+          const computeTargetSize = (ratioKey: string, amount: number) => {
             const ratioValue = resolveRatioValue(ratioKey);
             let width = baseWidth;
             let height = baseHeight;
@@ -3532,7 +3691,7 @@ export const VisualEditPanel = () => {
               const scale = 1 + amount / 100;
               width = Math.round(baseWidth * scale);
               height = Math.round(baseHeight * scale);
-              if (lockAspect && ratioValue) {
+              if (ratioValue) {
                 if (ratioValue > baseRatio) {
                   width = Math.round(height * ratioValue);
                 } else {
@@ -3552,8 +3711,7 @@ export const VisualEditPanel = () => {
 
           const targetSize = computeTargetSize(
             wf.visualExtend.targetAspectRatio,
-            wf.visualExtend.amount,
-            wf.visualExtend.lockAspectRatio
+            wf.visualExtend.amount
           );
           const extensionPx = Math.max(targetSize.width - baseWidth, targetSize.height - baseHeight, 0);
           const extensionDenom =
@@ -3565,7 +3723,7 @@ export const VisualEditPanel = () => {
               updateExtend({ targetAspectRatio: value });
               return;
             }
-            const nextTarget = computeTargetSize(value, wf.visualExtend.amount, wf.visualExtend.lockAspectRatio);
+            const nextTarget = computeTargetSize(value, wf.visualExtend.amount);
             const nextExtensionPx = Math.max(nextTarget.width - baseWidth, nextTarget.height - baseHeight, 0);
             const denom = nextTarget.ratioValue && nextTarget.ratioValue > baseRatio ? baseWidth : baseHeight;
             const derivedAmount = denom ? Math.max(10, Math.round((nextExtensionPx / denom) * 100)) : wf.visualExtend.amount;
@@ -3625,7 +3783,7 @@ export const VisualEditPanel = () => {
                 </div>
               </div>
 
-<div className="rounded-lg border border-border bg-surface-sunken p-3 text-[10px] text-foreground-muted space-y-1">
+              <div className="rounded-lg border border-border bg-surface-sunken p-3 text-[10px] text-foreground-muted space-y-1">
                 <div className="flex justify-between">
                   <span>Current</span>
                   <span className="font-mono">
@@ -3653,39 +3811,8 @@ export const VisualEditPanel = () => {
                 max={200}
                 step={1}
                 unit="%"
-onChange={(value) => updateExtend({ amount: value })}
+                onChange={(value) => updateExtend({ amount: value })}
               />
-
-              <div className="space-y-2">
-                <Toggle
-                  label="Lock Aspect Ratio"
-                  checked={wf.visualExtend.lockAspectRatio}
-                  onChange={(value) => updateExtend({ lockAspectRatio: value })}
-                />
-                <Toggle
-                  label="Seamless Blend"
-                  checked={wf.visualExtend.seamlessBlend}
-                  onChange={(value) => updateExtend({ seamlessBlend: value })}
-                />
-                <Toggle
-                  label="High Detail Mode"
-                  checked={wf.visualExtend.highDetail}
-                  onChange={(value) => updateExtend({ highDetail: value })}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground mb-2 block">Quality</label>
-                <select
-                  className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
-                  value={wf.visualExtend.quality}
-                  onChange={(event) => updateExtend({ quality: event.target.value as any })}
-                >
-                  <option value="draft">Draft (fast)</option>
-                  <option value="standard">Standard</option>
-                  <option value="high">High (slower)</option>
-                </select>
-              </div>
             </div>
           );
         }
@@ -3966,7 +4093,7 @@ onChange={(value) => updateExtend({ amount: value })}
                       key={material.id}
                       type="button"
                       onClick={() => {
-                        updateMaterial({ materialId: material.id, category: material.category });
+                        updateMaterial({ materialId: material.id, category: material.category, referenceEnabled: false });
                         setIsMaterialBrowserOpen(false);
                       }}
                       className={cn(

@@ -1,7 +1,7 @@
 
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Info, X, Layers, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Info, X } from 'lucide-react';
 import { AppProvider, useAppStore } from './store';
 import { AuthGate } from './components/auth/AuthGate';
 import { TopBar } from './components/panels/TopBar';
@@ -85,7 +85,11 @@ const Layout: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans selection:bg-accent selection:text-foreground">
       <TopBar onToggleMobilePanel={(panel) => setMobilePanel((prev) => (prev === panel ? null : panel))} />
-      <MobilePanels active={mobilePanel} onClose={() => setMobilePanel(null)} />
+      <MobilePanels
+        active={mobilePanel}
+        onClose={() => setMobilePanel(null)}
+        onOpen={(panel) => setMobilePanel(panel)}
+      />
       {showVideoLockOverlay && (
         <div
           className="fixed inset-y-0 right-0 left-0 lg:left-14 z-[80] bg-black/60 backdrop-blur-md flex items-center justify-center"
@@ -128,37 +132,7 @@ const Layout: React.FC = () => {
         <div className="hidden lg:flex h-full">
           <LeftSidebar />
         </div>
-        <div className="flex-1 flex flex-col min-w-0 relative">
-          <div className="lg:hidden pointer-events-none">
-            <div className="fixed top-24 left-3 z-[70] pointer-events-auto">
-              <button
-                onClick={() => setMobilePanel((prev) => (prev === 'workflow' ? null : 'workflow'))}
-                className={cn(
-                  "h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all",
-                  mobilePanel === 'workflow'
-                    ? "bg-foreground text-background border-foreground"
-                    : "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
-                )}
-                aria-label="Open workflow panel"
-              >
-                <Layers size={18} />
-              </button>
-            </div>
-            <div className="fixed top-24 right-3 z-[70] pointer-events-auto">
-              <button
-                onClick={() => setMobilePanel((prev) => (prev === 'settings' ? null : 'settings'))}
-                className={cn(
-                  "h-11 w-11 rounded-full border shadow-lg flex items-center justify-center transition-all",
-                  mobilePanel === 'settings'
-                    ? "bg-foreground text-background border-foreground"
-                    : "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
-                )}
-                aria-label="Open settings panel"
-              >
-                <SlidersHorizontal size={18} />
-              </button>
-            </div>
-          </div>
+        <div className="flex-1 flex flex-col min-w-0 relative pb-24 lg:pb-0">
           {state.mode === 'material-validation' ? (
             <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
@@ -169,7 +143,11 @@ const Layout: React.FC = () => {
             <ImageCanvas />
           )}
           <FloatingGenerateButton />
-          {state.mode !== 'document-translate' && state.mode !== 'pdf-compression' && <BottomPanel />}
+          {state.mode !== 'document-translate' && state.mode !== 'pdf-compression' && (
+            <div className="hidden lg:block">
+              <BottomPanel />
+            </div>
+          )}
         </div>
         <div className="hidden lg:flex h-full">
           <RightPanel />

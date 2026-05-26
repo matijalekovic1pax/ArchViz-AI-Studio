@@ -1790,18 +1790,26 @@ export function useGeneration(): UseGenerationReturn {
           people: 'people',
         };
         const editType = editTypeMap[activeVisualTool] || 'replace';
-        const materialReference = activeVisualTool === 'material'
-          ? getMaterialById(state.workflow.visualMaterial.materialId)
+        const visualMaterial = state.workflow.visualMaterial;
+        const isMaterialReferenceMode = Boolean(
+          activeVisualTool === 'material' &&
+          visualMaterial.referenceEnabled
+        );
+        const materialReference = activeVisualTool === 'material' && !isMaterialReferenceMode
+          ? getMaterialById(visualMaterial.materialId)
           : null;
         const hasLocalMaskedMaterialEdit = Boolean(
           activeVisualTool === 'material' &&
+          !isMaterialReferenceMode &&
           shouldUseSelectionMask &&
           selectedMaskDataUrl &&
           materialReference
         );
-        const materialReferenceImage = materialReference && !hasLocalMaskedMaterialEdit
-          ? await materialPreviewToImageData(materialReference.previewUrl)
-          : null;
+        const materialReferenceImage = isMaterialReferenceMode && visualMaterial.referenceImage
+          ? dataUrlToImageData(visualMaterial.referenceImage)
+          : materialReference && !hasLocalMaskedMaterialEdit
+            ? await materialPreviewToImageData(materialReference.previewUrl)
+            : null;
 
         const adjust = state.workflow.visualAdjust;
         const hasAdjustGeometryChange = activeVisualTool === 'adjust' && (
@@ -1823,11 +1831,11 @@ export function useGeneration(): UseGenerationReturn {
           result = { text: null, images: [materialImage] };
           visualMaskHandledLocally = true;
           updateProgress(90);
-        } else if (activeVisualTool === 'material' && !shouldUseSelectionMask && materialReference && state.workflow.visualPrompt.trim()) {
+        } else if (activeVisualTool === 'material' && !isMaterialReferenceMode && !shouldUseSelectionMask && materialReference && state.workflow.visualPrompt.trim()) {
           const materialImage = await applyPromptTargetedMaterialReplacement(
             sourceImageUrl!,
             materialReference,
-            state.workflow.visualMaterial,
+            visualMaterial,
             state.workflow.visualPrompt
           );
           if (materialImage) {

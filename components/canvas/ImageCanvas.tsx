@@ -12,6 +12,8 @@ import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 
 type CanvasPoint = { x: number; y: number };
 type ImageLayout = {
+  layerWidth: number;
+  layerHeight: number;
   width: number;
   height: number;
   offsetX: number;
@@ -329,6 +331,9 @@ const StandardCanvas: React.FC = () => {
   const brushOutlineId = useRef(`brush-outline-${nanoid()}`);
   const selectionMigrationRef = useRef<string | null>(null);
   const lastViewScaleRef = useRef<number | null>(null);
+  const layoutRafRef = useRef<number | null>(null);
+  const layoutWatchRafRef = useRef<number | null>(null);
+  const layoutWatchUntilRef = useRef(0);
 
   // Mode helpers
   const isGenerateText = state.mode === 'generate-text';
@@ -458,6 +463,8 @@ const StandardCanvas: React.FC = () => {
     const scaleY = drawHeight / img.naturalHeight;
 
     return {
+      layerWidth: width,
+      layerHeight: height,
       width: drawWidth,
       height: drawHeight,
       offsetX,
@@ -469,7 +476,21 @@ const StandardCanvas: React.FC = () => {
     };
   }, []);
 
-  const getImageLayout = useCallback(() => imageLayout ?? measureImageLayout(), [imageLayout, measureImageLayout]);
+  const isCachedImageLayoutCurrent = useCallback((layout: ImageLayout | null) => {
+    if (!layout || !selectionLayerRef.current || !imageRef.current) return false;
+    const img = imageRef.current;
+    return (
+      layout.layerWidth === Math.round(selectionLayerRef.current.offsetWidth) &&
+      layout.layerHeight === Math.round(selectionLayerRef.current.offsetHeight) &&
+      layout.naturalWidth === img.naturalWidth &&
+      layout.naturalHeight === img.naturalHeight
+    );
+  }, []);
+
+  const getImageLayout = useCallback(() => {
+    if (isCachedImageLayoutCurrent(imageLayout)) return imageLayout;
+    return measureImageLayout() ?? imageLayout;
+  }, [imageLayout, isCachedImageLayoutCurrent, measureImageLayout]);
 
   const updateImageLayout = useCallback(() => {
     const next = measureImageLayout();
@@ -477,6 +498,8 @@ const StandardCanvas: React.FC = () => {
       if (!next) return prev ? null : prev;
       if (
         prev &&
+        prev.layerWidth === next.layerWidth &&
+        prev.layerHeight === next.layerHeight &&
         prev.width === next.width &&
         prev.height === next.height &&
         prev.offsetX === next.offsetX &&
@@ -510,16 +533,99 @@ const StandardCanvas: React.FC = () => {
     }
   }, [dispatch, measureImageLayout]);
 
+  const scheduleImageLayoutUpdate = useCallback((watchDuration = 0) => {
+    if (layoutRafRef.current === null) {
+      layoutRafRef.current = requestAnimationFrame(() => {
+        layoutRafRef.current = null;
+        updateImageLayout();
+      });
+    }
+
+    if (watchDuration <= 0) return;
+
+    layoutWatchUntilRef.current = Math.max(
+      layoutWatchUntilRef.current,
+      performance.now() + watchDuration
+    );
+
+    if (layoutWatchRafRef.current !== null) return;
+
+    const watchLayout = () => {
+      updateImageLayout();
+      if (performance.now() < layoutWatchUntilRef.current) {
+        layoutWatchRafRef.current = requestAnimationFrame(watchLayout);
+      } else {
+        layoutWatchRafRef.current = null;
+      }
+    };
+
+    layoutWatchRafRef.current = requestAnimationFrame(watchLayout);
+  }, [updateImageLayout]);
+
   useLayoutEffect(() => {
     updateImageLayout();
-    if (!selectionLayerRef.current) return;
-    const observer = new ResizeObserver(() => updateImageLayout());
-    observer.observe(selectionLayerRef.current);
-    if (imageRef.current) {
-      observer.observe(imageRef.current);
+    const observedElements = [
+      containerRef.current,
+      selectionLayerRef.current,
+      imageRef.current,
+    ].filter((element): element is Element => Boolean(element));
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && observedElements.length > 0) {
+      observer = new ResizeObserver(() => scheduleImageLayoutUpdate(650));
+      observedElements.forEach((element) => observer?.observe(element));
     }
-    return () => observer.disconnect();
-  }, [imageVersion, updateImageLayout]);
+
+    const handleViewportResize = () => scheduleImageLayoutUpdate(650);
+    const handleLayoutTransition = (event: TransitionEvent) => {
+      const propertyName = event.propertyName || '';
+      if (
+        propertyName &&
+        !['all', 'width', 'min-width', 'max-width', 'height', 'min-height', 'max-height', 'flex-basis', 'margin', 'padding'].includes(propertyName)
+      ) {
+        return;
+      }
+      scheduleImageLayoutUpdate(650);
+    };
+
+    window.addEventListener('resize', handleViewportResize);
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
+    document.addEventListener('transitionrun', handleLayoutTransition, true);
+    document.addEventListener('transitionend', handleLayoutTransition, true);
+    document.addEventListener('transitioncancel', handleLayoutTransition, true);
+
+    scheduleImageLayoutUpdate(650);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', handleViewportResize);
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
+      document.removeEventListener('transitionrun', handleLayoutTransition, true);
+      document.removeEventListener('transitionend', handleLayoutTransition, true);
+      document.removeEventListener('transitioncancel', handleLayoutTransition, true);
+      if (layoutRafRef.current !== null) {
+        cancelAnimationFrame(layoutRafRef.current);
+        layoutRafRef.current = null;
+      }
+      if (layoutWatchRafRef.current !== null) {
+        cancelAnimationFrame(layoutWatchRafRef.current);
+        layoutWatchRafRef.current = null;
+      }
+      layoutWatchUntilRef.current = 0;
+    };
+  }, [imageVersion, scheduleImageLayoutUpdate, state.mode, state.uploadedImage, updateImageLayout]);
+
+  useLayoutEffect(() => {
+    scheduleImageLayoutUpdate(650);
+  }, [
+    scheduleImageLayoutUpdate,
+    state.bottomPanelCollapsed,
+    state.bottomPanelHeight,
+    state.leftSidebarOpen,
+    state.leftSidebarWidth,
+    state.rightPanelOpen,
+    state.rightPanelWidth,
+  ]);
 
   useEffect(() => {
     if (!selectionLayerRef.current) return;

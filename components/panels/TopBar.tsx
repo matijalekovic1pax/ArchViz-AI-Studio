@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Image as ImageIcon, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, Layers, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -12,6 +12,26 @@ import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
+
+const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
+  'generate-text': 'workflows.generateText',
+  'render-3d': 'workflows.render3d',
+  'scene-compose': 'workflows.sceneCompose',
+  'render-cad': 'workflows.renderCad',
+  masterplan: 'workflows.masterplan',
+  'visual-edit': 'workflows.visualEdit',
+  'material-validation': 'workflows.materialValidation',
+  'document-translate': 'workflows.documentTranslate',
+  'pdf-compression': 'workflows.pdfCompression',
+  exploded: 'workflows.exploded',
+  section: 'workflows.section',
+  'render-sketch': 'workflows.renderSketch',
+  'multi-angle': 'workflows.multiAngle',
+  upscale: 'workflows.upscale',
+  'img-to-cad': 'workflows.imgToCad',
+  video: 'workflows.video',
+  headshot: 'workflows.headshot',
+};
 
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
@@ -548,534 +568,161 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     <>
     <header className="h-auto lg:h-16 bg-surface-elevated border-b border-border flex items-center justify-between px-3 lg:px-6 py-2 lg:py-0 shrink-0 z-40 shadow-sm relative">
       {isMobile ? (
-        <div className="flex w-full flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 select-none">
-              <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shadow-md shrink-0">
-                <span className="text-surface-elevated font-bold text-sm">AV</span>
-              </div>
-              <div className="flex flex-col">
-                <h1 className="font-bold text-xs leading-tight whitespace-nowrap">{t('app.title')}</h1>
-                <p className="text-[10px] text-foreground-muted whitespace-nowrap">{t('app.subtitle')}</p>
-              </div>
+        <div className="flex w-full items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => onToggleMobilePanel?.('workflow')}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-xl py-1 pr-2 text-left active:scale-[0.99]"
+            title={t('leftSidebar.workflow')}
+          >
+            <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shadow-md shrink-0">
+              <span className="text-surface-elevated font-bold text-sm">AV</span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onToggleMobilePanel?.('workflow')}
-                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
-                title={t('leftSidebar.workflow')}
-              >
-                <Layers size={16} />
-              </button>
-              <div className="relative shrink-0">
-                <button
-                  ref={languageButtonRef}
-                  onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-                  className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
-                  title={t('topBar.language')}
-                >
-                  <span>{getLanguageLabel()}</span>
-                  <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
-                </button>
-
-                {showLanguageMenu && (
-                  <div
-                    ref={languageMenuRef}
-                    className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right"
-                  >
-                    <button
-                      onClick={() => handleLanguageChange('en')}
-                      className={cn(
-                        "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                        i18n.language === 'en'
-                          ? "bg-foreground text-background"
-                          : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                      )}
-                      title="English"
-                    >
-                      EN
-                    </button>
-                    <button
-                      onClick={() => handleLanguageChange('es')}
-                      className={cn(
-                        "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                        i18n.language === 'es'
-                          ? "bg-foreground text-background"
-                          : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                      )}
-                      title="Spanish"
-                    >
-                      ES
-                    </button>
-                    <button
-                      onClick={() => handleLanguageChange('fr')}
-                      className={cn(
-                        "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                        i18n.language === 'fr'
-                          ? "bg-foreground text-background"
-                          : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                      )}
-                      title="French"
-                    >
-                      FR
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="relative shrink-0">
-                <button
-                  ref={projectButtonRef}
-                  onClick={() => setShowProjectMenu(!showProjectMenu)}
-                  className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
-                  title={t('topBar.saveProject')}
-                >
-                  <MoreVertical size={16} />
-                </button>
-
-                {showProjectMenu && (
-                  <div
-                    ref={projectMenuRef}
-                    className="absolute right-0 top-full mt-2 w-44 bg-surface-elevated rounded-xl shadow-elevated border border-border p-2 z-50 animate-fade-in origin-top-right"
-                  >
-                    <button
-                      onClick={() => {
-                        setShowProjectMenu(false);
-                        handleReset();
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-2 text-[11px] font-semibold text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <RotateCcw size={14} />
-                      {t('topBar.resetProject')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowProjectMenu(false);
-                        fileInputRef.current?.click();
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-2 text-[11px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-lg transition-colors"
-                    >
-                      <FolderOpen size={14} />
-                      {t('topBar.loadProject')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowProjectMenu(false);
-                        handleExportProject();
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-2 text-[11px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-lg transition-colors"
-                    >
-                      <FileJson size={14} />
-                      {t('topBar.saveProject')}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* User Profile & Logout (Mobile) */}
-              {user?.picture && (
-                <img
-                  src={user.picture}
-                  alt={user.name || ''}
-                  referrerPolicy="no-referrer"
-                  className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
-                />
-              )}
-              <button
-                onClick={() => setShowFeedbackDialog(true)}
-                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
-                title={t('feedback.reportButton')}
-              >
-                <Flag size={16} />
-              </button>
-              {isFeedbackAdmin && (
-                <button
-                  onClick={() => setShowAdminDashboard(true)}
-                  className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
-                  title={t('feedback.adminButton')}
-                >
-                  <Shield size={16} />
-                </button>
-              )}
-              <a
-                href="/docs/"
-                onClick={handleDocsNavigation}
-                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
-                title="User Manual"
-              >
-                <BookOpen size={16} />
-              </a>
-              <button
-                onClick={() => logout()}
-                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
-                title="Sign out"
-              >
-                <LogOut size={16} />
-              </button>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-bold leading-tight">{t('app.title')}</h1>
+              <p className="truncate text-[11px] text-foreground-muted">
+                {t(MOBILE_WORKFLOW_LABEL_KEYS[state.mode] || 'workflows.render3d')}
+              </p>
             </div>
-          </div>
+          </button>
 
           <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept="application/json" />
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="relative shrink-0">
               <button
-                ref={controlsButtonRef}
-                onClick={() => setShowControlsMenu(!showControlsMenu)}
-                className="p-2 rounded-full bg-surface-sunken text-foreground-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
-                title={t('topBar.controls')}
+                ref={languageButtonRef}
+                onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+                className="flex h-9 items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 text-[10px] font-semibold text-foreground-muted transition-colors hover:bg-surface-elevated hover:text-foreground"
+                title={t('topBar.language')}
               >
-                <SlidersHorizontal size={16} />
+                <span>{getLanguageLabel()}</span>
+                <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
               </button>
 
-              {showControlsMenu && (
+              {showLanguageMenu && (
                 <div
-                  ref={controlsMenuRef}
-                  className="absolute left-0 top-full mt-2 w-64 bg-surface-elevated rounded-xl shadow-elevated border border-border z-50 animate-fade-in origin-top-left"
+                  ref={languageMenuRef}
+                  className="absolute right-0 top-full z-50 mt-2 w-16 origin-top-right rounded-lg border border-border bg-surface-elevated p-1 shadow-elevated"
                 >
-                  <div className="p-2.5 border-b border-border-subtle">
-                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
-                      <button
-                        onClick={handleUndoSelection}
-                        disabled={!canUndoSelection}
-                        className={cn(
-                          "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
-                          canUndoSelection
-                            ? "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                            : "text-foreground-muted/30 cursor-not-allowed"
-                        )}
-                        title={t('topBar.undo')}
-                      >
-                        <Undo size={13} />
-                        <span className="text-[7.5px] font-medium uppercase tracking-wide">{t('topBar.undo')}</span>
-                      </button>
-                      <button
-                        onClick={handleRedoSelection}
-                        disabled={!canRedoSelection}
-                        className={cn(
-                          "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
-                          canRedoSelection
-                            ? "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                            : "text-foreground-muted/30 cursor-not-allowed"
-                        )}
-                        title={t('topBar.redo')}
-                      >
-                        <Redo size={13} />
-                        <span className="text-[7.5px] font-medium uppercase tracking-wide">{t('topBar.redo')}</span>
-                      </button>
-                      <button
-                        onClick={handleFitToScreen}
-                        disabled={!state.uploadedImage}
-                        className={cn(
-                          "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
-                          !state.uploadedImage
-                            ? "text-foreground-muted/30 cursor-not-allowed"
-                            : "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                        )}
-                        title={t('topBar.fitToScreen')}
-                      >
-                        <Minimize2 size={13} />
-                        <span className="text-[7.5px] font-medium uppercase tracking-wide">Fit</span>
-                      </button>
-                      {!isVideoMode && (
-                        <button
-                          onClick={handleToggleSplit}
-                          disabled={!state.uploadedImage}
-                          className={cn(
-                            "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
-                            !state.uploadedImage
-                              ? "text-foreground-muted/30 cursor-not-allowed"
-                              : state.workflow.canvasSync
-                                ? "text-foreground bg-surface-sunken"
-                                : "text-foreground-secondary hover:text-foreground hover:bg-surface-sunken"
-                          )}
-                          title={t('topBar.toggleSplitView')}
-                        >
-                          <Columns size={13} />
-                          <span className="text-[7.5px] font-medium uppercase tracking-wide">Split</span>
-                        </button>
-                      )}
-                      <button
-                        onClick={handleClearImage}
-                        disabled={!state.uploadedImage}
-                        className={cn(
-                          "flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-all",
-                          !state.uploadedImage
-                            ? "text-foreground-muted/30 cursor-not-allowed"
-                            : "text-foreground-secondary hover:text-red-600 hover:bg-red-50"
-                        )}
-                        title={t('topBar.clearImage')}
-                      >
-                        <Trash2 size={13} />
-                        <span className="text-[7.5px] font-medium uppercase tracking-wide">Clear</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 border-b border-border-subtle">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted">Zoom</span>
-                      <span className="text-[10px] font-mono text-foreground-muted">{Math.round(state.canvas.zoom * 100)}%</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleZoom(-0.25)}
-                        className="flex-1 p-1.5 bg-surface-sunken rounded-md hover:bg-surface-sunken/80 transition-all"
-                        title={t('topBar.zoomOut')}
-                      >
-                        <ZoomOut size={13} className="mx-auto text-foreground-secondary" />
-                      </button>
-                      <button
-                        onClick={() => handleZoom(0.25)}
-                        className="flex-1 p-1.5 bg-surface-sunken rounded-md hover:bg-surface-sunken/80 transition-all"
-                        title={t('topBar.zoomIn')}
-                      >
-                        <ZoomIn size={13} className="mx-auto text-foreground-secondary" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {!isVideoMode && (
-                    <div className="p-2.5">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-foreground-muted block mb-1.5">
-                        {t('topBar.resolution')}
-                      </span>
-                      <div className="grid grid-cols-3 gap-1">
-                        {resolutionOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => handleResolutionChange(option.value)}
-                            className={cn(
-                              "py-1.5 px-1 text-[10px] font-semibold rounded-md transition-all",
-                              state.output.resolution === option.value
-                                ? "bg-foreground text-background shadow-sm"
-                                : "bg-surface-sunken text-foreground-secondary hover:bg-surface-sunken/80"
-                            )}
-                            title={option.title || `Set ${option.label} output resolution`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1">
-              {state.mode !== 'generate-text' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    aria-label="generate-trigger"
-                    onClick={handleGenerate}
-                    disabled={isDisabled || state.isGenerating}
-                    className={cn(
-                      "relative group flex flex-1 items-center justify-center gap-2 px-4 py-2.5 rounded-full transition-all duration-300 border border-transparent overflow-hidden",
-                      isDisabled
-                        ? "bg-surface-sunken text-foreground-muted cursor-not-allowed"
-                        : "bg-foreground text-background shadow-lg active:scale-95"
-                    )}
-                  >
-                    {state.isGenerating ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span className="font-bold text-[11px]">{t('generation.generating')} {Math.round(state.progress)}%</span>
-                      </>
-                    ) : (
-                      <>
-                        {state.mode === 'document-translate' ? (
-                          <Languages size={16} />
-                        ) : (
-                          <Sparkles size={16} />
-                        )}
-                        <span className="font-bold text-[11px] truncate">{getGenerateLabel()}</span>
-                      </>
-                    )}
-                  </button>
-
-                  {state.isGenerating && (
+                  {(['en', 'es', 'fr'] as const).map((language) => (
                     <button
-                      aria-label="cancel-generation"
-                      onClick={cancelGeneration}
-                      className="px-3 py-2 rounded-full bg-red-600 text-white text-[10px] font-semibold uppercase tracking-wider"
+                      key={language}
+                      onClick={() => handleLanguageChange(language)}
+                      className={cn(
+                        "w-full rounded-md px-2 py-1.5 text-center text-[10px] font-semibold uppercase transition-colors",
+                        i18n.language === language
+                          ? "bg-foreground text-background"
+                          : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                      )}
+                      title={language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'French'}
                     >
-                      {t('generation.cancel')}
+                      {language}
                     </button>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
 
             <div className="relative shrink-0">
-              <div
-                className={cn(
-                  "h-9 rounded-full transition-all border overflow-hidden flex items-center",
-                  state.uploadedImage
-                    ? "bg-surface-elevated text-foreground border-border shadow-sm"
-                    : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
-                )}
+              <button
+                ref={projectButtonRef}
+                onClick={() => setShowProjectMenu(!showProjectMenu)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-foreground-muted transition-colors hover:bg-surface-elevated hover:text-foreground"
+                title={t('topBar.saveProject')}
               >
-                <button
-                  onClick={handleDefaultDownload}
-                  disabled={!state.uploadedImage}
-                  className="h-9 w-9 flex items-center justify-center transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                  title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
+                {user?.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name || ''}
+                    referrerPolicy="no-referrer"
+                    className="h-7 w-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <MoreVertical size={16} />
+                )}
+              </button>
+
+              {showProjectMenu && (
+                <div
+                  ref={projectMenuRef}
+                  className="absolute right-0 top-full z-50 mt-2 w-56 origin-top-right rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated"
                 >
-                  {isVideoMode ? <Video size={16} /> : <Download size={16} />}
-                </button>
-                <div className={cn("h-6 w-px shrink-0", state.uploadedImage ? "bg-foreground/20" : "bg-border/50")} />
-                <button
-                  onClick={handleDownloadClick}
-                  disabled={!state.uploadedImage}
-                  className={cn(
-                    "h-9 w-9 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:bg-transparent",
-                    state.uploadedImage && "bg-surface-sunken/50 hover:bg-foreground hover:text-background"
+                  <div className="border-b border-border-subtle px-2 pb-2 pt-1">
+                    <div className="truncate text-xs font-bold text-foreground">{user?.name || t('app.title')}</div>
+                    <div className="truncate text-[10px] text-foreground-muted">{user?.email || t('app.subtitle')}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowProjectMenu(false);
+                      handleReset();
+                    }}
+                    className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <RotateCcw size={14} />
+                    {t('topBar.resetProject')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowProjectMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+                  >
+                    <FolderOpen size={14} />
+                    {t('topBar.loadProject')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowProjectMenu(false);
+                      handleExportProject();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+                  >
+                    <FileJson size={14} />
+                    {t('topBar.saveProject')}
+                  </button>
+                  <div className="my-2 h-px bg-border-subtle" />
+                  <button
+                    onClick={() => {
+                      setShowProjectMenu(false);
+                      setShowFeedbackDialog(true);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+                  >
+                    <Flag size={14} />
+                    {t('feedback.reportButton')}
+                  </button>
+                  {isFeedbackAdmin && (
+                    <button
+                      onClick={() => {
+                        setShowProjectMenu(false);
+                        setShowAdminDashboard(true);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+                    >
+                      <Shield size={14} />
+                      {t('feedback.adminButton')}
+                    </button>
                   )}
-                  title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
-                  aria-label={t('topBar.downloadSettings')}
-                >
-                  <ChevronDown size={13} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />
-                </button>
-              </div>
-
-              {showDownloadMenu && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-surface-elevated rounded-xl shadow-elevated border border-border p-4 z-50 animate-fade-in origin-top-right">
-                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-subtle">
-                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">{t('topBar.downloadSettings')}</span>
-                    <button onClick={() => setShowDownloadMenu(false)} className="text-foreground-muted hover:text-foreground" title={t('topBar.close')}><X size={14}/></button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                     {isVideoMode ? (
-                       <>
-                          <div className="space-y-2">
-                            <label className="text-xs text-foreground-secondary font-medium">{t('topBar.videoResolution')}</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <button 
-                                  onClick={() => setDownloadResolution('full')} 
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadResolution === 'full' 
-                                      ? "bg-foreground text-background border-foreground shadow-sm" 
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                                >
-                                  <span className="flex items-center gap-1">
-                                      <Film size={10} />
-                                      <span className="text-xs font-bold">4K UHD</span>
-                                  </span>
-                                  <span className={cn("text-[9px]", downloadResolution === 'full' ? "text-white/70" : "text-foreground-muted")}>2160p</span>
-                                </button>
-                                <button 
-                                  onClick={() => setDownloadResolution('medium')} 
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadResolution === 'medium' 
-                                      ? "bg-foreground text-background border-foreground shadow-sm" 
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                                >
-                                  <span className="flex items-center gap-1">
-                                      <MonitorPlay size={10} />
-                                      <span className="text-xs font-bold">HD</span>
-                                  </span>
-                                  <span className={cn("text-[9px]", downloadResolution === 'medium' ? "text-white/70" : "text-foreground-muted")}>1080p</span>
-                                </button>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                             <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
-                             <div className="grid grid-cols-1 gap-2">
-                                <div className="p-2 border border-foreground bg-surface-sunken rounded text-center opacity-70 cursor-not-allowed">
-                                   <span className="text-xs font-bold">MP4</span>
-                                   <span className="block text-[9px] text-foreground-muted">{t('topBar.universalVideoFormat')}</span>
-                                </div>
-                             </div>
-                          </div>
-                       </>
-                     ) : (
-                       <>
-                        <div className="space-y-2">
-                            <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <button
-                                  onClick={() => setDownloadFormat('jpg')}
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadFormat === 'jpg'
-                                      ? "bg-foreground text-background border-foreground shadow-sm"
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                              >
-                                  <span className="text-xs font-bold">JPG</span>
-                                  <span className={cn("text-[9px]", downloadFormat === 'jpg' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.compact')}</span>
-                              </button>
-                              <button
-                                  onClick={() => setDownloadFormat('png')}
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadFormat === 'png'
-                                      ? "bg-foreground text-background border-foreground shadow-sm"
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                              >
-                                  <span className="text-xs font-bold">PNG</span>
-                                  <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
-                              </button>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-xs text-foreground-secondary font-medium">{t('topBar.resolution')}</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <button
-                                  onClick={() => setDownloadResolution('full')}
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadResolution === 'full'
-                                      ? "bg-foreground text-background border-foreground shadow-sm"
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                              >
-                                  <span className="flex items-center gap-1">
-                                    <Maximize2 size={10} />
-                                    <span className="text-xs font-bold">{t('topBar.fullRes')}</span>
-                                  </span>
-                                  <span className={cn("text-[9px]", downloadResolution === 'full' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.originalSize')}</span>
-                              </button>
-                              <button
-                                  onClick={() => setDownloadResolution('medium')}
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadResolution === 'medium'
-                                      ? "bg-foreground text-background border-foreground shadow-sm"
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                              >
-                                  <span className="flex items-center gap-1">
-                                    <Minimize2 size={10} />
-                                    <span className="text-xs font-bold">{t('topBar.medium')}</span>
-                                  </span>
-                                  <span className={cn("text-[9px]", downloadResolution === 'medium' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.scalePercent')}</span>
-                              </button>
-                            </div>
-                        </div>
-                       </>
-                     )}
-
-                     <div className="h-px bg-border-subtle my-2" />
-
-                     <button
-                      onClick={performDownload}
-                      className="w-full py-2.5 bg-foreground text-background rounded-lg text-xs font-bold hover:bg-foreground/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                     >
-                        <FileDown size={14} />
-                        {t('topBar.downloadNow')}
-                     </button>
-                  </div>
+                  <a
+                    href="/docs/"
+                    onClick={() => {
+                      setShowProjectMenu(false);
+                      handleDocsNavigation();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+                  >
+                    <BookOpen size={14} />
+                    User Manual
+                  </a>
+                  <button
+                    onClick={() => logout()}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold text-foreground-muted transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <LogOut size={14} />
+                    Sign out
+                  </button>
                 </div>
               )}
             </div>

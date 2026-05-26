@@ -1544,7 +1544,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     // Describe material in natural language
     const materialDesc: string[] = [];
-    if (selectedMaterial) {
+    if (material.referenceEnabled && material.referenceImage) {
+      materialDesc.push('Use the uploaded material reference image as the authoritative target finish');
+      materialDesc.push('match its color palette, grain or aggregate pattern, texture scale, roughness, reflectivity, joint logic, seams, and surface wear without copying the reference image composition or adding it as an object');
+    } else if (selectedMaterial) {
       materialDesc.push(`Apply ${selectedMaterial.label.toLowerCase()} as a ${selectedMaterial.category.toLowerCase()} finish`);
       materialDesc.push(selectedMaterial.modelPrompt);
     } else if (material.category && material.materialId) {
@@ -2344,13 +2347,6 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push(`Target a ${extend.targetAspectRatio} aspect ratio.`);
     } else {
       parts.push(`Target a ${extend.customRatio.width}:${extend.customRatio.height} aspect ratio.`);
-    }
-
-    if (extend.seamlessBlend) {
-      parts.push('Ensure the new content blends seamlessly with existing pixels.');
-    }
-    if (extend.highDetail) {
-      parts.push('Maintain high detail and quality in the extended areas.');
     }
 
     parts.push('Critical constraints: do not modify any existing pixels in the original image area. Only paint into the new canvas space, continuing the existing perspective lines, horizon placement, architectural materials, and lighting conditions seamlessly. Avoid duplicating, repeating, or warping elements from the original image.');

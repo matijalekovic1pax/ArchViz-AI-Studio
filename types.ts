@@ -315,6 +315,8 @@ export interface WorkflowSettings {
     surfaceType: 'auto' | 'manual';
     category: 'Flooring' | 'Wall' | 'Facade' | 'Roof' | 'Metal' | 'Glass' | 'Stone' | 'Fabric';
     materialId: string;
+    referenceEnabled: boolean;
+    referenceImage: string | null;
     scale: number;
     rotation: number;
     roughness: number;
@@ -512,10 +514,6 @@ export interface WorkflowSettings {
     amount: number;
     targetAspectRatio: '16:9' | '21:9' | '4:3' | '1:1' | '9:16' | 'custom';
     customRatio: { width: number; height: number };
-    lockAspectRatio: boolean;
-    seamlessBlend: boolean;
-    highDetail: boolean;
-    quality: 'draft' | 'standard' | 'high';
   };
   visualBackground: {
     mode: 'prompt' | 'image';
