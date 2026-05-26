@@ -66,6 +66,8 @@ const cleanNote = (value: string): string | undefined => {
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const MAX_FEEDBACK_DOCUMENT_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MAX_FEEDBACK_DOCUMENT_ATTACHMENT_TOTAL_BYTES = 16 * 1024 * 1024;
 
 const estimateDataUrlSize = (dataUrl: string): number => {
   const commaIndex = dataUrl.indexOf(',');
@@ -87,6 +89,33 @@ const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getAttachmentByteSize = (attachment: FeedbackDocumentAttachment): number => {
+  if (Number.isFinite(attachment.size) && attachment.size > 0) return attachment.size;
+  return estimateDataUrlSize(attachment.dataUrl);
+};
+
+const buildDocumentFeedbackPayload = (
+  attachments: FeedbackDocumentAttachment[]
+): FeedbackDocumentAttachment[] | undefined => {
+  let totalBytes = 0;
+  const included: FeedbackDocumentAttachment[] = [];
+
+  for (const attachment of attachments) {
+    const attachmentBytes = getAttachmentByteSize(attachment);
+    if (
+      attachmentBytes > MAX_FEEDBACK_DOCUMENT_ATTACHMENT_BYTES ||
+      totalBytes + attachmentBytes > MAX_FEEDBACK_DOCUMENT_ATTACHMENT_TOTAL_BYTES
+    ) {
+      continue;
+    }
+
+    totalBytes += attachmentBytes;
+    included.push(attachment);
+  }
+
+  return included.length > 0 ? included : undefined;
 };
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -282,10 +311,11 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
 
       const compactPreview = createFeedbackJpegCompressor({
-        quality: 0.85,
-        scale: 0.5,
-        maxDimension: 4096,
+        quality: 0.72,
+        scale: 1,
+        maxDimension: 1280,
         convertRemoteToDataUrl: true,
+        timeoutMs: 8000,
       });
 
       const imageFeedback = await Promise.all(
@@ -323,7 +353,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         reportedFeatureKey: state.mode,
         reportedFeatureLabel: featureLabel,
         imageFeedback,
-        documentFeedback: documentAttachments.length > 0 ? documentAttachments : undefined,
+        documentFeedback: buildDocumentFeedbackPayload(documentAttachments),
       });
 
       onClose();

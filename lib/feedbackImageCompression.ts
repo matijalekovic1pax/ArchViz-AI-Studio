@@ -3,11 +3,13 @@ export interface FeedbackImageCompressionOptions {
   maxDimension?: number;
   scale?: number;
   convertRemoteToDataUrl?: boolean;
+  timeoutMs?: number;
 }
 
-const DEFAULT_QUALITY = 0.85;
-const DEFAULT_MAX_DIMENSION = 4096;
-const DEFAULT_SCALE = 0.5;
+const DEFAULT_QUALITY = 0.72;
+const DEFAULT_MAX_DIMENSION = 1280;
+const DEFAULT_SCALE = 1;
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 const DATA_IMAGE_PREFIX = /^data:image\//i;
 const HTTP_IMAGE_PREFIX = /^https?:\/\//i;
@@ -15,13 +17,32 @@ const HTTP_IMAGE_PREFIX = /^https?:\/\//i;
 const isCompressibleInput = (value: string): boolean =>
   DATA_IMAGE_PREFIX.test(value) || HTTP_IMAGE_PREFIX.test(value);
 
-const loadImage = (src: string): Promise<HTMLImageElement> =>
+const loadImage = (src: string, timeoutMs: number): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      image.onload = null;
+      image.onerror = null;
+      image.src = '';
+      reject(new Error('Image load timed out.'));
+    }, timeoutMs);
+
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      image.onload = null;
+      image.onerror = null;
+      callback();
+    };
+
     image.crossOrigin = 'anonymous';
     image.decoding = 'async';
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Failed to load image.'));
+    image.onload = () => settle(() => resolve(image));
+    image.onerror = () => settle(() => reject(new Error('Failed to load image.')));
     image.src = src;
   });
 
@@ -64,6 +85,7 @@ export const createFeedbackJpegCompressor = (options: FeedbackImageCompressionOp
   const maxDimension = Math.max(320, Math.min(8192, Math.floor(options.maxDimension ?? DEFAULT_MAX_DIMENSION)));
   const scale = Math.max(0.1, Math.min(1, options.scale ?? DEFAULT_SCALE));
   const convertRemoteToDataUrl = options.convertRemoteToDataUrl === true;
+  const timeoutMs = Math.max(1000, Math.min(30_000, Math.floor(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)));
 
   const cache = new Map<string, Promise<string | null>>();
 
@@ -78,7 +100,7 @@ export const createFeedbackJpegCompressor = (options: FeedbackImageCompressionOp
 
     const pending = (async (): Promise<string | null> => {
       try {
-        const image = await loadImage(normalized);
+        const image = await loadImage(normalized, timeoutMs);
         return renderAsJpeg(image, quality, maxDimension, scale);
       } catch {
         return null;

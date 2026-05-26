@@ -21,10 +21,11 @@ export interface PreparedFeedbackSnapshot {
 
 const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppState> => {
   const compressToMediumJpeg = createFeedbackJpegCompressor({
-    quality: 0.85,
-    scale: 0.5,
-    maxDimension: 4096,
+    quality: 0.68,
+    scale: 1,
+    maxDimension: 1280,
     convertRemoteToDataUrl: false,
+    timeoutMs: 8000,
   });
 
   const compressDataImage = async (value: string | null): Promise<string | null> => {
@@ -41,16 +42,86 @@ const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppSta
 
   const history = await Promise.all(
     state.history.map(async (item) => {
-      const thumbnail = await compressDataImage(item.thumbnail);
-      if (thumbnail === item.thumbnail) return item;
-      return { ...item, thumbnail: thumbnail || item.thumbnail };
+      const [thumbnail, attachments] = await Promise.all([
+        compressDataImage(item.thumbnail),
+        item.attachments
+          ? Promise.all(item.attachments.map((attachment) => compressDataImage(attachment)))
+          : Promise.resolve(undefined),
+      ]);
+      return {
+        ...item,
+        thumbnail: thumbnail || item.thumbnail,
+        attachments: attachments ? attachments.map((attachment, index) => attachment || item.attachments?.[index] || '') : item.attachments,
+      };
     })
   );
+
+  const videoState = state.workflow.videoState;
+  const [videoInputImage, startFrame, endFrame, generationHistory] = await Promise.all([
+    compressDataImage(videoState.videoInputImage),
+    compressDataImage(videoState.startFrame),
+    compressDataImage(videoState.endFrame),
+    Promise.all(
+      videoState.generationHistory.map(async (item) => {
+        const thumbnail = await compressDataImage(item.thumbnail);
+        return { ...item, thumbnail: thumbnail || item.thumbnail };
+      })
+    ),
+  ]);
+
+  const headshot = state.workflow.headshot;
+  const [leftImage, frontImage, rightImage, generatedItems] = await Promise.all([
+    compressDataImage(headshot.leftImage),
+    compressDataImage(headshot.frontImage),
+    compressDataImage(headshot.rightImage),
+    Promise.all(
+      headshot.generatedItems.map(async (item) => {
+        const url = await compressDataImage(item.url);
+        return { ...item, url: url || item.url };
+      })
+    ),
+  ]);
+
+  const documentTranslate = state.workflow.documentTranslate;
+  const pdfCompression = state.workflow.pdfCompression;
 
   return {
     ...state,
     uploadedImage,
     sourceImage,
+    workflow: {
+      ...state.workflow,
+      videoState: {
+        ...videoState,
+        videoInputImage,
+        startFrame,
+        endFrame,
+        generationHistory,
+      },
+      documentTranslate: {
+        ...documentTranslate,
+        sourceDocument: documentTranslate.sourceDocument
+          ? { ...documentTranslate.sourceDocument, dataUrl: '' }
+          : null,
+        translatedDocumentUrl: documentTranslate.translatedDocumentUrl ? null : null,
+      },
+      pdfCompression: {
+        ...pdfCompression,
+        queue: pdfCompression.queue.map((item) => ({ ...item, dataUrl: '' })),
+        outputs: pdfCompression.outputs.map((item) => ({ ...item, dataUrl: '' })),
+      },
+      headshot: {
+        ...headshot,
+        leftImage,
+        frontImage,
+        rightImage,
+        generatedItems,
+      },
+    },
+    materialValidation: {
+      ...state.materialValidation,
+      documents: state.materialValidation.documents.map((item) => ({ ...item, dataUrl: '' })),
+    },
     history,
   };
 };

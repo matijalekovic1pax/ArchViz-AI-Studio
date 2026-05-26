@@ -51,6 +51,8 @@ const FEEDBACK_ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent'])
 const FEEDBACK_ALLOWED_CATEGORIES = new Set(['bug', 'quality', 'ux', 'performance', 'feature_request', 'other']);
 const FEEDBACK_ALLOWED_IMAGE_SOURCES = new Set(['source', 'current', 'history']);
 const FEEDBACK_ALLOWED_DOCUMENT_KINDS = new Set(['original', 'translated']);
+const SUPABASE_REQUEST_TIMEOUT_MS = 20_000;
+const SUPABASE_STORAGE_TIMEOUT_MS = 90_000;
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -496,13 +498,34 @@ function resolveSupabaseKey(env) {
 async function supabaseFetch(env, path, init = {}) {
   const baseUrl = resolveSupabaseUrl(env);
   const serviceKey = resolveSupabaseKey(env);
-  const headers = new Headers(init.headers || {});
+  const { timeoutMs = SUPABASE_REQUEST_TIMEOUT_MS, signal: callerSignal, ...fetchInit } = init;
+  const headers = new Headers(fetchInit.headers || {});
   if (!headers.has('apikey')) headers.set('apikey', serviceKey);
   if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${serviceKey}`);
-  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+  if (!headers.has('Content-Type') && fetchInit.body && typeof fetchInit.body === 'string') {
     headers.set('Content-Type', 'application/json');
   }
-  return fetch(`${baseUrl}${path}`, { ...init, headers });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const onCallerAbort = () => controller.abort();
+  callerSignal?.addEventListener?.('abort', onCallerAbort);
+
+  try {
+    return await fetch(`${baseUrl}${path}`, {
+      ...fetchInit,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted && !callerSignal?.aborted) {
+      throw new Error(`Supabase request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    callerSignal?.removeEventListener?.('abort', onCallerAbort);
+  }
 }
 
 async function supabaseJson(env, path, init = {}) {
@@ -544,6 +567,7 @@ async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
       'x-upsert': 'true',
     },
     body: snapshotText,
+    timeoutMs: SUPABASE_STORAGE_TIMEOUT_MS,
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -566,6 +590,7 @@ async function deleteFeedbackSnapshotFromStorage(env, snapshotStoragePath) {
   const encodedPath = objectPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   const resp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
     method: 'DELETE',
+    timeoutMs: SUPABASE_STORAGE_TIMEOUT_MS,
   });
 
   if (!resp.ok && resp.status !== 404) {
@@ -1821,6 +1846,7 @@ async function handleFeedbackSnapshot(request, env, reportId, isAdmin) {
     const storageResp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      timeoutMs: SUPABASE_STORAGE_TIMEOUT_MS,
     });
 
     if (!storageResp.ok) {
