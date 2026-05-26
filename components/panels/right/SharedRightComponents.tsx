@@ -103,7 +103,14 @@ const getLightSourceLabel = (azimuth: number, elevation: number): string => {
   return 'Centered';
 };
 
-export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; onChange: (az: number, el: number) => void }> = ({ azimuth, elevation, onChange }) => {
+interface SunPositionWidgetProps {
+  azimuth: number;
+  elevation: number;
+  onChange: (az: number, el: number) => void;
+  helperText?: string;
+}
+
+export const SunPositionWidget: React.FC<SunPositionWidgetProps> = ({ azimuth, elevation, onChange, helperText }) => {
   const boxRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const sourceLabel = getLightSourceLabel(azimuth, elevation);
@@ -115,7 +122,7 @@ export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; o
     const y = Math.min(Math.max(0, e.clientY - rect.top), rect.height);
 
     // Reuse the legacy azimuth/elevation fields as a camera-relative 2D source map.
-    // X: west/left to east/right. Y: south/back to north/front.
+    // X: left to right. Y: back to front.
     const newAz = Math.round((x / rect.width) * 360);
     const newEl = Math.round(90 - (y / rect.height) * 90);
 
@@ -144,33 +151,40 @@ export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; o
   const top = ((90 - elevation) / 90) * 100;
 
   return (
-    <div 
-      ref={boxRef}
-      className="relative h-24 bg-surface-sunken border border-border rounded-lg overflow-hidden cursor-crosshair mb-4 shadow-inner"
-      onMouseDown={handleMouseDown}
-      aria-label={`Light source direction: ${sourceLabel}`}
-      title={`Light source: ${sourceLabel}`}
-    >
-      {/* Grid Lines */}
-      <div className="absolute inset-0 pointer-events-none opacity-20" 
-           style={{ backgroundImage: 'linear-gradient(to right, #888 1px, transparent 1px), linear-gradient(to bottom, #888 1px, transparent 1px)', backgroundSize: '25% 33%' }} />
-      
-      {/* Directions */}
-      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">N / Front</span>
-      <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">S / Back</span>
-      <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">W / Left</span>
-      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">E / Right</span>
+    <div className="mb-4">
+      <div
+        ref={boxRef}
+        className="relative h-24 bg-surface-sunken border border-border rounded-lg overflow-hidden cursor-crosshair shadow-inner"
+        onMouseDown={handleMouseDown}
+        aria-label={`Light source direction: ${sourceLabel}`}
+        title={`Light source: ${sourceLabel}`}
+      >
+        {/* Grid Lines */}
+        <div className="absolute inset-0 pointer-events-none opacity-20"
+             style={{ backgroundImage: 'linear-gradient(to right, #888 1px, transparent 1px), linear-gradient(to bottom, #888 1px, transparent 1px)', backgroundSize: '25% 33%' }} />
 
-      {/* Sun Handle */}
-      <div 
-        className="absolute w-4 h-4 bg-yellow-400 rounded-full shadow-[0_0_12px_rgba(250,204,21,0.8)] border-2 border-white z-10 transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
-        style={{ left: `${left}%`, top: `${top}%` }}
-      />
-      
-      {/* Info Tag */}
-      <div className="absolute bottom-1 right-1 bg-background/80 backdrop-blur px-1.5 py-0.5 rounded text-[9px] font-mono border border-border pointer-events-none">
-        {sourceLabel}
+        {/* Directions */}
+        <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Front</span>
+        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Back</span>
+        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Left</span>
+        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Right</span>
+
+        {/* Sun Handle */}
+        <div
+          className="absolute w-4 h-4 bg-yellow-400 rounded-full shadow-[0_0_12px_rgba(250,204,21,0.8)] border-2 border-white z-10 transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
+          style={{ left: `${left}%`, top: `${top}%` }}
+        />
+
+        {/* Info Tag */}
+        <div className="absolute bottom-1 right-1 bg-background/80 backdrop-blur px-1.5 py-0.5 rounded text-[9px] font-mono border border-border pointer-events-none">
+          {sourceLabel}
+        </div>
       </div>
+      {helperText && (
+        <p className="mt-2 text-[10px] leading-relaxed text-foreground-muted">
+          {helperText}
+        </p>
+      )}
     </div>
   );
 };

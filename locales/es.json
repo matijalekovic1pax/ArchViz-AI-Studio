@@ -1079,12 +1079,12 @@
       "lighting": {
         "title": "Iluminacion",
         "sunPosition": "Fuente de luz",
+        "lightSourceNote": "Las direcciones son relativas al punto de vista actual desde el que se toma la foto.",
         "intensity": "Intensidad",
         "colorTemp": "Temperatura de color",
         "shadows": {
           "title": "Sombras",
-          "opacity": "Opacidad",
-          "softness": "Suavidad"
+          "opacity": "Opacidad"
         },
         "timeOfDay": {
           "label": "Hora del dia",
@@ -1117,7 +1117,6 @@
           "stormy": "Tormentoso",
           "noir": "Noir"
         },
-        "temperature": "Temperatura",
         "fog": {
           "title": "Niebla",
           "density": "Densidad"

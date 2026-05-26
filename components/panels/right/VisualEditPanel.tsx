@@ -2378,6 +2378,7 @@ export const VisualEditPanel = () => {
                 <SunPositionWidget
                   azimuth={wf.visualLighting.sun.azimuth}
                   elevation={wf.visualLighting.sun.elevation}
+                  helperText="Directions are relative to the current point of view from which the photo is taken."
                   onChange={(azimuth, elevation) => updateLightingSun({ azimuth, elevation })}
                 />
                 <SliderControl

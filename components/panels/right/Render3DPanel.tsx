@@ -103,6 +103,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                     <SunPositionWidget
                       azimuth={settings.lighting.sun.azimuth}
                       elevation={settings.lighting.sun.elevation}
+                      helperText={t('render3dSettings.sections.lighting.lightSourceNote')}
                       onChange={(az, el) => updateSection('lighting', { sun: { ...settings.lighting.sun, azimuth: az, elevation: el } })}
                     />
 
@@ -165,15 +166,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                         unit="%"
                         onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, intensity: v } })}
                       />
-                      <SliderControl
-                        label={t('render3dSettings.sections.lighting.shadows.softness')}
-                        value={settings.lighting.shadows.softness}
-                        min={0}
-                        max={100}
-                        step={1}
-                        unit="%"
-                        onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, softness: v } })}
-                      />
                     </div>
                   )}
                 </div>
@@ -235,15 +227,6 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                     </button>
                   ))}
                 </div>
-
-                <SliderControl
-                  label={t('render3dSettings.sections.atmosphere.temperature')}
-                  value={settings.atmosphere.temp}
-                  min={-100}
-                  max={100}
-                  step={1}
-                  onChange={(v) => updateSection('atmosphere', { temp: v })}
-                />
 
                 <div className="space-y-3 pt-2 border-t border-border-subtle mt-2">
                   <div className="flex items-center justify-between">

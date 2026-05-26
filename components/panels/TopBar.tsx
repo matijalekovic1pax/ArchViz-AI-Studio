@@ -913,23 +913,26 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                 className={cn(
                   "h-9 rounded-full transition-all border overflow-hidden flex items-center",
                   state.uploadedImage
-                    ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
+                    ? "bg-surface-elevated text-foreground border-border shadow-sm"
                     : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
                 )}
               >
                 <button
                   onClick={handleDefaultDownload}
                   disabled={!state.uploadedImage}
-                  className="h-9 w-9 flex items-center justify-center disabled:cursor-not-allowed"
+                  className="h-9 w-9 flex items-center justify-center transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
                 >
                   {isVideoMode ? <Video size={16} /> : <Download size={16} />}
                 </button>
-                <div className={cn("h-5 w-px", state.uploadedImage ? "bg-border-subtle" : "bg-border/40")} />
+                <div className={cn("h-6 w-px shrink-0", state.uploadedImage ? "bg-foreground/20" : "bg-border/50")} />
                 <button
                   onClick={handleDownloadClick}
                   disabled={!state.uploadedImage}
-                  className="h-9 w-8 flex items-center justify-center disabled:cursor-not-allowed"
+                  className={cn(
+                    "h-9 w-9 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:bg-transparent",
+                    state.uploadedImage && "bg-surface-sunken/50 hover:bg-foreground hover:text-background"
+                  )}
                   title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
                   aria-label={t('topBar.downloadSettings')}
                 >
@@ -1555,24 +1558,27 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             className={cn(
               "h-9 rounded-lg transition-all duration-200 flex items-stretch text-xs font-bold border overflow-hidden",
               state.uploadedImage
-                ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken hover:border-foreground-muted shadow-sm"
+                ? "bg-surface-elevated text-foreground border-border hover:border-foreground-muted shadow-sm"
                 : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
             )}
           >
             <button
               onClick={handleDefaultDownload}
               disabled={!state.uploadedImage}
-              className="h-full flex items-center gap-2 pl-4 pr-3 disabled:cursor-not-allowed"
+              className="h-full flex items-center gap-2 pl-4 pr-3 transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:hover:bg-transparent"
               title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
             >
               {isVideoMode ? <Video size={14} /> : <Download size={14} />}
               <span className="hidden sm:inline">{t('topBar.download')}</span>
             </button>
-            <div className={cn("my-2 w-px", state.uploadedImage ? "bg-border-subtle" : "bg-border/40")} />
+            <div className={cn("my-1.5 w-px shrink-0", state.uploadedImage ? "bg-foreground/20" : "bg-border/50")} />
             <button
               onClick={handleDownloadClick}
               disabled={!state.uploadedImage}
-              className="h-full w-10 flex items-center justify-center disabled:cursor-not-allowed"
+              className={cn(
+                "h-full w-11 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:bg-transparent",
+                state.uploadedImage && "bg-surface-sunken/50 hover:bg-foreground hover:text-background"
+              )}
               title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
               aria-label={t('topBar.downloadSettings')}
             >

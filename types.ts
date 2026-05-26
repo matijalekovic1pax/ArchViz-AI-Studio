@@ -93,8 +93,8 @@ export type VisualSelectionShape =
 
 // Render 3D Panel Settings
 export interface Render3DLighting {
-  sun: { enabled: boolean; azimuth: number; elevation: number; intensity: number; colorTemp: number; softness: number };
-  shadows: { enabled: boolean; intensity: number; softness: number; color: string };
+  sun: { enabled: boolean; azimuth: number; elevation: number; intensity: number; colorTemp: number };
+  shadows: { enabled: boolean; intensity: number; color: string };
   ambient: { intensity: number; occlusion: number };
   preset: string;
 }
@@ -103,7 +103,6 @@ export interface Render3DAtmosphere {
   mood: string;
   fog: { enabled: boolean; density: number };
   bloom: { enabled: boolean; intensity: number };
-  temp: number;
 }
 
 export interface Render3DScenery {

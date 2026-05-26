@@ -979,7 +979,7 @@ const describeLightSourcePosition = (azimuth: number, elevation: number): string
     'back-right': 'the image-right rear should act as the source, producing backlit edges and shadows toward the front-left',
   };
 
-  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat N as front/camera-side, S as back/deeper scene, W as image-left, and E as image-right; this is not a geographic sun azimuth. ${lightingEffect[frameDirection]}`;
+  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right; this is not a geographic sun azimuth. ${lightingEffect[frameDirection]}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {
@@ -1004,29 +1004,18 @@ const describeColorTemperature = (kelvin: number): string => {
   return `cold blue light (${kelvin}K) - distinctly cool tones matching deep shade or heavily overcast winter sky`;
 };
 
-const describeShadows = (softness: number, intensity: number): string => {
-  // Precise shadow characteristics
-  const softDesc = softness > 80
-    ? `extremely soft, diffused shadows (${softness}% softness) with gradual falloff spanning many inches`
-    : softness > 60
-      ? `soft shadows (${softness}% softness) with gentle penumbra edges`
-      : softness > 40
-        ? `moderately defined shadows (${softness}% softness) balancing clarity with naturalism`
-        : softness > 20
-          ? `fairly crisp shadows (${softness}% softness) with discernible but not harsh edges`
-          : `razor-sharp shadows (${softness}% softness) with minimal penumbra, typical of direct sunlight`;
-
+const describeShadows = (intensity: number): string => {
   const intensityDesc = intensity > 80
-    ? `rendered at high density (${intensity}% intensity) - deep, nearly black in umbra regions`
+    ? `deep cast shadows at high density (${intensity}% intensity)`
     : intensity > 60
-      ? `at medium-high density (${intensity}% intensity) - clearly visible with good contrast`
+      ? `clear cast shadows at medium-high density (${intensity}% intensity)`
       : intensity > 40
-        ? `at balanced density (${intensity}% intensity) - present but not dominating`
+        ? `balanced cast shadows at ${intensity}% intensity`
         : intensity > 20
-          ? `at reduced density (${intensity}% intensity) - visible but lifted, showing detail in shadow`
-          : `at minimal density (${intensity}% intensity) - very subtle, almost transparent`;
+          ? `light cast shadows at reduced density (${intensity}% intensity)`
+          : `minimal cast shadows at ${intensity}% intensity`;
 
-  return `${softDesc}, ${intensityDesc}`;
+  return `${intensityDesc}, grounded to scene geometry and consistent with the selected light direction`;
 };
 
 const describeLens = (mm: number): string => {
@@ -1042,7 +1031,7 @@ const describeLens = (mm: number): string => {
   return `a long telephoto ${mm}mm lens - extreme compression creating layered, graphic compositions; requires considerable distance from subject`;
 };
 
-const describeAtmosphericMood = (mood: string, temp: number): string => {
+const describeAtmosphericMood = (mood: string): string => {
   const moodDescriptions: Record<string, string> = {
     'natural': 'a balanced, true-to-life atmosphere',
     'warm': 'an inviting, cozy warmth suffusing the scene',
@@ -1058,13 +1047,7 @@ const describeAtmosphericMood = (mood: string, temp: number): string => {
     'noir': 'deep shadows and highlights in classic noir style',
   };
 
-  const moodDesc = moodDescriptions[mood] || mood;
-  const tempDesc = temp > 20 ? ', warmed with golden undertones' :
-    temp < -20 ? ', cooled with blue-violet tones' :
-    temp > 10 ? ', slightly warmed' :
-    temp < -10 ? ', slightly cooled' : '';
-
-  return `${moodDesc}${tempDesc}`;
+  return moodDescriptions[mood] || mood;
 };
 
 const describeFog = (density: number): string => {
@@ -1273,14 +1256,14 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   if (light.shadows.enabled) {
-    lightParts.push(`. The lighting creates ${describeShadows(light.shadows.softness, light.shadows.intensity)}`);
+    lightParts.push(`. The lighting creates ${describeShadows(light.shadows.intensity)}`);
   }
 
   parts.push(`${lightParts.join('')}.`);
 
   // 8. ATMOSPHERE & MOOD - Immersive description
   const atm = r3d.atmosphere;
-  parts.push(`The atmosphere conveys ${describeAtmosphericMood(atm.mood, atm.temp)}.`);
+  parts.push(`The atmosphere conveys ${describeAtmosphericMood(atm.mood)}.`);
 
   if (atm.fog.enabled) {
     parts.push(describeFog(atm.fog.density) + '.');
@@ -2657,12 +2640,12 @@ function generateCadRenderPrompt(state: AppState): string {
   }
 
   if (light.shadows.enabled) {
-    parts.push(`Shadows are ${describeShadows(light.shadows.softness, light.shadows.intensity)}.`);
+    parts.push(`Shadows are ${describeShadows(light.shadows.intensity)}.`);
   }
 
   // Atmosphere
   const atm = r3d.atmosphere;
-  parts.push(`The overall atmosphere conveys ${describeAtmosphericMood(atm.mood, atm.temp)}.`);
+  parts.push(`The overall atmosphere conveys ${describeAtmosphericMood(atm.mood)}.`);
 
   if (atm.fog.enabled) {
     parts.push(describeFog(atm.fog.density) + '.');
@@ -2863,12 +2846,12 @@ function generateSketchPrompt(state: AppState): string {
   }
 
   if (light.shadows.enabled) {
-    parts.push(`Create ${describeShadows(light.shadows.softness, light.shadows.intensity)}.`);
+    parts.push(`Create ${describeShadows(light.shadows.intensity)}.`);
   }
 
   // Atmosphere
   const atm = r3d.atmosphere;
-  parts.push(`The atmosphere should convey ${describeAtmosphericMood(atm.mood, atm.temp)}.`);
+  parts.push(`The atmosphere should convey ${describeAtmosphericMood(atm.mood)}.`);
 
   if (atm.fog.enabled) {
     parts.push(describeFog(atm.fog.density) + '.');

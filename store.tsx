@@ -73,8 +73,8 @@ const initialVideoState: VideoState = {
 
 const initialRender3D: Render3DSettings = {
   lighting: {
-    sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500, softness: 35 },
-    shadows: { enabled: true, intensity: 75, softness: 40, color: '#1a237e' },
+    sun: { enabled: true, azimuth: 135, elevation: 45, intensity: 80, colorTemp: 5500 },
+    shadows: { enabled: true, intensity: 75, color: '#1a237e' },
     ambient: { intensity: 40, occlusion: 50 },
     preset: 'golden-hour',
   },
@@ -82,7 +82,6 @@ const initialRender3D: Render3DSettings = {
     mood: 'natural',
     fog: { enabled: false, density: 20 },
     bloom: { enabled: false, intensity: 30 },
-    temp: 0,
   },
   scenery: {
     people: { enabled: false, count: 20 },
