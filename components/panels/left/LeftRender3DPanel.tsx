@@ -32,7 +32,8 @@ export const LeftRender3DPanel = () => {
     () => [...BUILT_IN_STYLES, ...state.customStyles],
     [state.customStyles]
   );
-  const isStyleReferenceActive = Boolean(wf.styleReferenceEnabled && wf.styleReferenceImage);
+  const isStyleReferenceMode = Boolean(wf.styleReferenceEnabled);
+  const hasStyleReferenceImage = Boolean(wf.styleReferenceEnabled && wf.styleReferenceImage);
   const getStyleDisplayName = useCallback(
     (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
     [t]
@@ -43,15 +44,15 @@ export const LeftRender3DPanel = () => {
   );
 
   const activeStyleRawName = useMemo(() => {
-    if (isStyleReferenceActive) return 'Reference image';
+    if (isStyleReferenceMode) return 'Reference image';
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
     return activeStyle ? activeStyle.name : toTitle(state.activeStyleId);
-  }, [availableStyles, isStyleReferenceActive, state.activeStyleId, toTitle]);
+  }, [availableStyles, isStyleReferenceMode, state.activeStyleId, toTitle]);
   const activeStyleLabel = useMemo(() => {
-    if (isStyleReferenceActive) return t('render3d.styleReference.activeLabel');
+    if (isStyleReferenceMode) return t('render3d.styleReference.activeLabel');
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
     return activeStyle ? getStyleDisplayName(activeStyle) : toTitle(state.activeStyleId);
-  }, [availableStyles, getStyleDisplayName, isStyleReferenceActive, state.activeStyleId, t, toTitle]);
+  }, [availableStyles, getStyleDisplayName, isStyleReferenceMode, state.activeStyleId, t, toTitle]);
 
   const updateWf = useCallback((payload: Partial<typeof wf>) => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload });
@@ -187,7 +188,7 @@ export const LeftRender3DPanel = () => {
         activeStyle: {
           id: state.activeStyleId,
           name: activeStyleRawName,
-          referenceImageEnabled: isStyleReferenceActive
+          referenceImageEnabled: hasStyleReferenceImage
         },
         render3d: wf.render3d,
         lighting: state.lighting,
@@ -258,7 +259,7 @@ export const LeftRender3DPanel = () => {
     wf.sourceType,
     wf.renderMode,
     activeStyleRawName,
-    isStyleReferenceActive,
+    hasStyleReferenceImage,
     ensureServiceInitialized,
     parseProblemAreas,
     updateWf
@@ -356,15 +357,17 @@ export const LeftRender3DPanel = () => {
           <SectionHeader title={t('render3d.style.title')} />
           <span className="text-[9px] text-foreground-muted font-mono">{activeStyleLabel}</span>
         </div>
-        <StyleGrid
-          activeId={state.activeStyleId}
-          onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
-          onBrowse={() => setIsBrowserOpen(true)}
-          styles={availableStyles}
-        />
         <StyleReferenceUploader
-          enabled={isStyleReferenceActive}
+          enabled={Boolean(wf.styleReferenceEnabled)}
           image={wf.styleReferenceImage}
+          presetContent={(
+            <StyleGrid
+              activeId={state.activeStyleId}
+              onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
+              onBrowse={() => setIsBrowserOpen(true)}
+              styles={availableStyles}
+            />
+          )}
           onSetEnabled={(enabled) => updateWf({ styleReferenceEnabled: enabled })}
           onSetImage={(image) => updateWf({ styleReferenceImage: image })}
         />

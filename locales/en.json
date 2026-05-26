@@ -429,6 +429,7 @@
       "activeLabel": "Reference image",
       "upload": "Upload style reference...",
       "change": "Change style reference...",
+      "hint": "Use this image for rendering style only",
       "remove": "Remove style reference",
       "alt": "Style reference"
     },

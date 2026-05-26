@@ -427,6 +427,7 @@
       "activeLabel": "Image de reference",
       "upload": "Telecharger une reference de style...",
       "change": "Changer la reference de style...",
+      "hint": "Utiliser cette image uniquement pour le style du rendu",
       "remove": "Supprimer la reference de style",
       "alt": "Reference de style"
     },

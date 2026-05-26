@@ -89,9 +89,10 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
 export const StyleReferenceUploader: React.FC<{
   enabled: boolean;
   image: string | null;
+  presetContent: React.ReactNode;
   onSetEnabled: (enabled: boolean) => void;
   onSetImage: (image: string | null) => void;
-}> = ({ enabled, image, onSetEnabled, onSetImage }) => {
+}> = ({ enabled, image, presetContent, onSetEnabled, onSetImage }) => {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -111,21 +112,12 @@ export const StyleReferenceUploader: React.FC<{
     }
   };
 
-  const handleUseReference = () => {
-    if (image) {
-      onSetEnabled(true);
-      return;
-    }
-    inputRef.current?.click();
-  };
-
   const handleRemove = () => {
     onSetImage(null);
-    onSetEnabled(false);
   };
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="space-y-2">
       <input
         ref={inputRef}
         type="file"
@@ -150,7 +142,7 @@ export const StyleReferenceUploader: React.FC<{
         </button>
         <button
           type="button"
-          onClick={handleUseReference}
+          onClick={() => onSetEnabled(true)}
           className={cn(
             "h-8 rounded border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors",
             enabled
@@ -163,51 +155,60 @@ export const StyleReferenceUploader: React.FC<{
         </button>
       </div>
 
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-md border p-2 transition-colors",
-          enabled
-            ? "border-accent/50 bg-accent/10"
-            : "border-border bg-surface-sunken"
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="relative w-12 h-12 rounded overflow-hidden border border-border bg-surface-elevated flex-shrink-0 flex items-center justify-center text-foreground-muted hover:text-foreground transition-colors"
-          title={image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
-        >
-          {image ? (
-            <img
-              src={image}
-              alt={t('render3d.styleReference.alt')}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
-            <Upload size={16} />
-          )}
-          {enabled && image && (
-            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-foreground text-background flex items-center justify-center shadow-sm">
-              <Check size={8} strokeWidth={3} />
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex-1 min-w-0 h-8 rounded border border-border bg-surface-elevated px-2 text-left text-xs text-foreground-muted hover:text-foreground hover:border-accent/50 transition-colors truncate"
-        >
-          {image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
-        </button>
-        {image && (
-          <button
-            type="button"
-            onClick={handleRemove}
-            className="w-8 h-8 flex items-center justify-center rounded border border-border bg-surface-elevated text-foreground-muted hover:text-rose-500 hover:border-rose-500/50 transition-colors"
-            title={t('render3d.styleReference.remove')}
-          >
-            <X size={14} />
-          </button>
+      <div className="h-40">
+        {enabled ? (
+          <div className="relative h-full">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className={cn(
+                "relative h-full w-full overflow-hidden rounded-md border transition-all duration-200 group",
+                "flex flex-col items-center justify-center gap-2 text-center",
+                image
+                  ? "border-border bg-surface-sunken hover:border-foreground-muted"
+                  : "border-dashed border-border bg-surface-sunken hover:border-accent/60 hover:bg-surface-elevated"
+              )}
+              title={image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
+            >
+              {image ? (
+                <>
+                  <img
+                    src={image}
+                    alt={t('render3d.styleReference.alt')}
+                    className="absolute inset-0 z-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/75 via-black/15 to-black/10" />
+                  <div className="absolute top-2 right-2 z-10 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center shadow-sm">
+                    <Check size={10} strokeWidth={3} />
+                  </div>
+                </>
+              ) : (
+                <div className="w-12 h-12 rounded-full border border-border bg-surface-elevated flex items-center justify-center text-foreground-muted group-hover:text-accent transition-colors">
+                  <Upload size={20} />
+                </div>
+              )}
+              <div className={cn("relative z-10 px-4", image ? "text-white" : "text-foreground")}>
+                <p className="text-xs font-bold leading-snug">
+                  {image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
+                </p>
+                <p className={cn("mt-1 text-[10px] leading-snug", image ? "text-white/75" : "text-foreground-muted")}>
+                  {t('render3d.styleReference.hint')}
+                </p>
+              </div>
+            </button>
+            {image && (
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="absolute top-2 left-2 z-20 w-7 h-7 flex items-center justify-center rounded-full border border-white/20 bg-black/50 text-white hover:bg-rose-500 transition-colors"
+                title={t('render3d.styleReference.remove')}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ) : (
+          presetContent
         )}
       </div>
     </div>

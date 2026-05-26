@@ -428,6 +428,7 @@
       "activeLabel": "Imagen de referencia",
       "upload": "Subir referencia de estilo...",
       "change": "Cambiar referencia de estilo...",
+      "hint": "Usar esta imagen solo para el estilo del render",
       "remove": "Eliminar referencia de estilo",
       "alt": "Referencia de estilo"
     },
