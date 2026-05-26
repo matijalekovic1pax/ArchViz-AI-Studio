@@ -3,7 +3,7 @@ import { useAppStore } from '../../../store';
 import { useTranslation } from 'react-i18next';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
-import { SectionHeader, StyleGrid } from './SharedLeftComponents';
+import { SectionHeader, StyleGrid, StyleReferenceUploader } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES, generatePrompt } from '../../../engine/promptEngine';
 import { nanoid } from 'nanoid';
@@ -32,6 +32,7 @@ export const LeftRender3DPanel = () => {
     () => [...BUILT_IN_STYLES, ...state.customStyles],
     [state.customStyles]
   );
+  const isStyleReferenceActive = Boolean(wf.styleReferenceEnabled && wf.styleReferenceImage);
   const getStyleDisplayName = useCallback(
     (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
     [t]
@@ -42,13 +43,15 @@ export const LeftRender3DPanel = () => {
   );
 
   const activeStyleRawName = useMemo(() => {
+    if (isStyleReferenceActive) return 'Reference image';
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
     return activeStyle ? activeStyle.name : toTitle(state.activeStyleId);
-  }, [availableStyles, state.activeStyleId, toTitle]);
+  }, [availableStyles, isStyleReferenceActive, state.activeStyleId, toTitle]);
   const activeStyleLabel = useMemo(() => {
+    if (isStyleReferenceActive) return t('render3d.styleReference.activeLabel');
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
     return activeStyle ? getStyleDisplayName(activeStyle) : toTitle(state.activeStyleId);
-  }, [availableStyles, getStyleDisplayName, state.activeStyleId, toTitle]);
+  }, [availableStyles, getStyleDisplayName, isStyleReferenceActive, state.activeStyleId, t, toTitle]);
 
   const updateWf = useCallback((payload: Partial<typeof wf>) => {
     dispatch({ type: 'UPDATE_WORKFLOW', payload });
@@ -183,7 +186,8 @@ export const LeftRender3DPanel = () => {
         renderMode: wf.renderMode,
         activeStyle: {
           id: state.activeStyleId,
-          name: activeStyleRawName
+          name: activeStyleRawName,
+          referenceImageEnabled: isStyleReferenceActive
         },
         render3d: wf.render3d,
         lighting: state.lighting,
@@ -253,7 +257,8 @@ export const LeftRender3DPanel = () => {
     wf.viewType,
     wf.sourceType,
     wf.renderMode,
-    activeStyleLabel,
+    activeStyleRawName,
+    isStyleReferenceActive,
     ensureServiceInitialized,
     parseProblemAreas,
     updateWf
@@ -356,6 +361,12 @@ export const LeftRender3DPanel = () => {
           onSelect={(id) => dispatch({ type: 'SET_STYLE', payload: id })}
           onBrowse={() => setIsBrowserOpen(true)}
           styles={availableStyles}
+        />
+        <StyleReferenceUploader
+          enabled={isStyleReferenceActive}
+          image={wf.styleReferenceImage}
+          onSetEnabled={(enabled) => updateWf({ styleReferenceEnabled: enabled })}
+          onSetImage={(image) => updateWf({ styleReferenceImage: image })}
         />
       </div>
 

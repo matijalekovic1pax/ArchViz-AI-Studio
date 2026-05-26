@@ -1123,14 +1123,23 @@ const describeRenderMode = (mode: string): string => {
   return descriptions[mode] || '';
 };
 
+const getStyleReferenceInstruction = (hasSourceImage: boolean): string => {
+  const imageOrder = hasSourceImage
+    ? 'provided immediately after the source image'
+    : 'provided as an input image';
+  return `**Style Reference (CRITICAL):** A style reference image is ${imageOrder}. Use it only to guide the visual language of the generated render: rendering medium, color grading, contrast curve, material finish, lighting character, atmosphere, camera polish, grain, and overall archviz mood. Do not copy the reference scene, subject, composition, background, furniture, people, signage, logos, or geometry. Preserve the source architecture and requested camera exactly; transfer style cues, not content.`;
+};
+
 // Generate comprehensive prompt for 3D Render mode
 function generate3DRenderPrompt(state: AppState): string {
   const { workflow, activeStyleId, customStyles } = state;
   const r3d = workflow.render3d;
+  const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
+  const hasStyleReference = Boolean(workflow.styleReferenceEnabled && workflow.styleReferenceImage);
 
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
-  const isNoStyle = style?.id === 'no-style';
+  const isNoStyle = !hasStyleReference && style?.id === 'no-style';
 
   const parts: string[] = [];
 
@@ -1158,7 +1167,9 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(`${viewIntro}, rendered from ${sourceDescriptions[workflow.sourceType] || 'a 3D architectural model'}.`);
 
   // 2. STYLE - More narrative description
-  if (!isNoStyle && style) {
+  if (hasStyleReference) {
+    parts.push(getStyleReferenceInstruction(hasSourceImage));
+  } else if (!isNoStyle && style) {
     parts.push(style.description);
     if (style.promptBundle?.renderingLanguage?.atmosphere) {
       const atmosphereWords = style.promptBundle.renderingLanguage.atmosphere;
@@ -2420,8 +2431,9 @@ function generateCadRenderPrompt(state: AppState): string {
   const r3d = workflow.render3d;
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
-  const isNoStyle = style?.id === 'no-style';
   const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
+  const hasStyleReference = Boolean(workflow.styleReferenceEnabled && workflow.styleReferenceImage);
+  const isNoStyle = !hasStyleReference && style?.id === 'no-style';
 
   const parts: string[] = [];
 
@@ -2485,7 +2497,9 @@ function generateCadRenderPrompt(state: AppState): string {
   }
 
   // Style
-  if (!isNoStyle && style) {
+  if (hasStyleReference) {
+    parts.push(getStyleReferenceInstruction(hasSourceImage));
+  } else if (!isNoStyle && style) {
     parts.push(style.description);
     if (style.promptBundle?.renderingLanguage?.atmosphere) {
       const atmosphereWords = style.promptBundle.renderingLanguage.atmosphere;

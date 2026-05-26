@@ -421,6 +421,15 @@
     "style": {
       "title": "Style"
     },
+    "styleReference": {
+      "presets": "Prereglages",
+      "image": "Image",
+      "activeLabel": "Image de reference",
+      "upload": "Telecharger une reference de style...",
+      "change": "Changer la reference de style...",
+      "remove": "Supprimer la reference de style",
+      "alt": "Reference de style"
+    },
     "backgroundReference": {
       "title": "Reference de Fond",
       "upload": "Telecharger une reference...",

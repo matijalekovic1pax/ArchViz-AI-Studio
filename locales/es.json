@@ -422,6 +422,15 @@
     "style": {
       "title": "Estilo"
     },
+    "styleReference": {
+      "presets": "Preajustes",
+      "image": "Imagen",
+      "activeLabel": "Imagen de referencia",
+      "upload": "Subir referencia de estilo...",
+      "change": "Cambiar referencia de estilo...",
+      "remove": "Eliminar referencia de estilo",
+      "alt": "Referencia de estilo"
+    },
     "backgroundReference": {
       "title": "Referencia de Fondo",
       "upload": "Subir referencia...",

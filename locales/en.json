@@ -423,6 +423,15 @@
     "style": {
       "title": "Style"
     },
+    "styleReference": {
+      "presets": "Presets",
+      "image": "Image",
+      "activeLabel": "Reference image",
+      "upload": "Upload style reference...",
+      "change": "Change style reference...",
+      "remove": "Remove style reference",
+      "alt": "Style reference"
+    },
     "backgroundReference": {
       "title": "Background Reference",
       "upload": "Upload reference...",

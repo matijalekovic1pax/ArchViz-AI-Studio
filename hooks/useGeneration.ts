@@ -781,6 +781,18 @@ export function useGeneration(): UseGenerationReturn {
         }
       }
 
+      // Add style reference image for render-style modes if enabled
+      if (
+        (state.mode === 'render-3d' || state.mode === 'render-cad') &&
+        state.workflow.styleReferenceEnabled &&
+        state.workflow.styleReferenceImage
+      ) {
+        const styleImgData = dataUrlToImageData(state.workflow.styleReferenceImage);
+        if (styleImgData) {
+          images.push(styleImgData);
+        }
+      }
+
       // Add background reference image for render-style modes if enabled
       if (
         (state.mode === 'render-3d' || state.mode === 'render-cad') &&

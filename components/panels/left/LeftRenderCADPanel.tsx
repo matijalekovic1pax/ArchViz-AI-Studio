@@ -4,9 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
 import { useAppStore } from '../../../store';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
-import { SectionHeader } from './SharedLeftComponents';
+import { SectionHeader, StyleGrid, StyleReferenceUploader } from './SharedLeftComponents';
 import { Toggle } from '../../ui/Toggle';
-import { StyleGrid } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { LayoutIcon, ScissorsIcon, BuildingIcon, MapIcon, RefreshCw, X, ChevronDown } from 'lucide-react';
@@ -67,6 +66,7 @@ export const LeftRenderCADPanel = () => {
       () => [...BUILT_IN_STYLES, ...state.customStyles],
       [state.customStyles]
     );
+    const isStyleReferenceActive = Boolean(wf.styleReferenceEnabled && wf.styleReferenceImage);
     const getStyleDisplayName = useCallback(
       (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
       [t]
@@ -77,9 +77,10 @@ export const LeftRenderCADPanel = () => {
     );
 
     const activeStyleLabel = useMemo(() => {
+      if (isStyleReferenceActive) return t('render3d.styleReference.activeLabel');
       const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
       return activeStyle ? getStyleDisplayName(activeStyle) : toTitle(state.activeStyleId);
-    }, [availableStyles, getStyleDisplayName, state.activeStyleId, toTitle]);
+    }, [availableStyles, getStyleDisplayName, isStyleReferenceActive, state.activeStyleId, t, toTitle]);
 
     const roomTypeCategories = [
       {
@@ -525,6 +526,12 @@ export const LeftRenderCADPanel = () => {
             onBrowse={() => setIsBrowserOpen(true)}
             styles={availableStyles}
           />
+          <StyleReferenceUploader
+            enabled={isStyleReferenceActive}
+            image={wf.styleReferenceImage}
+            onSetEnabled={(enabled) => updateWf({ styleReferenceEnabled: enabled })}
+            onSetImage={(image) => updateWf({ styleReferenceImage: image })}
+          />
         </div>
 
         {/* Background/Environment Reference */}
@@ -797,4 +804,3 @@ export const LeftRenderCADPanel = () => {
       </div>
     );
 };
-

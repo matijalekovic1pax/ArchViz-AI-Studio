@@ -143,6 +143,8 @@ export interface WorkflowSettings {
   sceneComposeActivePlacementId: string | null;
 
   // Background/Environment Reference
+  styleReferenceImage: string | null;
+  styleReferenceEnabled: boolean;
   backgroundReferenceImage: string | null;
   backgroundReferenceEnabled: boolean;
 

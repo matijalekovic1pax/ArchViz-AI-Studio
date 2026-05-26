@@ -1,7 +1,7 @@
 
-import React, { useMemo } from 'react';
+import React, { ChangeEvent, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Grid } from 'lucide-react';
+import { Check, Grid, Image as ImageIcon, Palette, Upload, X } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
 import { StyleConfiguration } from '../../../types';
@@ -82,6 +82,134 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
         <Grid size={12} />
         <span>{t('styles.browseAll')}</span>
       </button>
+    </div>
+  );
+};
+
+export const StyleReferenceUploader: React.FC<{
+  enabled: boolean;
+  image: string | null;
+  onSetEnabled: (enabled: boolean) => void;
+  onSetImage: (image: string | null) => void;
+}> = ({ enabled, image, onSetEnabled, onSetImage }) => {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      onSetImage(reader.result as string);
+      onSetEnabled(true);
+    };
+    reader.readAsDataURL(file);
+
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+  };
+
+  const handleUseReference = () => {
+    if (image) {
+      onSetEnabled(true);
+      return;
+    }
+    inputRef.current?.click();
+  };
+
+  const handleRemove = () => {
+    onSetImage(null);
+    onSetEnabled(false);
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleUpload}
+        className="hidden"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onSetEnabled(false)}
+          className={cn(
+            "h-8 rounded border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors",
+            !enabled
+              ? "bg-foreground text-background border-foreground"
+              : "bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted"
+          )}
+        >
+          <Palette size={12} />
+          <span>{t('render3d.styleReference.presets')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleUseReference}
+          className={cn(
+            "h-8 rounded border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors",
+            enabled
+              ? "bg-foreground text-background border-foreground"
+              : "bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted"
+          )}
+        >
+          <ImageIcon size={12} />
+          <span>{t('render3d.styleReference.image')}</span>
+        </button>
+      </div>
+
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-md border p-2 transition-colors",
+          enabled
+            ? "border-accent/50 bg-accent/10"
+            : "border-border bg-surface-sunken"
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="relative w-12 h-12 rounded overflow-hidden border border-border bg-surface-elevated flex-shrink-0 flex items-center justify-center text-foreground-muted hover:text-foreground transition-colors"
+          title={image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
+        >
+          {image ? (
+            <img
+              src={image}
+              alt={t('render3d.styleReference.alt')}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <Upload size={16} />
+          )}
+          {enabled && image && (
+            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-foreground text-background flex items-center justify-center shadow-sm">
+              <Check size={8} strokeWidth={3} />
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex-1 min-w-0 h-8 rounded border border-border bg-surface-elevated px-2 text-left text-xs text-foreground-muted hover:text-foreground hover:border-accent/50 transition-colors truncate"
+        >
+          {image ? t('render3d.styleReference.change') : t('render3d.styleReference.upload')}
+        </button>
+        {image && (
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="w-8 h-8 flex items-center justify-center rounded border border-border bg-surface-elevated text-foreground-muted hover:text-rose-500 hover:border-rose-500/50 transition-colors"
+            title={t('render3d.styleReference.remove')}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
     </div>
   );
 };

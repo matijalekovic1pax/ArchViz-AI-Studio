@@ -142,6 +142,8 @@ const initialWorkflow: WorkflowSettings = {
   sceneComposeActivePlacementId: null,
 
   // Background/Environment Reference
+  styleReferenceImage: null,
+  styleReferenceEnabled: false,
   backgroundReferenceImage: null,
   backgroundReferenceEnabled: false,
 
@@ -873,7 +875,11 @@ function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default', prompt: '' };
     case 'SET_PROMPT': return { ...state, prompt: action.payload };
-    case 'SET_STYLE': return { ...state, activeStyleId: action.payload };
+    case 'SET_STYLE': return {
+      ...state,
+      activeStyleId: action.payload,
+      workflow: { ...state.workflow, styleReferenceEnabled: false }
+    };
     case 'SET_IMAGE': return { ...state, uploadedImage: action.payload };
     case 'SET_SOURCE_IMAGE': return { ...state, sourceImage: action.payload };
     case 'CLEAR_CANVAS': return { ...state, uploadedImage: null, sourceImage: null };
