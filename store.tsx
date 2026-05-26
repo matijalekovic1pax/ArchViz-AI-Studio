@@ -1,7 +1,23 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES } from './types';
 import { generatePrompt } from './engine/promptEngine';
+
+const normalizeRenderMode = (mode: unknown): RenderGenerationMode => {
+  return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
+    ? mode as RenderGenerationMode
+    : 'enhance';
+};
+
+const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
+  ...workflow,
+  renderMode: normalizeRenderMode(workflow.renderMode),
+});
+
+const updateWorkflow = (
+  workflow: WorkflowSettings,
+  payload: Partial<WorkflowSettings>
+): WorkflowSettings => normalizeWorkflow({ ...workflow, ...payload });
 
 const initialVideoState: VideoState = {
   inputMode: 'image-animate',
@@ -885,7 +901,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'CLEAR_CANVAS': return { ...state, uploadedImage: null, sourceImage: null };
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
-    case 'UPDATE_WORKFLOW': return { ...state, workflow: { ...state.workflow, ...action.payload } };
+    case 'UPDATE_WORKFLOW': return { ...state, workflow: updateWorkflow(state.workflow, action.payload) };
     
     // Video State Reducers
     case 'UPDATE_VIDEO_STATE': return { ...state, workflow: { ...state.workflow, videoState: { ...state.workflow.videoState, ...action.payload } } };
@@ -927,8 +943,9 @@ function appReducer(state: AppState, action: Action): AppState {
 
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
-    case 'LOAD_PROJECT': return { 
+    case 'LOAD_PROJECT': return {
       ...action.payload,
+      workflow: normalizeWorkflow(action.payload.workflow),
       sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
       appAlert: action.payload?.appAlert ?? null
     };

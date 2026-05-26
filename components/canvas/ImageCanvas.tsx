@@ -365,6 +365,20 @@ const StandardCanvas: React.FC = () => {
   const splitOriginal = state.sourceImage || state.uploadedImage;
   const splitPreview = latestHistoryItem?.thumbnail || state.uploadedImage;
 
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleFullscreenKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleFullscreenKeyDown);
+    return () => window.removeEventListener('keydown', handleFullscreenKeyDown);
+  }, [isFullscreen]);
+
   // --- Handlers ---
 
   const updateActiveSelection = useCallback((

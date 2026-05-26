@@ -108,7 +108,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
   
   // Download options state
-  const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpg' | 'mp4'>('png');
+  const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpg' | 'mp4'>('jpg');
   const [downloadResolution, setDownloadResolution] = useState<'full' | 'medium'>('full');
   
   const isVideoMode = state.mode === 'video';
@@ -152,10 +152,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           : isVideoMode
             ? !videoReady || !videoUnlocked
             : !state.uploadedImage;
-  const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
+  const resolutionOptions: Array<{ value: '2k' | '4k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
-    { value: '8k', label: '8K', title: '8K (API capped at 4K)' },
   ];
 
   const getSafeProjectName = (value: string) =>
@@ -168,7 +167,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const safeProjectName = getSafeProjectName(projectName);
   const canSaveProject = safeProjectName.length > 0;
 
-  const handleResolutionChange = (resolution: '2k' | '4k' | '8k') => {
+  const handleResolutionChange = (resolution: '2k' | '4k') => {
     if (resolution === state.output.resolution) return;
     dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution } });
   };
@@ -251,19 +250,22 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowDownloadMenu(!showDownloadMenu);
   };
 
-  const performDownload = () => {
+  const performDownload = (options?: { format?: 'png' | 'jpg' | 'mp4'; resolution?: 'full' | 'medium' }) => {
     if (!state.uploadedImage) return;
+
+    const requestedFormat = options?.format ?? downloadFormat;
+    const requestedResolution = options?.resolution ?? downloadResolution;
     
     // Determine extension and filename parts based on mode
-    let ext = downloadFormat;
-    let resSuffix = downloadResolution === 'medium' ? '-med' : '-full';
+    let ext = requestedFormat;
+    let resSuffix = requestedResolution === 'medium' ? '-med' : '-full';
     
     // Enforce logic if modes switched but state lingered
     if (isVideoMode) {
       ext = 'mp4';
-      resSuffix = downloadResolution === 'medium' ? '-1080p' : '-4k';
+      resSuffix = requestedResolution === 'medium' ? '-1080p' : '-4k';
     } else {
-      if (ext === 'mp4') ext = 'png'; // Fallback if stuck
+      if (ext === 'mp4') ext = 'jpg'; // Fallback if stuck
     }
 
     const prefix = isVideoMode ? 'archviz-video' : 'archviz-render';
@@ -295,7 +297,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             let width = img.width;
             let height = img.height;
 
-            if (downloadResolution === 'medium') {
+            if (requestedResolution === 'medium') {
                 width *= 0.5;
                 height *= 0.5;
             }
@@ -350,6 +352,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
     // Set src after handlers
     img.src = downloadSource;
+  };
+
+  const handleDefaultDownload = () => {
+    performDownload(isVideoMode ? { resolution: 'full' } : { format: 'jpg', resolution: 'full' });
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -903,19 +909,33 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </div>
 
             <div className="relative shrink-0">
-              <button
-                onClick={handleDownloadClick}
-                disabled={!state.uploadedImage}
+              <div
                 className={cn(
-                  "p-2 rounded-full transition-all border",
+                  "h-9 rounded-full transition-all border overflow-hidden flex items-center",
                   state.uploadedImage
                     ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken"
                     : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
                 )}
-                title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
               >
-                {isVideoMode ? <Video size={16} /> : <Download size={16} />}
-              </button>
+                <button
+                  onClick={handleDefaultDownload}
+                  disabled={!state.uploadedImage}
+                  className="h-9 w-9 flex items-center justify-center disabled:cursor-not-allowed"
+                  title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
+                >
+                  {isVideoMode ? <Video size={16} /> : <Download size={16} />}
+                </button>
+                <div className={cn("h-5 w-px", state.uploadedImage ? "bg-border-subtle" : "bg-border/40")} />
+                <button
+                  onClick={handleDownloadClick}
+                  disabled={!state.uploadedImage}
+                  className="h-9 w-8 flex items-center justify-center disabled:cursor-not-allowed"
+                  title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
+                  aria-label={t('topBar.downloadSettings')}
+                >
+                  <ChevronDown size={13} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />
+                </button>
+              </div>
 
               {showDownloadMenu && (
                 <div className="absolute right-0 top-full mt-2 w-72 bg-surface-elevated rounded-xl shadow-elevated border border-border p-4 z-50 animate-fade-in origin-top-right">
@@ -979,18 +999,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                             <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <button
-                                  onClick={() => setDownloadFormat('png')}
-                                  className={cn(
-                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                    downloadFormat === 'png'
-                                      ? "bg-foreground text-background border-foreground shadow-sm"
-                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                                  )}
-                              >
-                                  <span className="text-xs font-bold">PNG</span>
-                                  <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
-                              </button>
-                              <button
                                   onClick={() => setDownloadFormat('jpg')}
                                   className={cn(
                                     "flex flex-col items-center justify-center p-2 border rounded transition-all",
@@ -1001,6 +1009,18 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                               >
                                   <span className="text-xs font-bold">JPG</span>
                                   <span className={cn("text-[9px]", downloadFormat === 'jpg' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.compact')}</span>
+                              </button>
+                              <button
+                                  onClick={() => setDownloadFormat('png')}
+                                  className={cn(
+                                    "flex flex-col items-center justify-center p-2 border rounded transition-all",
+                                    downloadFormat === 'png'
+                                      ? "bg-foreground text-background border-foreground shadow-sm"
+                                      : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
+                                  )}
+                              >
+                                  <span className="text-xs font-bold">PNG</span>
+                                  <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
                               </button>
                             </div>
                         </div>
@@ -1531,21 +1551,34 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
         {/* Download Button Group */}
         <div className="relative shrink-0">
-          <button
-            onClick={handleDownloadClick}
-            disabled={!state.uploadedImage}
+          <div
             className={cn(
-              "h-9 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-xs font-bold border",
+              "h-9 rounded-lg transition-all duration-200 flex items-stretch text-xs font-bold border overflow-hidden",
               state.uploadedImage
                 ? "bg-surface-elevated text-foreground border-border hover:bg-surface-sunken hover:border-foreground-muted shadow-sm"
                 : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
             )}
-            title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
           >
-            {isVideoMode ? <Video size={14} /> : <Download size={14} />}
-            <span className="hidden sm:inline">{t('topBar.download')}</span>
-            {state.uploadedImage && <ChevronDown size={12} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />}
-          </button>
+            <button
+              onClick={handleDefaultDownload}
+              disabled={!state.uploadedImage}
+              className="h-full flex items-center gap-2 pl-4 pr-3 disabled:cursor-not-allowed"
+              title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
+            >
+              {isVideoMode ? <Video size={14} /> : <Download size={14} />}
+              <span className="hidden sm:inline">{t('topBar.download')}</span>
+            </button>
+            <div className={cn("my-2 w-px", state.uploadedImage ? "bg-border-subtle" : "bg-border/40")} />
+            <button
+              onClick={handleDownloadClick}
+              disabled={!state.uploadedImage}
+              className="h-full w-10 flex items-center justify-center disabled:cursor-not-allowed"
+              title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
+              aria-label={t('topBar.downloadSettings')}
+            >
+              <ChevronDown size={13} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />
+            </button>
+          </div>
 
           {/* Download Pop-up Menu */}
           {showDownloadMenu && (
@@ -1612,18 +1645,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                         <label className="text-xs text-foreground-secondary font-medium">{t('topBar.format')}</label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <button
-                              onClick={() => setDownloadFormat('png')}
-                              className={cn(
-                                "flex flex-col items-center justify-center p-2 border rounded transition-all",
-                                downloadFormat === 'png'
-                                  ? "bg-foreground text-background border-foreground shadow-sm"
-                                  : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
-                              )}
-                          >
-                              <span className="text-xs font-bold">PNG</span>
-                              <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
-                          </button>
-                          <button
                               onClick={() => setDownloadFormat('jpg')}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 border rounded transition-all",
@@ -1634,6 +1655,18 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                           >
                               <span className="text-xs font-bold">JPG</span>
                               <span className={cn("text-[9px]", downloadFormat === 'jpg' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.compact')}</span>
+                          </button>
+                          <button
+                              onClick={() => setDownloadFormat('png')}
+                              className={cn(
+                                "flex flex-col items-center justify-center p-2 border rounded transition-all",
+                                downloadFormat === 'png'
+                                  ? "bg-foreground text-background border-foreground shadow-sm"
+                                  : "bg-surface-sunken border-transparent hover:border-border text-foreground-secondary"
+                              )}
+                          >
+                              <span className="text-xs font-bold">PNG</span>
+                              <span className={cn("text-[9px]", downloadFormat === 'png' ? "text-white/70" : "text-foreground-muted")}>{t('topBar.lossless')}</span>
                           </button>
                         </div>
                     </div>

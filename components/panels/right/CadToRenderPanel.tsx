@@ -9,6 +9,7 @@ import { Slider } from '../../ui/Slider';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
 import { VerticalCard } from './SharedRightComponents';
+import { RENDER_GENERATION_MODES, RenderGenerationMode } from '../../../types';
 
 export const CadToRenderPanel = () => {
   const { state, dispatch } = useAppStore();
@@ -19,13 +20,20 @@ export const CadToRenderPanel = () => {
   const cadFurnishing = wf.cadFurnishing;
   const cadContext = wf.cadContext;
   const [openSection, setOpenSection] = useState<string | null>(null);
-  const generationModes = [
-    { id: 'enhance', label: t('render3dSettings.generationMode.options.enhance.label'), desc: t('render3dSettings.generationMode.options.enhance.desc') },
-    { id: 'stylize', label: t('render3dSettings.generationMode.options.stylize.label'), desc: t('render3dSettings.generationMode.options.stylize.desc') },
-    { id: 'hybrid', label: t('render3dSettings.generationMode.options.hybrid.label'), desc: t('render3dSettings.generationMode.options.hybrid.desc') },
-    { id: 'strict-realism', label: t('render3dSettings.generationMode.options.strictRealism.label'), desc: t('render3dSettings.generationMode.options.strictRealism.desc') },
-    { id: 'concept-push', label: t('render3dSettings.generationMode.options.conceptPush.label'), desc: t('render3dSettings.generationMode.options.conceptPush.desc') },
-  ];
+  const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
+    'strict-realism': {
+      label: t('render3dSettings.generationMode.options.strictRealism.label'),
+      desc: t('render3dSettings.generationMode.options.strictRealism.desc'),
+    },
+    'enhance': {
+      label: t('render3dSettings.generationMode.options.enhance.label'),
+      desc: t('render3dSettings.generationMode.options.enhance.desc'),
+    },
+    'concept-push': {
+      label: t('render3dSettings.generationMode.options.conceptPush.label'),
+      desc: t('render3dSettings.generationMode.options.conceptPush.desc'),
+    },
+  };
 
   const directionOptions = [
     { value: 'n', label: 'N' },
@@ -53,13 +61,13 @@ export const CadToRenderPanel = () => {
           {t('render3dSettings.generationMode.title')}
         </label>
         <div className="space-y-1">
-          {generationModes.map((mode) => (
+          {RENDER_GENERATION_MODES.map((mode) => (
             <VerticalCard
-              key={mode.id}
-              label={mode.label}
-              description={mode.desc}
-              selected={wf.renderMode === mode.id}
-              onClick={() => updateWf({ renderMode: mode.id as any })}
+              key={mode}
+              label={generationModeCopy[mode].label}
+              description={generationModeCopy[mode].desc}
+              selected={wf.renderMode === mode}
+              onClick={() => updateWf({ renderMode: mode })}
             />
           ))}
         </div>

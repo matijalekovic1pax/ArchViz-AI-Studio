@@ -90,21 +90,35 @@ export const NumberInput: React.FC<NumberInputProps> = ({ label, value, min, max
   </div>
 );
 
+const getLightSourceLabel = (azimuth: number, elevation: number): string => {
+  const horizontal = Math.min(1, Math.max(0, azimuth / 360));
+  const frontBack = Math.min(1, Math.max(0, elevation / 90));
+
+  const xLabel = horizontal < 0.4 ? 'Left' : horizontal > 0.6 ? 'Right' : '';
+  const yLabel = frontBack > 0.6 ? 'Front' : frontBack < 0.4 ? 'Back' : '';
+
+  if (xLabel && yLabel) return `${yLabel}-${xLabel}`;
+  if (yLabel) return yLabel;
+  if (xLabel) return xLabel;
+  return 'Centered';
+};
+
 export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; onChange: (az: number, el: number) => void }> = ({ azimuth, elevation, onChange }) => {
   const boxRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const sourceLabel = getLightSourceLabel(azimuth, elevation);
 
   const handleMove = (e: MouseEvent | React.MouseEvent) => {
     if (!boxRef.current) return;
     const rect = boxRef.current.getBoundingClientRect();
     const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width);
     const y = Math.min(Math.max(0, e.clientY - rect.top), rect.height);
-    
-    // Map x to Azimuth (0-360)
+
+    // Reuse the legacy azimuth/elevation fields as a camera-relative 2D source map.
+    // X: west/left to east/right. Y: south/back to north/front.
     const newAz = Math.round((x / rect.width) * 360);
-    // Map y to Elevation (90-0) - Top is 90 deg
     const newEl = Math.round(90 - (y / rect.height) * 90);
-    
+
     onChange(newAz, newEl);
   };
 
@@ -126,7 +140,6 @@ export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; o
     };
   }, [isDragging]);
 
-  // Calculate position percentage
   const left = (azimuth / 360) * 100;
   const top = ((90 - elevation) / 90) * 100;
 
@@ -135,16 +148,18 @@ export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; o
       ref={boxRef}
       className="relative h-24 bg-surface-sunken border border-border rounded-lg overflow-hidden cursor-crosshair mb-4 shadow-inner"
       onMouseDown={handleMouseDown}
+      aria-label={`Light source direction: ${sourceLabel}`}
+      title={`Light source: ${sourceLabel}`}
     >
       {/* Grid Lines */}
       <div className="absolute inset-0 pointer-events-none opacity-20" 
            style={{ backgroundImage: 'linear-gradient(to right, #888 1px, transparent 1px), linear-gradient(to bottom, #888 1px, transparent 1px)', backgroundSize: '25% 33%' }} />
       
       {/* Directions */}
-      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">N</span>
-      <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">S</span>
-      <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">W</span>
-      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">E</span>
+      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">N / Front</span>
+      <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">S / Back</span>
+      <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">W / Left</span>
+      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">E / Right</span>
 
       {/* Sun Handle */}
       <div 
@@ -154,7 +169,7 @@ export const SunPositionWidget: React.FC<{ azimuth: number; elevation: number; o
       
       {/* Info Tag */}
       <div className="absolute bottom-1 right-1 bg-background/80 backdrop-blur px-1.5 py-0.5 rounded text-[9px] font-mono border border-border pointer-events-none">
-        Az:{azimuth}° El:{elevation}°
+        {sourceLabel}
       </div>
     </div>
   );

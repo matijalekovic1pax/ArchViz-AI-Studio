@@ -25,20 +25,18 @@ export const BottomPanel: React.FC = () => {
   const showEditStack = state.mode === 'visual-edit';
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
-  const isUpscaleMode = state.mode === 'upscale';
   const isMultiAngleMode = state.mode === 'multi-angle';
-  const isSelectableHistoryMode = isUpscaleMode || isMultiAngleMode;
   const isVideoLocked = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
   const resolvedBottomTab = isGenerateTextMode
     ? 'history'
     : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
 
   useEffect(() => {
-    if (!isSelectableHistoryMode || resolvedBottomTab !== 'history') {
+    if (resolvedBottomTab !== 'history') {
       setHistorySelectMode(false);
       setSelectedHistoryIds(new Set());
     }
-  }, [isSelectableHistoryMode, resolvedBottomTab]);
+  }, [resolvedBottomTab]);
 
   useEffect(() => {
     if (!isPromptEdited) {
@@ -231,43 +229,6 @@ export const BottomPanel: React.FC = () => {
     
     // ... (Keep existing handlers for legend, edit-stack, cleanup, history)
     if (resolvedBottomTab === 'history') {
-        if (!isSelectableHistoryMode) {
-          return (
-            <div className="absolute inset-0 p-4 overflow-x-auto flex items-center gap-4 custom-scrollbar">
-              {historyItems.length === 0 ? (
-                 <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
-                    <Clock size={24} className="opacity-20" />
-                    <span className="text-xs">{t('bottomPanel.history.empty')}</span>
-                  </div>
-              ) : (
-                 historyItems.map((item) => (
-                   <button 
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
-                        if (item.settings?.kind === 'source') {
-                          dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
-                        }
-                        dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
-                        dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
-                      }}
-                      className="min-w-[140px] aspect-video rounded-lg border border-border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-foreground transition-colors group relative overflow-hidden"
-                   >
-                      <div className="absolute inset-0 bg-surface-sunken">
-                         <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                         <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
-                         <div className="text-[8px] opacity-80 truncate">{item.mode}</div>
-                      </div>
-                   </button>
-                 ))
-              )}
-            </div>
-          );
-        }
-
         return (
           <div className="absolute inset-0 p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
@@ -287,7 +248,7 @@ export const BottomPanel: React.FC = () => {
                   )}
                 >
                   <Download size={12} />
-                  Download All
+                  {t('bottomPanel.history.downloadAll')}
                 </button>
                 <button
                   type="button"
@@ -305,24 +266,23 @@ export const BottomPanel: React.FC = () => {
                   )}
                 >
                   <Check size={12} />
-                  {historySelectMode ? 'Cancel' : 'Select'}
+                  {historySelectMode ? t('bottomPanel.history.cancelSelection') : t('bottomPanel.history.select')}
                 </button>
-                {historySelectMode && (
-                  <button
-                    type="button"
-                    onClick={() => downloadHistoryItems(selectedHistoryItems)}
-                    disabled={selectedHistoryItems.length === 0}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
-                      selectedHistoryItems.length === 0
-                        ? "border-border text-foreground-muted/60 cursor-not-allowed"
-                        : "border-accent text-white bg-accent hover:bg-accent/90"
-                    )}
-                  >
-                    <Download size={12} />
-                    Download Selected {selectedHistoryItems.length > 0 ? `(${selectedHistoryItems.length})` : ''}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => downloadHistoryItems(selectedHistoryItems)}
+                  disabled={selectedHistoryItems.length === 0}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                    selectedHistoryItems.length === 0
+                      ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                      : "border-accent text-white bg-accent hover:bg-accent/90"
+                  )}
+                >
+                  <Download size={12} />
+                  {t('bottomPanel.history.downloadSelected')}
+                  {selectedHistoryItems.length > 0 ? ` (${selectedHistoryItems.length})` : ''}
+                </button>
               </div>
             </div>
 

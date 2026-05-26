@@ -119,6 +119,14 @@ export interface Render3DFormat {
   viewType: string;
 }
 
+export type RenderGenerationMode = 'strict-realism' | 'enhance' | 'concept-push';
+
+export const RENDER_GENERATION_MODES: readonly RenderGenerationMode[] = [
+  'strict-realism',
+  'enhance',
+  'concept-push',
+] as const;
+
 export interface Render3DSettings {
   lighting: Render3DLighting;
   atmosphere: Render3DAtmosphere;
@@ -135,7 +143,7 @@ export interface WorkflowSettings {
   viewType: 'exterior' | 'interior' | 'aerial' | 'detail';
   prioritizationEnabled: boolean;
   detectedElements: DetectedElement[];
-  renderMode: 'enhance' | 'stylize' | 'hybrid' | 'strict-realism' | 'concept-push';
+  renderMode: RenderGenerationMode;
   canvasSync: boolean; // Used for Split View toggle
   compareMode: boolean;
   render3d: Render3DSettings;
@@ -1322,7 +1330,7 @@ export interface ContextState {
 }
 
 export interface OutputState {
-  resolution: '2k' | '4k' | '8k' | 'custom';
+  resolution: '2k' | '4k' | 'custom';
   customResolution: { width: number; height: number };
   aspectRatio: '1:1' | '16:9' | '4:5' | '9:16' | 'custom';
   customAspectRatio: { width: number; height: number };

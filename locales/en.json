@@ -1018,7 +1018,11 @@
       "cleanup": "Cleanup"
     },
     "history": {
-      "empty": "No history in this session."
+      "empty": "No history in this session.",
+      "downloadAll": "Download All",
+      "downloadSelected": "Download Selection",
+      "select": "Select",
+      "cancelSelection": "Cancel"
     },
     "timeline": {
       "mainSequence": "Main Sequence",
@@ -1062,32 +1066,24 @@
     "generationMode": {
       "title": "Generation Mode",
       "options": {
-        "enhance": {
-          "label": "Enhance",
-          "desc": "Improves lighting and overall render clarity."
-        },
-        "stylize": {
-          "label": "Stylize",
-          "desc": "Applies artistic styles to the base model."
-        },
-        "hybrid": {
-          "label": "Hybrid",
-          "desc": "Balances structural accuracy with creative details."
-        },
         "strictRealism": {
           "label": "Strict Realism",
-          "desc": "Photographic accuracy, minimal hallucination."
+          "desc": "Converts 3D/Revit screenshots into hyper-realistic renders."
+        },
+        "enhance": {
+          "label": "Enhance",
+          "desc": "Refines realistic renders: style, lighting, mood, clarity."
         },
         "conceptPush": {
           "label": "Concept Push",
-          "desc": "High creativity, explores new forms."
+          "desc": "Creates less-real, artificial concept renders with bolder ideas."
         }
       }
     },
     "sections": {
       "lighting": {
         "title": "Lighting",
-        "sunPosition": "Sun Position",
+        "sunPosition": "Light Source",
         "intensity": "Intensity",
         "colorTemp": "Color Temp",
         "shadows": {

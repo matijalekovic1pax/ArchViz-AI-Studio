@@ -429,6 +429,18 @@ export class GeminiService {
       'Allowed changes are only optical-quality improvements: reduce noise and compression artifacts, recover local contrast, sharpen existing edges, clarify already-visible microdetail, and smooth obvious rendering artifacts.',
       'For blurry, tiny, distant, or ambiguous areas, keep the same shapes and approximate detail rather than inventing new content. When enhancement conflicts with preservation, preserve.'
     ].join(' ');
+    const guidedRemoveTargetInstructions = [
+      'For removal requests, treat the selection mask as target guidance for the complete subject centered inside the selected area, not as a request to remove only small high-contrast fragments.',
+      'If the centered target is a person, remove the entire person silhouette: head, torso, limbs, clothing, hair, hands, feet, carried bags, wheeled luggage, straps, personal items, contact shadows, and reflections.',
+      'If the whole person or object extends slightly beyond the white mask, remove those connected parts too when needed so no body, accessory, shadow, or ghosted remnant remains.',
+      'Do not remove only luggage, bags, shadows, or accessories while leaving the selected person or main object visible.',
+      'Treat selected floor, wall, kiosk, ceiling, sign, and architectural pixels as reconstruction context unless they are clearly the central selected subject.'
+    ].join(' ');
+    const strictRemoveTargetInstructions = [
+      'For removal requests, remove the complete target content inside the editable area rather than only small high-contrast fragments.',
+      'If the editable area contains a person, remove all visible person parts and personal accessories inside that area, then reconstruct the background naturally.',
+      'Do not remove only luggage, bags, shadows, or accessories while leaving the targeted person or main object visible inside the editable area.'
+    ].join(' ');
 
     switch (request.editType) {
       case 'inpaint':
@@ -449,8 +461,8 @@ export class GeminiService {
         break;
       case 'remove':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Remove the unwanted content indicated by the selection mask as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
-          : `${maskInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
+          ? `${maskInstructions} ${guidedRemoveTargetInstructions} Remove the unwanted content indicated by the selection mask as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
+          : `${maskInstructions} ${strictRemoveTargetInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
         break;
       case 'replace':
         editPrompt = maskMode === 'guided'

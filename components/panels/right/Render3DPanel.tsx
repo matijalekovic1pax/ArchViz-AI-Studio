@@ -7,7 +7,7 @@ import { Accordion } from '../../ui/Accordion';
 import { Sun, User, Wind, Sparkle, Car, Trees } from 'lucide-react';
 import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
 import { cn } from '../../../lib/utils';
-import { Render3DSettings } from '../../../types';
+import { RENDER_GENERATION_MODES, Render3DSettings, RenderGenerationMode } from '../../../types';
 
 interface Render3DPanelProps {
   showGenerationMode?: boolean;
@@ -41,6 +41,20 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   };
 
   const sectionId = (id: string) => (accordionIdPrefix ? `${accordionIdPrefix}${id}` : id);
+  const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
+    'strict-realism': {
+      label: t('render3dSettings.generationMode.options.strictRealism.label'),
+      desc: t('render3dSettings.generationMode.options.strictRealism.desc'),
+    },
+    'enhance': {
+      label: t('render3dSettings.generationMode.options.enhance.label'),
+      desc: t('render3dSettings.generationMode.options.enhance.desc'),
+    },
+    'concept-push': {
+      label: t('render3dSettings.generationMode.options.conceptPush.label'),
+      desc: t('render3dSettings.generationMode.options.conceptPush.desc'),
+    },
+  };
 
   return (
     <div className="space-y-6">
@@ -50,19 +64,13 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
             {t('render3dSettings.generationMode.title')}
           </label>
           <div className="space-y-1">
-            {[
-              { id: 'enhance', label: t('render3dSettings.generationMode.options.enhance.label'), desc: t('render3dSettings.generationMode.options.enhance.desc') },
-              { id: 'stylize', label: t('render3dSettings.generationMode.options.stylize.label'), desc: t('render3dSettings.generationMode.options.stylize.desc') },
-              { id: 'hybrid', label: t('render3dSettings.generationMode.options.hybrid.label'), desc: t('render3dSettings.generationMode.options.hybrid.desc') },
-              { id: 'strict-realism', label: t('render3dSettings.generationMode.options.strictRealism.label'), desc: t('render3dSettings.generationMode.options.strictRealism.desc') },
-              { id: 'concept-push', label: t('render3dSettings.generationMode.options.conceptPush.label'), desc: t('render3dSettings.generationMode.options.conceptPush.desc') },
-            ].map(m => (
+            {RENDER_GENERATION_MODES.map((mode) => (
               <VerticalCard
-                key={m.id}
-                label={m.label}
-                description={m.desc}
-                selected={wf.renderMode === m.id}
-                onClick={() => updateWf({ renderMode: m.id as any })}
+                key={mode}
+                label={generationModeCopy[mode].label}
+                description={generationModeCopy[mode].desc}
+                selected={wf.renderMode === mode}
+                onClick={() => updateWf({ renderMode: mode })}
               />
             ))}
           </div>

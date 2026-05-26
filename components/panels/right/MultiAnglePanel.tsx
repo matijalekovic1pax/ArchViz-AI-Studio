@@ -84,13 +84,9 @@ export const MultiAnglePanel = () => {
     setCustomCount(String(nextValue));
 
     // Auto-adjust resolution based on view count
-    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
-    if (nextValue >= 9) {
-      recommendedResolution = '8k';
-    } else if (nextValue >= 5) {
+    let recommendedResolution: '2k' | '4k' = '2k';
+    if (nextValue >= 5) {
       recommendedResolution = '4k';
-    } else {
-      recommendedResolution = '2k';
     }
 
     // Update global resolution setting
@@ -164,10 +160,8 @@ export const MultiAnglePanel = () => {
     updateWf({ multiAngleAngles: next, multiAngleViewCount: next.length, multiAngleDistribution: 'manual' });
 
     // Auto-adjust resolution based on new count
-    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
-    if (next.length >= 9) {
-      recommendedResolution = '8k';
-    } else if (next.length >= 5) {
+    let recommendedResolution: '2k' | '4k' = '2k';
+    if (next.length >= 5) {
       recommendedResolution = '4k';
     }
     dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution: recommendedResolution } });
@@ -179,10 +173,8 @@ export const MultiAnglePanel = () => {
     updateWf({ multiAngleAngles: next, multiAngleViewCount: newCount });
 
     // Auto-adjust resolution based on new count
-    let recommendedResolution: '2k' | '4k' | '8k' = '2k';
-    if (newCount >= 9) {
-      recommendedResolution = '8k';
-    } else if (newCount >= 5) {
+    let recommendedResolution: '2k' | '4k' = '2k';
+    if (newCount >= 5) {
       recommendedResolution = '4k';
     }
     dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution: recommendedResolution } });

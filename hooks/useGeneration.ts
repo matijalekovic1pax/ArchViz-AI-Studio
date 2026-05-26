@@ -41,6 +41,26 @@ import type { AppState, GenerationMode, TranslationProgress, VideoGenerationProg
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
+const SOURCE_LOCKED_MODES: GenerationMode[] = [
+  'render-3d',
+  'scene-compose',
+  'render-cad',
+  'render-sketch',
+  'masterplan',
+  'exploded',
+  'section',
+  'multi-angle',
+  'img-to-cad'
+];
+const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
+const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
+
+const SOURCE_FIDELITY_CONTRACT = [
+  'Source fidelity contract: the first input image is the locked source reference.',
+  'Preserve the camera, crop, perspective, horizon, field of view, room layout, structural geometry, major object count, object positions, wall/floor/ceiling boundaries, signage blocks, openings, stairs, columns, railings, furniture, planting, and graphic placements.',
+  'Do not invent a different design, move architectural elements, replace the scene, or use style/lighting instructions as permission to redraw the composition.',
+  'If any user instruction conflicts with the source image, follow the source image.'
+].join(' ');
 
 const loadCanvasImage = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -603,7 +623,6 @@ export function useGeneration(): UseGenerationReturn {
       '2k': '2K',
       '4k': '4K',
       'print': '4K',
-      '8k': '4K', // API max is 4K
     };
 
     return {
@@ -617,16 +636,40 @@ export function useGeneration(): UseGenerationReturn {
   /**
    * Get mode-specific prompt enhancement
    */
-  const getModePromptPrefix = useCallback((mode: GenerationMode): string => {
+  const getModePromptPrefix = useCallback((mode: GenerationMode, renderMode = state.workflow.renderMode): string => {
+    if (mode === 'render-3d') {
+      if (renderMode === 'strict-realism') {
+        return 'Convert this 3D, Revit, BIM, or viewport screenshot into a hyper-realistic architectural render: ';
+      }
+      if (renderMode === 'enhance') {
+        return 'Enhance this existing realistic architectural render without redesigning it: ';
+      }
+      return 'Create an intentionally artificial architectural concept render from this 3D source: ';
+    }
+
+    if (mode === 'render-cad') {
+      if (renderMode === 'strict-realism') {
+        return 'Convert this CAD, Revit, BIM, or drawing source into a hyper-realistic architectural visualization: ';
+      }
+      if (renderMode === 'enhance') {
+        return 'Enhance this existing realistic architectural/CAD-derived render without redesigning it: ';
+      }
+      return 'Create an intentionally artificial architectural concept render from this CAD source: ';
+    }
+
+    if (mode === 'render-sketch') {
+      if (renderMode === 'concept-push') {
+        return 'Create an intentionally artificial architectural concept render from this sketch: ';
+      }
+      return 'Transform this sketch into a photorealistic render: ';
+    }
+
     const prefixes: Partial<Record<GenerationMode, string>> = {
-      'render-3d': 'Create a photorealistic architectural render: ',
       'scene-compose': 'Create a photorealistic architectural scene composition: ',
-      'render-cad': 'Transform this CAD drawing into a photorealistic visualization: ',
       'masterplan': 'Generate a detailed masterplan visualization: ',
       'visual-edit': 'Edit this image according to the following instructions: ',
       'exploded': 'Create an exploded architectural diagram: ',
       'section': 'Generate an architectural section drawing: ',
-      'render-sketch': 'Transform this sketch into a photorealistic render: ',
       'multi-angle': 'Generate a photorealistic architectural view: ',
       'upscale': 'Enhance and upscale this architectural image: ',
       'img-to-cad': 'Convert this image into a CAD drawing: ',
@@ -635,7 +678,7 @@ export function useGeneration(): UseGenerationReturn {
       'generate-text': '',
     };
     return prefixes[mode] || '';
-  }, []);
+  }, [state.workflow.renderMode]);
 
   /**
    * Main generation function
@@ -700,11 +743,28 @@ export function useGeneration(): UseGenerationReturn {
         throw new DOMException('Request aborted', 'AbortError');
       }
 
-      // Build prompt. Visual-edit always goes through the structured prompt generator so
-      // selection constraints and mask semantics cannot be bypassed by a freeform prompt.
+      const isSourceLockedMode = SOURCE_LOCKED_MODES.includes(state.mode);
+      const usesConceptRenderPipeline =
+        RENDER_GENERATION_PIPELINE_MODES.includes(state.mode) &&
+        state.workflow.renderMode === 'concept-push';
+      const usesStrictSourceFidelity =
+        STRICT_SOURCE_FIDELITY_MODES.includes(state.mode) && !usesConceptRenderPipeline;
+      const keepsStructuredPrompt = isSourceLockedMode || state.mode === 'upscale';
+      const sourceImage = state.sourceImage || state.uploadedImage;
+      const baseImage = isSourceLockedMode ? sourceImage : state.uploadedImage;
+
+      // Build prompt. Source-based modes always keep the structured prompt so
+      // preservation constraints cannot be bypassed by a freeform prompt.
       let basePrompt = '';
+      let explicitPrompt = state.prompt?.trim() || options.prompt?.trim() || '';
+      if (options.prompt && explicitPrompt && needsTranslation(i18n.language)) {
+        try {
+          explicitPrompt = await translateToEnglish(explicitPrompt, i18n.language);
+        } catch (error) {
+        }
+      }
       if (state.mode === 'visual-edit') {
-        const visualPrompt = options.prompt?.trim() || state.workflow.visualPrompt;
+        const visualPrompt = explicitPrompt || state.workflow.visualPrompt;
         basePrompt = generatePrompt({
           ...state,
           workflow: {
@@ -712,47 +772,37 @@ export function useGeneration(): UseGenerationReturn {
             visualPrompt
           }
         });
+      } else if (state.mode === 'material-validation') {
+        basePrompt = '';
+      } else if (keepsStructuredPrompt) {
+        const structuredPrompt = generatePrompt({
+          ...state,
+          prompt: ''
+        });
+        basePrompt = explicitPrompt
+          ? [
+              structuredPrompt,
+              `Additional user request: ${explicitPrompt}`,
+              'Apply the additional request only where it does not conflict with the source-preservation constraints above.'
+            ].join('\n\n')
+          : structuredPrompt;
       } else {
-        basePrompt = state.prompt?.trim() || options.prompt || (
-          state.mode === 'material-validation'
-            ? ''
-            : generatePrompt(state)
-        );
+        basePrompt = explicitPrompt || generatePrompt(state);
       }
 
-      // Translate user-entered prompts to English if needed
-      // Note: Generated prompts from promptEngine are already in English
-      if (options.prompt && needsTranslation(i18n.language)) {
-        try {
-          basePrompt = await translateToEnglish(basePrompt, i18n.language);
-        } catch (error) {
-        }
-      }
-
-      const modePrefix = getModePromptPrefix(state.mode);
+      const modePrefix = getModePromptPrefix(state.mode, state.workflow.renderMode);
       const fullPrompt = state.mode === 'material-validation'
         ? buildMaterialValidationPrompt(options.prompt)
-        : modePrefix + basePrompt;
+        : [
+            modePrefix + basePrompt,
+            usesStrictSourceFidelity && baseImage ? SOURCE_FIDELITY_CONTRACT : ''
+          ].filter(Boolean).join('\n\n');
       const attachmentUrls = options.attachments
         ? options.attachments.map((attachment) =>
             typeof attachment === 'string' ? attachment : attachment.dataUrl
           )
         : [];
 
-      const sourceLockedModes: GenerationMode[] = [
-        'render-3d',
-        'scene-compose',
-        'render-cad',
-        'render-sketch',
-        'masterplan',
-        'exploded',
-        'section',
-        'multi-angle',
-        'img-to-cad'
-      ];
-      const isSourceLockedMode = sourceLockedModes.includes(state.mode);
-      const sourceImage = state.sourceImage || state.uploadedImage;
-      const baseImage = isSourceLockedMode ? sourceImage : state.uploadedImage;
       const primaryRatioSource = baseImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
       const inputAspectRatio = await resolveClosestAspectRatio(primaryRatioSource);
       const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'

@@ -1013,7 +1013,11 @@
       "cleanup": "Limpieza"
     },
     "history": {
-      "empty": "No hay historial en esta sesión."
+      "empty": "No hay historial en esta sesión.",
+      "downloadAll": "Descargar todo",
+      "downloadSelected": "Descargar selección",
+      "select": "Seleccionar",
+      "cancelSelection": "Cancelar"
     },
     "timeline": {
       "mainSequence": "Secuencia Principal",
@@ -1057,32 +1061,24 @@
     "generationMode": {
       "title": "Modo de generacion",
       "options": {
-        "enhance": {
-          "label": "Mejorar",
-          "desc": "Mejora la iluminacion y la claridad general del render."
-        },
-        "stylize": {
-          "label": "Estilizar",
-          "desc": "Aplica estilos artisticos al modelo base."
-        },
-        "hybrid": {
-          "label": "Hibrido",
-          "desc": "Equilibra precision estructural con detalles creativos."
-        },
         "strictRealism": {
           "label": "Realismo estricto",
-          "desc": "Precision fotografica, minima alucinacion."
+          "desc": "Convierte capturas 3D/Revit en renders hiperrealistas."
+        },
+        "enhance": {
+          "label": "Mejorar",
+          "desc": "Refina renders realistas: estilo, iluminacion, atmosfera y claridad."
         },
         "conceptPush": {
           "label": "Impulso conceptual",
-          "desc": "Alta creatividad, explora nuevas formas."
+          "desc": "Crea renders conceptuales menos realistas y mas artificiales."
         }
       }
     },
     "sections": {
       "lighting": {
         "title": "Iluminacion",
-        "sunPosition": "Posicion del sol",
+        "sunPosition": "Fuente de luz",
         "intensity": "Intensidad",
         "colorTemp": "Temperatura de color",
         "shadows": {

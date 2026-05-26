@@ -1,5 +1,5 @@
 
-import { AppState, StyleConfiguration, VisualSelectionShape } from '../types';
+import { AppState, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
@@ -51,7 +51,7 @@ export const BUILT_IN_STYLES: StyleConfiguration[] = [
         avoid: ['flat lighting', 'overexposed']
       },
       cameraBias: { preferredAngles: ['low angle', 'worm-eye'], preferredFraming: ['monumental', 'imposing'] },
-      renderingLanguage: { quality: ['cinematic', '8k'], atmosphere: ['imposing', 'atmospheric', 'moody'], detail: ['concrete texture', 'imperfections'] }
+      renderingLanguage: { quality: ['cinematic', 'high fidelity'], atmosphere: ['imposing', 'atmospheric', 'moody'], detail: ['concrete texture', 'imperfections'] }
     }
   },
   {
@@ -937,42 +937,49 @@ const formatMood = (mood: string): string => {
 // ENHANCED DESCRIPTION HELPERS - Granular architectural visualization language
 // ============================================================================
 
-const describeSunPosition = (azimuth: number, elevation: number): string => {
-  // Precise directional mapping with architectural implications
-  const directions: Record<string, { dir: string; quality: string }> = {
-    north: { dir: 'from the north', quality: 'cool, even illumination typical of north-facing facades' },
-    northeast: { dir: 'from the northeast', quality: 'crisp morning light with soft diagonal shadows' },
-    east: { dir: 'from the east', quality: 'classic morning light revealing eastern elevations' },
-    southeast: { dir: 'from the southeast', quality: 'warm mid-morning light with favorable shadow angles' },
-    south: { dir: 'from the south', quality: 'strong direct light illuminating southern exposures fully' },
-    southwest: { dir: 'from the southwest', quality: 'rich afternoon warmth with elongating shadows' },
-    west: { dir: 'from the west', quality: 'dramatic evening light catching western facades' },
-    northwest: { dir: 'from the northwest', quality: 'soft late-day light with gentle shadow play' },
+const describeLightSourcePosition = (azimuth: number, elevation: number): string => {
+  const leftRight = Math.min(1, Math.max(0, azimuth / 360));
+  const frontBack = Math.min(1, Math.max(0, elevation / 90));
+
+  const horizontal =
+    leftRight < 0.2 ? 'far left of the image'
+      : leftRight < 0.4 ? 'left side of the image'
+        : leftRight > 0.8 ? 'far right of the image'
+          : leftRight > 0.6 ? 'right side of the image'
+            : 'center of the image';
+
+  const depth =
+    frontBack > 0.8 ? 'strongly from the front, near the observer or camera'
+      : frontBack > 0.6 ? 'from the front of the scene, toward the observer'
+        : frontBack < 0.2 ? 'strongly from the back of the scene, behind the visible subject'
+          : frontBack < 0.4 ? 'from the back of the scene, deeper in the image'
+            : 'from a neutral mid-depth position in the scene';
+
+  const frameDirection = (() => {
+    if (horizontal === 'center of the image') {
+      if (frontBack > 0.6) return 'front';
+      if (frontBack < 0.4) return 'back';
+      return 'centered';
+    }
+    const side = horizontal.includes('left') ? 'left' : 'right';
+    if (frontBack > 0.6) return `front-${side}`;
+    if (frontBack < 0.4) return `back-${side}`;
+    return side;
+  })();
+
+  const lightingEffect: Record<string, string> = {
+    front: 'visible faces should brighten evenly, with shadows pushed subtly behind objects',
+    back: 'the scene should gain backlight, rim highlights, and shadows falling toward the viewer',
+    centered: 'illumination should feel centered and balanced from the viewer direction',
+    left: 'shadows should travel across the frame toward the right',
+    right: 'shadows should travel across the frame toward the left',
+    'front-left': 'visible faces should catch light from image-left and the camera side, with shadows falling back and right',
+    'front-right': 'visible faces should catch light from image-right and the camera side, with shadows falling back and left',
+    'back-left': 'the image-left rear should act as the source, producing backlit edges and shadows toward the front-right',
+    'back-right': 'the image-right rear should act as the source, producing backlit edges and shadows toward the front-left',
   };
 
-  let dirKey = 'north';
-  if (azimuth >= 337.5 || azimuth < 22.5) dirKey = 'north';
-  else if (azimuth >= 22.5 && azimuth < 67.5) dirKey = 'northeast';
-  else if (azimuth >= 67.5 && azimuth < 112.5) dirKey = 'east';
-  else if (azimuth >= 112.5 && azimuth < 157.5) dirKey = 'southeast';
-  else if (azimuth >= 157.5 && azimuth < 202.5) dirKey = 'south';
-  else if (azimuth >= 202.5 && azimuth < 247.5) dirKey = 'southwest';
-  else if (azimuth >= 247.5 && azimuth < 292.5) dirKey = 'west';
-  else dirKey = 'northwest';
-
-  const { dir, quality } = directions[dirKey];
-
-  // Elevation with precise shadow length implications
-  let elevationDesc = '';
-  if (elevation < 10) elevationDesc = `positioned extremely low on the horizon (${elevation}°), creating dramatically elongated shadows that stretch 5-6x object height`;
-  else if (elevation < 20) elevationDesc = `low on the horizon (${elevation}°), casting long theatrical shadows approximately 3x object height`;
-  else if (elevation < 35) elevationDesc = `at a favorable low-mid angle (${elevation}°), producing shadows roughly 1.5-2x object height ideal for revealing form`;
-  else if (elevation < 50) elevationDesc = `at a balanced mid-angle (${elevation}°), with shadows approximately equal to object height`;
-  else if (elevation < 65) elevationDesc = `moderately high (${elevation}°), creating compact shadows about half the object height`;
-  else if (elevation < 80) elevationDesc = `high in the sky (${elevation}°), with minimal shadow extension`;
-  else elevationDesc = `nearly overhead (${elevation}°), creating almost no horizontal shadows`;
-
-  return `sunlight streaming ${dir} (azimuth ${Math.round(azimuth)}°), ${elevationDesc}, providing ${quality}`;
+  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat N as front/camera-side, S as back/deeper scene, W as image-left, and E as image-right; this is not a geographic sun azimuth. ${lightingEffect[frameDirection]}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {
@@ -1112,15 +1119,67 @@ const describeAspectRatio = (ratio: string): string => {
   return descriptions[ratio] || `in ${ratio} format`;
 };
 
+const normalizeRenderGenerationMode = (mode: unknown): RenderGenerationMode => {
+  return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
+    ? mode as RenderGenerationMode
+    : 'enhance';
+};
+
 const describeRenderMode = (mode: string): string => {
-  const descriptions: Record<string, string> = {
-    'enhance': 'Enhance the existing image by refining lighting, visual clarity, and overall render polish while staying true to the source composition.',
-    'stylize': 'Apply artistic interpretation that transforms the visual style while maintaining the fundamental architectural accuracy and spatial relationships of the original.',
-    'hybrid': 'Strike a thoughtful balance between source accuracy and creative enhancement, allowing atmosphere and lighting to be reimagined.',
-    'strict-realism': 'Achieve maximum photographic authenticity with minimal creative interpretation.',
-    'concept-push': 'Explore creative possibilities freely, allowing imaginative details that elevate the architectural concept.',
+  const normalizedMode = normalizeRenderGenerationMode(mode);
+  const descriptions: Record<RenderGenerationMode, string> = {
+    'strict-realism': [
+      'Render Mode: STRICT REALISM.',
+      'Use this as a source-to-hyper-real conversion pass for raw 3D model screenshots, Revit/BIM screenshots, CAD-derived views, clay renders, or shaded viewport captures.',
+      'The goal is a believable architectural photograph: physically plausible daylight or artificial light, accurate global illumination, grounded shadows, realistic material response, natural reflections, and professional camera behavior.',
+      'Preserve the source architecture, camera, perspective, scale, proportions, openings, stairs, columns, ceilings, signage blocks, and major object placement.',
+      'Do not redesign, stylize, exaggerate, simplify into graphics, invent alternate forms, or add decorative ideas that are not grounded in the source.'
+    ].join(' '),
+    'enhance': [
+      'Render Mode: ENHANCE.',
+      'Use this only for images that already read as realistic or nearly finished renders.',
+      'Keep the completed rendering, architecture, camera, composition, materials, object layout, and spatial relationships intact.',
+      'Make controlled post-render improvements only: lighting direction or intensity, atmosphere, color grading, style mood, clarity, material polish, shadow quality, reflections, and overall presentation finish.',
+      'Do not remodel the project, change the design language, replace major elements, or invent new architecture.'
+    ].join(' '),
+    'concept-push': [
+      'Render Mode: CONCEPT PUSH.',
+      'Create a deliberately less-realistic, more artificial architectural concept image rather than a photograph.',
+      'Keep the source recognizable through its primary massing, camera angle, spatial organization, and key architectural intent, but allow bolder concept-level interpretation of forms, materials, lighting, atmosphere, and entourage.',
+      'The result may feel synthetic, speculative, CGI-like, maquette-like, competition-board-like, or intentionally fake, with stronger stylization and less naturalistic perfection.',
+      'Do not drift into an unrelated building or ignore the source composition.'
+    ].join(' '),
   };
-  return descriptions[mode] || '';
+  return descriptions[normalizedMode];
+};
+
+const describeRenderModeClosing = (mode: string, resolution: string): string => {
+  const normalizedMode = normalizeRenderGenerationMode(mode);
+  const isHighResolution = resolution === '4k' || resolution === 'print';
+
+  if (normalizedMode === 'strict-realism') {
+    return isHighResolution
+      ? 'Every highlight, shadow, reflection, material edge, and fine visual detail should reward close inspection. The final image must be indistinguishable from a photograph taken by a master architectural photographer.'
+      : 'The final image must achieve the visual quality of professional architectural photography, with accurate lighting, refined detail, natural materials, and no visible model or viewport artifacts.';
+  }
+
+  if (normalizedMode === 'enhance') {
+    return isHighResolution
+      ? 'The final image must still read as the same completed realistic render, only cleaner, better lit, better graded, sharper, and more polished at close inspection.'
+      : 'The final image must stay faithful to the existing realistic render while improving lighting, mood, clarity, color grade, material polish, and presentation quality.';
+  }
+
+  return isHighResolution
+    ? 'The final image should be a polished artificial concept visualization with deliberate synthetic character, crisp design intent, expressive lighting, and presentation-quality detail.'
+    : 'The final image should feel like a polished but intentionally artificial concept render: clear, expressive, slightly fake, and less bound to photographic naturalism.';
+};
+
+const describeSourceFidelityForRenderMode = (mode: string): string => {
+  const normalizedMode = normalizeRenderGenerationMode(mode);
+  if (normalizedMode === 'concept-push') {
+    return 'Use the source as a spatial and compositional scaffold. Preserve the primary layout, major walls, openings, circulation, massing, and camera direction, but allow concept-level interpretation of secondary details, material language, lighting, styling, and entourage. Do not rotate, crop, or ignore the source.';
+  }
+  return 'Treat the source as the absolute source of truth. Every wall position, opening, grid line, dimensional relationship, camera angle, horizon, and perspective relationship must be preserved exactly. Do not rotate, skew, crop, reframe, add, remove, relocate, or redesign architectural elements.';
 };
 
 const getStyleReferenceInstruction = (hasSourceImage: boolean): string => {
@@ -1208,7 +1267,7 @@ function generate3DRenderPrompt(state: AppState): string {
   lightParts.push(`The scene is illuminated by ${formatTimePreset(light.preset)}`);
 
   if (light.sun.enabled) {
-    lightParts.push(`. ${describeSunPosition(light.sun.azimuth, light.sun.elevation)}`);
+    lightParts.push(`. ${describeLightSourcePosition(light.sun.azimuth, light.sun.elevation)}`);
     lightParts.push(`, with ${describeSunIntensity(light.sun.intensity)}`);
     lightParts.push(` and ${describeColorTemperature(light.sun.colorTemp)}`);
   }
@@ -1269,12 +1328,8 @@ function generate3DRenderPrompt(state: AppState): string {
   const rend = r3d.render;
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
-  // 11. TECHNICAL QUALITY - Aspirational closing
-  const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'Every highlight, shadow, and fine visual detail should reward close inspection. The final image should be indistinguishable from a photograph taken by a master architectural photographer.'
-    : 'The rendering should achieve the visual quality of professional architectural photography, with accurate lighting, refined detail, and compelling composition.';
-
-  parts.push(`This should be a high-fidelity photorealistic architectural visualization with ray-traced global illumination. ${qualityClosing}`);
+  // 11. TECHNICAL QUALITY - mode-specific finish
+  parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
@@ -1436,6 +1491,23 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
   return parts;
 };
 
+const buildRemoveSelectionTargeting = (workflow: AppState['workflow']) => {
+  const hasSelection = workflow.visualSelections.length > 0 || Boolean(workflow.visualSelectionMask);
+  const parts: string[] = [];
+
+  if (!hasSelection) {
+    parts.push('When no selection is provided, remove only targets clearly named by the user or quick-remove settings; do not broadly simplify the scene.');
+    return parts;
+  }
+
+  parts.push('Removal target semantics: in each selected region, identify the complete foreground subject or subjects centered in or deliberately enclosed by the selection. Remove the whole subject, not merely the easiest visible subpart.');
+  parts.push('If a selected target is a person, remove the entire human figure including head, torso, limbs, clothing, hair, pose silhouette, hands, feet, carried bags, wheeled luggage, straps, personal items, contact shadows, reflections, and any partial extension just outside the selection needed to eliminate the complete figure.');
+  parts.push('Selected floor, walls, kiosks, ceilings, signs, and other background surfaces are context to reconstruct after the subject is removed unless they are themselves the clear selected subject.');
+  parts.push('Do not leave a person behind after removing luggage, bags, shadows, or accessories; the central selected subject and attached personal items must disappear together.');
+
+  return parts;
+};
+
 const generateVisualEditPrompt = (state: AppState): string => {
   const { workflow } = state;
   const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
@@ -1534,7 +1606,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     const lighting = workflow.visualLighting;
     if (lighting.mode === 'sun') {
-      parts.push(`Illuminate the scene with ${describeSunPosition(lighting.sun.azimuth, lighting.sun.elevation)}. ${describeSunIntensity(lighting.sun.intensity)}, casting light with ${describeColorTemperature(lighting.sun.colorTemp)}.`);
+      parts.push(`Illuminate the scene with ${describeLightSourcePosition(lighting.sun.azimuth, lighting.sun.elevation)}. ${describeSunIntensity(lighting.sun.intensity)}, casting light with ${describeColorTemperature(lighting.sun.colorTemp)}.`);
       const shadowDesc = lighting.sun.shadowSoftness > 60 ? 'soft, diffused shadows' :
         lighting.sun.shadowSoftness > 30 ? 'moderately soft shadows' : 'crisp, defined shadows';
       parts.push(`Create ${shadowDesc}.`);
@@ -2022,13 +2094,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
   if (tool === 'remove') {
     parts.push('Cleanly remove the specified unwanted elements from this image, reconstructing the background naturally.');
     parts.push(...selectionParts);
+    parts.push(...buildRemoveSelectionTargeting(workflow));
     parts.push(describeUserIntent(userPrompt));
 
     const remove = workflow.visualRemove;
     const modeDesc: Record<string, string> = {
-      'object': 'specific objects that have been selected',
-      'brush': 'areas painted with the removal brush',
-      'auto': 'automatically detected unwanted elements',
+      fill: 'the targeted subject using generative inpainting and natural reconstruction',
+      aware: 'the targeted subject using content-aware cleanup based on surrounding pixels',
+      clone: 'the targeted subject using clone-style cleanup from the selected source context',
     };
     parts.push(`Remove ${modeDesc[remove.mode] || 'the selected content'}.`);
 
@@ -2458,8 +2531,10 @@ function generateCadRenderPrompt(state: AppState): string {
     parts.push(`The drawing is prepared at ${workflow.cadScale} scale.`);
   }
 
+  parts.push(describeRenderMode(workflow.renderMode));
+
   // Fidelity constraints in natural language
-  parts.push('Treat the CAD drawing as the absolute source of truth. Every wall position, opening, grid line, and dimensional relationship must be preserved exactly. Do not rotate, skew, crop, or reframe the drawing in any way. No elements may be added, removed, or relocated. The viewpoint, horizon, and perspective must remain locked precisely as shown.');
+  parts.push(describeSourceFidelityForRenderMode(workflow.renderMode));
 
   if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
     const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
@@ -2578,7 +2653,7 @@ function generateCadRenderPrompt(state: AppState): string {
   parts.push(`The scene is bathed in ${formatTimePreset(light.preset)}.`);
 
   if (light.sun.enabled) {
-    parts.push(`${describeSunPosition(light.sun.azimuth, light.sun.elevation)}, with ${describeSunIntensity(light.sun.intensity)} and ${describeColorTemperature(light.sun.colorTemp)}.`);
+    parts.push(`${describeLightSourcePosition(light.sun.azimuth, light.sun.elevation)}, with ${describeSunIntensity(light.sun.intensity)} and ${describeColorTemperature(light.sun.colorTemp)}.`);
   }
 
   if (light.shadows.enabled) {
@@ -2619,11 +2694,7 @@ function generateCadRenderPrompt(state: AppState): string {
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}.`);
 
   // Closing
-  const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'The final image should reward close inspection, with every highlight, reflection, and shadow rendered to perfection. This should be indistinguishable from professional architectural photography.'
-    : 'Create a high-fidelity photorealistic visualization with accurate lighting and compelling spatial quality.';
-
-  parts.push(qualityClosing);
+  parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
@@ -2788,7 +2859,7 @@ function generateSketchPrompt(state: AppState): string {
   parts.push(`Illuminate the scene with ${formatTimePreset(light.preset)}.`);
 
   if (light.sun.enabled) {
-    parts.push(`${describeSunPosition(light.sun.azimuth, light.sun.elevation)}, casting ${describeSunIntensity(light.sun.intensity)} with ${describeColorTemperature(light.sun.colorTemp)}.`);
+    parts.push(`${describeLightSourcePosition(light.sun.azimuth, light.sun.elevation)}, casting ${describeSunIntensity(light.sun.intensity)} with ${describeColorTemperature(light.sun.colorTemp)}.`);
   }
 
   if (light.shadows.enabled) {
@@ -2826,11 +2897,7 @@ function generateSketchPrompt(state: AppState): string {
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}.`);
 
   // Closing
-  const qualityClosing = rend.resolution === '4k' || rend.resolution === 'print'
-    ? 'The transformation should be magical - taking rough pencil strokes and breathing photorealistic life into them. Every shadow should feel real, and the final image should be worthy of the design vision captured in the original sketch.'
-    : 'Transform this sketch into a compelling photorealistic visualization that honors the original design intent while bringing it to life with realistic lighting and professional quality.';
-
-  parts.push(qualityClosing);
+  parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }

@@ -12,13 +12,12 @@ export const UpscalePanel = () => {
     [dispatch]
   );
 
-  const resolutionOptions: Array<{ value: '2k' | '4k' | '8k'; label: string; title?: string }> = [
+  const resolutionOptions: Array<{ value: '2k' | '4k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
-    { value: '8k', label: '8K', title: '8K (API capped at 4K)' },
   ];
 
-  const handleResolutionChange = (resolution: '2k' | '4k' | '8k') => {
+  const handleResolutionChange = (resolution: '2k' | '4k') => {
     if (resolution === state.output.resolution) return;
     dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution } });
   };

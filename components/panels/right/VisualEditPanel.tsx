@@ -2944,7 +2944,7 @@ export const VisualEditPanel = () => {
       case 'remove':
         return (
           <div className="space-y-4 animate-fade-in">
-            <SectionDesc>Erase unwanted elements with AI tools.</SectionDesc>
+            <SectionDesc>Remove the main subject centered in each selection and rebuild the background.</SectionDesc>
             <SegmentedControl
               value={wf.visualRemove.mode}
               options={[
