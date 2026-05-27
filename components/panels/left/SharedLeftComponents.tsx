@@ -40,7 +40,11 @@ export const StyleGrid: React.FC<{ activeId: string; onSelect: (id: string) => v
     t(`styles.names.${style.id}`, { defaultValue: style.name });
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      data-assistant-inspect-target="true"
+      data-assistant-inspect-label={t('render3d.styleReference.presets')}
+    >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {displayStyles.map((style) => (
           <button
@@ -130,6 +134,8 @@ export const StyleReferenceUploader: React.FC<{
         <button
           type="button"
           onClick={() => onSetEnabled(false)}
+          data-assistant-inspect-target="true"
+          data-assistant-inspect-label={t('render3d.styleReference.presets')}
           className={cn(
             "h-8 rounded border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors",
             !enabled
@@ -143,6 +149,8 @@ export const StyleReferenceUploader: React.FC<{
         <button
           type="button"
           onClick={() => onSetEnabled(true)}
+          data-assistant-inspect-target="true"
+          data-assistant-inspect-label={t('render3d.styleReference.image')}
           className={cn(
             "h-8 rounded border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors",
             enabled
@@ -161,6 +169,8 @@ export const StyleReferenceUploader: React.FC<{
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
+              data-assistant-inspect-target="true"
+              data-assistant-inspect-label={t('render3d.styleReference.image')}
               className={cn(
                 "relative h-full w-full overflow-hidden rounded-md border transition-all duration-200 group",
                 "flex flex-col items-center justify-center gap-2 text-center",

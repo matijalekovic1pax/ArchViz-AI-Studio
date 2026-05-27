@@ -1,5 +1,5 @@
 import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, ScanSearch, Send, Sparkles, X } from 'lucide-react';
+import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, Send, Sparkles, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { GenerationMode } from '../types';
@@ -50,25 +50,83 @@ const getElementText = (element: Element) => {
   return getCompactText(element.textContent);
 };
 
+const inspectTargetSelector = '[data-assistant-inspect-target="true"]';
+const inspectLabelAttribute = 'data-assistant-inspect-label';
+const controlSelector = [
+  'button',
+  '[role="button"]',
+  'input',
+  'textarea',
+  'select',
+  'a',
+  '[aria-label]',
+  '[title]',
+].join(',');
+const formControlSelector = ['button', '[role="button"]', 'input', 'textarea', 'select', 'a'].join(',');
+const labelSelector = 'label,h1,h2,h3,h4,h5,h6';
+
+const getInspectLabel = (element: Element) => {
+  const explicitLabel = element.getAttribute(inspectLabelAttribute);
+  if (explicitLabel) return getCompactText(explicitLabel, 120);
+
+  const headingOrLabel = element.querySelector(labelSelector);
+  if (headingOrLabel) return getCompactText(getElementText(headingOrLabel), 120);
+
+  return getCompactText(
+    element.getAttribute('aria-label') ||
+    element.getAttribute('title') ||
+    getElementText(element),
+    120
+  );
+};
+
+const isReasonableInspectGroup = (element: Element) => {
+  const rect = element.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+  return (
+    rect.width >= 48 &&
+    rect.height >= 30 &&
+    rect.width <= viewportWidth * 0.65 &&
+    rect.height <= Math.min(240, viewportHeight * 0.32)
+  );
+};
+
+const getLabeledControlGroup = (target: Element) => {
+  let current: Element | null = target;
+  let depth = 0;
+
+  while (current && current !== document.body && depth < 8) {
+    if (
+      current.querySelector(labelSelector) &&
+      (current.matches(formControlSelector) || current.querySelector(formControlSelector)) &&
+      isReasonableInspectGroup(current)
+    ) {
+      return current;
+    }
+    current = current.parentElement;
+    depth += 1;
+  }
+
+  return null;
+};
+
 const getInspectableElement = (target: Element) => {
-  const selector = [
-    'button',
-    '[role="button"]',
-    'input',
-    'textarea',
-    'select',
-    'label',
-    'a',
-    '[aria-label]',
-    '[title]',
-  ].join(',');
-  return target.closest(selector) || target;
+  const explicitTarget = target.closest(inspectTargetSelector);
+  if (explicitTarget && isReasonableInspectGroup(explicitTarget)) return explicitTarget;
+
+  const groupedControl = getLabeledControlGroup(target);
+  if (groupedControl) return groupedControl;
+
+  return target.closest(controlSelector) || target;
 };
 
 const describeInspectedElement = (element: Element) => {
   const inspected = getInspectableElement(element);
   const parent = inspected.parentElement;
   const tagName = inspected.tagName.toLowerCase();
+  const inspectLabel = getInspectLabel(inspected);
   const role = inspected.getAttribute('role');
   const ariaLabel = inspected.getAttribute('aria-label');
   const title = inspected.getAttribute('title');
@@ -82,6 +140,7 @@ const describeInspectedElement = (element: Element) => {
   const nearbyText = parent ? getCompactText(parent.innerText || parent.textContent, 260) : '';
 
   return [
+    inspectLabel ? `Selection scope: ${inspectLabel}` : '',
     `Element tag: ${tagName}`,
     role ? `Role: ${role}` : '',
     type ? `Control type: ${type}` : '',
@@ -260,7 +319,7 @@ export const AppAssistant: React.FC = () => {
 
       const inspected = getInspectableElement(target);
       const visibleName = getCompactText(
-        getElementText(inspected) || inspected.getAttribute('aria-label') || inspected.getAttribute('title') || inspected.tagName.toLowerCase(),
+        getInspectLabel(inspected) || getElementText(inspected) || inspected.getAttribute('aria-label') || inspected.getAttribute('title') || inspected.tagName.toLowerCase(),
         80
       );
       const elementContext = describeInspectedElement(inspected);
@@ -445,6 +504,24 @@ export const AppAssistant: React.FC = () => {
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
+                  onClick={() => {
+                    dismissHint();
+                    setInspectMode(true);
+                  }}
+                  disabled={isThinking}
+                  className={cn(
+                    'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition-all',
+                    'border-accent/50 bg-accent/20 text-foreground shadow-sm hover:border-foreground/25 hover:bg-foreground hover:text-background',
+                    isThinking && 'cursor-not-allowed opacity-50 hover:border-accent/50 hover:bg-accent/20 hover:text-foreground'
+                  )}
+                  title={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
+                  aria-label={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
+                >
+                  <SquareMousePointer size={15} />
+                  <span>{t('assistant.inspectShort', { defaultValue: 'Inspect' })}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={clearThread}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
                   title={String(t('assistant.clear', { defaultValue: 'Clear chat' }))}
@@ -474,32 +551,6 @@ export const AppAssistant: React.FC = () => {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                dismissHint();
-                setInspectMode(true);
-              }}
-              disabled={isThinking}
-              className={cn(
-                'mt-3 flex w-full items-center gap-3 rounded-xl border border-border bg-foreground px-3 py-2 text-left text-background shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0',
-                isThinking && 'cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-sm'
-              )}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/15">
-                <ScanSearch size={18} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-bold">
-                  {t('assistant.inspect', { defaultValue: 'Inspect interface element' })}
-                </span>
-                <span className="mt-0.5 block truncate text-[11px] leading-relaxed text-background/70">
-                  {t('assistant.inspectHelp', {
-                    defaultValue: 'Click any control outside this chat to ask what it does. Press Esc to cancel.',
-                  })}
-                </span>
-              </span>
-            </button>
           </header>
 
           <div className="flex-1 overflow-y-auto bg-background-secondary/70 px-3 py-3 custom-scrollbar">
@@ -632,7 +683,7 @@ export const AppAssistant: React.FC = () => {
         >
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background/15">
-              <ScanSearch size={18} />
+              <SquareMousePointer size={18} />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold">

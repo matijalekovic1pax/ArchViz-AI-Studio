@@ -319,7 +319,10 @@ export const LeftRender3DPanel = () => {
               </button>
             </div>
           )}
-          <div>
+          <div
+            data-assistant-inspect-target="true"
+            data-assistant-inspect-label={t('render3d.sourceAnalysis.sourceType')}
+          >
             <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.sourceType')}</label>
             <select
               className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
@@ -337,7 +340,10 @@ export const LeftRender3DPanel = () => {
               <option value="other">{t('render3d.sourceAnalysis.sourceOptions.other')}</option>
             </select>
           </div>
-          <div>
+          <div
+            data-assistant-inspect-target="true"
+            data-assistant-inspect-label={t('render3d.sourceAnalysis.viewType')}
+          >
             <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.viewType')}</label>
             <SegmentedControl
               value={wf.viewType}
