@@ -74,6 +74,17 @@ const PromptBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isHistoryOpen]);
 
+  useEffect(() => {
+    if (state.mode !== 'generate-text') return;
+    if (state.prompt === inputText) return;
+    setInputText(state.prompt);
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    });
+  }, [inputText, state.mode, state.prompt]);
+
   const isHeadshotReady = state.mode === 'headshot' &&
     Boolean(state.workflow.headshot.leftImage || state.workflow.headshot.frontImage || state.workflow.headshot.rightImage);
 
@@ -84,6 +95,7 @@ const PromptBar: React.FC = () => {
     const promptAttachments = attachments.slice();
 
     setInputText('');
+    dispatch({ type: 'SET_PROMPT', payload: '' });
     setAttachments([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -126,13 +138,16 @@ const PromptBar: React.FC = () => {
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setInputText(e.target.value);
+      const next = e.target.value;
+      setInputText(next);
+      dispatch({ type: 'SET_PROMPT', payload: next });
       e.target.style.height = 'auto';
       e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
   const handleHistorySelect = (prompt: string, historyAttachments?: string[]) => {
       setInputText(prompt);
+      dispatch({ type: 'SET_PROMPT', payload: prompt });
       setAttachments(historyAttachments ?? []);
       setIsHistoryOpen(false);
       requestAnimationFrame(() => {

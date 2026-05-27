@@ -2,14 +2,22 @@ import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } fro
 import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, Send, Sparkles, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
-import type { GenerationMode } from '../types';
+import type { AppState, GenerationMode } from '../types';
+import { useGeneration } from '../hooks/useGeneration';
 import { cn } from '../lib/utils';
 import {
   buildAppAssistantPrompt,
   buildAppAssistantWorkspaceSnapshot,
   getAppAssistantFeature,
 } from '../lib/appAssistantKnowledge';
-import { GeminiService } from '../services/geminiService';
+import {
+  applyAppAssistantActions,
+  buildAppAssistantActionContext,
+  extractAppAssistantActions,
+  normalizeAppAssistantActions,
+  type AppAssistantAction,
+} from '../lib/appAssistantActions';
+import { GeminiService, ImageUtils, type ImageData } from '../services/geminiService';
 
 type AssistantRole = 'user' | 'assistant';
 
@@ -18,11 +26,18 @@ interface AssistantMessage {
   role: AssistantRole;
   content: string;
   isLoading?: boolean;
+  actions?: AppAssistantAction[];
+  appliedActionIds?: string[];
 }
 
 type AssistantThreads = Partial<Record<GenerationMode, AssistantMessage[]>>;
+interface PendingGenerationRequest {
+  id: string;
+  prompt?: string;
+}
 
 const ASSISTANT_MODEL = 'gemini-3.5-flash';
+const controlModeStorageKey = 'archviz_assistant_control_mode';
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 interface InspectRect {
@@ -35,6 +50,94 @@ interface InspectRect {
 const getCompactText = (value: string | null | undefined, maxLength = 220) => {
   const text = (value || '').replace(/\s+/g, ' ').trim();
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
+};
+
+const getAssistantImageSources = (state: AppState) => {
+  const latestHistoryImage = state.history.length > 0 ? state.history[state.history.length - 1]?.thumbnail : null;
+  const candidates = [
+    { url: state.workflow.visualSelectionComposite, label: 'selected image areas overlay' },
+    { url: state.uploadedImage, label: 'current canvas image' },
+    { url: state.sourceImage && state.sourceImage !== state.uploadedImage ? state.sourceImage : null, label: 'locked source image' },
+    { url: latestHistoryImage, label: 'latest generated history image' },
+  ].filter((item): item is { url: string; label: string } => Boolean(item.url && item.url.startsWith('data:image/')));
+
+  const seen = new Set<string>();
+  return candidates.filter((item) => {
+    if (seen.has(item.url)) return false;
+    seen.add(item.url);
+    return true;
+  }).slice(0, 4);
+};
+
+const getAssistantImages = (state: AppState): ImageData[] => {
+  return getAssistantImageSources(state).flatMap((source) => {
+    try {
+      return [ImageUtils.dataUrlToImageData(source.url)];
+    } catch {
+      return [];
+    }
+  });
+};
+
+const getAssistantGenerationReadiness = (
+  state: AppState,
+  promptOverride?: string
+): { ready: boolean; message?: string; prompt?: string } => {
+  if (state.isGenerating) {
+    return { ready: false, message: 'A generation is already running.' };
+  }
+
+  const prompt = (promptOverride || state.prompt || state.workflow.textPrompt || '').trim();
+
+  switch (state.mode) {
+    case 'generate-text':
+      return prompt
+        ? { ready: true, prompt }
+        : { ready: false, message: 'Add a prompt before generating from text.' };
+    case 'material-validation':
+      return state.materialValidation.documents.length > 0
+        ? { ready: true }
+        : { ready: false, message: 'Upload material documents before running validation.' };
+    case 'document-translate':
+      return state.workflow.documentTranslate.sourceDocument
+        ? { ready: true }
+        : { ready: false, message: 'Upload a document before running translation.' };
+    case 'pdf-compression':
+      return state.workflow.pdfCompression.queue.length > 0
+        ? { ready: true }
+        : { ready: false, message: 'Add PDFs to the queue before compressing.' };
+    case 'upscale':
+      return state.workflow.upscaleBatch.length > 0
+        ? { ready: true }
+        : { ready: false, message: 'Add an image to the upscale batch before running upscale.' };
+    case 'video': {
+      if (!state.workflow.videoState.accessUnlocked) {
+        return { ready: false, message: 'Video Studio access is currently locked.' };
+      }
+      const video = state.workflow.videoState;
+      if (video.inputMode === 'image-animate') {
+        return video.videoInputImage || state.uploadedImage
+          ? { ready: true, prompt: video.scenario || promptOverride }
+          : { ready: false, message: 'Add a video input image before generating video.' };
+      }
+      if (video.inputMode === 'image-morph') {
+        return video.startFrame && video.endFrame
+          ? { ready: true, prompt: video.scenario || promptOverride }
+          : { ready: false, message: 'Add start and end frames before interpolating video.' };
+      }
+      return video.keyframes.length > 0
+        ? { ready: true, prompt: video.scenario || promptOverride }
+        : { ready: false, message: 'Add video keyframes before generating.' };
+    }
+    case 'headshot':
+      return state.workflow.headshot.leftImage || state.workflow.headshot.frontImage || state.workflow.headshot.rightImage
+        ? { ready: true }
+        : { ready: false, message: 'Upload at least one portrait reference before generating headshots.' };
+    default:
+      return state.uploadedImage
+        ? { ready: true, prompt: promptOverride || state.prompt || undefined }
+        : { ready: false, message: 'Upload or select an image before generating this workflow.' };
+  }
 };
 
 const getElementText = (element: Element) => {
@@ -238,12 +341,21 @@ const BubbleText: React.FC<{ text: string }> = ({ text }) => (
 );
 
 export const AppAssistant: React.FC = () => {
-  const { state } = useAppStore();
+  const { state, dispatch } = useAppStore();
+  const { generate } = useGeneration();
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [hintVisible, setHintVisible] = useState(false);
   const [inspectMode, setInspectMode] = useState(false);
   const [inspectRect, setInspectRect] = useState<InspectRect | null>(null);
+  const [controlMode, setControlMode] = useState(() => {
+    try {
+      return sessionStorage.getItem(controlModeStorageKey) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [pendingGeneration, setPendingGeneration] = useState<PendingGenerationRequest | null>(null);
   const [input, setInput] = useState('');
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
@@ -277,6 +389,40 @@ export const AppAssistant: React.FC = () => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
     return () => window.clearTimeout(timer);
   }, [open, state.mode]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(controlModeStorageKey, controlMode ? 'true' : 'false');
+    } catch {}
+  }, [controlMode]);
+
+  useEffect(() => {
+    if (!pendingGeneration) return;
+
+    const readiness = getAssistantGenerationReadiness(state, pendingGeneration.prompt);
+    if (!readiness.ready) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: makeMessageId(),
+          tone: 'warning',
+          message: readiness.message || 'The assistant cannot run this workflow yet.',
+        },
+      });
+      setPendingGeneration(null);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const request = pendingGeneration;
+      setPendingGeneration(null);
+      void generate({
+        prompt: request.prompt || readiness.prompt,
+      });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [dispatch, generate, pendingGeneration, state]);
 
   useEffect(() => {
     if (!inspectMode) {
@@ -398,7 +544,13 @@ export const AppAssistant: React.FC = () => {
 
     const requestMode = state.mode;
     const requestMessages = threads[requestMode] || [];
-    const workspaceSnapshot = buildAppAssistantWorkspaceSnapshot(state);
+    const assistantImageSources = getAssistantImageSources(state);
+    const assistantImages = getAssistantImages(state);
+    const workspaceSnapshot = [
+      buildAppAssistantWorkspaceSnapshot(state),
+      `Assistant action mode: ${controlMode ? 'Act mode; validated actions will apply automatically' : 'Suggest mode; actions wait for user confirmation'}`,
+      `Visual attachments sent to assistant: ${assistantImageSources.length ? assistantImageSources.map((source, index) => `image ${index + 1}: ${source.label}`).join(', ') : 'none'}`,
+    ].join('\n');
     const userMessage: AssistantMessage = {
       id: makeMessageId(),
       role: 'user',
@@ -424,7 +576,9 @@ export const AppAssistant: React.FC = () => {
           language: i18n.language || 'en',
           messages: [...requestMessages, userMessage],
           workspaceSnapshot,
+          actionContext: buildAppAssistantActionContext(state),
         }),
+        images: assistantImages,
         generationConfig: {
           temperature: 0.15,
           topP: 0.9,
@@ -434,17 +588,28 @@ export const AppAssistant: React.FC = () => {
         },
       });
 
+      const { content, requests } = extractAppAssistantActions(answer);
+      const actions = normalizeAppAssistantActions(requests, state);
+
       setThreadForMode(requestMode, (items) =>
         items.map((message) =>
           message.id === loadingMessage.id
             ? {
                 ...message,
-                content: answer.trim() || String(t('assistant.empty', { defaultValue: 'I could not produce an answer. Try asking again with a little more detail.' })),
+                content: content.trim() || String(t('assistant.empty', { defaultValue: 'I could not produce an answer. Try asking again with a little more detail.' })),
                 isLoading: false,
+                actions,
+                appliedActionIds: [],
               }
             : message
         )
       );
+
+      if (controlMode && actions.length > 0) {
+        window.setTimeout(() => {
+          applyActions(requestMode, loadingMessage.id, actions, true);
+        }, 0);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -473,6 +638,101 @@ export const AppAssistant: React.FC = () => {
     setThreadForMode(state.mode, () => []);
   };
 
+  const markActionsApplied = (mode: GenerationMode, messageId: string, actionIds: string[]) => {
+    setThreadForMode(mode, (items) =>
+      items.map((message) => {
+        if (message.id !== messageId) return message;
+        const applied = new Set(message.appliedActionIds || []);
+        actionIds.forEach((id) => applied.add(id));
+        return { ...message, appliedActionIds: Array.from(applied) };
+      })
+    );
+  };
+
+  const applyActions = (
+    mode: GenerationMode,
+    messageId: string,
+    actions: AppAssistantAction[],
+    automatic = false
+  ) => {
+    if (!actions.length) return;
+    const runGenerationAction = actions.find((action) => action.type === 'run_generation');
+    const prepareSelectionAction = actions.find((action) => action.type === 'prepare_image_selection');
+    const stateActions = actions.filter(
+      (action) => action.type !== 'run_generation' && action.type !== 'prepare_image_selection'
+    );
+
+    if (stateActions.length > 0) {
+      applyAppAssistantActions(dispatch, state, stateActions);
+    }
+
+    if (prepareSelectionAction) {
+      startImageSelectionHandoff();
+    }
+
+    if (runGenerationAction) {
+      const prompt = typeof runGenerationAction.value === 'string' ? runGenerationAction.value : undefined;
+      setPendingGeneration({ id: runGenerationAction.id, prompt });
+    }
+
+    markActionsApplied(mode, messageId, actions.map((action) => action.id));
+    if (!prepareSelectionAction) {
+      const message = runGenerationAction
+        ? stateActions.length > 0
+          ? 'Assistant applied changes and queued generation.'
+          : 'Assistant queued generation.'
+        : automatic
+          ? actions.length === 1 ? 'Assistant applied a change.' : `Assistant applied ${actions.length} changes.`
+          : actions.length === 1 ? 'Assistant change applied.' : `${actions.length} assistant changes applied.`;
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: makeMessageId(),
+          tone: 'info',
+          message,
+        },
+      });
+    }
+  };
+
+  const startImageSelectionHandoff = () => {
+    if (!state.uploadedImage) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: makeMessageId(),
+          tone: 'warning',
+          message: 'Upload or select an image before circling an area for the assistant.',
+        },
+      });
+      return;
+    }
+
+    if (state.mode !== 'visual-edit') {
+      dispatch({ type: 'SET_MODE', payload: 'visual-edit' });
+    }
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        activeTool: 'select',
+        visualSelection: {
+          ...state.workflow.visualSelection,
+          mode: 'lasso',
+        },
+      },
+    });
+    setInspectMode(false);
+    setOpen(false);
+    dispatch({
+      type: 'SET_APP_ALERT',
+      payload: {
+        id: makeMessageId(),
+        tone: 'info',
+        message: 'Lasso the image area you want help with, then reopen the assistant and ask about that selection.',
+      },
+    });
+  };
+
   return (
     <>
       {open && !inspectMode && (
@@ -492,9 +752,20 @@ export const AppAssistant: React.FC = () => {
                     <h2 className="truncate text-sm font-bold text-foreground">
                       {t('assistant.title', { defaultValue: 'Studio Assistant' })}
                     </h2>
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
-                      {t('assistant.live', { defaultValue: 'Live' })}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setControlMode((value) => !value)}
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors',
+                        controlMode
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-surface-sunken text-foreground-muted hover:bg-border-subtle hover:text-foreground'
+                      )}
+                      title={controlMode ? 'Assistant applies validated actions automatically' : 'Assistant only suggests actions'}
+                      aria-pressed={controlMode}
+                    >
+                      {controlMode ? t('assistant.actMode', { defaultValue: 'Act' }) : t('assistant.suggestMode', { defaultValue: 'Suggest' })}
+                    </button>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-foreground-muted">
                     {t('assistant.contextLabel', { defaultValue: 'Context' })}: {feature.title}
@@ -502,6 +773,21 @@ export const AppAssistant: React.FC = () => {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={startImageSelectionHandoff}
+                  disabled={isThinking}
+                  className={cn(
+                    'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition-all',
+                    'border-border bg-surface-elevated text-foreground-secondary hover:border-foreground/25 hover:bg-surface-sunken hover:text-foreground',
+                    isThinking && 'cursor-not-allowed opacity-50 hover:border-border hover:bg-surface-elevated hover:text-foreground-secondary'
+                  )}
+                  title={String(t('assistant.selectImageArea', { defaultValue: 'Circle image area' }))}
+                  aria-label={String(t('assistant.selectImageArea', { defaultValue: 'Circle image area' }))}
+                >
+                  <SquareMousePointer size={15} />
+                  <span>{t('assistant.areaShort', { defaultValue: 'Area' })}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -547,10 +833,27 @@ export const AppAssistant: React.FC = () => {
               <div className="flex items-start gap-2">
                 <Sparkles size={14} className="mt-0.5 shrink-0 text-accent" />
                 <p className="line-clamp-2 text-xs leading-relaxed text-foreground-secondary">
-                  {feature.summary}
+                  {controlMode
+                    ? `${feature.summary} ${t('assistant.actModeHint', { defaultValue: 'Ask directly and I will apply validated settings in the app.' })}`
+                    : feature.summary}
                 </p>
               </div>
             </div>
+            {state.workflow.visualSelections.length > 0 && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-xs">
+                <span className="min-w-0 truncate font-medium text-foreground-secondary">
+                  {state.workflow.visualSelections.length} selected image area{state.workflow.visualSelections.length === 1 ? '' : 's'} in context
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void submitQuestion('Analyze the selected image area and recommend the best next edit, prompt, and settings.')}
+                  disabled={isThinking}
+                  className="shrink-0 rounded-lg bg-foreground px-2.5 py-1.5 text-[11px] font-bold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Ask
+                </button>
+              </div>
+            )}
           </header>
 
           <div className="flex-1 overflow-y-auto bg-background-secondary/70 px-3 py-3 custom-scrollbar">
@@ -603,7 +906,62 @@ export const AppAssistant: React.FC = () => {
                           <span>{message.content}</span>
                         </div>
                       ) : (
-                        <BubbleText text={message.content} />
+                        <>
+                          <BubbleText text={message.content} />
+                          {message.actions && message.actions.length > 0 && (
+                            <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold uppercase tracking-wide text-foreground-muted">
+                                  Assistant actions
+                                </span>
+                                {message.actions.some((action) => !(message.appliedActionIds || []).includes(action.id)) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => applyActions(
+                                      state.mode,
+                                      message.id,
+                                      message.actions!.filter((action) => !(message.appliedActionIds || []).includes(action.id))
+                                    )}
+                                    className="rounded-lg bg-foreground px-2.5 py-1 text-[11px] font-bold text-background transition hover:opacity-90"
+                                  >
+                                    Apply all
+                                  </button>
+                                )}
+                              </div>
+                              {message.actions.map((action) => {
+                                const applied = (message.appliedActionIds || []).includes(action.id);
+                                return (
+                                  <div
+                                    key={action.id}
+                                    className="rounded-xl border border-border bg-background px-3 py-2"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-semibold text-foreground">{action.label}</div>
+                                        {action.reason && (
+                                          <div className="mt-0.5 text-[11px] leading-relaxed text-foreground-muted">{action.reason}</div>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => applyActions(state.mode, message.id, [action])}
+                                        disabled={applied}
+                                        className={cn(
+                                          'shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition',
+                                          applied
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-surface-sunken text-foreground hover:bg-foreground hover:text-background'
+                                        )}
+                                      >
+                                        {applied ? 'Applied' : 'Apply'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

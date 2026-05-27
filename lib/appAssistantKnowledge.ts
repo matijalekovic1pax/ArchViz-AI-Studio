@@ -414,12 +414,14 @@ export function buildAppAssistantPrompt({
   language,
   messages,
   workspaceSnapshot,
+  actionContext,
 }: {
   mode: GenerationMode;
   question: string;
   language: string;
   messages: AppAssistantPromptMessage[];
   workspaceSnapshot: string;
+  actionContext: string;
 }): string {
   const recent = messages
     .slice(-8)
@@ -444,6 +446,8 @@ export function buildAppAssistantPrompt({
     'CURRENT WORKSPACE STATE:',
     workspaceSnapshot,
     '',
+    actionContext,
+    '',
     'RECENT CHAT IN THIS FEATURE:',
     recent,
     '',
@@ -453,12 +457,39 @@ export function buildAppAssistantPrompt({
 
 export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
   const wf = state.workflow;
+  const recentHistory = state.history.slice(-4).reverse();
+  const visualSelectionLines = wf.visualSelections.slice(-4).map((shape, index) => {
+    const points = shape.type === 'rect'
+      ? [shape.start, shape.end]
+      : shape.points;
+    if (points.length === 0) return `Selection ${index + 1}: ${shape.type}, no points`;
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const minX = Math.round(Math.min(...xs));
+    const maxX = Math.round(Math.max(...xs));
+    const minY = Math.round(Math.min(...ys));
+    const maxY = Math.round(Math.max(...ys));
+    const brushText = shape.type === 'brush' ? `, brush ${shape.brushSize}px` : '';
+    return `Selection ${index + 1}: ${shape.type}${brushText}, bounds x ${minX}-${maxX}, y ${minY}-${maxY}`;
+  });
   const lines = [
     `Active mode: ${state.mode}`,
+    `Active style id: ${state.activeStyleId}`,
+    `Custom styles: ${state.customStyles.length}`,
     `Canvas image uploaded: ${state.uploadedImage ? 'yes' : 'no'}`,
+    `Source image locked: ${state.sourceImage ? 'yes' : 'no'}`,
+    `Canvas view: zoom ${state.canvas.zoom.toFixed(2)}, pan x ${Math.round(state.canvas.pan.x)}, y ${Math.round(state.canvas.pan.y)}`,
+    `Output settings: ${state.output.resolution}, ${state.output.aspectRatio}, ${state.output.format}, seed ${state.output.seedLocked ? `locked ${state.output.seed}` : 'unlocked'}`,
+    `Geometry controls: preserve ${state.geometry.geometryPreservation}, perspective ${state.geometry.perspectiveAdherence}, framing ${state.geometry.framingAdherence}, locks geometry ${state.geometry.lockGeometry ? 'on' : 'off'}, perspective ${state.geometry.lockPerspective ? 'on' : 'off'}, hallucination guard ${state.geometry.suppressHallucinations ? 'on' : 'off'}`,
+    `Camera controls: ${state.camera.viewType}, ${state.camera.projection}, FOV ${state.camera.fov}, height ${state.camera.cameraHeight}, vertical correction ${state.camera.verticalCorrection ? state.camera.verticalCorrectionStrength : 'off'}, horizon ${state.camera.horizonLock ? state.camera.horizonPosition : 'unlocked'}`,
+    `Lighting controls: ${state.lighting.timeOfDay}, weather ${state.lighting.weather}, sun azimuth ${state.lighting.sunAzimuth}, altitude ${state.lighting.sunAltitude}, shadows ${state.lighting.shadowIntensity}, dramatic ${state.lighting.allowDramaticLighting ? 'allowed' : 'off'}`,
+    `Material controls: texture ${state.materials.textureSharpness}, aging ${state.materials.agingLevel}, glass ${state.materials.glassEmphasis}, wood ${state.materials.woodEmphasis}, reflectivity ${state.materials.reflectivityBias}, clean/raw ${state.materials.cleanVsRaw}`,
+    `Context controls: people ${state.context.people ? state.context.peopleDensity : 'off'}, vegetation ${state.context.vegetation ? state.context.vegetationDensity : 'off'}, vehicles ${state.context.vehicles ? state.context.vehicleDensity : 'off'}, season ${state.context.season}, subtlety ${state.context.contextSubtlety}`,
     `Prompt field: ${state.prompt.trim() ? state.prompt.trim().slice(0, 500) : 'empty'}`,
     `Generation status: ${state.isGenerating ? `running at ${Math.round(state.progress)}%` : 'idle'}`,
     `History items: ${state.history.length}`,
+    `Recent history: ${recentHistory.length ? recentHistory.map((item) => `${item.mode}: "${item.prompt.replace(/\s+/g, ' ').trim().slice(0, 140) || 'empty prompt'}"`).join(' | ') : 'none'}`,
+    `Image selections available to assistant: ${visualSelectionLines.length ? visualSelectionLines.join(' | ') : 'none'}`,
   ];
 
   switch (state.mode) {
@@ -480,7 +511,8 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       lines.push(
         `Reference images: ${wf.sceneInsertionReferences.length}`,
         `Placed references: ${wf.sceneInsertionReferences.filter((item) => item.placement).length}`,
-        `Active placement: ${wf.sceneComposeActivePlacementId ? 'yes' : 'no'}`
+        `Active placement: ${wf.sceneComposeActivePlacementId ? 'yes' : 'no'}`,
+        `Reference captions: ${wf.sceneInsertionReferences.length ? wf.sceneInsertionReferences.map((item, index) => `${index + 1}. ${item.caption || 'no caption'}${item.placement ? ` at ${Math.round(item.placement.x * 100)}%,${Math.round(item.placement.y * 100)}%` : ' unplaced'}`).join(' | ') : 'none'}`
       );
       break;
     case 'render-cad':
@@ -512,8 +544,11 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Selection mode: ${wf.visualSelection.mode}`,
         `Selection shapes: ${wf.visualSelections.length}`,
         `Selection mask: ${wf.visualSelectionMask ? 'yes' : 'no'}`,
+        `Selection overlay image: ${wf.visualSelectionComposite ? `${wf.visualSelectionCompositeSize?.width || 'unknown'}x${wf.visualSelectionCompositeSize?.height || 'unknown'}` : 'none'}`,
+        `Selection strength: ${wf.visualSelection.strength}, feather ${wf.visualSelection.featherEnabled ? wf.visualSelection.featherAmount : 'off'}`,
         `Visual prompt: ${wf.visualPrompt.trim() ? wf.visualPrompt.trim().slice(0, 500) : 'empty'}`,
-        `Material reference: ${wf.visualMaterial.referenceEnabled && wf.visualMaterial.referenceImage ? 'yes' : 'no'}`
+        `Material reference: ${wf.visualMaterial.referenceEnabled && wf.visualMaterial.referenceImage ? 'yes' : 'no'}`,
+        `Background prompt/reference: ${wf.visualBackground.mode}, ${wf.visualBackground.mode === 'prompt' ? (wf.visualBackground.prompt || 'empty') : wf.visualBackground.referenceImage ? 'reference image present' : 'no reference image'}`
       );
       break;
     case 'exploded':
