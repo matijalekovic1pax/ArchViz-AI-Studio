@@ -132,6 +132,9 @@
     "inspect": "Inspeccionar elemento",
     "inspectHelp": "Haz clic en cualquier control fuera de este chat para preguntar qué hace. Pulsa Esc para cancelar.",
     "inspectOverlay": "Selecciona un elemento de la interfaz",
+    "inspectActiveTitle": "Modo inspección",
+    "inspectActiveBody": "Haz clic en un control del espacio de trabajo. Pulsa Esc para cancelar.",
+    "inspectCancel": "Cancelar inspección",
     "inspectSelectedQuestion": "Explica este elemento seleccionado: {{element}}",
     "placeholder": "Pregunta sobre esta función...",
     "send": "Enviar"

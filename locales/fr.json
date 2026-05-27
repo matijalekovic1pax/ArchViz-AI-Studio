@@ -131,6 +131,9 @@
     "inspect": "Inspecter un élément",
     "inspectHelp": "Cliquez sur un contrôle en dehors de ce chat pour demander ce qu'il fait. Appuyez sur Échap pour annuler.",
     "inspectOverlay": "Sélectionnez un élément de l'interface",
+    "inspectActiveTitle": "Mode inspection",
+    "inspectActiveBody": "Cliquez sur un contrôle dans l'espace de travail. Appuyez sur Échap pour annuler.",
+    "inspectCancel": "Annuler l'inspection",
     "inspectSelectedQuestion": "Explique cet élément sélectionné : {{element}}",
     "placeholder": "Posez une question sur cette fonction...",
     "send": "Envoyer"

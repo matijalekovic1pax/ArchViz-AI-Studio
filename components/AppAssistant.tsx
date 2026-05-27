@@ -189,6 +189,7 @@ export const AppAssistant: React.FC = () => {
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const inspectToolbarRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
@@ -227,8 +228,11 @@ export const AppAssistant: React.FC = () => {
     const previousCursor = document.body.style.cursor;
     document.body.style.cursor = 'crosshair';
 
+    const isAssistantSurface = (target: Element) =>
+      Boolean(panelRef.current?.contains(target) || inspectToolbarRef.current?.contains(target));
+
     const updateRect = (target: Element) => {
-      if (panelRef.current?.contains(target)) {
+      if (isAssistantSurface(target)) {
         setInspectRect(null);
         return;
       }
@@ -249,7 +253,7 @@ export const AppAssistant: React.FC = () => {
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target;
-      if (!(target instanceof Element) || panelRef.current?.contains(target)) return;
+      if (!(target instanceof Element) || isAssistantSurface(target)) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -412,7 +416,7 @@ export const AppAssistant: React.FC = () => {
 
   return (
     <>
-      {open && (
+      {open && !inspectMode && (
         <section
           ref={panelRef}
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+8.25rem)] right-3 z-[95] flex h-[min(600px,calc(100svh-9.5rem))] w-[calc(100vw-1.5rem)] max-w-[390px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-xl lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)] lg:right-3"
@@ -441,26 +445,6 @@ export const AppAssistant: React.FC = () => {
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    dismissHint();
-                    setInspectMode((value) => !value);
-                  }}
-                  disabled={isThinking}
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
-                    inspectMode
-                      ? 'bg-foreground text-background'
-                      : 'text-foreground-muted hover:bg-surface-sunken hover:text-foreground',
-                    isThinking && 'cursor-not-allowed opacity-50'
-                  )}
-                  title={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
-                  aria-label={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
-                  aria-pressed={inspectMode}
-                >
-                  <ScanSearch size={15} />
-                </button>
-                <button
-                  type="button"
                   onClick={clearThread}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
                   title={String(t('assistant.clear', { defaultValue: 'Clear chat' }))}
@@ -470,7 +454,10 @@ export const AppAssistant: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setInspectMode(false);
+                    setOpen(false);
+                  }}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
                   title={String(t('common.close'))}
                   aria-label={String(t('common.close'))}
@@ -487,13 +474,32 @@ export const AppAssistant: React.FC = () => {
                 </p>
               </div>
             </div>
-            {inspectMode && (
-              <div className="mt-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-xs leading-relaxed text-foreground-secondary">
-                {t('assistant.inspectHelp', {
-                  defaultValue: 'Click any control outside this chat to ask what it does. Press Esc to cancel.',
-                })}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                dismissHint();
+                setInspectMode(true);
+              }}
+              disabled={isThinking}
+              className={cn(
+                'mt-3 flex w-full items-center gap-3 rounded-xl border border-border bg-foreground px-3 py-2 text-left text-background shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0',
+                isThinking && 'cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-sm'
+              )}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/15">
+                <ScanSearch size={18} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold">
+                  {t('assistant.inspect', { defaultValue: 'Inspect interface element' })}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] leading-relaxed text-background/70">
+                  {t('assistant.inspectHelp', {
+                    defaultValue: 'Click any control outside this chat to ask what it does. Press Esc to cancel.',
+                  })}
+                </span>
+              </span>
+            </button>
           </header>
 
           <div className="flex-1 overflow-y-auto bg-background-secondary/70 px-3 py-3 custom-scrollbar">
@@ -601,6 +607,12 @@ export const AppAssistant: React.FC = () => {
         type="button"
         onClick={() => {
           dismissHint();
+          if (inspectMode) {
+            setInspectMode(false);
+            setInspectRect(null);
+            setOpen(true);
+            return;
+          }
           setOpen((value) => !value);
         }}
         className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] right-3 z-[90] flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-foreground text-background shadow-xl transition-all hover:-translate-y-0.5 hover:shadow-elevated active:scale-95 lg:bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:right-3"
@@ -612,6 +624,41 @@ export const AppAssistant: React.FC = () => {
           <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
         )}
       </button>
+
+      {inspectMode && open && (
+        <div
+          ref={inspectToolbarRef}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] left-1/2 z-[96] flex w-[min(430px,calc(100vw-1.5rem))] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-foreground px-3 py-2.5 text-background shadow-2xl lg:bottom-[calc(env(safe-area-inset-bottom)+1rem)]"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background/15">
+              <ScanSearch size={18} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold">
+                {t('assistant.inspectActiveTitle', { defaultValue: 'Inspect mode' })}
+              </div>
+              <div className="truncate text-[11px] leading-relaxed text-background/70">
+                {t('assistant.inspectActiveBody', {
+                  defaultValue: 'Click a control in the workspace. Press Esc to cancel.',
+                })}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setInspectMode(false);
+              setInspectRect(null);
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background/10 text-background transition-colors hover:bg-background/20"
+            aria-label={String(t('assistant.inspectCancel', { defaultValue: 'Cancel inspect mode' }))}
+            title={String(t('assistant.inspectCancel', { defaultValue: 'Cancel inspect mode' }))}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       {hintVisible && !open && (
         <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+8rem)] right-3 z-[89] max-w-[220px] animate-fade-in rounded-xl border border-border bg-surface-elevated px-3 py-2 text-xs leading-relaxed text-foreground-secondary shadow-lg lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)]">
