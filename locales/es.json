@@ -116,6 +116,20 @@
     "custom": "Personalizado",
     "degrees": "grados"
   },
+  "assistant": {
+    "open": "Abrir asistente",
+    "title": "Asistente del estudio",
+    "live": "Activo",
+    "contextLabel": "Contexto",
+    "clear": "Limpiar chat",
+    "thinking": "Leyendo esta función...",
+    "empty": "No pude generar una respuesta. Intenta preguntar con un poco más de detalle.",
+    "error": "No pude contactar al asistente ahora. Inténtalo de nuevo.",
+    "emptyTitle": "Pregunta sobre esta función.",
+    "emptyBody": "Puedo explicar qué subir, qué controles importan y el siguiente paso más seguro para el espacio de trabajo actual.",
+    "placeholder": "Pregunta sobre esta función...",
+    "send": "Enviar"
+  },
   "feedback": {
     "reportButton": "Reportar Feedback",
     "adminButton": "Panel Admin",

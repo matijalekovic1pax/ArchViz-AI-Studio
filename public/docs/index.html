@@ -862,6 +862,10 @@
     }
 
     function buildManualText() {
+      const assistantGuide = (doc.assistantGuide || []).map((item) => [
+        `${item.title} (#${item.anchor || item.id || "overview"})`,
+        ...(item.guide || []),
+      ].join("\n")).join("\n\n");
       return [
         `${doc.hero.title}: ${doc.hero.lead}`,
         doc.workflow.steps.map((s) => `${s.title}: ${s.text}`).join("\n"),
@@ -877,6 +881,7 @@
           `${doc.modeLabels.tips}: ${mode.tips.join("; ")}`,
         ].join("\n")).join("\n\n"),
         Object.values(doc.reference).map((block) => `${block.title}: ${block.lead}\n${block.cards.map((card) => `${card.title}: ${card.text} ${(card.items || []).join("; ")}`).join("\n")}`).join("\n\n"),
+        `ASSISTANT FEATURE PLAYBOOK:\n${assistantGuide}`,
       ].join("\n\n");
     }
 
@@ -886,6 +891,10 @@
         doc.chat.system,
         doc.chat.photoInstruction,
         doc.chat.answerRules,
+        "Use the assistant feature playbook for precise, step-by-step guidance. Do not present removed or unavailable workflows as active features. If the user asks for a removed feature, explain that it is unavailable and redirect to the closest documented workflow.",
+        "Answer comparison questions from the named controls in the documentation. If a requested option is not documented, say so and offer the closest documented control.",
+        "Do not give generic rendering or AI theory unless it is tied directly to a named ArchViz AI Studio feature, panel, or control.",
+        "Prefer practical numbered steps with exact UI locations when the user needs guidance. Include one or more relevant anchor links. Ask a clarification only when the missing information changes the recommended feature.",
         "",
         "ANCHORS:",
         searchIndex.map((item) => `${item.title}: #${item.id}`).join("\n"),

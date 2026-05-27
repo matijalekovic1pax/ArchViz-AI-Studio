@@ -116,6 +116,20 @@
     "custom": "Custom",
     "degrees": "deg"
   },
+  "assistant": {
+    "open": "Open assistant",
+    "title": "Studio Assistant",
+    "live": "Live",
+    "contextLabel": "Context",
+    "clear": "Clear chat",
+    "thinking": "Reading this feature...",
+    "empty": "I could not produce an answer. Try asking again with a little more detail.",
+    "error": "I could not reach the assistant right now. Please try again.",
+    "emptyTitle": "Ask about this feature.",
+    "emptyBody": "I can explain what to upload, which controls matter, and the safest next step for the current workspace.",
+    "placeholder": "Ask about this feature...",
+    "send": "Send"
+  },
   "feedback": {
     "reportButton": "Report Feedback",
     "adminButton": "Admin Dashboard",

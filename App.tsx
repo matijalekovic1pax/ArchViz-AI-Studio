@@ -13,6 +13,7 @@ import { FloatingGenerateButton } from './components/FloatingGenerateButton';
 import { MaterialValidationView } from './components/MaterialValidationView';
 import { DocumentTranslateView } from './components/DocumentTranslateView';
 import { PdfCompressionView } from './components/PdfCompressionView';
+import { AppAssistant } from './components/AppAssistant';
 import { GenerationMode } from './types';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
@@ -128,6 +129,7 @@ const Layout: React.FC = () => {
         </div>
       )}
       <ShortcutsListener />
+      <AppAssistant />
       <div className="flex-1 flex overflow-hidden">
         <div className="hidden lg:flex h-full">
           <LeftSidebar />

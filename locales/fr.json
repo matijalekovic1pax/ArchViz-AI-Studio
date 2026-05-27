@@ -115,6 +115,20 @@
     "custom": "Personnalisé",
     "degrees": "degres"
   },
+  "assistant": {
+    "open": "Ouvrir l'assistant",
+    "title": "Assistant studio",
+    "live": "Actif",
+    "contextLabel": "Contexte",
+    "clear": "Effacer le chat",
+    "thinking": "Lecture de cette fonction...",
+    "empty": "Je n'ai pas pu produire de réponse. Essayez avec un peu plus de détail.",
+    "error": "Impossible de joindre l'assistant pour le moment. Réessayez.",
+    "emptyTitle": "Posez une question sur cette fonction.",
+    "emptyBody": "Je peux expliquer quoi importer, quels contrôles comptent et la prochaine étape la plus sûre pour l'espace de travail actuel.",
+    "placeholder": "Posez une question sur cette fonction...",
+    "send": "Envoyer"
+  },
   "feedback": {
     "reportButton": "Signaler un feedback",
     "adminButton": "Tableau Admin",
