@@ -124,8 +124,8 @@
     "thinking": "Lecture de cette fonction...",
     "empty": "Je n'ai pas pu produire de réponse. Essayez avec un peu plus de détail.",
     "error": "Impossible de joindre l'assistant pour le moment. Réessayez.",
-    "emptyTitle": "Posez une question sur cette fonction.",
-    "emptyBody": "Je peux expliquer quoi importer, quels contrôles comptent et la prochaine étape la plus sûre pour l'espace de travail actuel.",
+    "emptyTitle": "Dites-moi ce que vous voulez créer.",
+    "emptyBody": "Je peux analyser l'image actuelle, proposer une direction, régler les contrôles, améliorer le prompt et lancer le rendu après confirmation.",
     "hintTitle": "Besoin d'aide ?",
     "hintBody": "Demandez à l'assistant pour {{feature}}.",
     "inspect": "Inspecter un élément",
@@ -136,7 +136,9 @@
     "inspectActiveBody": "Cliquez sur un groupe de contrôles dans l'espace de travail. Appuyez sur Échap pour annuler.",
     "inspectCancel": "Annuler l'inspection",
     "inspectSelectedQuestion": "Explique cet élément sélectionné : {{element}}",
-    "placeholder": "Posez une question sur cette fonction...",
+    "attachImage": "Joindre une image",
+    "removeImage": "Supprimer l'image",
+    "placeholder": "Demandez conseil, réglages, edits ou rendu...",
     "send": "Envoyer"
   },
   "feedback": {

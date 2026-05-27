@@ -121,7 +121,7 @@ export const SunPositionWidget: React.FC<SunPositionWidgetProps> = ({ azimuth, e
     const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width);
     const y = Math.min(Math.max(0, e.clientY - rect.top), rect.height);
 
-    // Reuse the legacy azimuth/elevation fields as a camera-relative 2D source map.
+    // Store the visible Light Source grid as a camera-relative 2D source map.
     // X: left to right. Y: back to front.
     const newAz = Math.round((x / rect.width) * 360);
     const newEl = Math.round(90 - (y / rect.height) * 90);
@@ -169,7 +169,7 @@ export const SunPositionWidget: React.FC<SunPositionWidgetProps> = ({ azimuth, e
         <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Left</span>
         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-bold text-foreground-muted pointer-events-none">Right</span>
 
-        {/* Sun Handle */}
+        {/* Light Source handle */}
         <div
           className="absolute w-4 h-4 bg-yellow-400 rounded-full shadow-[0_0_12px_rgba(250,204,21,0.8)] border-2 border-white z-10 transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
           style={{ left: `${left}%`, top: `${top}%` }}

@@ -27,7 +27,13 @@ export const APP_ASSISTANT_GLOBAL_RULES = [
   'For comparison questions, name each relevant in-app control and explain when to use it.',
   'Do not give generic rendering or AI theory unless it is tied directly to a named ArchViz AI Studio control or workflow.',
   'Prefer exact UI locations: top bar, left panel, canvas, right panel, history, mobile workflow dock, or the dedicated full-page workflow.',
-  'Ask a clarifying question only when the missing input changes the recommended feature or next action.',
+  'Lead the user through creation like a studio operator: identify intent, ask the fewest useful questions, suggest concrete options, then set up the app when there is enough direction.',
+  'When the user is still exploring, offer 2-3 clear directions instead of immediately applying every possible setting.',
+  'When a reference photo, style image, material sample, product photo, or background image would improve the result, ask the user to attach it in the assistant instead of pretending you can see a missing image.',
+  'When settings are applied or a direction is settled, ask whether the user is ready for the assistant to render/generate now.',
+  'Only trigger rendering after the user explicitly asks to render, generate, run, translate, validate, compress, or confirms a render question.',
+  'Never expose implementation-only field names in user prose. For lighting, use only the visible UI terms: Light Source, Front, Back, Left, Right, intensity, color temperature, shadows, and time of day.',
+  'Ask a clarifying question when the missing input changes the recommended feature, visual direction, or next action.',
 ];
 
 export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureGuide> = {
@@ -59,9 +65,9 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'Upload the model screenshot to the canvas.',
       'Set source type and view type in the left panel.',
       'Choose a style preset or upload a style reference, then optionally add a background reference.',
-      'Use the right panel for generation mode, lighting, atmosphere, scenery, aspect ratio, and resolution.',
+      'Use the right panel for generation mode, Light Source position, intensity, color temperature, shadows, time of day, atmosphere, scenery, aspect ratio, and resolution.',
     ],
-    controls: ['source type', 'view type', 'style reference', 'background reference', 'AI problem analysis', 'Strict Realism/Enhance/Concept Push', 'lighting', 'atmosphere', 'scenery', 'resolution'],
+    controls: ['source type', 'view type', 'style reference', 'background reference', 'AI problem analysis', 'Strict Realism/Enhance/Concept Push', 'Light Source grid', 'intensity', 'color temperature', 'shadows', 'time of day', 'atmosphere', 'scenery', 'resolution'],
     specificGuidance: [
       'A style preset is a built-in style selected in the left panel Presets tab. It applies a known visual style bundle without requiring an uploaded reference image.',
       'A style reference image is uploaded in the left panel Image tab. It is for visual language only: rendering medium, color grading, contrast curve, material finish, lighting character, atmosphere, camera polish, grain, and mood.',
@@ -71,6 +77,7 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'Strict Realism is for preserving source geometry, camera, composition, walls, openings, and spatial relationships as closely as possible while turning the model screenshot into a realistic render.',
       'Enhance is the default middle option for a source that already reads well; it improves lighting, atmosphere, color grading, clarity, material polish, and presentation without redesigning the project.',
       'Concept Push is for looser exploration; it keeps the source recognizable but allows bolder interpretation of forms, materials, lighting, atmosphere, and entourage.',
+      'The lighting direction control is named Light Source and uses a camera-relative grid: Front, Back, Left, and Right.',
     ],
     watchOut: ['Use Strict Realism when geometry must stay close.', 'Clean clay renders usually preserve geometry better than noisy viewport screenshots.'],
     suggestions: ['Walk me through 3D Rendering', 'Which generation mode should I use?', 'How do I preserve geometry?'],
@@ -148,11 +155,12 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'Choose the active edit tool and write a direct instruction.',
       'Upload material or object references when matching something real matters.',
     ],
-    controls: ['active tool', 'selection mode', 'mask feather/strength', 'material reference image', 'lighting', 'people density', 'background reference', 'outpaint direction'],
+    controls: ['active tool', 'selection mode', 'mask feather/strength', 'material reference image', 'lighting mode', 'Light Source grid', 'people density', 'background reference', 'outpaint direction'],
     specificGuidance: [
       'Visual Edit changes selected pixels in an existing image. The mask or selection is the main safety control.',
       'Use rectangle, brush, lasso, AI selection, erase, or adjust tools to define the editable region.',
       'Material references are for matching material appearance in the selected area.',
+      'When relighting with Sun mode, describe the Light Source grid as Front, Back, Left, and Right rather than exposing numeric coordinate values.',
       'If the user wants to add many separately referenced objects with placement control, redirect to Scene Compose.',
     ],
     watchOut: ['Tight masks produce cleaner edits.', 'Use Scene Compose for many new referenced objects.'],
@@ -223,9 +231,9 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Upload the strongest source view.',
       'Choose turntable, architectural, bird-eye, or custom preset.',
-      'Set view count, azimuth and elevation ranges, consistency lock, style, and output resolution.',
+      'Set view count, camera orbit range, camera height range, consistency lock, style, and output resolution.',
     ],
-    controls: ['preset', 'view count', 'azimuth range', 'elevation range', 'consistency lock', 'custom angles'],
+    controls: ['preset', 'view count', 'camera orbit range', 'camera height range', 'consistency lock', 'custom angles'],
     specificGuidance: [
       'Multi-Angle generates a set of related views from one source image.',
       'Consistency lock is the key control when materials, massing, and style must stay aligned across views.',
@@ -433,9 +441,15 @@ export function buildAppAssistantPrompt({
     'You are the embedded ArchViz AI Studio assistant inside the actual app.',
     `Answer in this app language when possible: ${language}.`,
     'Use the active feature context first. The user opened the assistant from the current feature, so assume they need help with that feature unless they ask otherwise.',
-    'Be precise and practical. Prefer 3-6 concise bullets, exact UI locations, and concrete settings. Complete every sentence; never stop mid-list or mid-thought.',
+    'Be precise, practical, and conversational. Prefer short guided steps over long documentation dumps. Complete every sentence; never stop mid-list or mid-thought.',
     'Never invent buttons, models, file types, export formats, or controls that are not in the provided context.',
     'If the active feature guide contains direct guidance for the question, answer from that guidance first.',
+    'INTERACTIVE ASSISTANT BEHAVIOR:',
+    '- If the user gives a broad goal, ask one focused question or offer 2-3 concrete directions before changing many settings.',
+    '- If the user gives enough intent, propose the direction, request useful app actions, and explain what those actions prepare.',
+    '- If the user sounds unsure, guide them through a decision path instead of only listing settings.',
+    '- If you have prepared a setup but the user has not explicitly asked to run it, end by asking whether they are ready for you to render/generate.',
+    '- If the user confirms rendering or says yes after a render question, request run_generation.',
     APP_ASSISTANT_GLOBAL_RULES.map((rule) => `- ${rule}`).join('\n'),
     '',
     `All active features: ${getAppAssistantModeList()}`,
@@ -455,9 +469,22 @@ export function buildAppAssistantPrompt({
   ].join('\n');
 }
 
+function describeLightSource(azimuth: number, elevation: number): string {
+  const horizontal = Math.min(1, Math.max(0, azimuth / 360));
+  const frontBack = Math.min(1, Math.max(0, elevation / 90));
+  const xLabel = horizontal < 0.4 ? 'Left' : horizontal > 0.6 ? 'Right' : '';
+  const yLabel = frontBack > 0.6 ? 'Front' : frontBack < 0.4 ? 'Back' : '';
+  if (xLabel && yLabel) return `${yLabel}-${xLabel}`;
+  if (yLabel) return yLabel;
+  if (xLabel) return xLabel;
+  return 'Centered';
+}
+
 export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
   const wf = state.workflow;
   const recentHistory = state.history.slice(-4).reverse();
+  const renderLight = wf.render3d.lighting;
+  const renderLightSource = describeLightSource(renderLight.sun.azimuth, renderLight.sun.elevation);
   const visualSelectionLines = wf.visualSelections.slice(-4).map((shape, index) => {
     const points = shape.type === 'rect'
       ? [shape.start, shape.end]
@@ -482,7 +509,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
     `Output settings: ${state.output.resolution}, ${state.output.aspectRatio}, ${state.output.format}, seed ${state.output.seedLocked ? `locked ${state.output.seed}` : 'unlocked'}`,
     `Geometry controls: preserve ${state.geometry.geometryPreservation}, perspective ${state.geometry.perspectiveAdherence}, framing ${state.geometry.framingAdherence}, locks geometry ${state.geometry.lockGeometry ? 'on' : 'off'}, perspective ${state.geometry.lockPerspective ? 'on' : 'off'}, hallucination guard ${state.geometry.suppressHallucinations ? 'on' : 'off'}`,
     `Camera controls: ${state.camera.viewType}, ${state.camera.projection}, FOV ${state.camera.fov}, height ${state.camera.cameraHeight}, vertical correction ${state.camera.verticalCorrection ? state.camera.verticalCorrectionStrength : 'off'}, horizon ${state.camera.horizonLock ? state.camera.horizonPosition : 'unlocked'}`,
-    `Lighting controls: ${state.lighting.timeOfDay}, weather ${state.lighting.weather}, sun azimuth ${state.lighting.sunAzimuth}, altitude ${state.lighting.sunAltitude}, shadows ${state.lighting.shadowIntensity}, dramatic ${state.lighting.allowDramaticLighting ? 'allowed' : 'off'}`,
+    `Global lighting controls: ${state.lighting.timeOfDay}, weather ${state.lighting.weather}, light direction map ${describeLightSource(state.lighting.sunAzimuth, Math.max(0, state.lighting.sunAltitude))}, shadows ${state.lighting.shadowIntensity}, dramatic ${state.lighting.allowDramaticLighting ? 'allowed' : 'off'}`,
     `Material controls: texture ${state.materials.textureSharpness}, aging ${state.materials.agingLevel}, glass ${state.materials.glassEmphasis}, wood ${state.materials.woodEmphasis}, reflectivity ${state.materials.reflectivityBias}, clean/raw ${state.materials.cleanVsRaw}`,
     `Context controls: people ${state.context.people ? state.context.peopleDensity : 'off'}, vegetation ${state.context.vegetation ? state.context.vegetationDensity : 'off'}, vehicles ${state.context.vehicles ? state.context.vehicleDensity : 'off'}, season ${state.context.season}, subtlety ${state.context.contextSubtlety}`,
     `Prompt field: ${state.prompt.trim() ? state.prompt.trim().slice(0, 500) : 'empty'}`,
@@ -504,6 +531,9 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Style reference enabled: ${wf.styleReferenceEnabled ? 'yes' : 'no'}`,
         `Background reference enabled: ${wf.backgroundReferenceEnabled ? 'yes' : 'no'}`,
         `Detected problem areas: ${wf.detectedElements.length}`,
+        `Light Source: ${renderLight.sun.enabled ? renderLightSource : 'off'}, intensity ${renderLight.sun.intensity}, color temperature ${renderLight.sun.colorTemp}K, shadows ${renderLight.shadows.enabled ? `${renderLight.shadows.intensity}%` : 'off'}, time of day ${renderLight.preset}`,
+        `Atmosphere: ${wf.render3d.atmosphere.mood}, fog ${wf.render3d.atmosphere.fog.enabled ? wf.render3d.atmosphere.fog.density : 'off'}, bloom ${wf.render3d.atmosphere.bloom.enabled ? wf.render3d.atmosphere.bloom.intensity : 'off'}`,
+        `Scenery: people ${wf.render3d.scenery.people.enabled ? wf.render3d.scenery.people.count : 'off'}, vegetation ${wf.render3d.scenery.trees.enabled ? wf.render3d.scenery.trees.count : 'off'}, vehicles ${wf.render3d.scenery.cars.enabled ? wf.render3d.scenery.cars.count : 'off'}, preset ${wf.render3d.scenery.preset}`,
         `Output: ${wf.render3d.render.resolution}, ${wf.render3d.render.aspectRatio}`
       );
       break;
@@ -546,6 +576,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Selection mask: ${wf.visualSelectionMask ? 'yes' : 'no'}`,
         `Selection overlay image: ${wf.visualSelectionComposite ? `${wf.visualSelectionCompositeSize?.width || 'unknown'}x${wf.visualSelectionCompositeSize?.height || 'unknown'}` : 'none'}`,
         `Selection strength: ${wf.visualSelection.strength}, feather ${wf.visualSelection.featherEnabled ? wf.visualSelection.featherAmount : 'off'}`,
+        `Visual relight source: ${describeLightSource(wf.visualLighting.sun.azimuth, wf.visualLighting.sun.elevation)}, intensity ${wf.visualLighting.sun.intensity}, color temperature ${wf.visualLighting.sun.colorTemp}K`,
         `Visual prompt: ${wf.visualPrompt.trim() ? wf.visualPrompt.trim().slice(0, 500) : 'empty'}`,
         `Material reference: ${wf.visualMaterial.referenceEnabled && wf.visualMaterial.referenceImage ? 'yes' : 'no'}`,
         `Background prompt/reference: ${wf.visualBackground.mode}, ${wf.visualBackground.mode === 'prompt' ? (wf.visualBackground.prompt || 'empty') : wf.visualBackground.referenceImage ? 'reference image present' : 'no reference image'}`

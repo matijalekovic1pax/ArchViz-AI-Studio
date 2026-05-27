@@ -125,8 +125,8 @@
     "thinking": "Reading this feature...",
     "empty": "I could not produce an answer. Try asking again with a little more detail.",
     "error": "I could not reach the assistant right now. Please try again.",
-    "emptyTitle": "Ask about this feature.",
-    "emptyBody": "I can explain what to upload, which controls matter, and the safest next step for the current workspace.",
+    "emptyTitle": "Tell me what you want to make.",
+    "emptyBody": "I can review the current image, suggest a direction, set up the controls, improve the prompt, and render when you confirm.",
     "hintTitle": "Need help?",
     "hintBody": "Ask the assistant about {{feature}}.",
     "inspect": "Inspect interface element",
@@ -137,7 +137,9 @@
     "inspectActiveBody": "Click a control group in the workspace. Press Esc to cancel.",
     "inspectCancel": "Cancel inspect mode",
     "inspectSelectedQuestion": "Explain this selected element: {{element}}",
-    "placeholder": "Ask about this feature...",
+    "attachImage": "Attach image",
+    "removeImage": "Remove image",
+    "placeholder": "Ask for advice, edits, settings, or a render...",
     "send": "Send"
   },
   "feedback": {

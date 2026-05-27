@@ -125,8 +125,8 @@
     "thinking": "Leyendo esta función...",
     "empty": "No pude generar una respuesta. Intenta preguntar con un poco más de detalle.",
     "error": "No pude contactar al asistente ahora. Inténtalo de nuevo.",
-    "emptyTitle": "Pregunta sobre esta función.",
-    "emptyBody": "Puedo explicar qué subir, qué controles importan y el siguiente paso más seguro para el espacio de trabajo actual.",
+    "emptyTitle": "Dime qué quieres crear.",
+    "emptyBody": "Puedo revisar la imagen actual, sugerir una dirección, ajustar controles, mejorar el prompt y renderizar cuando confirmes.",
     "hintTitle": "¿Necesitas ayuda?",
     "hintBody": "Pregunta al asistente sobre {{feature}}.",
     "inspect": "Inspeccionar elemento",
@@ -137,7 +137,9 @@
     "inspectActiveBody": "Haz clic en un grupo de controles del espacio de trabajo. Pulsa Esc para cancelar.",
     "inspectCancel": "Cancelar inspección",
     "inspectSelectedQuestion": "Explica este elemento seleccionado: {{element}}",
-    "placeholder": "Pregunta sobre esta función...",
+    "attachImage": "Adjuntar imagen",
+    "removeImage": "Eliminar imagen",
+    "placeholder": "Pide consejo, ajustes, ediciones o un render...",
     "send": "Enviar"
   },
   "feedback": {

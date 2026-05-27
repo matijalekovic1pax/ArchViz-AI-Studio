@@ -979,7 +979,7 @@ const describeLightSourcePosition = (azimuth: number, elevation: number): string
     'back-right': 'the image-right rear should act as the source, producing backlit edges and shadows toward the front-left',
   };
 
-  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right; this is not a geographic sun azimuth. ${lightingEffect[frameDirection]}`;
+  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right, not as a geographic compass angle. ${lightingEffect[frameDirection]}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {
@@ -3140,7 +3140,7 @@ function generateMasterplanPrompt(state: AppState): string {
   parts.push(`${heightDesc}, with ${buildings.roofStyle} roof forms.`);
 
   if (buildings.showShadows) {
-    parts.push('Cast realistic shadows to communicate building heights and sun position.');
+    parts.push('Cast realistic shadows to communicate building heights and light direction.');
   }
   if (buildings.transparent) {
     parts.push('Render buildings with some transparency to reveal ground-level activity beneath.');

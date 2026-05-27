@@ -1,5 +1,5 @@
 import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, Send, Sparkles, SquareMousePointer, X } from 'lucide-react';
+import { Bot, ChevronDown, Image as ImageIcon, Loader2, MessageCircle, RefreshCw, Send, Sparkles, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { AppState, GenerationMode } from '../types';
@@ -16,6 +16,7 @@ import {
   extractAppAssistantActions,
   normalizeAppAssistantActions,
   type AppAssistantAction,
+  type AppAssistantChatImage,
 } from '../lib/appAssistantActions';
 import { GeminiService, ImageUtils, type ImageData } from '../services/geminiService';
 
@@ -26,6 +27,7 @@ interface AssistantMessage {
   role: AssistantRole;
   content: string;
   isLoading?: boolean;
+  attachments?: AppAssistantChatImage[];
   actions?: AppAssistantAction[];
   appliedActionIds?: string[];
 }
@@ -38,6 +40,7 @@ interface PendingGenerationRequest {
 
 const ASSISTANT_MODEL = 'gemini-3.5-flash';
 const controlModeStorageKey = 'archviz_assistant_control_mode';
+const maxAssistantComposerImages = 4;
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 interface InspectRect {
@@ -52,9 +55,13 @@ const getCompactText = (value: string | null | undefined, maxLength = 220) => {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
 };
 
-const getAssistantImageSources = (state: AppState) => {
+const getAssistantImageSources = (state: AppState, chatImages: AppAssistantChatImage[] = []) => {
   const latestHistoryImage = state.history.length > 0 ? state.history[state.history.length - 1]?.thumbnail : null;
   const candidates = [
+    ...chatImages.map((image, index) => ({
+      url: image.url,
+      label: `user attached image ${index + 1}${image.name ? ` (${image.name})` : ''}`,
+    })),
     { url: state.workflow.visualSelectionComposite, label: 'selected image areas overlay' },
     { url: state.uploadedImage, label: 'current canvas image' },
     { url: state.sourceImage && state.sourceImage !== state.uploadedImage ? state.sourceImage : null, label: 'locked source image' },
@@ -66,11 +73,11 @@ const getAssistantImageSources = (state: AppState) => {
     if (seen.has(item.url)) return false;
     seen.add(item.url);
     return true;
-  }).slice(0, 4);
+  }).slice(0, 8);
 };
 
-const getAssistantImages = (state: AppState): ImageData[] => {
-  return getAssistantImageSources(state).flatMap((source) => {
+const getAssistantImages = (state: AppState, chatImages: AppAssistantChatImage[] = []): ImageData[] => {
+  return getAssistantImageSources(state, chatImages).flatMap((source) => {
     try {
       return [ImageUtils.dataUrlToImageData(source.url)];
     } catch {
@@ -357,12 +364,14 @@ export const AppAssistant: React.FC = () => {
   });
   const [pendingGeneration, setPendingGeneration] = useState<PendingGenerationRequest | null>(null);
   const [input, setInput] = useState('');
+  const [composerImages, setComposerImages] = useState<AppAssistantChatImage[]>([]);
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const inspectToolbarRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
   const feature = getAppAssistantFeature(state.mode);
   const messages = threads[state.mode] || [];
@@ -538,23 +547,78 @@ export const AppAssistant: React.FC = () => {
 
   const quickPrompts = feature.suggestions.slice(0, 3);
 
-  const submitQuestion = async (rawQuestion: string, visibleQuestion = rawQuestion) => {
-    const question = rawQuestion.trim();
+  useEffect(() => {
+    if (!open || !inputRef.current) return;
+    const textarea = inputRef.current;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 144)}px`;
+  }, [input, open]);
+
+  const handleAssistantImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = event.currentTarget.files;
+    const files: File[] = [];
+    if (fileList) {
+      for (let index = 0; index < fileList.length; index += 1) {
+        const file = fileList.item(index);
+        if (file?.type.startsWith('image/')) {
+          files.push(file);
+        }
+      }
+    }
+    const limitedFiles = files.slice(0, Math.max(0, maxAssistantComposerImages - composerImages.length));
+
+    limitedFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = typeof reader.result === 'string' ? reader.result : '';
+        if (!url) return;
+        setComposerImages((items) => [
+          ...items,
+          {
+            id: `chat-image-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            url,
+            name: file.name,
+          },
+        ].slice(0, maxAssistantComposerImages));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+  };
+
+  const removeComposerImage = (id: string) => {
+    setComposerImages((items) => items.filter((item) => item.id !== id));
+  };
+
+  const submitQuestion = async (
+    rawQuestion: string,
+    visibleQuestion = rawQuestion,
+    attachedImages: AppAssistantChatImage[] = []
+  ) => {
+    const imageQuestion = attachedImages.length
+      ? `I attached ${attachedImages.length} image reference${attachedImages.length === 1 ? '' : 's'}. Review them and suggest how they should be used in this workflow.`
+      : '';
+    const question = rawQuestion.trim() || imageQuestion;
     if (!question || isThinking) return;
 
     const requestMode = state.mode;
     const requestMessages = threads[requestMode] || [];
-    const assistantImageSources = getAssistantImageSources(state);
-    const assistantImages = getAssistantImages(state);
+    const assistantImageSources = getAssistantImageSources(state, attachedImages);
+    const assistantImages = getAssistantImages(state, attachedImages);
     const workspaceSnapshot = [
       buildAppAssistantWorkspaceSnapshot(state),
       `Assistant action mode: ${controlMode ? 'Act mode; validated actions will apply automatically' : 'Suggest mode; actions wait for user confirmation'}`,
+      `User-attached images in this message: ${attachedImages.length ? attachedImages.map((image) => `${image.id}${image.name ? ` (${image.name})` : ''}`).join(', ') : 'none'}`,
       `Visual attachments sent to assistant: ${assistantImageSources.length ? assistantImageSources.map((source, index) => `image ${index + 1}: ${source.label}`).join(', ') : 'none'}`,
     ].join('\n');
     const userMessage: AssistantMessage = {
       id: makeMessageId(),
       role: 'user',
       content: visibleQuestion.trim() || question,
+      attachments: attachedImages,
     };
     const loadingMessage: AssistantMessage = {
       id: makeMessageId(),
@@ -565,6 +629,9 @@ export const AppAssistant: React.FC = () => {
 
     setError(null);
     setInput('');
+    if (attachedImages.length > 0) {
+      setComposerImages([]);
+    }
     setThreadForMode(requestMode, (items) => [...items, userMessage, loadingMessage]);
 
     try {
@@ -576,7 +643,7 @@ export const AppAssistant: React.FC = () => {
           language: i18n.language || 'en',
           messages: [...requestMessages, userMessage],
           workspaceSnapshot,
-          actionContext: buildAppAssistantActionContext(state),
+          actionContext: buildAppAssistantActionContext(state, { chatImages: attachedImages }),
         }),
         images: assistantImages,
         generationConfig: {
@@ -589,7 +656,7 @@ export const AppAssistant: React.FC = () => {
       });
 
       const { content, requests } = extractAppAssistantActions(answer);
-      const actions = normalizeAppAssistantActions(requests, state);
+      const actions = normalizeAppAssistantActions(requests, state, { chatImages: attachedImages });
 
       setThreadForMode(requestMode, (items) =>
         items.map((message) =>
@@ -629,12 +696,13 @@ export const AppAssistant: React.FC = () => {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void submitQuestion(input);
+    void submitQuestion(input, input, composerImages);
   };
 
   const clearThread = () => {
     setError(null);
     setInspectMode(false);
+    setComposerImages([]);
     setThreadForMode(state.mode, () => []);
   };
 
@@ -742,35 +810,12 @@ export const AppAssistant: React.FC = () => {
           aria-label={String(t('assistant.title', { defaultValue: 'Assistant' }))}
         >
           <header className="border-b border-border-subtle bg-background/95 px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
-                  <Bot size={19} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="truncate text-sm font-bold text-foreground">
-                      {t('assistant.title', { defaultValue: 'Studio Assistant' })}
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => setControlMode((value) => !value)}
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors',
-                        controlMode
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-surface-sunken text-foreground-muted hover:bg-border-subtle hover:text-foreground'
-                      )}
-                      title={controlMode ? 'Assistant applies validated actions automatically' : 'Assistant only suggests actions'}
-                      aria-pressed={controlMode}
-                    >
-                      {controlMode ? t('assistant.actMode', { defaultValue: 'Act' }) : t('assistant.suggestMode', { defaultValue: 'Suggest' })}
-                    </button>
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                    {t('assistant.contextLabel', { defaultValue: 'Context' })}: {feature.title}
-                  </p>
-                </div>
+            <div className="flex items-center justify-between gap-3">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background"
+                title={String(t('assistant.title', { defaultValue: 'Studio Assistant' }))}
+              >
+                <Bot size={19} />
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
@@ -805,6 +850,20 @@ export const AppAssistant: React.FC = () => {
                 >
                   <SquareMousePointer size={15} />
                   <span>{t('assistant.inspectShort', { defaultValue: 'Inspect' })}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setControlMode((value) => !value)}
+                  className={cn(
+                    'flex h-8 items-center rounded-lg border px-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                    controlMode
+                      ? 'border-green-200 bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'border-border bg-surface-elevated text-foreground-muted hover:border-foreground/25 hover:bg-surface-sunken hover:text-foreground'
+                  )}
+                  title={controlMode ? 'Assistant applies validated actions automatically' : 'Assistant only suggests actions'}
+                  aria-pressed={controlMode}
+                >
+                  {controlMode ? t('assistant.actMode', { defaultValue: 'Act' }) : t('assistant.suggestMode', { defaultValue: 'Suggest' })}
                 </button>
                 <button
                   type="button"
@@ -861,11 +920,11 @@ export const AppAssistant: React.FC = () => {
               <div className="space-y-3">
                 <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3 text-sm leading-relaxed text-foreground-secondary">
                   <div className="font-semibold text-foreground">
-                    {t('assistant.emptyTitle', { defaultValue: 'Ask about this feature.' })}
+                    {t('assistant.emptyTitle', { defaultValue: 'Tell me what you want to make.' })}
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-foreground-muted">
                     {t('assistant.emptyBody', {
-                      defaultValue: 'I can explain what to upload, which controls matter, and the safest next step for the current workspace.',
+                      defaultValue: 'I can review the current image, suggest a direction, set up the controls, improve the prompt, and render when you confirm.',
                     })}
                   </p>
                 </div>
@@ -907,6 +966,18 @@ export const AppAssistant: React.FC = () => {
                         </div>
                       ) : (
                         <>
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className="mb-2 grid grid-cols-2 gap-2">
+                              {message.attachments.map((image) => (
+                                <img
+                                  key={image.id}
+                                  src={image.url}
+                                  alt={image.name || 'Assistant attachment'}
+                                  className="h-20 w-full rounded-xl border border-white/20 object-cover"
+                                />
+                              ))}
+                            </div>
+                          )}
                           <BubbleText text={message.content} />
                           {message.actions && message.actions.length > 0 && (
                             <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
@@ -978,7 +1049,48 @@ export const AppAssistant: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="border-t border-border bg-background px-3 py-3">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleAssistantImageUpload}
+            />
+            {composerImages.length > 0 && (
+              <div className="mb-2 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                {composerImages.map((image) => (
+                  <div key={image.id} className="group relative h-14 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-surface-sunken">
+                    <img src={image.url} alt={image.name || 'Reference image'} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeComposerImage(image.id)}
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition group-hover:opacity-100"
+                      aria-label={String(t('assistant.removeImage', { defaultValue: 'Remove image' }))}
+                      title={String(t('assistant.removeImage', { defaultValue: 'Remove image' }))}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isThinking || composerImages.length >= maxAssistantComposerImages}
+                className={cn(
+                  'flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl border border-border transition-all',
+                  isThinking || composerImages.length >= maxAssistantComposerImages
+                    ? 'cursor-not-allowed bg-surface-sunken text-foreground-muted'
+                    : 'bg-surface-elevated text-foreground-secondary hover:border-border-strong hover:bg-surface-sunken hover:text-foreground'
+                )}
+                aria-label={String(t('assistant.attachImage', { defaultValue: 'Attach image' }))}
+                title={String(t('assistant.attachImage', { defaultValue: 'Attach image' }))}
+              >
+                <ImageIcon size={17} />
+              </button>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -986,20 +1098,20 @@ export const AppAssistant: React.FC = () => {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
-                    void submitQuestion(input);
+                    void submitQuestion(input, input, composerImages);
                   }
                 }}
                 rows={1}
-                className="max-h-28 min-h-[42px] flex-1 resize-none rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground outline-none transition focus:border-border-strong focus:bg-background"
+                className="max-h-36 min-h-[42px] flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none transition focus:border-border-strong focus:bg-background custom-scrollbar"
                 placeholder={String(t('assistant.placeholder', { defaultValue: `Ask about ${feature.title}...` }))}
                 disabled={isThinking}
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isThinking}
+                disabled={(!input.trim() && composerImages.length === 0) || isThinking}
                 className={cn(
                   'flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl transition-all',
-                  !input.trim() || isThinking
+                  (!input.trim() && composerImages.length === 0) || isThinking
                     ? 'bg-surface-sunken text-foreground-muted'
                     : 'bg-foreground text-background hover:scale-105 active:scale-95'
                 )}

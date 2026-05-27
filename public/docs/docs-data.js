@@ -41,11 +41,12 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-render-3d",
     guide: [
       "Use when the user has a Rhino, Revit, SketchUp, Blender, 3ds Max, Archicad, Cinema 4D, clay, or viewport screenshot and wants a polished render.",
-      "Guide them to upload the model screenshot on the canvas, choose source type in the left panel, set exterior/interior/aerial view, choose a style preset or style reference, optionally add a background or environment reference, then use the right panel for generation mode, lighting, atmosphere, scenery, aspect ratio, and resolution.",
+      "Guide them to upload the model screenshot on the canvas, choose source type in the left panel, set exterior/interior/aerial view, choose a style preset or style reference, optionally add a background or environment reference, then use the right panel for generation mode, Light Source position, intensity, color temperature, shadows, time of day, atmosphere, scenery, aspect ratio, and resolution.",
       "Explain that a style preset is a built-in left-panel Presets choice, while a style reference image is an uploaded left-panel Image reference used only for visual language: rendering medium, color grade, contrast, material finish, lighting character, atmosphere, camera polish, grain, and mood.",
       "Do not tell users that a style reference copies geometry, scene subject, composition, background, furniture, people, signage, logos, or layout. A background/environment reference is the separate control for surrounding context.",
       "Recommend Strict Realism when geometry must stay close, Enhance when the source is clear but needs richer materials, and Concept Push only for looser design exploration.",
       "If the user asks about the three styles, clarify that Strict Realism, Enhance, and Concept Push are right-panel generation modes, not style presets.",
+      "When discussing lighting direction, refer to the visible Light Source grid with Front, Back, Left, and Right positions.",
       "Suggest AI problem-area analysis when the source has fragile railings, glass, stairs, mullions, landscaping, or noisy viewport artifacts.",
     ],
   },
@@ -74,8 +75,8 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-render-sketch",
     guide: [
       "Use for hand sketches, digital sketches, loose massing drawings, and concept linework.",
-      "Ask for a clean sketch with visible main edges, then guide the user to set structure adherence, style, materials, camera, lighting, atmosphere, and output resolution.",
-      "Use higher structure adherence when the composition must remain faithful, and lower adherence when the user wants concept exploration.",
+      "Ask for a clean sketch with visible main edges, then guide the user to set sketch type, cleanup intensity, perspective correction, interpretation strength, reference influence, style, materials, lighting, atmosphere, and output resolution.",
+      "Use lower interpretation for faithful sketch preservation and higher interpretation when the user wants the app to elaborate missing architectural detail.",
       "If the sketch has key program, material, or location intent that is not visible, tell the user to add that in the prompt.",
     ],
   },
@@ -135,7 +136,7 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-multi-angle",
     guide: [
       "Use when the user has one strong source image and needs several consistent views of the same design.",
-      "Guide them to choose preset turntable, architectural set, bird's-eye set, or custom angles, then set view count, azimuth/elevation, consistency lock, style, and output resolution.",
+      "Guide them to choose preset turntable, architectural set, bird's-eye set, or custom angles, then set view count, camera angle range, consistency lock, style, and output resolution.",
       "Tell users that visible corners, clean silhouettes, and high source resolution improve consistency.",
       "Use Visual Edit after generation for isolated inconsistencies in one view.",
     ],
@@ -185,7 +186,7 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-material",
     guide: [
       "Use to review material schedules, specifications, drawings, BoQ excerpts, pasted tables, and product references.",
-      "Guide the user to upload PDF, DOCX, XLSX, or pasted material data, add project requirements, then select checks such as sustainability, fire rating, drawing consistency, BoQ cross-reference, or product alternatives.",
+      "Guide the user to upload PDF, DOCX, XLSX, drawings, BoQ files, or pasted material data, then select checks for BoQ cross-reference, technical specification, dimensions, product references, and quantities.",
       "Answers should frame results as a review aid with severity, missing information, risks, and next actions.",
       "Do not describe the output as certification or a replacement for professional/specifier review.",
     ],
@@ -219,8 +220,8 @@ const EN_MODES = withModeSpecs([
     detail: "Use this mode when the design geometry is already modeled and you need a polished architectural image. It reads the source screenshot, preserves the camera and massing, then rebuilds materials, light, context, atmosphere, and detail.",
     input: "Rhino, Revit, SketchUp, Blender, 3ds Max, Archicad, Cinema 4D, clay, or other 3D screenshots.",
     output: "Photorealistic image in the selected aspect ratio and resolution.",
-    offers: ["Source-type tuning so the prompt understands the original modeling environment.", "Style presets, style-reference images, background/environment references, and AI problem-area analysis.", "Generation modes, camera, lighting, atmosphere, scenery, people, vegetation, weather, aspect ratio, and resolution controls."],
-    workflow: ["Upload the model screenshot and set the source type.", "Choose view type, style or style reference, optional background reference, and generation mode.", "Tune lighting, atmosphere, scenery, and output resolution; generate at 1K for iteration, then rerun at 2K or 4K for delivery."],
+    offers: ["Source-type tuning so the prompt understands the original modeling environment.", "Style presets, style-reference images, background/environment references, and AI problem-area analysis.", "Generation modes, Light Source position, intensity, color temperature, shadows, time of day, atmosphere, scenery, people, vegetation, vehicles, aspect ratio, and resolution controls."],
+    workflow: ["Upload the model screenshot and set the source type.", "Choose view type, style or style reference, optional background reference, and generation mode.", "Tune the Light Source grid, intensity, color temperature, shadows, atmosphere, scenery, and output resolution; generate a draft for iteration, then rerun at higher resolution for delivery."],
     tips: ["A style preset is a built-in visual style; a style reference image transfers rendering language only, not geometry or scene content.", "Use Strict Realism when geometry must stay close, Enhance for controlled polish, and Concept Push only for loose design exploration.", "White or neutral clay renders usually preserve geometry better than noisy viewport screenshots."],
   },
   {
@@ -249,8 +250,8 @@ const EN_MODES = withModeSpecs([
     detail: "Sketch to Render helps during early design exploration. It respects the broad composition of a sketch while adding architectural materials, light, landscape, scale figures, and photographic depth.",
     input: "Hand-drawn sketches, digital sketches, loose massing drawings, or concept line art.",
     output: "A photorealistic or stylized architectural render based on the sketch.",
-    offers: ["Structure adherence settings for either faithful or more creative interpretation.", "Style, material, lighting, camera, and atmosphere controls.", "Fast ideation from low-detail drawings when the design is still fluid."],
-    workflow: ["Upload a sketch with clear main edges and spatial intent.", "Set structure adherence high for fidelity or lower for exploration.", "Generate several style options and keep the best direction in history."],
+    offers: ["Sketch type, cleanup, perspective correction, interpretation strength, and reference influence controls.", "Style, material, lighting, camera, and atmosphere controls.", "Fast ideation from low-detail drawings when the design is still fluid."],
+    workflow: ["Upload a sketch with clear main edges and spatial intent.", "Use conservative interpretation for fidelity or stronger interpretation for exploration.", "Generate several style options and keep the best direction in history."],
     tips: ["Dark lines on a clean background work best.", "Add a short prompt if a key material, program, or mood is not obvious in the sketch."],
   },
   {
@@ -360,7 +361,7 @@ const EN_MODES = withModeSpecs([
     input: "PDF, DOCX, XLSX, pasted schedules, design requirements, and optional reference URLs.",
     output: "Structured validation report with compliant items, flagged issues, severity, and alternatives.",
     offers: ["Material parsing from documents and tables.", "Compliance checks against project criteria, drawings, BoQ, and product references.", "Issue summaries, severity labels, alternatives, and action-focused reporting."],
-    workflow: ["Upload the schedule and add the design specification.", "Select checks such as sustainability, fire rating, drawings, or BoQ cross-reference.", "Review flagged items and verify final decisions with project specialists."],
+    workflow: ["Upload the schedule, specification, drawings, or BoQ files.", "Select checks for BoQ cross-reference, technical specification, dimensions, product references, and quantities.", "Review flagged items and verify final decisions with project specialists."],
     tips: ["Provide the actual project criteria, not only a product list.", "Treat the output as a review aid, not professional certification."],
   },
   {
@@ -392,8 +393,8 @@ const ES_MODES = withModeSpecs([
     detail: "Usa este modo cuando la geometría ya está modelada y necesitas una imagen pulida. Lee la captura, conserva cámara y volumetría, y reconstruye materiales, luz, contexto, atmósfera y detalle.",
     input: "Capturas de Rhino, Revit, SketchUp, Blender, 3ds Max, Archicad, Cinema 4D, clay u otros entornos 3D.",
     output: "Imagen fotorealista en la relación de aspecto y resolución elegidas.",
-    offers: ["Ajuste por tipo de origen para entender el entorno de modelado.", "Controles de estilo, cámara, iluminación, atmósfera, entorno, personas, vegetación, clima y resolución.", "Guía para conservar geometría en vistas clay, vistas texturizadas o capturas de viewport."],
-    workflow: ["Sube la captura y define el tipo de origen.", "Elige tipo de vista, estilo, luz, ambiente y resolución.", "Itera en 1K y vuelve a generar en 2K o 4K para entrega."],
+    offers: ["Ajuste por tipo de origen para entender el entorno de modelado.", "Controles de estilo, fuente de luz, intensidad, temperatura de color, sombras, hora del día, atmósfera, entorno, personas, vegetación, vehículos y resolución.", "Guía para conservar geometría en vistas clay, vistas texturizadas o capturas de viewport."],
+    workflow: ["Sube la captura y define el tipo de origen.", "Elige tipo de vista, estilo, modo de generación, fuente de luz, ambiente y resolución.", "Itera con una resolución de borrador y vuelve a generar en mayor resolución para entrega."],
     tips: ["Mantén la cámara del modelo cerca de la cámara final deseada.", "Los renders clay limpios suelen preservar mejor la geometría que capturas ruidosas."],
   },
   {
@@ -565,8 +566,8 @@ const FR_MODES = withModeSpecs([
     detail: "Utilisez ce mode lorsque la géométrie est déjà modélisée et que vous avez besoin d'une image aboutie. Il lit la capture, préserve la caméra et les volumes, puis reconstruit matériaux, lumière, contexte, atmosphère et détails.",
     input: "Captures Rhino, Revit, SketchUp, Blender, 3ds Max, Archicad, Cinema 4D, clay ou autre vue 3D.",
     output: "Image photoréaliste au ratio et à la résolution choisis.",
-    offers: ["Réglage par type de source pour comprendre l'environnement de modélisation.", "Contrôles de style, caméra, éclairage, atmosphère, décor, personnages, végétation, météo et résolution.", "Guidage de préservation géométrique pour vues clay, texturées ou captures de viewport."],
-    workflow: ["Importez la capture et choisissez le type de source.", "Réglez vue, style, lumière, environnement et résolution.", "Itérez en 1K puis relancez en 2K ou 4K pour la livraison."],
+    offers: ["Réglage par type de source pour comprendre l'environnement de modélisation.", "Contrôles de style, source lumineuse, intensité, température de couleur, ombres, heure du jour, atmosphère, décor, personnages, végétation, véhicules et résolution.", "Guidage de préservation géométrique pour vues clay, texturées ou captures de viewport."],
+    workflow: ["Importez la capture et choisissez le type de source.", "Réglez vue, style, mode de génération, source lumineuse, ambiance et résolution.", "Itérez avec une résolution de brouillon puis relancez en plus haute résolution pour la livraison."],
     tips: ["Gardez la caméra du modèle proche de la caméra finale voulue.", "Les vues clay propres préservent souvent mieux la géométrie que les captures chargées."],
   },
   {
@@ -803,8 +804,8 @@ window.AVAS_DOCS = {
     reference: {
       settings: { id: "settings", eyebrow: "Reference", title: "Render settings", lead: "Common settings appear across render modes, but their effect depends on the input and mode.", cards: [
         { title: "Aspect ratio", text: "Use 16:9 for presentations, 4:3 or 3:2 for architectural boards, 1:1 for quick comparisons, and 9:16 or 3:4 for social or vertical imagery." },
-        { title: "Resolution", text: "Use 1K for iteration, 2K for stronger reviews, and 4K for final delivery when credits and generation time allow." },
-        { title: "Lighting and atmosphere", text: "Time of day, weather, sky, and environment affect shadows, material response, contrast, and mood." },
+        { title: "Resolution", text: "Use a lower draft resolution for iteration, then switch to 2K, 4K, print, or a custom output when credits and generation time allow." },
+        { title: "Lighting and atmosphere", text: "Light Source position, intensity, color temperature, shadows, time of day, weather, sky, and environment affect material response, contrast, and mood." },
         { title: "People and vegetation", text: "Use these to add scale and realism, but keep them sparse when the architecture must remain the focus." },
       ]},
       styles: { id: "styles", eyebrow: "Reference", title: "Architectural styles", lead: "Style presets guide visual language. Custom text can refine material, era, region, or atmosphere.", cards: [
@@ -912,8 +913,8 @@ window.AVAS_DOCS = {
     reference: {
       settings: { id: "settings", eyebrow: "Referencia", title: "Ajustes de render", lead: "Los ajustes comunes aparecen en varios modos y su efecto depende del modo y la entrada.", cards: [
         { title: "Relación de aspecto", text: "Usa 16:9 para presentaciones, 4:3 o 3:2 para láminas, 1:1 para comparar y 9:16 o 3:4 para vertical." },
-        { title: "Resolución", text: "1K para iterar, 2K para revisión y 4K para entrega final cuando créditos y tiempo lo permitan." },
-        { title: "Luz y atmósfera", text: "Hora, clima, cielo y ambiente afectan sombras, materiales, contraste y mood." },
+        { title: "Resolución", text: "Resoluciones bajas para borradores rápidos; 2K, 4K, impresión o tamaño personalizado para revisión y entrega cuando créditos y tiempo lo permitan." },
+        { title: "Luz y atmósfera", text: "Fuente de luz, intensidad, temperatura de color, sombras, hora, clima y ambiente afectan materiales, contraste y mood." },
         { title: "Personas y vegetación", text: "Añaden escala y realismo, pero conviene moderarlas si la arquitectura es el foco." },
       ]},
       styles: { id: "styles", eyebrow: "Referencia", title: "Estilos arquitectónicos", lead: "Los presets guían el lenguaje visual. El texto personalizado ajusta material, época, región o atmósfera.", cards: [
@@ -1021,8 +1022,8 @@ window.AVAS_DOCS = {
     reference: {
       settings: { id: "settings", eyebrow: "Référence", title: "Paramètres de rendu", lead: "Les paramètres communs apparaissent dans plusieurs modes; leur effet dépend de l'entrée.", cards: [
         { title: "Ratio", text: "16:9 pour présentations, 4:3 ou 3:2 pour planches, 1:1 pour comparer, 9:16 ou 3:4 pour vertical." },
-        { title: "Résolution", text: "1K pour itérer, 2K pour revue, 4K pour livraison finale si crédits et temps le permettent." },
-        { title: "Lumière et atmosphère", text: "Heure, météo, ciel et environnement influencent ombres, matériaux, contraste et humeur." },
+        { title: "Résolution", text: "Basses résolutions pour les brouillons rapides; 2K, 4K, impression ou taille personnalisée pour revue et livraison si crédits et temps le permettent." },
+        { title: "Lumière et atmosphère", text: "Source lumineuse, intensité, température de couleur, ombres, heure, météo et environnement influencent matériaux, contraste et humeur." },
         { title: "Personnes et végétation", text: "Ajoutent échelle et réalisme, mais à doser si l'architecture doit dominer." },
       ]},
       styles: { id: "styles", eyebrow: "Référence", title: "Styles architecturaux", lead: "Les presets guident le langage visuel. Le texte personnalisé affine matériau, époque, région ou ambiance.", cards: [

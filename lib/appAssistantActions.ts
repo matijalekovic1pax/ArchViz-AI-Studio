@@ -38,6 +38,7 @@ export type AppAssistantActionType =
   | 'open_bottom_panel'
   | 'collapse_bottom_panel'
   | 'run_generation'
+  | 'use_chat_image'
   | 'prepare_image_selection'
   | 'clear_image_selections'
   | 'reset_canvas_view'
@@ -53,6 +54,9 @@ export interface AppAssistantActionRequest {
   mode?: GenerationMode;
   path?: string;
   value?: unknown;
+  imageTarget?: AppAssistantImageTarget;
+  attachmentId?: string;
+  caption?: string;
 }
 
 export interface AppAssistantAction {
@@ -63,6 +67,29 @@ export interface AppAssistantAction {
   mode?: GenerationMode;
   path?: string;
   value?: unknown;
+  imageTarget?: AppAssistantImageTarget;
+  attachmentId?: string;
+  caption?: string;
+}
+
+export type AppAssistantImageTarget =
+  | 'canvas'
+  | 'source'
+  | 'style-reference'
+  | 'background-reference'
+  | 'visual-material-reference'
+  | 'visual-background-reference'
+  | 'scene-compose-reference'
+  | 'sketch-reference'
+  | 'video-input'
+  | 'headshot-left'
+  | 'headshot-front'
+  | 'headshot-right';
+
+export interface AppAssistantChatImage {
+  id: string;
+  url: string;
+  name?: string;
 }
 
 type ActionTarget =
@@ -194,8 +221,25 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   }),
   workflow('styleReferenceEnabled', 'Style reference enabled', 'boolean', ['render-3d', 'render-cad']),
   workflow('backgroundReferenceEnabled', 'Background reference enabled', 'boolean', ['render-3d', 'render-cad']),
+  workflow('render3d.lighting.sun.enabled', 'Light Source enabled', 'boolean', ['render-3d']),
+  workflow('render3d.lighting.sun.azimuth', 'Light Source left/right position', 'number', ['render-3d'], { min: 0, max: 360 }),
+  workflow('render3d.lighting.sun.elevation', 'Light Source front/back position', 'number', ['render-3d'], { min: 0, max: 90 }),
+  workflow('render3d.lighting.sun.intensity', 'Light Source intensity', 'number', ['render-3d'], { min: 0, max: 200 }),
+  workflow('render3d.lighting.sun.colorTemp', 'Light Source color temperature', 'number', ['render-3d'], { min: 2000, max: 12000 }),
+  workflow('render3d.lighting.shadows.enabled', 'Shadows enabled', 'boolean', ['render-3d']),
+  workflow('render3d.lighting.shadows.intensity', 'Shadow opacity', 'number', ['render-3d'], { min: 0, max: 100 }),
   workflow('render3d.lighting.preset', 'Lighting preset', 'string', ['render-3d']),
   workflow('render3d.atmosphere.mood', 'Atmosphere mood', 'string', ['render-3d']),
+  workflow('render3d.atmosphere.fog.enabled', 'Fog enabled', 'boolean', ['render-3d']),
+  workflow('render3d.atmosphere.fog.density', 'Fog density', 'number', ['render-3d'], { min: 0, max: 100 }),
+  workflow('render3d.atmosphere.bloom.enabled', 'Bloom enabled', 'boolean', ['render-3d']),
+  workflow('render3d.atmosphere.bloom.intensity', 'Bloom intensity', 'number', ['render-3d'], { min: 0, max: 100 }),
+  workflow('render3d.scenery.people.enabled', 'People enabled', 'boolean', ['render-3d']),
+  workflow('render3d.scenery.people.count', 'People count', 'number', ['render-3d'], { min: 0, max: 100 }),
+  workflow('render3d.scenery.trees.enabled', 'Vegetation enabled', 'boolean', ['render-3d']),
+  workflow('render3d.scenery.trees.count', 'Vegetation density', 'number', ['render-3d'], { min: 0, max: 100 }),
+  workflow('render3d.scenery.cars.enabled', 'Vehicles enabled', 'boolean', ['render-3d']),
+  workflow('render3d.scenery.cars.count', 'Vehicle count', 'number', ['render-3d'], { min: 0, max: 50 }),
   workflow('render3d.scenery.preset', 'Scenery preset', 'string', ['render-3d']),
   workflow('render3d.render.resolution', 'Render resolution', 'string', ['render-3d'], {
     values: ['720p', '1080p', '4k', 'print'],
@@ -258,6 +302,13 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualMaterial.referenceEnabled', 'Material reference', 'boolean', ['visual-edit']),
   workflow('visualMaterial.scale', 'Material scale', 'number', ['visual-edit'], { min: 1, max: 200 }),
   workflow('visualLighting.mode', 'Lighting mode', 'string', ['visual-edit'], { values: ['sun', 'hdri', 'artificial'] }),
+  workflow('visualLighting.sun.azimuth', 'Visual Edit Light Source left/right position', 'number', ['visual-edit'], { min: 0, max: 360 }),
+  workflow('visualLighting.sun.elevation', 'Visual Edit Light Source front/back position', 'number', ['visual-edit'], { min: 0, max: 90 }),
+  workflow('visualLighting.sun.intensity', 'Visual Edit Light Source intensity', 'number', ['visual-edit'], { min: 0, max: 200 }),
+  workflow('visualLighting.sun.colorTemp', 'Visual Edit Light Source color temperature', 'number', ['visual-edit'], { min: 2000, max: 10000 }),
+  workflow('visualLighting.sun.shadowSoftness', 'Visual Edit shadow softness', 'number', ['visual-edit'], { min: 0, max: 100 }),
+  workflow('visualLighting.ambient', 'Visual Edit ambient light', 'number', ['visual-edit'], { min: 0, max: 100 }),
+  workflow('visualLighting.preserveShadows', 'Preserve existing shadows', 'boolean', ['visual-edit']),
   workflow('visualSky.preset', 'Sky preset', 'string', ['visual-edit']),
   workflow('visualPeople.mode', 'People edit mode', 'string', ['visual-edit'], { values: ['enhance', 'repopulate', 'cleanup'] }),
   workflow('visualPeople.density', 'People density', 'number', ['visual-edit'], { min: 0, max: 100 }),
@@ -426,9 +477,9 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   lighting('timeOfDay', 'Time of day', 'string', {
     values: ['morning', 'midday', 'afternoon', 'golden-hour', 'blue-hour', 'night', 'overcast', 'custom'],
   }),
-  lighting('customTime', 'Custom sun time', 'number', { min: 0, max: 24 }),
-  lighting('sunAzimuth', 'Sun azimuth', 'number', { min: 0, max: 360 }),
-  lighting('sunAltitude', 'Sun altitude', 'number', { min: -10, max: 90 }),
+  lighting('customTime', 'Custom light time', 'number', { min: 0, max: 24 }),
+  lighting('sunAzimuth', 'Light direction left/right position', 'number', { min: 0, max: 360 }),
+  lighting('sunAltitude', 'Light direction front/back height', 'number', { min: -10, max: 90 }),
   lighting('cloudCover', 'Cloud cover', 'number', { min: 0, max: 100 }),
   lighting('cloudType', 'Cloud type', 'string', {
     values: ['clear', 'scattered', 'overcast', 'dramatic', 'stormy'],
@@ -581,6 +632,39 @@ const getDescriptor = (type: AppAssistantActionType | undefined, path: string | 
   return PATH_DESCRIPTORS.find((descriptor) => descriptor.type === type && descriptor.path === path);
 };
 
+const IMAGE_TARGETS: readonly AppAssistantImageTarget[] = [
+  'canvas',
+  'source',
+  'style-reference',
+  'background-reference',
+  'visual-material-reference',
+  'visual-background-reference',
+  'scene-compose-reference',
+  'sketch-reference',
+  'video-input',
+  'headshot-left',
+  'headshot-front',
+  'headshot-right',
+] as const;
+
+const getImageTargetLabel = (target: AppAssistantImageTarget): string => {
+  const labels: Record<AppAssistantImageTarget, string> = {
+    canvas: 'Use attached image on canvas',
+    source: 'Use attached image as source',
+    'style-reference': 'Use attached image as style reference',
+    'background-reference': 'Use attached image as background reference',
+    'visual-material-reference': 'Use attached image as material reference',
+    'visual-background-reference': 'Use attached image as background edit reference',
+    'scene-compose-reference': 'Add attached image as scene object reference',
+    'sketch-reference': 'Add attached image as sketch reference',
+    'video-input': 'Use attached image as video input',
+    'headshot-left': 'Use attached image as left headshot reference',
+    'headshot-front': 'Use attached image as front headshot reference',
+    'headshot-right': 'Use attached image as right headshot reference',
+  };
+  return labels[target];
+};
+
 const getTargetSource = (state: AppState, target: ActionTarget): unknown => {
   switch (target) {
     case 'workflow':
@@ -613,6 +697,8 @@ const summarizeValue = (value: unknown): string => {
   return 'custom value';
 };
 
+const makeAssistantImageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 export const extractAppAssistantActions = (rawAnswer: string): { content: string; requests: AppAssistantActionRequest[] } => {
   const tagMatch = rawAnswer.match(/<assistant_actions>\s*([\s\S]*?)\s*<\/assistant_actions>/i);
   if (!tagMatch) {
@@ -634,9 +720,12 @@ export const extractAppAssistantActions = (rawAnswer: string): { content: string
 
 export const normalizeAppAssistantActions = (
   requests: AppAssistantActionRequest[],
-  state: AppState
+  state: AppState,
+  options: { chatImages?: AppAssistantChatImage[] } = {}
 ): AppAssistantAction[] => {
-  return requests.flatMap((request, index) => {
+  const chatImages = options.chatImages || [];
+
+  return requests.flatMap((request, index): AppAssistantAction[] => {
     if (!request.type) return [];
 
     if (request.type === 'set_mode') {
@@ -719,6 +808,28 @@ export const normalizeAppAssistantActions = (
         type: 'run_generation',
         value,
         label: request.label || 'Run generation',
+        reason: request.reason,
+      }];
+    }
+
+    if (request.type === 'use_chat_image') {
+      const target = request.imageTarget || (typeof request.path === 'string' ? request.path : undefined);
+      if (!target || !IMAGE_TARGETS.includes(target as AppAssistantImageTarget)) return [];
+      if (!chatImages.length) return [];
+      const requestedId = request.attachmentId || (typeof request.value === 'string' ? request.value : 'latest');
+      const image = requestedId === 'latest'
+        ? chatImages[chatImages.length - 1]
+        : chatImages.find((item) => item.id === requestedId) || chatImages[chatImages.length - 1];
+      if (!image?.url) return [];
+      const imageTarget = target as AppAssistantImageTarget;
+      return [{
+        id: `${index}-use-chat-image-${imageTarget}-${image.id}`,
+        type: 'use_chat_image',
+        value: image.url,
+        imageTarget,
+        attachmentId: image.id,
+        caption: typeof request.caption === 'string' ? request.caption.trim() : undefined,
+        label: request.label || getImageTargetLabel(imageTarget),
         reason: request.reason,
       }];
     }
@@ -807,16 +918,16 @@ export const applyAppAssistantActions = (
   state: AppState,
   actions: AppAssistantAction[]
 ) => {
-  const nextWorkflow = cloneValue(state.workflow) as Record<string, unknown>;
-  const nextGeometry = cloneValue(state.geometry) as Record<string, unknown>;
-  const nextCamera = cloneValue(state.camera) as Record<string, unknown>;
-  const nextLighting = cloneValue(state.lighting) as Record<string, unknown>;
-  const nextMaterials = cloneValue(state.materials) as Record<string, unknown>;
-  const nextContext = cloneValue(state.context) as Record<string, unknown>;
-  const nextOutput = cloneValue(state.output) as Record<string, unknown>;
-  const nextCanvas = cloneValue(state.canvas) as Record<string, unknown>;
-  const nextMaterialValidation = cloneValue(state.materialValidation) as Record<string, unknown>;
-  const nextDocumentTranslate = cloneValue(state.workflow.documentTranslate) as Record<string, unknown>;
+  const nextWorkflow = cloneValue(state.workflow) as unknown as Record<string, unknown>;
+  const nextGeometry = cloneValue(state.geometry) as unknown as Record<string, unknown>;
+  const nextCamera = cloneValue(state.camera) as unknown as Record<string, unknown>;
+  const nextLighting = cloneValue(state.lighting) as unknown as Record<string, unknown>;
+  const nextMaterials = cloneValue(state.materials) as unknown as Record<string, unknown>;
+  const nextContext = cloneValue(state.context) as unknown as Record<string, unknown>;
+  const nextOutput = cloneValue(state.output) as unknown as Record<string, unknown>;
+  const nextCanvas = cloneValue(state.canvas) as unknown as Record<string, unknown>;
+  const nextMaterialValidation = cloneValue(state.materialValidation) as unknown as Record<string, unknown>;
+  const nextDocumentTranslate = cloneValue(state.workflow.documentTranslate) as unknown as Record<string, unknown>;
 
   let workflowChanged = false;
   let geometryChanged = false;
@@ -842,6 +953,8 @@ export const applyAppAssistantActions = (
   let clearCanvas = false;
   let setSourceFromCurrent = false;
   let useLatestHistoryImage = false;
+  let nextUploadedImage: string | null = null;
+  let nextSourceImage: string | null = null;
 
   actions.forEach((action) => {
     if (action.type === 'set_mode' && action.mode) {
@@ -929,6 +1042,89 @@ export const applyAppAssistantActions = (
       return;
     }
 
+    if (action.type === 'use_chat_image' && typeof action.value === 'string' && action.imageTarget) {
+      const image = action.value;
+      switch (action.imageTarget) {
+        case 'canvas':
+          nextUploadedImage = image;
+          break;
+        case 'source':
+          nextUploadedImage = image;
+          nextSourceImage = image;
+          break;
+        case 'style-reference':
+          setPath(nextWorkflow, 'styleReferenceImage', image);
+          setPath(nextWorkflow, 'styleReferenceEnabled', true);
+          workflowChanged = true;
+          break;
+        case 'background-reference':
+          setPath(nextWorkflow, 'backgroundReferenceImage', image);
+          setPath(nextWorkflow, 'backgroundReferenceEnabled', true);
+          workflowChanged = true;
+          break;
+        case 'visual-material-reference':
+          setPath(nextWorkflow, 'visualMaterial', {
+            ...state.workflow.visualMaterial,
+            referenceImage: image,
+            referenceEnabled: true,
+          });
+          workflowChanged = true;
+          break;
+        case 'visual-background-reference':
+          setPath(nextWorkflow, 'visualBackground', {
+            ...state.workflow.visualBackground,
+            mode: 'image',
+            referenceImage: image,
+          });
+          workflowChanged = true;
+          break;
+        case 'scene-compose-reference':
+          setPath(nextWorkflow, 'sceneInsertionReferences', [
+            ...state.workflow.sceneInsertionReferences,
+            {
+              id: makeAssistantImageId(),
+              image,
+              caption: action.caption || 'Assistant reference image',
+              placement: null,
+            },
+          ]);
+          workflowChanged = true;
+          break;
+        case 'sketch-reference':
+          setPath(nextWorkflow, 'sketchRefs', [
+            ...state.workflow.sketchRefs,
+            {
+              id: makeAssistantImageId(),
+              url: image,
+              type: state.workflow.sketchRefType || 'style',
+            },
+          ]);
+          workflowChanged = true;
+          break;
+        case 'video-input':
+          setPath(nextWorkflow, 'videoState', {
+            ...state.workflow.videoState,
+            inputMode: 'image-animate',
+            videoInputImage: image,
+          });
+          workflowChanged = true;
+          break;
+        case 'headshot-left':
+          setPath(nextWorkflow, 'headshot', { ...state.workflow.headshot, leftImage: image });
+          workflowChanged = true;
+          break;
+        case 'headshot-front':
+          setPath(nextWorkflow, 'headshot', { ...state.workflow.headshot, frontImage: image });
+          workflowChanged = true;
+          break;
+        case 'headshot-right':
+          setPath(nextWorkflow, 'headshot', { ...state.workflow.headshot, rightImage: image });
+          workflowChanged = true;
+          break;
+      }
+      return;
+    }
+
     const descriptor = getDescriptor(action.type, action.path);
     if (!descriptor || !action.path) return;
     const target = targetByActionType[descriptor.type];
@@ -977,6 +1173,8 @@ export const applyAppAssistantActions = (
   });
 
   if (nextMode) dispatch({ type: 'SET_MODE', payload: nextMode });
+  if (nextUploadedImage !== null) dispatch({ type: 'SET_IMAGE', payload: nextUploadedImage });
+  if (nextSourceImage !== null) dispatch({ type: 'SET_SOURCE_IMAGE', payload: nextSourceImage });
   if (nextStyle) dispatch({ type: 'SET_STYLE', payload: nextStyle });
   if (workflowChanged) dispatch({ type: 'UPDATE_WORKFLOW', payload: nextWorkflow as Partial<WorkflowSettings> });
   if (geometryChanged) dispatch({ type: 'UPDATE_GEOMETRY', payload: nextGeometry as Partial<GeometryState> });
@@ -1047,8 +1245,12 @@ export const applyAppAssistantActions = (
   }
 };
 
-export const buildAppAssistantActionContext = (state: AppState): string => {
+export const buildAppAssistantActionContext = (
+  state: AppState,
+  options: { chatImages?: AppAssistantChatImage[] } = {}
+): string => {
   const descriptors = PATH_DESCRIPTORS.filter((descriptor) => !descriptor.modes || descriptor.modes.includes(state.mode));
+  const chatImages = options.chatImages || [];
   const styleOptions = [...BUILT_IN_STYLES, ...state.customStyles]
     .slice(0, 80)
     .map((style) => `${style.id} (${style.name})`)
@@ -1073,7 +1275,15 @@ export const buildAppAssistantActionContext = (state: AppState): string => {
     'set_prompt can write a complete optimized prompt into the global prompt override.',
     'set_active_right_tab and set_active_bottom_tab can open a tab by string value when useful.',
     'open_right_panel, close_right_panel, open_left_sidebar, close_left_sidebar, open_bottom_panel, and collapse_bottom_panel can change workspace panel visibility.',
+    'Some action paths use legacy implementation names. Do not say those path names to the user; translate them into visible UI language.',
+    'For the visible Light Source grid: Left uses a low left/right value around 90, Center around 180, Right around 270. Front uses front/back around 75, Center around 45, Back around 15.',
+    `Attached user images this turn: ${chatImages.length ? chatImages.map((image) => `${image.id}${image.name ? ` (${image.name})` : ''}`).join(', ') : 'none'}.`,
+    'use_chat_image can place an attached user image into the app. It requires imageTarget and attachmentId. Use attachmentId "latest" for the newest image.',
+    'Valid imageTarget values: canvas, source, style-reference, background-reference, visual-material-reference, visual-background-reference, scene-compose-reference, sketch-reference, video-input, headshot-left, headshot-front, headshot-right.',
+    'Use style-reference for visual language, background-reference for environment/context, visual-material-reference for a material sample, scene-compose-reference for an object/product/furniture reference, and canvas/source for the main image to work from.',
+    'If a reference image would help but no user image is attached, ask them to attach one with the image button in the assistant composer.',
     'run_generation runs the current workflow. Only include it when the user explicitly asks to generate, render, translate, validate, compress, or run now.',
+    'If the user is deciding on a direction, apply only useful setup actions and ask whether they are ready to render. Add run_generation only after they confirm.',
     'prepare_image_selection switches to Visual Edit lasso selection so the user can circle an image area. Use it when the user wants to select/circle/mark something in the image.',
     'clear_image_selections clears current Visual Edit selection shapes and masks.',
     'reset_canvas_view fits the canvas to screen.',
@@ -1082,7 +1292,7 @@ export const buildAppAssistantActionContext = (state: AppState): string => {
     'use_latest_history_image places the latest generated history image back on the canvas.',
     'clear_prompt clears global and common feature prompt overrides.',
     'Append action requests only in this exact hidden JSON block at the end of the answer:',
-    '<assistant_actions>{"actions":[{"type":"set_workflow","path":"visualPrompt","value":"replace the selected floor with warm oak planks","label":"Use this edit prompt","reason":"Makes the edit instruction concrete"},{"type":"run_generation","label":"Generate the edit","reason":"The user asked to apply it now"}]}</assistant_actions>',
+    '<assistant_actions>{"actions":[{"type":"use_chat_image","imageTarget":"style-reference","attachmentId":"latest","label":"Use attached image as style reference","reason":"The uploaded image defines the desired visual language"},{"type":"set_workflow","path":"visualPrompt","value":"replace the selected floor with warm oak planks","label":"Use this edit prompt","reason":"Makes the edit instruction concrete"}]}</assistant_actions>',
     'Allowed setting actions for the current workspace:',
     ...lines,
   ].join('\n');
