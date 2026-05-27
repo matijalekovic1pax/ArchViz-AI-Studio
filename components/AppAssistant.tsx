@@ -9,7 +9,7 @@ import {
   buildAppAssistantWorkspaceSnapshot,
   getAppAssistantFeature,
 } from '../lib/appAssistantKnowledge';
-import { GeminiService, TEXT_MODEL } from '../services/geminiService';
+import { GeminiService } from '../services/geminiService';
 
 type AssistantRole = 'user' | 'assistant';
 
@@ -22,6 +22,7 @@ interface AssistantMessage {
 
 type AssistantThreads = Partial<Record<GenerationMode, AssistantMessage[]>>;
 
+const ASSISTANT_MODEL = 'gemini-3.5-flash';
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const BubbleText: React.FC<{ text: string }> = ({ text }) => (
@@ -38,7 +39,7 @@ export const AppAssistant: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const service = useMemo(() => new GeminiService({ model: TEXT_MODEL }), []);
+  const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
   const feature = getAppAssistantFeature(state.mode);
   const messages = threads[state.mode] || [];
   const isThinking = messages.some((message) => message.isLoading);
@@ -122,7 +123,7 @@ export const AppAssistant: React.FC = () => {
 
     try {
       const answer = await service.generateText({
-        model: TEXT_MODEL,
+        model: ASSISTANT_MODEL,
         prompt: buildAppAssistantPrompt({
           mode: requestMode,
           question,
