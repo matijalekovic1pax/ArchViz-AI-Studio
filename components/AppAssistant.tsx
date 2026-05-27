@@ -1,5 +1,5 @@
 import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, Image as ImageIcon, Loader2, MessageCircle, RefreshCw, Send, Sparkles, SquareMousePointer, X } from 'lucide-react';
+import { Bot, ChevronDown, Image as ImageIcon, Loader2, MessageCircle, RefreshCw, Send, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { AppState, GenerationMode } from '../types';
@@ -899,16 +899,6 @@ export const AppAssistant: React.FC = () => {
                 >
                   <X size={16} />
                 </button>
-              </div>
-            </div>
-            <div className="mt-3 rounded-xl border border-border-subtle bg-surface-sunken px-3 py-2">
-              <div className="flex items-start gap-2">
-                <Sparkles size={14} className="mt-0.5 shrink-0 text-accent" />
-                <p className="line-clamp-2 text-xs leading-relaxed text-foreground-secondary">
-                  {controlMode
-                    ? `${feature.summary} ${t('assistant.actModeHint', { defaultValue: 'Ask directly and I will apply validated settings in the app.' })}`
-                    : feature.summary}
-                </p>
               </div>
             </div>
             {state.workflow.visualSelections.length > 0 && (
