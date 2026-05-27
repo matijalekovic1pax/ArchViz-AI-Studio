@@ -39,7 +39,6 @@ interface PendingGenerationRequest {
 }
 
 const ASSISTANT_MODEL = 'gemini-3.5-flash';
-const controlModeStorageKey = 'archviz_assistant_control_mode';
 const maxAssistantComposerImages = 4;
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -355,13 +354,6 @@ export const AppAssistant: React.FC = () => {
   const [hintVisible, setHintVisible] = useState(false);
   const [inspectMode, setInspectMode] = useState(false);
   const [inspectRect, setInspectRect] = useState<InspectRect | null>(null);
-  const [controlMode, setControlMode] = useState(() => {
-    try {
-      return sessionStorage.getItem(controlModeStorageKey) !== 'false';
-    } catch {
-      return true;
-    }
-  });
   const [pendingGeneration, setPendingGeneration] = useState<PendingGenerationRequest | null>(null);
   const [input, setInput] = useState('');
   const [composerImages, setComposerImages] = useState<AppAssistantChatImage[]>([]);
@@ -376,6 +368,7 @@ export const AppAssistant: React.FC = () => {
   const feature = getAppAssistantFeature(state.mode);
   const messages = threads[state.mode] || [];
   const isThinking = messages.some((message) => message.isLoading);
+  const controlMode = true;
   const assistantHintKey = 'archviz_assistant_hint_seen';
 
   const setThreadForMode = (
@@ -398,12 +391,6 @@ export const AppAssistant: React.FC = () => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
     return () => window.clearTimeout(timer);
   }, [open, state.mode]);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(controlModeStorageKey, controlMode ? 'true' : 'false');
-    } catch {}
-  }, [controlMode]);
 
   useEffect(() => {
     if (!pendingGeneration) return;
@@ -863,20 +850,6 @@ export const AppAssistant: React.FC = () => {
                 >
                   <SquareMousePointer size={15} />
                   <span>{t('assistant.inspectShort', { defaultValue: 'Inspect' })}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setControlMode((value) => !value)}
-                  className={cn(
-                    'flex h-8 items-center rounded-lg border px-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                    controlMode
-                      ? 'border-green-200 bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'border-border bg-surface-elevated text-foreground-muted hover:border-foreground/25 hover:bg-surface-sunken hover:text-foreground'
-                  )}
-                  title={controlMode ? 'Assistant applies validated actions automatically' : 'Assistant only suggests actions'}
-                  aria-pressed={controlMode}
-                >
-                  {controlMode ? t('assistant.actMode', { defaultValue: 'Act' }) : t('assistant.suggestMode', { defaultValue: 'Suggest' })}
                 </button>
                 <button
                   type="button"
