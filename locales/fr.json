@@ -126,6 +126,8 @@
     "error": "Impossible de joindre l'assistant pour le moment. Réessayez.",
     "emptyTitle": "Posez une question sur cette fonction.",
     "emptyBody": "Je peux expliquer quoi importer, quels contrôles comptent et la prochaine étape la plus sûre pour l'espace de travail actuel.",
+    "hintTitle": "Besoin d'aide ?",
+    "hintBody": "Demandez à l'assistant pour {{feature}}.",
     "placeholder": "Posez une question sur cette fonction...",
     "send": "Envoyer"
   },

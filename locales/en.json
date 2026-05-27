@@ -127,6 +127,8 @@
     "error": "I could not reach the assistant right now. Please try again.",
     "emptyTitle": "Ask about this feature.",
     "emptyBody": "I can explain what to upload, which controls matter, and the safest next step for the current workspace.",
+    "hintTitle": "Need help?",
+    "hintBody": "Ask the assistant about {{feature}}.",
     "placeholder": "Ask about this feature...",
     "send": "Send"
   },

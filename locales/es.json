@@ -127,6 +127,8 @@
     "error": "No pude contactar al asistente ahora. Inténtalo de nuevo.",
     "emptyTitle": "Pregunta sobre esta función.",
     "emptyBody": "Puedo explicar qué subir, qué controles importan y el siguiente paso más seguro para el espacio de trabajo actual.",
+    "hintTitle": "¿Necesitas ayuda?",
+    "hintBody": "Pregunta al asistente sobre {{feature}}.",
     "placeholder": "Pregunta sobre esta función...",
     "send": "Enviar"
   },

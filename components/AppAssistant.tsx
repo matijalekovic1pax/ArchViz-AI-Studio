@@ -32,6 +32,7 @@ export const AppAssistant: React.FC = () => {
   const { state } = useAppStore();
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [hintVisible, setHintVisible] = useState(false);
   const [input, setInput] = useState('');
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export const AppAssistant: React.FC = () => {
   const feature = getAppAssistantFeature(state.mode);
   const messages = threads[state.mode] || [];
   const isThinking = messages.some((message) => message.isLoading);
+  const assistantHintKey = 'archviz_assistant_hint_seen';
 
   const setThreadForMode = (
     mode: GenerationMode,
@@ -62,6 +64,36 @@ export const AppAssistant: React.FC = () => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
     return () => window.clearTimeout(timer);
   }, [open, state.mode]);
+
+  useEffect(() => {
+    let alreadySeen = false;
+    try {
+      alreadySeen = sessionStorage.getItem(assistantHintKey) === 'true';
+    } catch {
+      alreadySeen = false;
+    }
+    if (alreadySeen) return;
+
+    const showTimer = window.setTimeout(() => setHintVisible(true), 900);
+    const hideTimer = window.setTimeout(() => {
+      setHintVisible(false);
+      try {
+        sessionStorage.setItem(assistantHintKey, 'true');
+      } catch {}
+    }, 8500);
+
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, []);
+
+  const dismissHint = () => {
+    setHintVisible(false);
+    try {
+      sessionStorage.setItem(assistantHintKey, 'true');
+    } catch {}
+  };
 
   const quickPrompts = feature.suggestions.slice(0, 3);
 
@@ -149,7 +181,7 @@ export const AppAssistant: React.FC = () => {
     <>
       {open && (
         <section
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+6.25rem)] right-4 z-[95] flex h-[min(620px,calc(100svh-8rem))] w-[calc(100vw-2rem)] max-w-[420px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-2xl lg:bottom-24 lg:right-6"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+8.25rem)] right-3 z-[95] flex h-[min(600px,calc(100svh-9.5rem))] w-[calc(100vw-1.5rem)] max-w-[390px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-xl lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)] lg:right-3"
           aria-label={String(t('assistant.title', { defaultValue: 'Assistant' }))}
         >
           <header className="border-b border-border-subtle bg-background/95 px-4 py-3">
@@ -306,16 +338,41 @@ export const AppAssistant: React.FC = () => {
 
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.9rem)] right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-full border border-border bg-foreground text-background shadow-2xl transition-all hover:-translate-y-0.5 hover:shadow-elevated active:scale-95 lg:bottom-6 lg:right-6"
+        onClick={() => {
+          dismissHint();
+          setOpen((value) => !value);
+        }}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] right-3 z-[90] flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-foreground text-background shadow-xl transition-all hover:-translate-y-0.5 hover:shadow-elevated active:scale-95 lg:bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:right-3"
         aria-label={String(t('assistant.open', { defaultValue: 'Open assistant' }))}
         aria-expanded={open}
       >
-        {open ? <ChevronDown size={22} /> : <MessageCircle size={22} />}
+        {open ? <ChevronDown size={18} /> : <MessageCircle size={18} />}
         {!open && (
-          <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background bg-green-500" />
+          <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
         )}
       </button>
+
+      {hintVisible && !open && (
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+8rem)] right-3 z-[89] max-w-[220px] animate-fade-in rounded-xl border border-border bg-surface-elevated px-3 py-2 text-xs leading-relaxed text-foreground-secondary shadow-lg lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)]">
+          <button
+            type="button"
+            onClick={dismissHint}
+            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+            aria-label={String(t('common.close'))}
+          >
+            <X size={12} />
+          </button>
+          <div className="pr-5 font-semibold text-foreground">
+            {t('assistant.hintTitle', { defaultValue: 'Need help?' })}
+          </div>
+          <div className="mt-0.5 pr-3 text-[11px] text-foreground-muted">
+            {t('assistant.hintBody', {
+              feature: feature.title,
+              defaultValue: `Ask the assistant about ${feature.title}.`,
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 };
