@@ -38,6 +38,7 @@ export type AppAssistantActionType =
   | 'open_bottom_panel'
   | 'collapse_bottom_panel'
   | 'run_generation'
+  | 'run_preprocess'
   | 'use_chat_image'
   | 'prepare_image_selection'
   | 'clear_image_selections'
@@ -812,6 +813,15 @@ export const normalizeAppAssistantActions = (
       }];
     }
 
+    if (request.type === 'run_preprocess') {
+      return [{
+        id: `${index}-run-preprocess`,
+        type: 'run_preprocess',
+        label: request.label || 'Run AI pre-processing',
+        reason: request.reason,
+      }];
+    }
+
     if (request.type === 'use_chat_image') {
       const target = request.imageTarget || (typeof request.path === 'string' ? request.path : undefined);
       if (!target || !IMAGE_TARGETS.includes(target as AppAssistantImageTarget)) return [];
@@ -1282,8 +1292,13 @@ export const buildAppAssistantActionContext = (
     'Valid imageTarget values: canvas, source, style-reference, background-reference, visual-material-reference, visual-background-reference, scene-compose-reference, sketch-reference, video-input, headshot-left, headshot-front, headshot-right.',
     'Use style-reference for visual language, background-reference for environment/context, visual-material-reference for a material sample, scene-compose-reference for an object/product/furniture reference, and canvas/source for the main image to work from.',
     'If a reference image would help but no user image is attached, ask them to attach one with the image button in the assistant composer.',
-    'run_generation runs the current workflow. Only include it when the user explicitly asks to generate, render, translate, validate, compress, or run now.',
-    'If the user is deciding on a direction, apply only useful setup actions and ask whether they are ready to render. Add run_generation only after they confirm.',
+    'run_generation runs the current workflow. Treat it as final execution for every feature: generate, render, translate, validate, compress, upscale, animate, or create headshots.',
+    'run_preprocess runs the 3D Rendering AI problem-area analysis. Use it in 3D Rendering setup when a source image is available, especially for skylights, ceiling trusses, columns, glass, signage, stairs, fine frames, or noisy viewport geometry.',
+    'For broad creative requests in any feature, treat the request as setup intent, not final permission. Apply safe setup actions, use available analysis/preprocessing when useful, ask for missing style/reference/output details, and wait for confirmation before run_generation.',
+    'For complete operational requests where all required inputs and settings are present, run_generation is allowed. Examples: "compress these PDFs with balanced", "translate this document to French preserving formatting", or "validate these uploaded specs against the BoQ".',
+    'If the user is deciding on a direction, apply only useful setup actions and ask whether they are ready for the final run. Add run_generation only after they confirm.',
+    'Do not write action labels or reasons using azimuth, elevation, altitude, or sun angle. Use visible UI language such as Light Source, Front, Back, Left, Right, high-noon lighting, intensity, color temperature, and shadows.',
+    'For overhead skylight requests, use high-noon/direct overhead lighting language and prompt details about light pouring through skylights. Do not describe it as a vertical-angle slider change.',
     'prepare_image_selection switches to Visual Edit lasso selection so the user can circle an image area. Use it when the user wants to select/circle/mark something in the image.',
     'clear_image_selections clears current Visual Edit selection shapes and masks.',
     'reset_canvas_view fits the canvas to screen.',

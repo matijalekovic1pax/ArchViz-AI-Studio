@@ -725,13 +725,22 @@ export const AppAssistant: React.FC = () => {
   ) => {
     if (!actions.length) return;
     const runGenerationAction = actions.find((action) => action.type === 'run_generation');
+    const runPreprocessAction = actions.find((action) => action.type === 'run_preprocess');
     const prepareSelectionAction = actions.find((action) => action.type === 'prepare_image_selection');
     const stateActions = actions.filter(
-      (action) => action.type !== 'run_generation' && action.type !== 'prepare_image_selection'
+      (action) => action.type !== 'run_generation' && action.type !== 'run_preprocess' && action.type !== 'prepare_image_selection'
     );
 
     if (stateActions.length > 0) {
       applyAppAssistantActions(dispatch, state, stateActions);
+    }
+
+    if (runPreprocessAction) {
+      dispatch({ type: 'SET_MODE', payload: 'render-3d' });
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { prioritizationEnabled: true, detectedElements: [] } });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-render3d-preprocess'));
+      }, 80);
     }
 
     if (prepareSelectionAction) {
@@ -749,6 +758,10 @@ export const AppAssistant: React.FC = () => {
         ? stateActions.length > 0
           ? 'Assistant applied changes and queued generation.'
           : 'Assistant queued generation.'
+        : runPreprocessAction
+          ? stateActions.length > 0
+            ? 'Assistant applied setup and started AI pre-processing.'
+            : 'Assistant started AI pre-processing.'
         : automatic
           ? actions.length === 1 ? 'Assistant applied a change.' : `Assistant applied ${actions.length} changes.`
           : actions.length === 1 ? 'Assistant change applied.' : `${actions.length} assistant changes applied.`;

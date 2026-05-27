@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef, ChangeEvent } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef, ChangeEvent } from 'react';
 import { useAppStore } from '../../../store';
 import { useTranslation } from 'react-i18next';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
@@ -274,6 +274,14 @@ export const LeftRender3DPanel = () => {
     updateWf({ prioritizationEnabled: true, detectedElements: [] });
     analyzeProblemAreas();
   }, [analyzeProblemAreas, isAnalyzing, updateWf]);
+
+  useEffect(() => {
+    const handleAssistantPreprocess = () => {
+      handleProblemAreaAnalysis();
+    };
+    window.addEventListener('archviz:assistant-run-render3d-preprocess', handleAssistantPreprocess);
+    return () => window.removeEventListener('archviz:assistant-run-render3d-preprocess', handleAssistantPreprocess);
+  }, [handleProblemAreaAnalysis]);
 
   const problemAreasActionLabel = isAnalyzing
     ? t('render3d.problemAreas.analyzing')
