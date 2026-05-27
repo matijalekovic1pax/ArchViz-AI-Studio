@@ -124,7 +124,7 @@ export const LeftSidebar: React.FC = () => {
               <h2 className="text-lg font-semibold tracking-tight text-foreground">{activeWorkflowLabel}</h2>
               <button 
                 onClick={() => dispatch({ type: 'TOGGLE_LEFT_SIDEBAR' })}
-                className="text-foreground-muted hover:text-foreground hover:bg-surface-sunken p-1 rounded-md transition-colors"
+                className="-mr-2 text-foreground-muted hover:text-foreground hover:bg-surface-sunken p-1 rounded-md transition-colors"
                 title={t('leftSidebar.collapse')}
               >
                 <ChevronsLeft size={16} />

@@ -129,6 +129,10 @@
     "emptyBody": "I can explain what to upload, which controls matter, and the safest next step for the current workspace.",
     "hintTitle": "Need help?",
     "hintBody": "Ask the assistant about {{feature}}.",
+    "inspect": "Inspect interface element",
+    "inspectHelp": "Click any control outside this chat to ask what it does. Press Esc to cancel.",
+    "inspectOverlay": "Select a UI element to explain",
+    "inspectSelectedQuestion": "Explain this selected element: {{element}}",
     "placeholder": "Ask about this feature...",
     "send": "Send"
   },

@@ -401,7 +401,6 @@ function sanitizeFeedbackImageAnnotations(input) {
       const timestampRaw = clampNumber(entry?.timestamp, 0, 9999999999999, null);
       const timestamp = timestampRaw == null ? null : Math.floor(timestampRaw);
       const note = sanitizeText(entry?.note, 12000);
-      const previewDataUrl = sanitizeDataImageUrl(entry?.previewDataUrl, 3000000);
 
       const markups = Array.isArray(entry?.markups)
         ? entry.markups
@@ -440,6 +439,8 @@ function sanitizeFeedbackImageAnnotations(input) {
             .filter(Boolean)
         : [];
 
+      if (!note && markups.length === 0) return null;
+
       return {
         id: sanitizeText(entry?.id, 120) || `image-feedback-${index + 1}`,
         sourceType,
@@ -449,7 +450,10 @@ function sanitizeFeedbackImageAnnotations(input) {
         mode: mode || null,
         timestamp,
         note: note || null,
-        previewDataUrl: previewDataUrl || null,
+        // The snapshot already contains the source/history images. Keeping
+        // data URLs in metadata duplicates large image payloads and can make
+        // the Supabase insert fail for reports that only need pointers.
+        previewDataUrl: null,
         markups,
       };
     })

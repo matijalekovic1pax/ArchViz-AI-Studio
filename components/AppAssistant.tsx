@@ -1,5 +1,5 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, Send, Sparkles, X } from 'lucide-react';
+import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, ChevronDown, Loader2, MessageCircle, RefreshCw, ScanSearch, Send, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { GenerationMode } from '../types';
@@ -25,8 +25,157 @@ type AssistantThreads = Partial<Record<GenerationMode, AssistantMessage[]>>;
 const ASSISTANT_MODEL = 'gemini-3.5-flash';
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+interface InspectRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+const getCompactText = (value: string | null | undefined, maxLength = 220) => {
+  const text = (value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
+};
+
+const getElementText = (element: Element) => {
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    return getCompactText(element.value || element.placeholder);
+  }
+  if (element instanceof HTMLSelectElement) {
+    return getCompactText(element.selectedOptions[0]?.text || element.value);
+  }
+  if (element instanceof HTMLElement) {
+    return getCompactText(element.innerText || element.textContent);
+  }
+  return getCompactText(element.textContent);
+};
+
+const getInspectableElement = (target: Element) => {
+  const selector = [
+    'button',
+    '[role="button"]',
+    'input',
+    'textarea',
+    'select',
+    'label',
+    'a',
+    '[aria-label]',
+    '[title]',
+  ].join(',');
+  return target.closest(selector) || target;
+};
+
+const describeInspectedElement = (element: Element) => {
+  const inspected = getInspectableElement(element);
+  const parent = inspected.parentElement;
+  const tagName = inspected.tagName.toLowerCase();
+  const role = inspected.getAttribute('role');
+  const ariaLabel = inspected.getAttribute('aria-label');
+  const title = inspected.getAttribute('title');
+  const placeholder = inspected instanceof HTMLInputElement || inspected instanceof HTMLTextAreaElement
+    ? inspected.placeholder
+    : '';
+  const type = inspected instanceof HTMLInputElement || inspected instanceof HTMLButtonElement
+    ? inspected.type
+    : '';
+  const text = getElementText(inspected);
+  const nearbyText = parent ? getCompactText(parent.innerText || parent.textContent, 260) : '';
+
+  return [
+    `Element tag: ${tagName}`,
+    role ? `Role: ${role}` : '',
+    type ? `Control type: ${type}` : '',
+    ariaLabel ? `ARIA label: ${ariaLabel}` : '',
+    title ? `Title: ${title}` : '',
+    placeholder ? `Placeholder: ${placeholder}` : '',
+    text ? `Visible text: ${text}` : '',
+    nearbyText && nearbyText !== text ? `Nearby panel text: ${nearbyText}` : '',
+  ].filter(Boolean).join('\n');
+};
+
+const renderInlineMarkdown = (text: string): ReactNode[] => {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    const token = match[0];
+    const key = `${match.index}-${token}`;
+    if (token.startsWith('**')) {
+      nodes.push(<strong key={key} className="font-semibold text-foreground">{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith('`')) {
+      nodes.push(<code key={key} className="rounded bg-surface-sunken px-1 py-0.5 text-[0.92em] text-foreground">{token.slice(1, -1)}</code>);
+    } else {
+      nodes.push(<em key={key} className="italic">{token.slice(1, -1)}</em>);
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+};
+
 const BubbleText: React.FC<{ text: string }> = ({ text }) => (
-  <div className="whitespace-pre-wrap break-words">{text}</div>
+  <div className="space-y-2 break-words">
+    {(() => {
+      const blocks: ReactNode[] = [];
+      const lines = text.replace(/\r\n/g, '\n').split('\n');
+      let index = 0;
+
+      while (index < lines.length) {
+        const line = lines[index].trim();
+        if (!line) {
+          index += 1;
+          continue;
+        }
+
+        const listMatch = line.match(/^(\d+[.)]|[-*•])\s+(.+)$/);
+        if (listMatch) {
+          const ordered = /^\d/.test(listMatch[1]);
+          const items: string[] = [];
+          while (index < lines.length) {
+            const itemMatch = lines[index].trim().match(/^(\d+[.)]|[-*•])\s+(.+)$/);
+            if (!itemMatch || /^\d/.test(itemMatch[1]) !== ordered) break;
+            items.push(itemMatch[2]);
+            index += 1;
+          }
+          const ListTag = ordered ? 'ol' : 'ul';
+          blocks.push(
+            <ListTag
+              key={`list-${index}-${blocks.length}`}
+              className={cn('space-y-1 pl-4', ordered ? 'list-decimal' : 'list-disc')}
+            >
+              {items.map((item, itemIndex) => (
+                <li key={`${itemIndex}-${item}`}>{renderInlineMarkdown(item)}</li>
+              ))}
+            </ListTag>
+          );
+          continue;
+        }
+
+        const paragraphLines: string[] = [];
+        while (index < lines.length) {
+          const paragraphLine = lines[index].trim();
+          if (!paragraphLine || /^(\d+[.)]|[-*•])\s+(.+)$/.test(paragraphLine)) break;
+          paragraphLines.push(paragraphLine);
+          index += 1;
+        }
+
+        blocks.push(
+          <p key={`p-${index}-${blocks.length}`}>{renderInlineMarkdown(paragraphLines.join(' '))}</p>
+        );
+      }
+
+      return blocks;
+    })()}
+  </div>
 );
 
 export const AppAssistant: React.FC = () => {
@@ -34,9 +183,12 @@ export const AppAssistant: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [hintVisible, setHintVisible] = useState(false);
+  const [inspectMode, setInspectMode] = useState(false);
+  const [inspectRect, setInspectRect] = useState<InspectRect | null>(null);
   const [input, setInput] = useState('');
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
@@ -65,6 +217,85 @@ export const AppAssistant: React.FC = () => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
     return () => window.clearTimeout(timer);
   }, [open, state.mode]);
+
+  useEffect(() => {
+    if (!inspectMode) {
+      setInspectRect(null);
+      return;
+    }
+
+    const previousCursor = document.body.style.cursor;
+    document.body.style.cursor = 'crosshair';
+
+    const updateRect = (target: Element) => {
+      if (panelRef.current?.contains(target)) {
+        setInspectRect(null);
+        return;
+      }
+      const inspected = getInspectableElement(target);
+      const rect = inspected.getBoundingClientRect();
+      setInspectRect({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    const handlePointerMove = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element) updateRect(target);
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || panelRef.current?.contains(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      const inspected = getInspectableElement(target);
+      const visibleName = getCompactText(
+        getElementText(inspected) || inspected.getAttribute('aria-label') || inspected.getAttribute('title') || inspected.tagName.toLowerCase(),
+        80
+      );
+      const elementContext = describeInspectedElement(inspected);
+      setInspectMode(false);
+      setInspectRect(null);
+      void submitQuestion(
+        [
+          `Explain the selected UI element in ${feature.title}.`,
+          'Identify what this element is, where it sits in the interface, what it controls, when to use it, and any cautions.',
+          'Keep the answer specific to ArchViz AI Studio and the active feature.',
+          '',
+          'SELECTED ELEMENT DETAILS:',
+          elementContext,
+        ].join('\n'),
+        String(t('assistant.inspectSelectedQuestion', {
+          element: visibleName,
+          defaultValue: `Explain this selected element: ${visibleName}`,
+        }))
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setInspectMode(false);
+        setInspectRect(null);
+      }
+    };
+
+    document.addEventListener('mousemove', handlePointerMove, true);
+    document.addEventListener('click', handleClick, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.removeEventListener('mousemove', handlePointerMove, true);
+      document.removeEventListener('click', handleClick, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [inspectMode, feature.title, t]);
 
   useEffect(() => {
     let alreadySeen = false;
@@ -98,7 +329,7 @@ export const AppAssistant: React.FC = () => {
 
   const quickPrompts = feature.suggestions.slice(0, 3);
 
-  const submitQuestion = async (rawQuestion: string) => {
+  const submitQuestion = async (rawQuestion: string, visibleQuestion = rawQuestion) => {
     const question = rawQuestion.trim();
     if (!question || isThinking) return;
 
@@ -108,7 +339,7 @@ export const AppAssistant: React.FC = () => {
     const userMessage: AssistantMessage = {
       id: makeMessageId(),
       role: 'user',
-      content: question,
+      content: visibleQuestion.trim() || question,
     };
     const loadingMessage: AssistantMessage = {
       id: makeMessageId(),
@@ -134,7 +365,7 @@ export const AppAssistant: React.FC = () => {
         generationConfig: {
           temperature: 0.15,
           topP: 0.9,
-          maxOutputTokens: 1000,
+          maxOutputTokens: 4096,
           responseModalities: ['TEXT'],
           thinkingConfig: { thinkingLevel: 'low' },
         },
@@ -175,6 +406,7 @@ export const AppAssistant: React.FC = () => {
 
   const clearThread = () => {
     setError(null);
+    setInspectMode(false);
     setThreadForMode(state.mode, () => []);
   };
 
@@ -182,6 +414,7 @@ export const AppAssistant: React.FC = () => {
     <>
       {open && (
         <section
+          ref={panelRef}
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+8.25rem)] right-3 z-[95] flex h-[min(600px,calc(100svh-9.5rem))] w-[calc(100vw-1.5rem)] max-w-[390px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-xl lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)] lg:right-3"
           aria-label={String(t('assistant.title', { defaultValue: 'Assistant' }))}
         >
@@ -206,6 +439,26 @@ export const AppAssistant: React.FC = () => {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissHint();
+                    setInspectMode((value) => !value);
+                  }}
+                  disabled={isThinking}
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                    inspectMode
+                      ? 'bg-foreground text-background'
+                      : 'text-foreground-muted hover:bg-surface-sunken hover:text-foreground',
+                    isThinking && 'cursor-not-allowed opacity-50'
+                  )}
+                  title={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
+                  aria-label={String(t('assistant.inspect', { defaultValue: 'Inspect interface element' }))}
+                  aria-pressed={inspectMode}
+                >
+                  <ScanSearch size={15} />
+                </button>
                 <button
                   type="button"
                   onClick={clearThread}
@@ -234,6 +487,13 @@ export const AppAssistant: React.FC = () => {
                 </p>
               </div>
             </div>
+            {inspectMode && (
+              <div className="mt-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-xs leading-relaxed text-foreground-secondary">
+                {t('assistant.inspectHelp', {
+                  defaultValue: 'Click any control outside this chat to ask what it does. Press Esc to cancel.',
+                })}
+              </div>
+            )}
           </header>
 
           <div className="flex-1 overflow-y-auto bg-background-secondary/70 px-3 py-3 custom-scrollbar">
@@ -373,6 +633,25 @@ export const AppAssistant: React.FC = () => {
             })}
           </div>
         </div>
+      )}
+
+      {inspectMode && open && (
+        <>
+          {inspectRect && (
+            <div
+              className="pointer-events-none fixed z-[94] rounded-lg border-2 border-accent bg-accent/5 shadow-[0_0_0_1px_rgba(255,255,255,0.45)]"
+              style={{
+                top: inspectRect.top,
+                left: inspectRect.left,
+                width: inspectRect.width,
+                height: inspectRect.height,
+              }}
+            />
+          )}
+          <div className="pointer-events-none fixed left-1/2 top-20 z-[94] -translate-x-1/2 rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-xs font-medium text-foreground shadow-lg">
+            {t('assistant.inspectOverlay', { defaultValue: 'Select a UI element to explain' })}
+          </div>
+        </>
       )}
     </>
   );

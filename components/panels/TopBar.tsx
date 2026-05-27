@@ -137,6 +137,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
   const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
+  const canUseDownloadControls = Boolean(state.uploadedImage) && !state.isGenerating;
 
   const handleDocsNavigation = () => {
     try {
@@ -266,12 +267,12 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleDownloadClick = () => {
-    if (!state.uploadedImage) return;
+    if (!canUseDownloadControls) return;
     setShowDownloadMenu(!showDownloadMenu);
   };
 
   const performDownload = (options?: { format?: 'png' | 'jpg' | 'mp4'; resolution?: 'full' | 'medium' }) => {
-    if (!state.uploadedImage) return;
+    if (!canUseDownloadControls) return;
 
     const requestedFormat = options?.format ?? downloadFormat;
     const requestedResolution = options?.resolution ?? downloadResolution;
@@ -375,6 +376,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleDefaultDownload = () => {
+    if (!canUseDownloadControls) return;
     performDownload(isVideoMode ? { resolution: 'full' } : { format: 'jpg', resolution: 'full' });
   };
 
@@ -464,6 +466,14 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowLanguageMenu(false);
     setShowProjectMenu(false);
   }, [isMobile]);
+
+  useEffect(() => {
+    if (!state.isGenerating) return;
+    setShowControlsMenu(false);
+    setShowDownloadMenu(false);
+    setShowLanguageMenu(false);
+    setShowProjectMenu(false);
+  }, [state.isGenerating]);
 
   useEffect(() => {
     if (!showLanguageMenu) return;
@@ -1204,37 +1214,37 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           <div
             className={cn(
               "h-9 rounded-lg transition-all duration-200 flex items-stretch text-xs font-bold border overflow-hidden",
-              state.uploadedImage
+              canUseDownloadControls
                 ? "bg-surface-elevated text-foreground border-border hover:border-foreground-muted shadow-sm"
                 : "bg-surface-sunken text-foreground-muted border-transparent cursor-not-allowed"
             )}
           >
             <button
               onClick={handleDefaultDownload}
-              disabled={!state.uploadedImage}
+              disabled={!canUseDownloadControls}
               className="h-full flex items-center gap-2 pl-4 pr-3 transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.download')}
+              title={!state.uploadedImage ? t('generation.generateOutputFirst') : state.isGenerating ? t('generation.generating') : t('topBar.download')}
             >
               {isVideoMode ? <Video size={14} /> : <Download size={14} />}
               <span className="hidden sm:inline">{t('topBar.download')}</span>
             </button>
-            <div className={cn("my-1.5 w-px shrink-0", state.uploadedImage ? "bg-foreground/20" : "bg-border/50")} />
+            <div className={cn("my-1.5 w-px shrink-0", canUseDownloadControls ? "bg-foreground/20" : "bg-border/50")} />
             <button
               onClick={handleDownloadClick}
-              disabled={!state.uploadedImage}
+              disabled={!canUseDownloadControls}
               className={cn(
-                "h-full w-11 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:bg-transparent",
-                state.uploadedImage && "bg-surface-sunken/50 hover:bg-foreground hover:text-background"
+                "h-full w-9 flex items-center justify-end pr-2 transition-colors disabled:cursor-not-allowed disabled:bg-transparent",
+                canUseDownloadControls && "bg-surface-sunken/50 hover:bg-foreground hover:text-background"
               )}
-              title={!state.uploadedImage ? t('generation.generateOutputFirst') : t('topBar.downloadSettings')}
+              title={!state.uploadedImage ? t('generation.generateOutputFirst') : state.isGenerating ? t('generation.generating') : t('topBar.downloadSettings')}
               aria-label={t('topBar.downloadSettings')}
             >
-              <ChevronDown size={13} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />
+              <ChevronDown size={12} className={cn("transition-transform", showDownloadMenu && "rotate-180")} />
             </button>
           </div>
 
           {/* Download Pop-up Menu */}
-          {showDownloadMenu && (
+          {showDownloadMenu && canUseDownloadControls && (
             <div className="absolute top-full right-0 mt-2 w-72 bg-surface-elevated rounded-xl shadow-elevated border border-border p-4 z-50 animate-fade-in origin-top-right">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-subtle">
                 <span className="text-xs font-bold text-foreground uppercase tracking-wider">{t('topBar.downloadSettings')}</span>

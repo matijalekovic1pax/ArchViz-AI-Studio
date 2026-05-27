@@ -129,6 +129,10 @@
     "emptyBody": "Puedo explicar qué subir, qué controles importan y el siguiente paso más seguro para el espacio de trabajo actual.",
     "hintTitle": "¿Necesitas ayuda?",
     "hintBody": "Pregunta al asistente sobre {{feature}}.",
+    "inspect": "Inspeccionar elemento",
+    "inspectHelp": "Haz clic en cualquier control fuera de este chat para preguntar qué hace. Pulsa Esc para cancelar.",
+    "inspectOverlay": "Selecciona un elemento de la interfaz",
+    "inspectSelectedQuestion": "Explica este elemento seleccionado: {{element}}",
     "placeholder": "Pregunta sobre esta función...",
     "send": "Enviar"
   },
