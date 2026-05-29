@@ -290,26 +290,11 @@
     "downloadTranslated": "Download Translated Document",
     "noDocumentUploaded": "Upload a document on the left to begin translation.",
     "settings": "Settings",
-    "preserveFormattingLabel": "Preserve Formatting",
-    "preserveFormattingDesc": "Maintains original fonts, styles, and layout where possible.",
-    "xlsxPreserveFormattingLocked": "For Excel files, structure-preserving mode is always enabled.",
-    "pptxPreserveFormattingLocked": "For PowerPoint files, structure-preserving mode is always enabled.",
     "xlsxWarningsTitle": "Structure Preservation Warnings",
     "xlsxStatsTitle": "Excel Translation Summary",
     "xlsxStatsTranslated": "Translated cells: {{count}}",
     "xlsxStatsSkipped": "Skipped cells: {{count}}",
     "xlsxStatsDetected": "Detected text cells: {{count}}",
-    "qualityLabel": "Translation Quality",
-    "qualityOptions": {
-      "fast": {
-        "label": "Fast",
-        "desc": "Quick turnaround using gemini-2.5-flash."
-      },
-      "pro": {
-        "label": "Professional",
-        "desc": "Higher accuracy with gemini-3-flash-preview (slower)."
-      }
-    },
     "pdfWarningTitle": "Note:",
     "pdfWarningMessage": "PDF translation may have minor layout differences due to font embedding limitations.",
     "progress": {

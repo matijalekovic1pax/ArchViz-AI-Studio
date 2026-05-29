@@ -65,14 +65,13 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
             translatedDocumentUrl: null,
             warnings: null,
             xlsxStats: null,
-            preserveFormatting: isXlsx || isPptx ? true : docTranslate.preserveFormatting,
           },
         });
       };
       reader.readAsDataURL(file);
       e.target.value = '';
     },
-    [dispatch, docTranslate.preserveFormatting]
+    [dispatch]
   );
 
   const handleRemoveDocument = useCallback(() => {

@@ -1150,8 +1150,6 @@ export interface TranslationProgress {
   message?: string;
 }
 
-export type DocumentTranslationQuality = 'fast' | 'pro';
-
 export interface XlsxTranslationStats {
   translatedCount: number;
   skippedCount: number;
@@ -1168,10 +1166,8 @@ export interface DocumentTranslateState {
   sourceDocument: DocumentTranslateDocument | null;
   sourceLanguage: string;
   targetLanguage: string;
-  preserveFormatting: boolean;
   translateHeaders: boolean;
   translateFootnotes: boolean;
-  translationQuality: DocumentTranslationQuality;
   progress: TranslationProgress;
   translatedDocumentUrl: string | null;
   warnings: string[] | null;

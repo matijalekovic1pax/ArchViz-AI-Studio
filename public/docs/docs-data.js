@@ -196,7 +196,7 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-translate",
     guide: [
       "Use for DOCX, XLSX, PPTX, and PDF translation.",
-      "Guide users to upload the file, select source language or Auto, target language, quality mode Fast or Pro, and preservation options. Supported targets include English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Russian, and Serbian.",
+      "Guide users to upload the file, select source language or Auto, and choose a target language. Formatting preservation is always enabled. Supported targets include English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Russian, and Serbian.",
       "DOCX can preserve styles, tables, headers, footers, and footnotes. XLSX translates text cells while preserving numbers, dates, formulas, workbook structure, and formatting. PPTX translates slide, layout, master, speaker-note, chart, and diagram text while preserving media, animations, and slide order.",
       "PDF translation uses ConvertAPI to convert the PDF to Word first and outputs a translated DOCX. Complex PDFs may need layout cleanup after conversion.",
     ],
@@ -370,8 +370,8 @@ const EN_MODES = withModeSpecs([
     detail: "Document Translate is built for technical architectural documents. It extracts text, translates with Gemini, and rebuilds the document while preserving styles, tables, formulas, headers, slides, notes, charts, and structure where possible.",
     input: "DOCX, XLSX, PPTX, or PDF files.",
     output: "Translated DOCX, XLSX, PPTX, or PDF-to-DOCX result with retained formatting and downloadable files.",
-    offers: ["Fast and Pro translation quality options with Auto source-language detection.", "DOCX style, table, header, footer, and footnote preservation.", "XLSX text-cell translation while keeping numbers, dates, formulas, workbook structure, and formatting.", "PPTX slide, layout, master, speaker-note, chart, and diagram text translation while preserving media, animations, and slide order."],
-    workflow: ["Upload documents and pick source/target languages.", "Choose Fast or Pro quality and preservation options.", "Run translation, inspect formatting, and download the rebuilt files."],
+    offers: ["Auto source-language detection with a single Gemini translation model.", "DOCX style, table, header, footer, and footnote preservation.", "XLSX text-cell translation while keeping numbers, dates, formulas, workbook structure, and formatting.", "PPTX slide, layout, master, speaker-note, chart, and diagram text translation while preserving media, animations, and slide order."],
+    workflow: ["Upload documents and pick source/target languages.", "Run translation with formatting preservation enabled, inspect formatting, and download the rebuilt files."],
     tips: ["DOCX, XLSX, and PPTX preserve editable structure best.", "PDF translation converts the PDF to Word first and outputs a translated DOCX.", "Complex PDFs may need conversion cleanup before final delivery."],
   },
   {
@@ -543,8 +543,8 @@ const ES_MODES = withModeSpecs([
     detail: "Pensado para documentos técnicos. Extrae texto, traduce con Gemini y reconstruye el archivo manteniendo estilos, tablas, fórmulas, encabezados, diapositivas, notas, gráficos y estructura cuando sea posible.",
     input: "Archivos DOCX, XLSX, PPTX o PDF.",
     output: "DOCX, XLSX, PPTX o PDF convertido a DOCX traducido con formato preservado.",
-    offers: ["Calidad Fast o Pro con detección automática de idioma origen.", "Preservación de estilos, tablas, encabezados, pies y notas al pie en DOCX.", "Traducción de celdas XLSX manteniendo números, fechas, fórmulas, estructura y formato.", "Traducción de texto en slides, layouts, masters, notas, gráficos y diagramas PPTX preservando medios, animaciones y orden."],
-    workflow: ["Sube documentos y elige idioma origen/destino.", "Elige calidad Fast o Pro y opciones de preservación.", "Ejecuta, revisa formato y descarga archivos reconstruidos."],
+    offers: ["Detección automática del idioma origen con un único modelo Gemini de traducción.", "Preservación de estilos, tablas, encabezados, pies y notas al pie en DOCX.", "Traducción de celdas XLSX manteniendo números, fechas, fórmulas, estructura y formato.", "Traducción de texto en slides, layouts, masters, notas, gráficos y diagramas PPTX preservando medios, animaciones y orden."],
+    workflow: ["Sube documentos y elige idioma origen/destino.", "Ejecuta con preservación de formato activada, revisa formato y descarga archivos reconstruidos."],
     tips: ["DOCX, XLSX y PPTX preservan mejor su estructura editable.", "La traducción PDF convierte primero a Word y entrega un DOCX traducido.", "PDF complejos pueden necesitar limpieza tras conversión."],
   },
   {
@@ -716,8 +716,8 @@ const FR_MODES = withModeSpecs([
     detail: "Conçu pour documents techniques. Il extrait le texte, traduit avec Gemini et reconstruit le document en préservant styles, tableaux, formules, en-têtes, diapositives, notes, graphiques et structure si possible.",
     input: "Fichiers DOCX, XLSX, PPTX ou PDF.",
     output: "DOCX, XLSX, PPTX ou PDF converti en DOCX traduit avec format conservé.",
-    offers: ["Qualité Fast ou Pro avec détection automatique de la langue source.", "Préservation DOCX des styles, tableaux, en-têtes, pieds et notes de bas de page.", "Traduction XLSX des cellules texte en conservant nombres, dates, formules, structure et format.", "Traduction PPTX des textes de slides, layouts, masters, notes, graphiques et diagrammes en préservant médias, animations et ordre."],
-    workflow: ["Importez les documents et choisissez langues source/cible.", "Choisissez qualité Fast ou Pro et options de préservation.", "Lancez, vérifiez la mise en page et téléchargez."],
+    offers: ["Détection automatique de la langue source avec un modèle Gemini unique pour la traduction.", "Préservation DOCX des styles, tableaux, en-têtes, pieds et notes de bas de page.", "Traduction XLSX des cellules texte en conservant nombres, dates, formules, structure et format.", "Traduction PPTX des textes de slides, layouts, masters, notes, graphiques et diagrammes en préservant médias, animations et ordre."],
+    workflow: ["Importez les documents et choisissez langues source/cible.", "Lancez avec la préservation de la mise en page activée, vérifiez la mise en page et téléchargez."],
     tips: ["DOCX, XLSX et PPTX préservent mieux leur structure éditable.", "La traduction PDF convertit d'abord le PDF en Word et livre un DOCX traduit.", "Les PDF complexes peuvent nécessiter un nettoyage après conversion."],
   },
   {

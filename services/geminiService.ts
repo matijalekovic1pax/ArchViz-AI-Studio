@@ -395,8 +395,13 @@ export class GeminiService {
     const referenceCount = request.referenceImages?.length || 0;
     const maskMode = request.maskMode ?? 'strict';
     const referenceInstructions = referenceCount > 0
-      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and mask' : ''}. Use ${referenceCount > 1 ? 'these references' : 'this reference'} only as visual target material data for color, pattern, texture scale, roughness, reflectivity, grain direction, joints, and seams. Do not copy reference-image framing, add the reference as an object, or change scene geometry.`
+      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and mask' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
       : '';
+    const cameraAndTextLock = [
+      'Preserve the original camera position, field of view, horizon, crop, perspective, and aspect ratio unless the edit type explicitly changes the canvas.',
+      'Preserve existing text, signage, numbers, logos, labels, UI marks, and graphic blocks as source-faithful shapes. Do not translate, rewrite, correct, invent, blur, or remove text unless the edit prompt explicitly requests text editing.',
+      'All unaffected regions must remain visually identical in layout, object count, geometry, material boundaries, shadows, reflections, and scale relationships.'
+    ].join(' ');
     const maskScopeInstructions = maskMode === 'guided'
       ? [
           'Use the white mask pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout or alpha edge.',
@@ -415,11 +420,12 @@ export class GeminiService {
             : 'You are given two input images in this exact order:',
           '1. The original source image.',
           '2. A black-and-white selection mask with the same framing as the source image.',
+          cameraAndTextLock,
           maskScopeInstructions,
           'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
           referenceInstructions
         ].join(' ')
-      : `Return a complete edited image preserving the original camera, framing, and perspective unless the request explicitly changes the canvas or aspect ratio.${referenceInstructions}`;
+      : `Return a complete edited image. ${cameraAndTextLock}${referenceInstructions}`;
     const highFidelityEnhanceInstructions = [
       'Perform a conservative restoration and quality pass, not a redraw or redesign.',
       'Treat the source image as the exact visual blueprint: same object count, same object positions, same silhouettes, same scale relationships, same crop, same camera, and same perspective.',
@@ -449,7 +455,7 @@ export class GeminiService {
           : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
-        editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Do not change existing source pixels unless needed only at the extension seam.`;
+        editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Continue the source perspective lines, horizon, lighting direction, materials, shadows, reflections, and visible text/signage shapes into the new canvas area. Do not change existing source pixels unless needed only at the extension seam.`;
         break;
       case 'style-transfer':
         editPrompt = `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;

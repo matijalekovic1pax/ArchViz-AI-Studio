@@ -394,10 +394,8 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
 
   documentTranslate('sourceLanguage', 'Source language', 'string'),
   documentTranslate('targetLanguage', 'Target language', 'string'),
-  documentTranslate('preserveFormatting', 'Preserve formatting', 'boolean'),
   documentTranslate('translateHeaders', 'Translate headers/footers', 'boolean'),
   documentTranslate('translateFootnotes', 'Translate footnotes', 'boolean'),
-  documentTranslate('translationQuality', 'Translation quality', 'string', { values: ['fast', 'pro'] }),
 
   materialValidation('activeTab', 'Material Validation tab', 'string', {
     values: ['dashboard', 'documents', 'materials', 'drawings', 'boq', 'issues', 'reports'],

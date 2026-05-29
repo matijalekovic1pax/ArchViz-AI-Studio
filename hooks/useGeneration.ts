@@ -1238,8 +1238,6 @@ export function useGeneration(): UseGenerationReturn {
                 sourceDocument: docTranslate.sourceDocument,
                 sourceLanguage: docTranslate.sourceLanguage,
                 targetLanguage: docTranslate.targetLanguage,
-                translationQuality: docTranslate.translationQuality,
-                preserveFormatting: docTranslate.preserveFormatting,
                 translateHeaders: docTranslate.translateHeaders,
                 translateFootnotes: docTranslate.translateFootnotes,
                 onProgress: (progress: TranslationProgress) => {

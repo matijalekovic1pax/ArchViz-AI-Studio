@@ -20,7 +20,6 @@ import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './conver
 import type {
   DocumentTranslateDocument,
   DocumentTranslationResult,
-  DocumentTranslationQuality,
   TranslationProgress,
   TextSegment,
   ParsedLegalDocx,
@@ -31,14 +30,10 @@ import type {
 } from '../types';
 
 // Translation settings
-const FAST_TRANSLATION_MODEL = 'gemini-2.5-flash';
-const PROFESSIONAL_TRANSLATION_MODEL = 'gemini-3-flash-preview';
+const TRANSLATION_MODEL = 'gemini-3.5-flash';
 const BATCH_SIZE = 20;
 const MAX_CHARS_PER_BATCH = 12000;
 const MAX_CONCURRENT_BATCHES = 3;
-
-const getTranslationModel = (quality?: DocumentTranslationQuality) =>
-  quality === 'pro' ? PROFESSIONAL_TRANSLATION_MODEL : FAST_TRANSLATION_MODEL;
 
 export type { TextSegment };
 
@@ -46,8 +41,6 @@ export interface TranslationOptions {
   sourceDocument: DocumentTranslateDocument;
   sourceLanguage: string;
   targetLanguage: string;
-  translationQuality?: DocumentTranslationQuality;
-  preserveFormatting?: boolean;
   translateHeaders?: boolean;
   translateFootnotes?: boolean;
   onProgress: (progress: TranslationProgress) => void;
@@ -70,7 +63,6 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     targetLanguage,
     onProgress,
     abortSignal,
-    translationQuality,
     translateHeaders = true,
     translateFootnotes = true,
   } = options;
@@ -92,8 +84,6 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     return translatePptxDocument(options);
   }
 
-  const service = getGeminiService();
-  const translationModel = getTranslationModel(translationQuality);
   const isPdf = sourceDocument.mimeType.includes('pdf');
 
   // Phase 0: Convert PDF to DOCX if needed
@@ -164,7 +154,6 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     allSegments,
     sourceLanguage,
     targetLanguage,
-    translationQuality,
     onProgress,
     abortSignal
   );
@@ -211,7 +200,6 @@ async function translatePptxDocument(options: TranslationOptions): Promise<Docum
     targetLanguage,
     onProgress,
     abortSignal,
-    translationQuality,
   } = options;
 
   // Phase 1: Parse PPTX
@@ -238,7 +226,6 @@ async function translatePptxDocument(options: TranslationOptions): Promise<Docum
     segmentsToTranslate,
     sourceLanguage,
     targetLanguage,
-    translationQuality,
     onProgress,
     abortSignal
   );
@@ -286,7 +273,6 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<Docum
     targetLanguage,
     onProgress,
     abortSignal,
-    translationQuality,
   } = options;
 
   // Phase 1: Parse XLSX
@@ -342,7 +328,6 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<Docum
     safeSegments,
     sourceLanguage,
     targetLanguage,
-    translationQuality,
     onProgress,
     abortSignal
   );
@@ -394,12 +379,11 @@ async function runTranslationPipeline(
   allSegments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
-  translationQuality: DocumentTranslationQuality | undefined,
   onProgress: (progress: TranslationProgress) => void,
   abortSignal?: AbortSignal
 ): Promise<Map<string, string>> {
   const service = getGeminiService();
-  const translationModel = getTranslationModel(translationQuality);
+  const translationModel = TRANSLATION_MODEL;
 
   // Analyze document context (sample first 15 segments)
   onProgress({

@@ -1172,6 +1172,45 @@ const getStyleReferenceInstruction = (hasSourceImage: boolean): string => {
   return `**Style Reference (CRITICAL):** A style reference image is ${imageOrder}. Use it only to guide the visual language of the generated render: rendering medium, color grading, contrast curve, material finish, lighting character, atmosphere, camera polish, grain, and overall archviz mood. Do not copy the reference scene, subject, composition, background, furniture, people, signage, logos, or geometry. Preserve the source architecture and requested camera exactly; transfer style cues, not content.`;
 };
 
+const SOURCE_CAMERA_LOCK = [
+  'Camera and POV lock: preserve the source camera position, lens behavior, field of view, horizon line, crop, vanishing points, perspective convergence, and viewer height unless a tool explicitly asks for a new camera.',
+  'Do not rotate, mirror, zoom, reframe, stretch, or change from eye-level to aerial, aerial to eye-level, perspective to orthographic, or orthographic to perspective unless that operation is explicitly requested.'
+].join(' ');
+
+const SOURCE_TEXT_SIGNAGE_LOCK = [
+  'Text and signage lock: preserve all existing words, signs, labels, logos, numbers, UI marks, and graphic blocks as source-faithful shapes.',
+  'Do not translate, rewrite, correct, invent, blur, or remove text unless the active tool explicitly asks to edit that text.',
+  'If any new visible text is requested, render only the exact quoted words and keep them sharp, legible, and in the requested typographic style.'
+].join(' ');
+
+const UNCHANGED_CONTENT_LOCK = [
+  'Unchanged content lock: all areas outside the requested operation must remain visually identical in layout, object count, object placement, architectural geometry, material boundaries, shadows, reflections, and scale relationships.',
+  'Style, lighting, and quality instructions are not permission to redraw unaffected parts of the image.'
+].join(' ');
+
+const buildSourceImageRelationship = (
+  role: string,
+  scope = 'Use the source as the authoritative visual blueprint.'
+) => [
+  `Input relationship: the first attached image is the locked ${role}.`,
+  scope,
+  SOURCE_CAMERA_LOCK,
+  SOURCE_TEXT_SIGNAGE_LOCK,
+  UNCHANGED_CONTENT_LOCK
+].join(' ');
+
+const buildReferenceStackRelationship = (referenceRole: string) => [
+  `Reference relationship: attachment #1 is the locked source image; later attachments are ${referenceRole}.`,
+  'Use reference images for the explicitly stated relationship only: material, object identity, mood, style, or endpoint frame.',
+  'Do not copy unrelated background content, camera angle, subject placement, signage, logos, people, or composition from reference images into the source.'
+].join(' ');
+
+const TEXT_TO_IMAGE_FRAMEWORK = [
+  'Prompting framework: treat the user brief as the subject and action, then complete the image with explicit location/context, composition, camera, lighting, materiality, and final visual style.',
+  'Use positive, concrete visual language. Avoid generic keyword lists.',
+  'When visible text is requested, render only the exact quoted text, with the requested font style, placement, color, and hierarchy.'
+].join(' ');
+
 // Generate comprehensive prompt for 3D Render mode
 function generate3DRenderPrompt(state: AppState): string {
   const { workflow, activeStyleId, customStyles } = state;
@@ -1207,6 +1246,14 @@ function generate3DRenderPrompt(state: AppState): string {
 
   const viewIntro = viewDescriptions[workflow.viewType] || 'Create a photorealistic architectural visualization';
   parts.push(`${viewIntro}, rendered from ${sourceDescriptions[workflow.sourceType] || 'a 3D architectural model'}.`);
+  if (hasSourceImage) {
+    parts.push(buildSourceImageRelationship(
+      '3D/render source',
+      'Convert or enhance what is already present in the source; keep the architectural design, spatial relationships, major entourage, and composition anchored to that image.'
+    ));
+  } else {
+    parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+  }
 
   // 2. STYLE - More narrative description
   if (hasStyleReference) {
@@ -1499,6 +1546,11 @@ const generateVisualEditPrompt = (state: AppState): string => {
   const selectionParts = buildSelectionContext(workflow, 'guide');
   const strictSelectionParts = buildSelectionContext(workflow);
   const parts: string[] = [];
+  parts.push('Image editing framework: make only the requested change, then actively preserve everything else from the source image.');
+  parts.push(buildSourceImageRelationship(
+    'image being edited',
+    'The requested tool scope is the only area allowed to change; all unrelated scene content stays locked.'
+  ));
 
   // User's creative intent
   const describeUserIntent = (prompt: string | undefined) => {
@@ -1545,6 +1597,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     // Describe material in natural language
     const materialDesc: string[] = [];
     if (material.referenceEnabled && material.referenceImage) {
+      parts.push('Reference relationship: the uploaded material image defines finish only. Sample its color, grain, veining, aggregate, weave, reflectivity, and scale; do not paste the reference image, copy its lighting setup, or introduce its background as content.');
       materialDesc.push('Use the uploaded material reference image as the authoritative target finish');
       materialDesc.push('match its color palette, grain or aggregate pattern, texture scale, roughness, reflectivity, joint logic, seams, and surface wear without copying the reference image composition or adding it as an object');
     } else if (selectedMaterial) {
@@ -2048,6 +2101,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     };
     const skyDesc = skyPresets[sky.preset] || `a ${sky.preset} sky`;
     parts.push(`Create ${skyDesc}.`);
+    parts.push(`Horizon discipline: align the new sky to the existing camera perspective and preserve the source horizon relationship; the intended horizon sits around ${sky.horizonLine}% of image height from the top.`);
 
     const cloudDesc = sky.cloudDensity > 70 ? 'abundant, dramatic clouds' :
       sky.cloudDensity > 40 ? 'moderate cloud coverage' :
@@ -2329,6 +2383,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
       'right': 'to the right',
       'top': 'upward',
       'bottom': 'downward',
+      'top-left': 'upward and to the left',
+      'top-right': 'upward and to the right',
+      'bottom-left': 'downward and to the left',
+      'bottom-right': 'downward and to the right',
       'horizontal': 'horizontally on both sides',
       'vertical': 'vertically above and below',
       'all': 'in all directions',
@@ -2349,7 +2407,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push(`Target a ${extend.customRatio.width}:${extend.customRatio.height} aspect ratio.`);
     }
 
-    parts.push('Critical constraints: do not modify any existing pixels in the original image area. Only paint into the new canvas space, continuing the existing perspective lines, horizon placement, architectural materials, and lighting conditions seamlessly. Avoid duplicating, repeating, or warping elements from the original image.');
+    parts.push('Critical constraints: do not modify any existing pixels in the original image area. Only paint into the new canvas space, continuing the existing perspective lines, horizon placement, architectural materials, lighting conditions, shadows, reflections, and visible text/signage shapes seamlessly. Avoid duplicating, repeating, or warping elements from the original image.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -2432,7 +2490,11 @@ function generateSceneComposePrompt(state: AppState): string {
 
   const parts: string[] = [
     `Create a photorealistic ${viewDescriptions[workflow.viewType] || 'architectural'} scene composition from ${sourceDescriptions[workflow.sourceType] || 'a 3D scene screenshot'}.`,
-    'Treat the first attached image as the locked base scene: preserve camera, perspective, architecture, and structural geometry exactly.',
+    buildSourceImageRelationship(
+      'base scene',
+      'Preserve the base scene architecture, structural geometry, room or site layout, material boundaries, and existing composition exactly.'
+    ),
+    buildReferenceStackRelationship('object, material, entourage, and placement references for scene insertion'),
     'Do not redesign the architecture. Only insert, arrange, and render scene elements based on the provided reference stack.',
     'All outputs must look like a single coherent photograph with consistent lens behavior, lighting direction, shadows, reflections, and contact points.'
   ];
@@ -2505,6 +2567,12 @@ function generateCadRenderPrompt(state: AppState): string {
   };
 
   parts.push(`${cadTypeDescriptions[workflow.cadDrawingType] || 'Create an architectural visualization from this CAD drawing'}, ${projectionDescriptions[workflow.cadDrawingType] || 'in orthographic projection'}.`);
+  if (hasSourceImage) {
+    parts.push(buildSourceImageRelationship(
+      'CAD/drawing source',
+      'The drawing establishes exact geometry, diagram orientation, wall/opening locations, line hierarchy, labels, dimensions, and source proportions.'
+    ));
+  }
 
   if (workflow.cadScale) {
     parts.push(`The drawing is prepared at ${workflow.cadScale} scale.`);
@@ -2547,7 +2615,7 @@ function generateCadRenderPrompt(state: AppState): string {
   parts.push(`The space features ${ceilingDesc}, ${space.windowStyle} windows, and ${space.doorStyle} doors.`);
 
   if (hasSourceImage) {
-    parts.push('The input image establishes the ground-truth for geometry and material choices.');
+    parts.push('The input image establishes the ground-truth for geometry, source labels, drawing orientation, and material clues.');
   }
 
   // Style
@@ -2689,10 +2757,14 @@ function generateSketchPrompt(state: AppState): string {
 
   // Opening - describe the transformation
   if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+    parts.push(`Transform this sketch according to the user brief: "${state.prompt.trim()}".`);
   } else {
     parts.push('Transform this hand-drawn architectural sketch into a stunning photorealistic visualization that brings the designer\'s vision to life.');
   }
+  parts.push(buildSourceImageRelationship(
+    'architectural sketch',
+    'The sketch establishes the composition, design intent, camera direction, perspective system, silhouettes, line positions, and proportions.'
+  ));
 
   // Sketch type description
   const sketchTypeDesc: Record<string, string> = {
@@ -2805,6 +2877,7 @@ function generateSketchPrompt(state: AppState): string {
 
   // Reference images
   if (workflow.sketchRefs.length > 0) {
+    parts.push(buildReferenceStackRelationship('style, material, or mood references for interpreting the sketch'));
     const counts = workflow.sketchRefs.reduce(
       (acc, ref) => {
         acc[ref.type] += 1;
@@ -2886,10 +2959,11 @@ function generateImageToCadPrompt(state: AppState): string {
   const parts: string[] = [];
 
   if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+    parts.push(`Convert this source image according to the user brief: "${state.prompt.trim()}".`);
   } else {
     parts.push('Convert this image into a clean, accurate CAD drawing.');
   }
+  parts.push('Source analysis contract: preserve the source building identity, visible proportions, structural rhythm, opening positions, edge relationships, and any readable annotations or dimensions as exact CAD text where possible. Do not invent hidden rooms, extra openings, extra floors, decorative details, or labels that are not supported by the source.');
 
   const typeDesc: Record<string, string> = {
     photo: 'The source is a photograph, so infer true edges and geometry from perspective cues.',
@@ -2943,6 +3017,10 @@ function generateUpscalePrompt(state: AppState): string {
 
   parts.push('Conservative architectural image restoration and upscale.');
   parts.push('The input image is the only source of truth. Produce the same image at higher apparent quality, as if the original render were exported at a higher resolution with cleaner sampling.');
+  parts.push(buildSourceImageRelationship(
+    'upscale/restoration source',
+    'This is a restoration pass, not generation from imagination. Improve sampling quality only where the source already contains visual evidence.'
+  ));
   parts.push(`Target upscale factor: ${workflow.upscaleFactor}. Treat this as a clarity goal only; do not zoom, crop, extend, or reframe the canvas.`);
   parts.push(`Output resolution target: ${outputResolution}. If the API caps output below this target, use the highest supported size and prioritize faithful detail preservation.`);
   parts.push('Allowed operations: reduce noise and compression artifacts, gently deblur, sharpen existing edges, recover local contrast, clarify already-visible microtexture, and improve anti-aliasing.');
@@ -3022,8 +3100,11 @@ function generateMultiAnglePrompt(state: AppState): string {
 
   // Core multi-angle instruction
   parts.push(`Act as a 3D camera operator. Using the attached image as the absolute geometric reference, generate a multi-angle orthographic study of this building. Keep the internal proportions, textures, and material properties 100% consistent.`);
+  parts.push('Input relationship: the attached image is the locked building identity reference. Reconstruct the same building across every panel with identical massing, facade rhythm, openings, roof form, materials, colors, signage blocks, and entourage rules; only the camera orbit changes.');
   parts.push(`Render a ${gridRows}x${gridCols} grid showing ${count} different camera angles with Y-axis rotations (0°, 90°, 180°, 270°, etc.).`);
-  parts.push(`Lighting Instruction: Maintain a fixed global light source so that shadows shift realistically as the camera moves around the building. No hallucinations or added features.`);
+  parts.push('Camera discipline: each panel must use a consistent orthographic lens, matching camera height and elevation unless the selected angle range says otherwise. Do not change scale or crop between panels.');
+  parts.push(SOURCE_TEXT_SIGNAGE_LOCK);
+  parts.push(`Lighting Instruction: Maintain a fixed global light source so that shadows shift realistically as the camera moves around the building. No hallucinations, extra wings, new facade systems, alternate materials, or added features.`);
 
   // User's custom prompt/description
   if (state.prompt?.trim()) {
@@ -3074,7 +3155,7 @@ function generateMasterplanPrompt(state: AppState): string {
 
   // Evocative opening
   if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+    parts.push(`Create the masterplan visualization from this user brief: "${state.prompt.trim()}".`);
   } else {
     const planTypeDescriptions: Record<string, string> = {
       site: 'Create a compelling site plan visualization that clearly communicates the development layout and spatial relationships',
@@ -3094,7 +3175,8 @@ function generateMasterplanPrompt(state: AppState): string {
 
   // Fidelity constraints
   const boundaryMode = workflow.mpBoundary?.mode || 'auto';
-  parts.push('If a masterplan drawing is provided as input, treat it as the authoritative layout. Preserve every site boundary, parcel edge, road alignment, water feature, and building footprint exactly as shown. Do not rotate, mirror, or reframe the plan. Enhancement should be limited to presentation styling, landscaping visualization, labels, and legend elements.');
+  parts.push('If a masterplan drawing is provided as input, treat it as the authoritative layout. Preserve every site boundary, parcel edge, road alignment, water feature, building footprint, existing label block, legend position, and north orientation exactly as shown. Do not rotate, mirror, reframe, redraw, or normalize the plan unless the selected view angle explicitly requires a controlled axonometric translation. Enhancement should be limited to presentation styling, landscaping visualization, labels, and legend elements.');
+  parts.push('Label discipline: if the source already contains readable labels, keep their wording and placement faithful. For new labels, render only concise exact text from the requested annotations and keep typography clean, sharp, and professionally aligned.');
 
   if (boundaryMode === 'custom') {
     parts.push('Respect the custom site boundary exactly as defined.');
@@ -3225,13 +3307,15 @@ function generateExplodedPrompt(state: AppState): string {
 
   // Evocative opening
   if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+    parts.push(`Create the exploded architectural view from this user brief: "${state.prompt.trim()}".`);
   } else {
     parts.push('Create a compelling exploded axonometric view that reveals the building\'s construction logic, showing how individual components and systems come together to form the whole.');
   }
 
   // Fidelity constraints
   parts.push('Treat the input model as the definitive source for all geometry. Each component must maintain its exact shape, scale, and internal alignment. Separate the parts only along the specified explosion axis without introducing any rotation, distortion, or scaling changes. Do not add or remove any components. Keep the camera framing consistent with the source view.');
+  parts.push('Source preservation: the exploded result must still read as the same project, with the same proportions, facade rhythm, openings, roof shape, structural grid, material identity, and existing signage or annotation blocks. Only the disassembly spacing, diagram hierarchy, and requested labels may change.');
+  parts.push('Text discipline: render new component labels, leader notes, dimensions, and assembly numbers only when requested, with crisp readable typography. Preserve any existing source text as source-faithful marks unless a new diagram label intentionally replaces it.');
 
   // Explosion direction
   const directionDesc: Record<string, string> = {
@@ -3391,13 +3475,14 @@ function generateSectionPrompt(state: AppState): string {
 
   // Evocative opening
   if (state.prompt?.trim()) {
-    parts.push(state.prompt.trim());
+    parts.push(`Create the architectural section from this user brief: "${state.prompt.trim()}".`);
   } else {
     parts.push('Create a revealing section cutaway that slices through the building to expose its inner spatial qualities, construction logic, and the relationships between interior and exterior.');
   }
 
   // Fidelity constraints
   parts.push('Treat the input model or drawing as the authoritative source for all geometry. The cut plane must be positioned exactly as specified - no shifting of the section location, depth, or cutting direction. Preserve the exact scale, orientation, and alignment of all elements. Do not relocate any architectural components or alter proportions. Only reveal what the cut and visibility settings allow.');
+  parts.push('POV and text preservation: keep the requested sectional viewpoint, horizon or projection logic, scale relationships, floor datum alignment, structural grid, and source label positions consistent. Preserve readable source text where it remains visible; render new labels only when requested and keep them exact, sharp, and unobtrusive.');
 
   // Cut description
   const cut = workflow.sectionCut;
@@ -3609,12 +3694,75 @@ function generateSectionPrompt(state: AppState): string {
   return parts.filter(Boolean).join(' ');
 }
 
+function generateVideoPrompt(state: AppState): string {
+  const { workflow } = state;
+  const video = workflow.videoState;
+  const parts: string[] = [];
+  const userBrief = state.prompt?.trim() || video.scenario?.trim();
+
+  const modeDesc: Record<string, string> = {
+    'image-animate': 'Animate the attached architectural image into a coherent short video.',
+    'image-morph': 'Create a smooth architectural video transition between the provided start frame and end frame.',
+    'camera-path': 'Generate an architectural visualization video with a deliberate camera path.',
+    'multi-shot': 'Generate a concise multi-shot architectural visualization sequence.',
+  };
+  parts.push(modeDesc[video.inputMode] || 'Generate an architectural visualization video.');
+
+  if (userBrief) {
+    parts.push(`Creative direction: ${userBrief}.`);
+  }
+
+  if (video.inputMode === 'image-animate') {
+    parts.push('Input relationship: the attached image is the locked first frame. Preserve its architecture, materials, lighting mood, signage/text shapes, camera perspective, horizon, crop, and object placement at the start of the video.');
+  } else if (video.inputMode === 'image-morph') {
+    parts.push('Input relationship: the first frame and final frame are authoritative keyframes. Preserve each keyframe composition at its endpoint and interpolate only the physically plausible motion between them.');
+  } else if (video.keyframes.length > 0) {
+    parts.push(`Input relationship: use the ${video.keyframes.length} provided keyframe images as authoritative continuity anchors. Preserve project identity, proportions, materials, signage/text shapes, lighting logic, and viewpoint continuity between shots.`);
+  } else {
+    parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+  }
+
+  const motionStyleDesc: Record<string, string> = {
+    smooth: 'smooth and controlled motion',
+    dynamic: 'dynamic motion with confident pacing',
+    energetic: 'energetic motion with faster transitions',
+    elegant: 'elegant, premium architectural camera movement',
+    cinematic: 'cinematic motion with measured acceleration and atmospheric depth',
+    subtle: 'subtle motion with minimal transformation',
+    dramatic: 'dramatic movement with expressive reveal timing',
+    gentle: 'gentle motion with calm pacing',
+  };
+  parts.push(`Motion style: ${motionStyleDesc[video.motionStyle] || video.motionStyle}. Duration ${video.duration}s, aspect ratio ${video.aspectRatio}, target resolution ${video.resolution}.`);
+
+  const camera = video.camera;
+  if (camera.type === 'static') {
+    parts.push('Camera: static locked-off shot with only natural environmental motion where appropriate.');
+  } else {
+    parts.push(`Camera: ${camera.type} movement at ${camera.speed} speed, direction ${camera.direction} degrees, smoothness ${camera.smoothness}/100. Keep the motion physically plausible for an architectural camera rig; avoid sudden jumps, rolling shutter wobble, or perspective drift.`);
+  }
+
+  parts.push('Continuity contract: preserve building identity, room or site layout, material boundaries, window/door positions, furniture/entourage placement, shadows, reflections, and scale relationships over time. Motion should reveal or animate the scene, not redesign it.');
+  parts.push('Text/signage continuity: existing text, logos, numbers, signs, labels, screens, and graphic blocks must stay stable and source-faithful across frames. Do not translate, rewrite, invent, melt, flicker, or replace text unless explicitly requested.');
+  parts.push('Temporal quality: maintain stable geometry with no warping, pulsing walls, swimming textures, duplicated people, disappearing objects, or changing camera viewpoint beyond the requested camera path.');
+
+  if (video.generateAudio) {
+    parts.push('If audio is generated, keep it subtle, spatially plausible, and secondary to the architectural visualization.');
+  }
+
+  return parts.filter(Boolean).join(' ');
+}
+
 export function generatePrompt(state: AppState): string {
   const { workflow, activeStyleId, lighting, context, materials, camera } = state;
 
   // If user provided a specific text prompt in text-to-image mode or visual edit, prioritize it or combine it.
   if (state.mode === 'generate-text' && workflow.textPrompt) {
-     return workflow.textPrompt;
+     return [
+       `Create an image from this user brief: ${workflow.textPrompt.trim()}.`,
+       TEXT_TO_IMAGE_FRAMEWORK,
+       'If reference images are attached, use them only for the relationship implied by the brief (subject identity, product/object appearance, material, mood, or style) and do not copy unrelated reference composition.',
+       'Final output should be a coherent complete image, not a contact sheet, collage, prompt text, or UI mockup unless explicitly requested.'
+     ].join(' ');
   }
 
   if (state.mode === 'visual-edit') {
@@ -3657,6 +3805,9 @@ export function generatePrompt(state: AppState): string {
   if (state.mode === 'section') {
     return generateSectionPrompt(state);
   }
+  if (state.mode === 'video') {
+    return generateVideoPrompt(state);
+  }
 
   const availableStyles = [...BUILT_IN_STYLES, ...(state.customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
@@ -3666,12 +3817,13 @@ export function generatePrompt(state: AppState): string {
 
   // 1. Base Prompt / Subject - More evocative opening
   if (state.prompt) {
-    promptParts.push(state.prompt);
+    promptParts.push(`Create an architectural visualization from this user brief: ${state.prompt}.`);
   } else if (style && !isNoStyle) {
     promptParts.push(`Create a stunning ${style.name.toLowerCase()} architectural visualization that captures the essence of this design`);
   } else {
     promptParts.push('Create a compelling architectural visualization that brings this design to life');
   }
+  promptParts.push(TEXT_TO_IMAGE_FRAMEWORK);
 
   // 2. Style Specifics - Enhanced descriptions
   if (!isNoStyle && style?.description) {
@@ -3807,6 +3959,7 @@ function generateHeadshotPrompt(state: AppState): string {
     const bg = bgMap[hs.background] || 'neutral studio backdrop';
 
     parts.push('Generate a portrait headshot photograph.');
+    parts.push('Reference relationship: use the provided reference photographs as the authoritative identity references. Preserve the person\'s facial structure, skin tone, hairline, hairstyle, facial hair, distinctive features, age impression, and natural expression identity while changing only wardrobe, lighting, background, crop, and polish requested below.');
     parts.push(`The subject is dressed in ${tone.attire}. Their expression is ${tone.expression}.`);
     parts.push('The subject is photographed straight-on, facing the camera directly.');
     parts.push(`Background: ${bg}.`);
@@ -3818,7 +3971,7 @@ function generateHeadshotPrompt(state: AppState): string {
     if (hs.quality === 'high') {
       parts.push('Ultra-high resolution, fine skin texture, tack-sharp focus, broadcast-quality photography.');
     }
-    parts.push('Use the provided reference photographs to accurately reproduce the person\'s facial features, hair color, hair style, and general appearance.');
+    parts.push('Do not change identity, face shape, eye spacing, nose shape, mouth shape, hair color, or hairstyle. Retouch conservatively: preserve real skin texture and avoid waxy skin, face swapping, plastic smoothing, or invented accessories.');
   } else {
     // website-custom — derive activity from role
     const role = hs.role?.trim() || '';
@@ -3829,6 +3982,7 @@ function generateHeadshotPrompt(state: AppState): string {
     const facingDir = hs.facing === 'left' ? 'facing left, profile oriented to the left side of the frame' : 'facing right, profile oriented to the right side of the frame';
 
     parts.push('Generate a cinematic, editorial team portrait photograph in a wide rectangular landscape format (approximately 16:9 aspect ratio or wider).');
+    parts.push('Reference relationship: use the provided reference photographs as the authoritative identity references. Preserve the person\'s facial structure, skin tone, hairline, hairstyle, facial hair, distinctive features, and age impression while changing only pose, work context, lighting, background, crop, and editorial styling.');
     parts.push(`The subject is dressed in ${tone.attire} with an ${tone.expression} demeanor.`);
     parts.push(`The subject is photographed from the side — a close-up side profile, ${facingDir}, from roughly chest or shoulder height upward.`);
     parts.push(`The person appears completely absorbed and immersed in their work: ${activity}.`);
@@ -3840,7 +3994,7 @@ function generateHeadshotPrompt(state: AppState): string {
     if (hs.quality === 'high') {
       parts.push('Ultra-high resolution, cinematic grain texture, shallow depth of field, magazine-quality photography.');
     }
-    parts.push('Use the provided reference photographs to accurately reproduce the person\'s facial features, hair, and appearance while applying this editorial style.');
+    parts.push('Keep the profile direction, face proportions, hair color, and recognizable identity consistent with the references. Avoid face swapping, invented glasses/jewelry, distorted hands, text overlays, or signage unless explicitly requested.');
   }
 
   return parts.join(' ');

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-react';
 import { Toggle } from '../../ui/Toggle';
-import { SegmentedControl } from '../../ui/SegmentedControl';
 import { isConvertApiConfigured } from '../../../services/convertApiService';
 import { downloadFile } from '../../../lib/download';
 
@@ -16,7 +15,6 @@ export const DocumentTranslatePanel: React.FC = () => {
   const { t } = useTranslation();
   const docTranslate = state.workflow.documentTranslate;
   const { progress } = docTranslate;
-  const translationQuality = docTranslate.translationQuality ?? 'fast';
 
   const [convertApiConfigured, setConvertApiConfigured] = useState(false);
 
@@ -39,20 +37,12 @@ export const DocumentTranslatePanel: React.FC = () => {
     downloadFile(docTranslate.translatedDocumentUrl, filename);
   };
 
+  const isPdf = docTranslate.sourceDocument?.mimeType.includes('pdf') ?? false;
   const isXlsx = docTranslate.sourceDocument?.type === 'xlsx';
   const isPptx = docTranslate.sourceDocument?.type === 'pptx';
   const isStructurePreservingArchive = isXlsx || isPptx;
-  const preserveFormattingChecked = isStructurePreservingArchive ? true : docTranslate.preserveFormatting;
-
-  const qualityOptions = [
-    { value: 'fast', label: t('documentTranslate.qualityOptions.fast.label') },
-    { value: 'pro', label: t('documentTranslate.qualityOptions.pro.label') },
-  ];
-
-  const qualityDescription =
-    translationQuality === 'pro'
-      ? t('documentTranslate.qualityOptions.pro.desc')
-      : t('documentTranslate.qualityOptions.fast.desc');
+  const showDocumentOptions = !isStructurePreservingArchive;
+  const showSettings = showDocumentOptions || (isPdf && convertApiConfigured);
 
   const progressPercent =
     progress.totalSegments > 0
@@ -172,7 +162,7 @@ export const DocumentTranslatePanel: React.FC = () => {
       )}
 
       {/* ConvertAPI Configuration Warning (for PDFs) */}
-      {docTranslate.sourceDocument?.mimeType.includes('pdf') && !convertApiConfigured && (
+      {isPdf && !convertApiConfigured && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-start gap-2">
             <Key size={16} className="text-amber-600 mt-0.5 shrink-0" />
@@ -220,95 +210,59 @@ export const DocumentTranslatePanel: React.FC = () => {
       )}
 
       {/* Settings */}
-      <div>
-        <h3 className="text-xs font-semibold text-foreground-muted uppercase tracking-wider mb-3">
-          {t('documentTranslate.settings')}
-        </h3>
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <label className="text-xs text-foreground-muted block">
-              {t('documentTranslate.qualityLabel')}
-            </label>
-            <SegmentedControl
-              value={translationQuality}
-              options={qualityOptions}
-              onChange={(value) =>
-                dispatch({
-                  type: 'UPDATE_DOCUMENT_TRANSLATE',
-                  payload: { translationQuality: value },
-                })
-              }
-            />
-            <p className="text-[10px] text-foreground-muted leading-relaxed">
-              {qualityDescription}
-            </p>
+      {showSettings && (
+        <div>
+          <h3 className="text-xs font-semibold text-foreground-muted uppercase tracking-wider mb-3">
+            {t('documentTranslate.settings')}
+          </h3>
+          <div className="space-y-3">
+            {showDocumentOptions && (
+              <>
+                <Toggle
+                  label="Translate Headers & Footers"
+                  checked={docTranslate.translateHeaders}
+                  onChange={(checked) =>
+                    dispatch({
+                      type: 'UPDATE_DOCUMENT_TRANSLATE',
+                      payload: { translateHeaders: checked },
+                    })
+                  }
+                />
+                <p className="text-[10px] text-foreground-muted leading-relaxed">
+                  Include document headers and footers in translation.
+                </p>
+
+                <Toggle
+                  label="Translate Footnotes"
+                  checked={docTranslate.translateFootnotes}
+                  onChange={(checked) =>
+                    dispatch({
+                      type: 'UPDATE_DOCUMENT_TRANSLATE',
+                      payload: { translateFootnotes: checked },
+                    })
+                  }
+                />
+                <p className="text-[10px] text-foreground-muted leading-relaxed">
+                  Include footnotes and endnotes in translation.
+                </p>
+              </>
+            )}
+
+            {/* ConvertAPI Status */}
+            {isPdf && convertApiConfigured && (
+              <div className="flex items-center gap-2 pt-2">
+                <CheckCircle2 size={14} className="text-accent" />
+                <span className="text-[10px] text-foreground-muted">
+                  ConvertAPI configured for PDF translation
+                </span>
+              </div>
+            )}
           </div>
-
-          <Toggle
-            label={t('documentTranslate.preserveFormattingLabel')}
-            checked={preserveFormattingChecked}
-            disabled={isStructurePreservingArchive}
-            onChange={(checked) =>
-              dispatch({
-                type: 'UPDATE_DOCUMENT_TRANSLATE',
-                payload: { preserveFormatting: checked },
-              })
-            }
-          />
-          <p className="text-[10px] text-foreground-muted leading-relaxed">
-            {isStructurePreservingArchive
-              ? isPptx
-                ? t('documentTranslate.pptxPreserveFormattingLocked')
-                : t('documentTranslate.xlsxPreserveFormattingLocked')
-              : t('documentTranslate.preserveFormattingDesc')}
-          </p>
-
-          {!isStructurePreservingArchive && (
-            <>
-              <Toggle
-                label="Translate Headers & Footers"
-                checked={docTranslate.translateHeaders}
-                onChange={(checked) =>
-                  dispatch({
-                    type: 'UPDATE_DOCUMENT_TRANSLATE',
-                    payload: { translateHeaders: checked },
-                  })
-                }
-              />
-              <p className="text-[10px] text-foreground-muted leading-relaxed">
-                Include document headers and footers in translation.
-              </p>
-
-              <Toggle
-                label="Translate Footnotes"
-                checked={docTranslate.translateFootnotes}
-                onChange={(checked) =>
-                  dispatch({
-                    type: 'UPDATE_DOCUMENT_TRANSLATE',
-                    payload: { translateFootnotes: checked },
-                  })
-                }
-              />
-              <p className="text-[10px] text-foreground-muted leading-relaxed">
-                Include footnotes and endnotes in translation.
-              </p>
-            </>
-          )}
-
-          {/* ConvertAPI Status */}
-          {convertApiConfigured && (
-            <div className="flex items-center gap-2 pt-2">
-              <CheckCircle2 size={14} className="text-accent" />
-              <span className="text-[10px] text-foreground-muted">
-                ConvertAPI configured for PDF translation
-              </span>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* PDF Info */}
-      {docTranslate.sourceDocument?.mimeType.includes('pdf') && convertApiConfigured && (
+      {isPdf && convertApiConfigured && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <strong>PDF Translation:</strong> Your PDF will be converted to Word via ConvertAPI, translated, and returned as a translated Word document (.docx).
         </div>

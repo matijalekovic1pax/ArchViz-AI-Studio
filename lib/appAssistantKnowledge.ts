@@ -351,17 +351,17 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Open the dedicated Document Translate workflow.',
       'Upload DOCX, XLSX, PPTX, or PDF.',
-      'Choose source language or Auto, target language, Fast or Pro quality, and preservation options.',
+      'Choose source language or Auto and the target language.',
       'Run translation, inspect warnings, then download the rebuilt file.',
     ],
-    controls: ['source language', 'target language', 'Fast/Pro quality', 'preserve formatting', 'headers/footers', 'footnotes'],
+    controls: ['source language', 'target language', 'headers/footers', 'footnotes'],
     specificGuidance: [
       'Document Translate is a dedicated full-page workflow, not a canvas image mode.',
       'It accepts DOCX, XLSX, PPTX, and PDF, with PDFs converted to DOCX output.',
-      'Fast is for speed; Pro is for higher quality on technical or layout-sensitive documents.',
+      'Formatting preservation is always enabled; text is translated while document structure is rebuilt.',
     ],
     watchOut: ['PDF translation converts to Word first and outputs DOCX.', 'Complex PDFs may need cleanup after conversion.'],
-    suggestions: ['Which quality mode should I use?', 'What happens to PPTX animations?', 'Why does PDF output as DOCX?'],
+    suggestions: ['What happens to PPTX animations?', 'Why does PDF output as DOCX?', 'Which file formats are supported?'],
   },
   'pdf-compression': {
     mode: 'pdf-compression',
@@ -694,8 +694,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Source document: ${wf.documentTranslate.sourceDocument?.name || 'none'}`,
         `Source language: ${wf.documentTranslate.sourceLanguage}`,
         `Target language: ${wf.documentTranslate.targetLanguage}`,
-        `Quality: ${wf.documentTranslate.translationQuality}`,
-        `Preserve formatting: ${wf.documentTranslate.preserveFormatting ? 'yes' : 'no'}`,
+        'Preserve formatting: always enabled',
         `Progress phase: ${wf.documentTranslate.progress.phase}`
       );
       break;
