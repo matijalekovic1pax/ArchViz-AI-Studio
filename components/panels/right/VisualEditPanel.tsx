@@ -2537,7 +2537,7 @@ export const VisualEditPanel = () => {
                 <SunPositionWidget
                   azimuth={wf.visualLighting.sun.azimuth}
                   elevation={wf.visualLighting.sun.elevation}
-                  helperText="Directions are relative to the current point of view from which the photo is taken."
+                  helperText="Directions are image-relative. Right means light enters from visible doors, windows, or bright openings on the right side of this view."
                   onChange={(azimuth, elevation) => updateLightingSun({ azimuth, elevation })}
                 />
                 <SliderControl

@@ -120,6 +120,8 @@ export interface Render3DFormat {
 
 export type RenderGenerationMode = 'strict-realism' | 'enhance' | 'concept-push';
 
+export const DEFAULT_RENDER_GENERATION_MODE: RenderGenerationMode = 'strict-realism';
+
 export const RENDER_GENERATION_MODES: readonly RenderGenerationMode[] = [
   'strict-realism',
   'enhance',

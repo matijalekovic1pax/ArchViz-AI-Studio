@@ -1,5 +1,5 @@
 
-import { AppState, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
+import { AppState, DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
@@ -979,7 +979,14 @@ const describeLightSourcePosition = (azimuth: number, elevation: number): string
     'back-right': 'the image-right rear should act as the source, producing backlit edges and shadows toward the front-left',
   };
 
-  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right, not as a geographic compass angle. ${lightingEffect[frameDirection]}`;
+  const sideApertureInstruction = (() => {
+    if (!frameDirection.includes('left') && !frameDirection.includes('right')) return '';
+    const side = frameDirection.includes('left') ? 'image-left' : 'image-right';
+    const opposite = frameDirection.includes('left') ? 'right' : 'left';
+    return `For interior or terminal scenes, physically anchor this light to existing ${side} apertures: doors, glazed entries, windows, curtain wall openings, or bright exterior portals visible in the source image. If the source shows a sign above or near that ${side} aperture, treat the doorway/glazing under that sign as the believable light entry point, but preserve the sign text exactly. The brightest glow, floor highlights, and first contact shadows should originate from that ${side} opening and fall naturally toward image-${opposite}.`;
+  })();
+
+  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right, not as a geographic compass angle. ${lightingEffect[frameDirection]}. ${sideApertureInstruction}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {
@@ -1105,7 +1112,7 @@ const describeAspectRatio = (ratio: string): string => {
 const normalizeRenderGenerationMode = (mode: unknown): RenderGenerationMode => {
   return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
     ? mode as RenderGenerationMode
-    : 'enhance';
+    : DEFAULT_RENDER_GENERATION_MODE;
 };
 
 const describeRenderMode = (mode: string): string => {

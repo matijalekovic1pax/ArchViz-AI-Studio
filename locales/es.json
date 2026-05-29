@@ -1092,7 +1092,7 @@
       "lighting": {
         "title": "Iluminacion",
         "sunPosition": "Fuente de luz",
-        "lightSourceNote": "Las direcciones son relativas al punto de vista actual desde el que se toma la foto.",
+        "lightSourceNote": "Las direcciones son relativas a la imagen. Derecha significa que la luz entra desde puertas, ventanas o aberturas luminosas visibles en el lado derecho de esta vista.",
         "intensity": "Intensidad",
         "colorTemp": "Temperatura de color",
         "shadows": {

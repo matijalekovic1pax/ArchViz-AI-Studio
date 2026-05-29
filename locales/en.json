@@ -1095,7 +1095,7 @@
       "lighting": {
         "title": "Lighting",
         "sunPosition": "Light Source",
-        "lightSourceNote": "Directions are relative to the current point of view from which the photo is taken.",
+        "lightSourceNote": "Directions are image-relative. Right means light enters from visible doors, windows, or bright openings on the right side of this view.",
         "intensity": "Intensity",
         "colorTemp": "Color Temp",
         "shadows": {

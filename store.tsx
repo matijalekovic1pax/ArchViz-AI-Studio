@@ -1,12 +1,12 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const normalizeRenderMode = (mode: unknown): RenderGenerationMode => {
   return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
     ? mode as RenderGenerationMode
-    : 'enhance';
+    : DEFAULT_RENDER_GENERATION_MODE;
 };
 
 const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
@@ -147,7 +147,7 @@ const initialWorkflow: WorkflowSettings = {
   viewType: 'exterior',
   prioritizationEnabled: false,
   detectedElements: [],
-  renderMode: 'enhance',
+  renderMode: DEFAULT_RENDER_GENERATION_MODE,
   canvasSync: false,
   compareMode: false,
   render3d: initialRender3D,
