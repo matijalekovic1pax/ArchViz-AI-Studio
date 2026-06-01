@@ -709,7 +709,7 @@
     },
     "angleChange": {
       "title": "Changement d'Angle",
-      "description": "Generez un nouveau point de vue camera depuis la photo ou le rendu actuel en conservant l'identite de la scene."
+      "description": "Definissez l'angle et l'inclinaison du cadre pour une nouvelle vue de la photo ou du rendu actuel."
     },
     "exploded": {
       "title": "Vue Eclatee",

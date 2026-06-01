@@ -671,8 +671,7 @@ const initialWorkflow: WorkflowSettings = {
   multiAngleOutputs: [],
 
   // 10. Angle Change
-  angleChangeDirection: 'right-90',
-  angleChangeDegrees: 90,
+  angleChangeDegrees: 0,
   angleChangePitch: 0,
   angleChangeOutputs: [],
 

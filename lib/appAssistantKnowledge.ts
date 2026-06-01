@@ -45,7 +45,7 @@ export const APP_ASSISTANT_GUIDED_WORKFLOW_RULES = [
   'Generate from Text: help shape the concept first. Ask for building type, site/context, style, material palette, camera, lighting, and mood when missing. Offer 2-3 prompt directions before generating.',
   '3D Rendering, CAD to Render, Sketch to Render, Section Render, Masterplan, Exploded View, and Image to CAD: infer obvious input/view/type settings from the source, prepare preservation or interpretation controls, and ask about style/reference/output intent before final generation.',
   'Visual Edit: if no clear selection exists, guide the user into Area/select mode before editing. Ask what should change, what must stay locked, and whether a material/object/background reference image should be attached.',
-  'Angle Change: confirm the intended camera direction before generating a new viewpoint.',
+  'Angle Change: confirm the intended full-frame angle and tilt before generating a new viewpoint.',
   'Scene Compose: ask what each reference object is, where it should go, and whether the user wants placement pins/captions before generating.',
   'Multi-Angle: ask which view set is needed, how many views, and how strict consistency should be before generating.',
   'Upscale: ask whether the goal is subtle cleanup, client delivery, print, or video-source quality before applying aggressive sharpening/detail settings.',
@@ -192,21 +192,22 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     mode: 'angle-change',
     title: 'Angle Change',
     summary: 'Generate one new camera viewpoint from an existing photo or render.',
-    bestFor: ['90-degree left/right room views', 'alternate POVs', 'opposite-side shots', 'object rotations', 'client viewpoint studies'],
+    bestFor: ['subtle left/right full-frame camera shifts', 'tilt up or down variations', 'alternate POVs', 'client viewpoint studies'],
     steps: [
       'Upload or select the source image on the canvas.',
-      'Choose Left 90, Right 90, Turn Around, or Custom in the right panel.',
-      'Set the rotation and tilt angles.',
+      'Use the Frame Angle pad, sliders, or presets in the right panel.',
+      'Set Angle Left/Right and Tilt Down/Up.',
       'Generate one clean shifted view, then compare or download it from the left panel outputs.',
     ],
-    controls: ['point of view preset', 'rotation', 'tilt'],
+    controls: ['image preview overlay', 'angle/tilt pad', 'angle slider', 'tilt slider', 'frame angle presets', 'reset angle', 'generate new angle'],
     specificGuidance: [
-      'Angle Change changes the camera position of the same image; it is not a bitmap rotation or crop.',
-      'Left and Right are relative to the current image frame.',
+      'Angle Change changes the full-frame camera angle of the same image; it is not object rotation, bitmap rotation, zoom, or lens control.',
+      'Angle Left and Angle Right are relative to the current image frame.',
+      'Tilt Up shows more ceiling or upper frame; Tilt Down shows more floor or lower frame.',
       'Use Multi-Angle when the user needs a whole view set or grid instead of one new viewpoint.',
     ],
-    watchOut: ['Results are strongest when the source shows enough geometry to infer depth.', 'Large rotations require hidden-side reconstruction.'],
-    suggestions: ['Make this 90 degrees left', 'Turn this view around', 'When should I use Multi-Angle instead?'],
+    watchOut: ['Results are strongest when the source shows enough geometry to infer depth.', 'This version is intentionally limited to angle and tilt only.'],
+    suggestions: ['Make this a 24 degree right angle', 'Tilt this up to show more ceiling', 'When should I use Multi-Angle instead?'],
   },
   exploded: {
     mode: 'exploded',
@@ -632,8 +633,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       break;
     case 'angle-change':
       lines.push(
-        `Direction preset: ${wf.angleChangeDirection}`,
-        `Rotation: ${wf.angleChangeDegrees}`,
+        `Frame angle: ${wf.angleChangeDegrees}`,
         `Tilt: ${wf.angleChangePitch}`,
         `Generated outputs: ${wf.angleChangeOutputs.length}`
       );

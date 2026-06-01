@@ -321,10 +321,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   }),
   workflow('visualExtend.amount', 'Outpaint amount', 'number', ['visual-edit'], { min: 10, max: 200 }),
 
-  workflow('angleChangeDirection', 'Angle Change direction', 'string', ['angle-change'], {
-    values: ['left-90', 'right-90', 'turn-around', 'custom'],
-  }),
-  workflow('angleChangeDegrees', 'Angle Change rotation', 'number', ['angle-change'], { min: -180, max: 180 }),
+  workflow('angleChangeDegrees', 'Frame angle', 'number', ['angle-change'], { min: -45, max: 45 }),
   workflow('angleChangePitch', 'Angle Change tilt', 'number', ['angle-change'], { min: -30, max: 30 }),
 
   workflow('explodedDetection', 'Exploded detection', 'string', ['exploded'], { values: ['auto', 'manual', 'category'] }),

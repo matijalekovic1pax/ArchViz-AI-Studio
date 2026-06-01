@@ -709,7 +709,7 @@
     },
     "angleChange": {
       "title": "Angle Change",
-      "description": "Generate a new camera viewpoint from the current photo or render while preserving scene identity."
+      "description": "Set the full-frame angle and tilt for a new view of the current photo or render."
     },
     "exploded": {
       "title": "Exploded View",

@@ -710,7 +710,7 @@
     },
     "angleChange": {
       "title": "Cambio de Ángulo",
-      "description": "Genera un nuevo punto de vista de cámara desde la foto o render actual conservando la identidad de la escena."
+      "description": "Define el angulo y la inclinacion del encuadre para una nueva vista de la foto o render actual."
     },
     "exploded": {
       "title": "Vista Explosionada",

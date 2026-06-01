@@ -1,18 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Check, Download, RotateCcw, RotateCw, ScanEye } from 'lucide-react';
+import { Camera, Check, Download, RotateCcw, RotateCw } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
 import { downloadImagesSequentially } from '../../../lib/download';
 
 const formatRotation = (rotation: number) => {
-  if (rotation === 0) return 'Same angle';
-  if (Math.abs(rotation) === 180) return 'Turn around';
-  return `${Math.abs(rotation)}° ${rotation < 0 ? 'left' : 'right'}`;
+  if (Math.abs(rotation) < 3) return 'Original angle';
+  return `${Math.abs(rotation)}° ${rotation < 0 ? 'left angle' : 'right angle'}`;
 };
 
 const getRotationIcon = (rotation: number) => {
-  if (Math.abs(rotation) === 180) return ScanEye;
+  if (Math.abs(rotation) < 3) return Camera;
   return rotation < 0 ? RotateCcw : RotateCw;
 };
 

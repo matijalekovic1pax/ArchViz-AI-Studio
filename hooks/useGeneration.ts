@@ -2090,16 +2090,14 @@ export function useGeneration(): UseGenerationReturn {
         }
 
         if (isAngleChangeMode) {
-          const rotation = Math.max(-180, Math.min(180, Math.round(state.workflow.angleChangeDegrees)));
-          const pitch = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
-          const rotationLabel = rotation === 0
-            ? 'Same Angle'
-            : Math.abs(rotation) === 180
-              ? 'Turn Around'
-              : `${Math.abs(rotation)}° ${rotation < 0 ? 'Left' : 'Right'}`;
-          const pitchLabel = pitch === 0
-            ? ''
-            : `, ${Math.abs(pitch)}° ${pitch > 0 ? 'Up' : 'Down'}`;
+          const angleDeg = Math.max(-45, Math.min(45, Math.round(state.workflow.angleChangeDegrees)));
+          const tiltDeg = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
+          const angleLabel = Math.abs(angleDeg) < 3
+            ? 'Original Angle'
+            : `${Math.abs(angleDeg)}° ${angleDeg < 0 ? 'Left' : 'Right'} Angle`;
+          const tiltLabel = Math.abs(tiltDeg) < 3
+            ? 'Level Tilt'
+            : `${Math.abs(tiltDeg)}° Tilt ${tiltDeg > 0 ? 'Up' : 'Down'}`;
 
           dispatch({
             type: 'UPDATE_WORKFLOW',
@@ -2107,10 +2105,10 @@ export function useGeneration(): UseGenerationReturn {
               angleChangeOutputs: [
                 {
                   id: nanoid(),
-                  name: `${rotationLabel}${pitchLabel}`,
+                  name: `${angleLabel} · ${tiltLabel}`,
                   url: generatedImageUrl,
-                  rotation,
-                  pitch,
+                  rotation: angleDeg,
+                  pitch: tiltDeg,
                   createdAt: Date.now()
                 },
                 ...state.workflow.angleChangeOutputs
@@ -2132,8 +2130,8 @@ export function useGeneration(): UseGenerationReturn {
             settings: isAngleChangeMode
               ? {
                   kind: 'angle-change',
-                  rotation: state.workflow.angleChangeDegrees,
-                  pitch: state.workflow.angleChangePitch
+                  angleDeg: state.workflow.angleChangeDegrees,
+                  tiltDeg: state.workflow.angleChangePitch
                 }
               : undefined
           }

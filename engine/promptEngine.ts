@@ -3159,70 +3159,30 @@ function generateMultiAnglePrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
-function describeAngleChangeRotation(degrees: number): string {
-  const normalized = Math.max(-180, Math.min(180, Math.round(degrees)));
-  if (normalized === 0) return 'keep the camera facing direction unchanged';
-  if (Math.abs(normalized) === 180) {
-    return 'orbit the camera 180 degrees to the opposite side of the same scene';
-  }
-  const side = normalized < 0 ? 'image-left' : 'image-right';
-  return `orbit the camera ${Math.abs(normalized)} degrees toward the ${side} side of the current view`;
-}
-
 function generateAngleChangePrompt(state: AppState): string {
-  const { workflow, activeStyleId, customStyles, lighting, context } = state;
-  const parts: string[] = [];
-  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
-  const style = availableStyles.find(s => s.id === activeStyleId);
-  const isNoStyle = style?.id === 'no-style';
-  const rotation = Math.max(-180, Math.min(180, workflow.angleChangeDegrees));
-  const pitch = Math.max(-30, Math.min(30, workflow.angleChangePitch));
+  const angleDeg = Math.max(-45, Math.min(45, Math.round(state.workflow.angleChangeDegrees)));
+  const tiltDeg = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
+  const angle =
+    Math.abs(angleDeg) < 3
+      ? 'keep the original horizontal camera angle'
+      : angleDeg > 0
+        ? `change the full-scene camera angle ${angleDeg} degrees to the right`
+        : `change the full-scene camera angle ${Math.abs(angleDeg)} degrees to the left`;
+  const tilt =
+    Math.abs(tiltDeg) < 3
+      ? 'keep the original vertical tilt'
+      : tiltDeg > 0
+        ? `tilt the camera ${tiltDeg} degrees upward`
+        : `tilt the camera ${Math.abs(tiltDeg)} degrees downward`;
 
-  parts.push('Single camera angle change from a source image.');
-  parts.push('Input relationship: the attached image is the locked identity reference for the same room, building, object, materials, lighting mood, scale, and design intent. Generate one new image from a different camera position, not a contact sheet, collage, grid, or annotated diagram.');
-  parts.push(`Camera move: ${describeAngleChangeRotation(rotation)}. Left and right are relative to the current image frame, not geographic compass directions.`);
-  parts.push(`Camera tilt: ${pitch === 0 ? 'keep the same vertical tilt and horizon height' : `tilt the camera ${Math.abs(pitch)} degrees ${pitch > 0 ? 'up' : 'down'} while preserving believable verticals`}.`);
-  parts.push('Camera discipline: keep the same horizon logic, apparent focal length, aspect ratio, shot scale, subject prominence, and visual density unless the new angle naturally requires a small adjustment.');
-  parts.push('Lighting continuity: preserve the same time of day, exposure mood, color temperature, global light direction, shadow softness, reflections, and atmosphere as the source image. Shadows should shift consistently with the new camera position, not reset to a new lighting setup.');
-  parts.push('Hidden geometry: infer plausible continuation of unseen areas from visible geometry, materials, symmetry, reflections, openings, and context while preserving the source identity.');
-  parts.push('Spatial consistency: preserve structural layout, wall/floor/ceiling relationships, openings, columns, stairs, furniture scale, object count where visible, material palette, facade rhythm, and design language. Newly visible areas must feel like the unseen continuation of the same space, not a redesigned scene.');
-  parts.push(SOURCE_TEXT_SIGNAGE_LOCK);
-  parts.push('Do not mirror the image, simply rotate the bitmap, stretch pixels, add labels, add UI marks, or render before/after text. The final output must be a clean photorealistic camera view.');
-
-  if (!isNoStyle && style?.description) {
-    parts.push(`Style continuity: ${style.description}`);
-  }
-
-  const timeDesc: Record<string, string> = {
-    dawn: 'soft early morning light',
-    morning: 'fresh morning sunlight',
-    noon: 'midday sun',
-    afternoon: 'warm afternoon light',
-    'golden-hour': 'rich golden hour illumination',
-    sunset: 'dramatic sunset colors',
-    dusk: 'fading twilight',
-    night: 'nighttime illumination',
-  };
-  const weatherDesc: Record<string, string> = {
-    clear: 'under clear skies',
-    'partly-cloudy': 'with scattered clouds',
-    overcast: 'under soft overcast conditions',
-    stormy: 'with dramatic storm clouds',
-  };
-  parts.push(`Global lighting context: ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}.`);
-
-  if (context.people) {
-    parts.push('If people are visible or requested, keep them realistically scaled and viewpoint-consistent; do not add crowds unless the source or user notes imply them.');
-  }
-  if (context.vegetation) {
-    parts.push(`Vegetation continuity: keep ${context.season} planting consistent with the source image and the new viewpoint.`);
-  }
-
-  if (state.prompt?.trim()) {
-    parts.push(`Additional user request: ${state.prompt.trim()}. Apply only where it does not conflict with the camera-change and source-identity constraints.`);
-  }
-
-  return parts.filter(p => p.trim()).join(' ');
+  return [
+    'Generate a new view of the same full scene from the source image.',
+    `${angle}.`,
+    `${tilt}.`,
+    'Preserve the same architecture, objects, materials, lighting, proportions, and overall framing.',
+    'Do not rotate individual objects.',
+    'Do not change lens, zoom, field of view, roll, or camera target.',
+  ].join(' ');
 }
 
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
