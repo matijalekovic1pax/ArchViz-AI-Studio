@@ -673,12 +673,6 @@ const initialWorkflow: WorkflowSettings = {
   // 10. Angle Change
   angleChangeDirection: 'right-90',
   angleChangeDegrees: 90,
-  angleChangePitch: 0,
-  angleChangeSceneType: 'auto',
-  angleChangeLens: 'match',
-  angleChangePreserveLighting: true,
-  angleChangePreserveFraming: true,
-  angleChangeInferHidden: 'balanced',
   angleChangeOutputs: [],
 
   // 11. Image to CAD

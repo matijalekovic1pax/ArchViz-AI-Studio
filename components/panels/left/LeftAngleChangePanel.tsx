@@ -156,7 +156,6 @@ export const LeftAngleChangePanel = () => {
                   </div>
                   <div className="mt-0.5 text-[10px] text-foreground-muted">
                     {formatRotation(output.rotation)}
-                    {output.pitch !== 0 ? `, ${Math.abs(output.pitch)}° ${output.pitch > 0 ? 'up' : 'down'}` : ''}
                   </div>
                 </div>
                 {selectMode && (

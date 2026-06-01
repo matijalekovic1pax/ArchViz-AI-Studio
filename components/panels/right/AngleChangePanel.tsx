@@ -1,14 +1,11 @@
 import React, { useCallback } from 'react';
-import { ArrowDown, ArrowUp, Camera, RotateCcw, RotateCw, ScanEye } from 'lucide-react';
+import { Camera, RotateCcw, RotateCw, ScanEye } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
-import { SegmentedControl } from '../../ui/SegmentedControl';
-import { Toggle } from '../../ui/Toggle';
 import { cn } from '../../../lib/utils';
 import type { WorkflowSettings } from '../../../types';
 
 type AngleDirection = WorkflowSettings['angleChangeDirection'];
-type SceneType = WorkflowSettings['angleChangeSceneType'];
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -49,20 +46,13 @@ const DIRECTION_PRESETS: Array<{
   },
 ];
 
-const SCENE_TYPES: Array<{ id: SceneType; label: string; description: string }> = [
-  { id: 'auto', label: 'Auto', description: 'Infer source type' },
-  { id: 'interior', label: 'Room', description: 'Interior POV' },
-  { id: 'exterior', label: 'Building', description: 'Exterior camera' },
-  { id: 'object', label: 'Object', description: 'Object orbit' },
-];
-
 const formatRotation = (degrees: number) => {
   if (degrees === 0) return '0°';
   if (Math.abs(degrees) === 180) return '180°';
   return `${Math.abs(degrees)}° ${degrees < 0 ? 'left' : 'right'}`;
 };
 
-const AngleOrbitPreview: React.FC<{ rotation: number; pitch: number }> = ({ rotation, pitch }) => {
+const AngleOrbitPreview: React.FC<{ rotation: number }> = ({ rotation }) => {
   const radius = 48;
   const center = 64;
   const startAngle = -90;
@@ -77,9 +67,6 @@ const AngleOrbitPreview: React.FC<{ rotation: number; pitch: number }> = ({ rota
     x: center + radius * Math.cos(targetRad),
     y: center + radius * Math.sin(targetRad),
   };
-  const pitchIcon = pitch > 0 ? ArrowUp : pitch < 0 ? ArrowDown : Camera;
-  const PitchIcon = pitchIcon;
-
   return (
     <div className="rounded-lg border border-border bg-surface-elevated p-3">
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -102,14 +89,8 @@ const AngleOrbitPreview: React.FC<{ rotation: number; pitch: number }> = ({ rota
             <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Rotation</div>
             <div className="mt-0.5 text-sm font-semibold text-foreground">{formatRotation(rotation)}</div>
           </div>
-          <div className="flex items-center gap-2 rounded-md bg-surface-sunken px-2.5 py-2">
-            <PitchIcon size={14} className="shrink-0 text-foreground-secondary" />
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Tilt</div>
-              <div className="text-xs text-foreground-secondary">
-                {pitch === 0 ? 'Same horizon' : `${Math.abs(pitch)}° ${pitch > 0 ? 'up' : 'down'}`}
-              </div>
-            </div>
+          <div className="rounded-md bg-surface-sunken px-2.5 py-2 text-xs leading-relaxed text-foreground-secondary">
+            The source image stays as the identity reference while the camera moves to the selected angle.
           </div>
         </div>
       </div>
@@ -179,11 +160,11 @@ export const AngleChangePanel = () => {
             );
           })}
         </div>
-        <AngleOrbitPreview rotation={wf.angleChangeDegrees} pitch={wf.angleChangePitch} />
+        <AngleOrbitPreview rotation={wf.angleChangeDegrees} />
       </div>
 
       <div className="space-y-3">
-        <label className="text-xs text-foreground-muted block font-bold uppercase tracking-wider">Camera Controls</label>
+        <label className="text-xs text-foreground-muted block font-bold uppercase tracking-wider">Angle</label>
         <Slider
           label="Rotation"
           min={-180}
@@ -192,78 +173,6 @@ export const AngleChangePanel = () => {
           value={wf.angleChangeDegrees}
           onChange={handleRotationChange}
         />
-        <Slider
-          label="Tilt"
-          min={-20}
-          max={20}
-          step={1}
-          value={wf.angleChangePitch}
-          onChange={(value) => updateWf({ angleChangePitch: clamp(Math.round(value), -20, 20) })}
-        />
-        <div>
-          <label className="mb-2 block text-xs text-foreground-muted">Lens</label>
-          <SegmentedControl
-            value={wf.angleChangeLens}
-            options={[
-              { label: 'Match', value: 'match' },
-              { label: 'Wide', value: 'wide' },
-              { label: 'Normal', value: 'normal' },
-              { label: 'Tight', value: 'telephoto' },
-            ]}
-            onChange={(value) => updateWf({ angleChangeLens: value })}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <label className="text-xs text-foreground-muted block font-bold uppercase tracking-wider">Source Type</label>
-        <div className="grid grid-cols-2 gap-2">
-          {SCENE_TYPES.map((item) => {
-            const selected = wf.angleChangeSceneType === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => updateWf({ angleChangeSceneType: item.id })}
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-left transition-colors",
-                  selected
-                    ? "border-foreground bg-surface-sunken text-foreground"
-                    : "border-border bg-surface-elevated text-foreground-secondary hover:border-foreground/40"
-                )}
-              >
-                <div className="text-xs font-semibold">{item.label}</div>
-                <div className="mt-1 text-[10px] leading-snug text-foreground-muted">{item.description}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <label className="text-xs text-foreground-muted block font-bold uppercase tracking-wider">Fidelity</label>
-        <Toggle
-          label="Preserve lighting"
-          checked={wf.angleChangePreserveLighting}
-          onChange={(value) => updateWf({ angleChangePreserveLighting: value })}
-        />
-        <Toggle
-          label="Preserve framing"
-          checked={wf.angleChangePreserveFraming}
-          onChange={(value) => updateWf({ angleChangePreserveFraming: value })}
-        />
-        <div>
-          <label className="mb-2 block text-xs text-foreground-muted">Hidden side inference</label>
-          <SegmentedControl
-            value={wf.angleChangeInferHidden}
-            options={[
-              { label: 'Safe', value: 'conservative' },
-              { label: 'Balanced', value: 'balanced' },
-              { label: 'Creative', value: 'creative' },
-            ]}
-            onChange={(value) => updateWf({ angleChangeInferHidden: value })}
-          />
-        </div>
         <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[10px] leading-relaxed text-foreground-muted">
           Uses the current canvas image as the source and generates one clean camera-shifted view.
         </p>

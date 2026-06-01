@@ -701,18 +701,11 @@ export interface WorkflowSettings {
   // 10. Angle Change
   angleChangeDirection: 'left-90' | 'right-90' | 'turn-around' | 'custom';
   angleChangeDegrees: number;
-  angleChangePitch: number;
-  angleChangeSceneType: 'auto' | 'interior' | 'exterior' | 'object';
-  angleChangeLens: 'match' | 'wide' | 'normal' | 'telephoto';
-  angleChangePreserveLighting: boolean;
-  angleChangePreserveFraming: boolean;
-  angleChangeInferHidden: 'conservative' | 'balanced' | 'creative';
   angleChangeOutputs: {
     id: string;
     name: string;
     url: string;
     rotation: number;
-    pitch: number;
     createdAt: number;
   }[];
 

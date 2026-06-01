@@ -3176,45 +3176,13 @@ function generateAngleChangePrompt(state: AppState): string {
   const style = availableStyles.find(s => s.id === activeStyleId);
   const isNoStyle = style?.id === 'no-style';
   const rotation = Math.max(-180, Math.min(180, workflow.angleChangeDegrees));
-  const pitch = Math.max(-20, Math.min(20, workflow.angleChangePitch));
-  const sceneTypeLabel: Record<typeof workflow.angleChangeSceneType, string> = {
-    auto: 'infer whether the source is an interior, exterior, object, or rendering and choose the most plausible camera model',
-    interior: 'treat the source as an interior room or architectural interior',
-    exterior: 'treat the source as an exterior architectural view',
-    object: 'treat the source as a product, furniture item, model, or isolated object',
-  };
-  const lensLabel: Record<typeof workflow.angleChangeLens, string> = {
-    match: 'match the apparent focal length and lens character of the source image',
-    wide: 'use a controlled architectural wide lens without fisheye distortion',
-    normal: 'use a natural normal lens with moderate perspective',
-    telephoto: 'use a tighter lens with compressed depth and minimal distortion',
-  };
-  const inferenceLabel: Record<typeof workflow.angleChangeInferHidden, string> = {
-    conservative: 'use conservative hidden-side reconstruction; infer only what is strongly implied by visible geometry, materials, symmetry, reflections, openings, and context',
-    balanced: 'use balanced hidden-side reconstruction; infer plausible continuation of the design while preserving the source identity',
-    creative: 'use creative but coherent hidden-side reconstruction; complete unseen areas with compatible architectural logic, materials, and lighting',
-  };
 
   parts.push('Single camera angle change from a source image.');
   parts.push('Input relationship: the attached image is the locked identity reference for the same room, building, object, materials, lighting mood, scale, and design intent. Generate one new image from a different camera position, not a contact sheet, collage, grid, or annotated diagram.');
   parts.push(`Camera move: ${describeAngleChangeRotation(rotation)}. Left and right are relative to the current image frame, not geographic compass directions.`);
-  parts.push(`Camera pitch: ${pitch === 0 ? 'keep the same vertical tilt and horizon height' : `tilt the camera ${Math.abs(pitch)} degrees ${pitch > 0 ? 'up' : 'down'} while preserving believable verticals`}.`);
-  parts.push(`Scene interpretation: ${sceneTypeLabel[workflow.angleChangeSceneType]}.`);
-  parts.push(`Lens: ${lensLabel[workflow.angleChangeLens]}.`);
-
-  if (workflow.angleChangePreserveFraming) {
-    parts.push('Framing discipline: preserve the source aspect ratio, shot scale, subject prominence, camera height, and visual density. Reframe only as much as required by the new camera position.');
-  } else {
-    parts.push('Framing may adapt naturally to the new viewpoint while keeping the subject recognizable and centered enough for review.');
-  }
-
-  if (workflow.angleChangePreserveLighting) {
-    parts.push('Lighting lock: preserve the same time of day, exposure mood, color temperature, global light direction, shadow softness, reflections, and atmosphere as the source image. Shadows should shift consistently with the new camera position, not reset to a new lighting setup.');
-  } else {
-    parts.push('Lighting may be rebalanced gently for the new viewpoint, but keep it plausible and compatible with the source image.');
-  }
-
-  parts.push(`Hidden geometry policy: ${inferenceLabel[workflow.angleChangeInferHidden]}.`);
+  parts.push('Camera discipline: keep the same horizon logic, apparent focal length, aspect ratio, shot scale, subject prominence, and visual density unless the new angle naturally requires a small adjustment.');
+  parts.push('Lighting continuity: preserve the same time of day, exposure mood, color temperature, global light direction, shadow softness, reflections, and atmosphere as the source image. Shadows should shift consistently with the new camera position, not reset to a new lighting setup.');
+  parts.push('Hidden geometry: infer plausible continuation of unseen areas from visible geometry, materials, symmetry, reflections, openings, and context while preserving the source identity.');
   parts.push('Spatial consistency: preserve structural layout, wall/floor/ceiling relationships, openings, columns, stairs, furniture scale, object count where visible, material palette, facade rhythm, and design language. Newly visible areas must feel like the unseen continuation of the same space, not a redesigned scene.');
   parts.push(SOURCE_TEXT_SIGNAGE_LOCK);
   parts.push('Do not mirror the image, simply rotate the bitmap, stretch pixels, add labels, add UI marks, or render before/after text. The final output must be a clean photorealistic camera view.');

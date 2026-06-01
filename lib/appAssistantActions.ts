@@ -325,18 +325,6 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
     values: ['left-90', 'right-90', 'turn-around', 'custom'],
   }),
   workflow('angleChangeDegrees', 'Angle Change rotation', 'number', ['angle-change'], { min: -180, max: 180 }),
-  workflow('angleChangePitch', 'Angle Change tilt', 'number', ['angle-change'], { min: -20, max: 20 }),
-  workflow('angleChangeSceneType', 'Angle Change source type', 'string', ['angle-change'], {
-    values: ['auto', 'interior', 'exterior', 'object'],
-  }),
-  workflow('angleChangeLens', 'Angle Change lens', 'string', ['angle-change'], {
-    values: ['match', 'wide', 'normal', 'telephoto'],
-  }),
-  workflow('angleChangePreserveLighting', 'Preserve angle-change lighting', 'boolean', ['angle-change']),
-  workflow('angleChangePreserveFraming', 'Preserve angle-change framing', 'boolean', ['angle-change']),
-  workflow('angleChangeInferHidden', 'Hidden side inference', 'string', ['angle-change'], {
-    values: ['conservative', 'balanced', 'creative'],
-  }),
 
   workflow('explodedDetection', 'Exploded detection', 'string', ['exploded'], { values: ['auto', 'manual', 'category'] }),
   workflow('explodedDirection', 'Explosion direction', 'string', ['exploded'], { values: ['vertical', 'radial', 'custom'] }),

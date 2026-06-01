@@ -45,7 +45,7 @@ export const APP_ASSISTANT_GUIDED_WORKFLOW_RULES = [
   'Generate from Text: help shape the concept first. Ask for building type, site/context, style, material palette, camera, lighting, and mood when missing. Offer 2-3 prompt directions before generating.',
   '3D Rendering, CAD to Render, Sketch to Render, Section Render, Masterplan, Exploded View, and Image to CAD: infer obvious input/view/type settings from the source, prepare preservation or interpretation controls, and ask about style/reference/output intent before final generation.',
   'Visual Edit: if no clear selection exists, guide the user into Area/select mode before editing. Ask what should change, what must stay locked, and whether a material/object/background reference image should be attached.',
-  'Angle Change: confirm the intended camera direction, scene type, lens, and hidden-side inference before generating a new viewpoint.',
+  'Angle Change: confirm the intended camera direction before generating a new viewpoint.',
   'Scene Compose: ask what each reference object is, where it should go, and whether the user wants placement pins/captions before generating.',
   'Multi-Angle: ask which view set is needed, how many views, and how strict consistency should be before generating.',
   'Upscale: ask whether the goal is subtle cleanup, client delivery, print, or video-source quality before applying aggressive sharpening/detail settings.',
@@ -196,19 +196,17 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Upload or select the source image on the canvas.',
       'Choose Left 90, Right 90, Turn Around, or Custom in the right panel.',
-      'Set rotation, tilt, lens, source type, lighting lock, framing lock, and hidden-side inference.',
+      'Set the rotation angle.',
       'Generate one clean shifted view, then compare or download it from the left panel outputs.',
     ],
-    controls: ['point of view preset', 'rotation', 'tilt', 'lens', 'source type', 'preserve lighting', 'preserve framing', 'hidden side inference'],
+    controls: ['point of view preset', 'rotation'],
     specificGuidance: [
       'Angle Change changes the camera position of the same image; it is not a bitmap rotation or crop.',
       'Left and Right are relative to the current image frame.',
-      'Preserve lighting and Preserve framing keep the result closer to the source shot.',
-      'Hidden side inference controls how cautiously the app completes areas that were not visible in the source.',
       'Use Multi-Angle when the user needs a whole view set or grid instead of one new viewpoint.',
     ],
     watchOut: ['Results are strongest when the source shows enough geometry to infer depth.', 'Large rotations require hidden-side reconstruction.'],
-    suggestions: ['Make this 90 degrees left', 'What inference setting should I use?', 'When should I use Multi-Angle instead?'],
+    suggestions: ['Make this 90 degrees left', 'Turn this view around', 'When should I use Multi-Angle instead?'],
   },
   exploded: {
     mode: 'exploded',
@@ -636,12 +634,6 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       lines.push(
         `Direction preset: ${wf.angleChangeDirection}`,
         `Rotation: ${wf.angleChangeDegrees}`,
-        `Tilt: ${wf.angleChangePitch}`,
-        `Scene type: ${wf.angleChangeSceneType}`,
-        `Lens: ${wf.angleChangeLens}`,
-        `Preserve lighting: ${wf.angleChangePreserveLighting ? 'yes' : 'no'}`,
-        `Preserve framing: ${wf.angleChangePreserveFraming ? 'yes' : 'no'}`,
-        `Hidden side inference: ${wf.angleChangeInferHidden}`,
         `Generated outputs: ${wf.angleChangeOutputs.length}`
       );
       break;
