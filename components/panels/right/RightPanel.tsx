@@ -4,13 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Video, CheckCircle2, Settings,
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle, Combine
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle, Combine, Orbit
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
 import { CadToRenderPanel } from './CadToRenderPanel';
 import { MasterplanPanel } from './MasterplanPanel';
 import { VisualEditPanel } from './VisualEditPanel';
+import { AngleChangePanel } from './AngleChangePanel';
 import { ExplodedPanel } from './ExplodedPanel';
 import { SectionPanel } from './SectionPanel';
 import { MultiAnglePanel } from './MultiAnglePanel';
@@ -94,6 +95,12 @@ export const RightPanel: React.FC = () => {
         PanelIcon = Wrench; 
         panelDescription = t('rightPanel.visualEdit.description');
         panelContent = <VisualEditPanel />; 
+        break;
+      case 'angle-change':
+        panelTitle = t('rightPanel.angleChange.title');
+        PanelIcon = Orbit;
+        panelDescription = t('rightPanel.angleChange.description');
+        panelContent = <AngleChangePanel />;
         break;
       case 'exploded': 
         panelTitle = t('rightPanel.exploded.title'); 

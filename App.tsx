@@ -50,8 +50,8 @@ const ShortcutsListener: React.FC = () => {
       // Mode Switching (Cmd + 1-9)
       if (e.metaKey || e.ctrlKey) {
         const modes: GenerationMode[] = [
-          'render-3d', 'render-cad', 'masterplan', 'visual-edit', 
-          'exploded', 'section', 'render-sketch', 'upscale', 'img-to-cad', 'video'
+          'render-3d', 'render-cad', 'masterplan', 'visual-edit',
+          'angle-change', 'exploded', 'section', 'render-sketch', 'upscale', 'img-to-cad', 'video'
         ];
         const num = parseInt(e.key);
         if (num >= 1 && num <= 9 && modes[num - 1]) {

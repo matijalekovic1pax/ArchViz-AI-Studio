@@ -49,6 +49,7 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
   'masterplan',
   'exploded',
   'section',
+  'angle-change',
   'multi-angle',
   'img-to-cad'
 ];
@@ -121,7 +122,7 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean): 
   return drawMaskImageData(mask, width, height, { invert })?.toDataURL('image/png') || maskDataUrl;
 };
 
-const STRICT_VISUAL_MASK_TOOLS = new Set(['material', 'adjust', 'background']);
+const STRICT_VISUAL_MASK_TOOLS = new Set(['select', 'material', 'adjust', 'background']);
 
 const getVisualMaskMode = (
   activeVisualTool: string,
@@ -668,6 +669,7 @@ export function useGeneration(): UseGenerationReturn {
       'scene-compose': 'Create a photorealistic architectural scene composition: ',
       'masterplan': 'Generate a detailed masterplan visualization: ',
       'visual-edit': 'Edit this image according to the following instructions: ',
+      'angle-change': 'Change the camera viewpoint of this image: ',
       'exploded': 'Create an exploded architectural diagram: ',
       'section': 'Generate an architectural section drawing: ',
       'multi-angle': 'Generate a photorealistic architectural view: ',
@@ -900,6 +902,7 @@ export function useGeneration(): UseGenerationReturn {
       }
 
       const isMultiAngleMode = state.mode === 'multi-angle';
+      const isAngleChangeMode = state.mode === 'angle-change';
       const isUpscaleMode = state.mode === 'upscale';
       const isVisualEditMode = state.mode === 'visual-edit';
       const isVideoMode = state.mode === 'video';
@@ -2086,6 +2089,36 @@ export function useGeneration(): UseGenerationReturn {
           });
         }
 
+        if (isAngleChangeMode) {
+          const rotation = Math.max(-180, Math.min(180, Math.round(state.workflow.angleChangeDegrees)));
+          const pitch = Math.max(-20, Math.min(20, Math.round(state.workflow.angleChangePitch)));
+          const rotationLabel = rotation === 0
+            ? 'Same Angle'
+            : Math.abs(rotation) === 180
+              ? 'Turn Around'
+              : `${Math.abs(rotation)}° ${rotation < 0 ? 'Left' : 'Right'}`;
+          const pitchLabel = pitch === 0
+            ? ''
+            : `, ${Math.abs(pitch)}° ${pitch > 0 ? 'Up' : 'Down'}`;
+
+          dispatch({
+            type: 'UPDATE_WORKFLOW',
+            payload: {
+              angleChangeOutputs: [
+                {
+                  id: nanoid(),
+                  name: `${rotationLabel}${pitchLabel}`,
+                  url: generatedImageUrl,
+                  rotation,
+                  pitch,
+                  createdAt: Date.now()
+                },
+                ...state.workflow.angleChangeOutputs
+              ].slice(0, 24)
+            }
+          });
+        }
+
         // Add to history
         dispatch({
           type: 'ADD_HISTORY',
@@ -2095,7 +2128,16 @@ export function useGeneration(): UseGenerationReturn {
             thumbnail: generatedImageUrl,
             prompt: basePrompt,
             attachments: attachmentUrls,
-            mode: state.mode
+            mode: state.mode,
+            settings: isAngleChangeMode
+              ? {
+                  kind: 'angle-change',
+                  rotation: state.workflow.angleChangeDegrees,
+                  pitch: state.workflow.angleChangePitch,
+                  lens: state.workflow.angleChangeLens,
+                  inference: state.workflow.angleChangeInferHidden
+                }
+              : undefined
           }
         });
 

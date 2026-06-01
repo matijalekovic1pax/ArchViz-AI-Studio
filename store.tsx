@@ -670,7 +670,18 @@ const initialWorkflow: WorkflowSettings = {
   multiAngleAngles: [],
   multiAngleOutputs: [],
 
-  // 10. Image to CAD
+  // 10. Angle Change
+  angleChangeDirection: 'right-90',
+  angleChangeDegrees: 90,
+  angleChangePitch: 0,
+  angleChangeSceneType: 'auto',
+  angleChangeLens: 'match',
+  angleChangePreserveLighting: true,
+  angleChangePreserveFraming: true,
+  angleChangeInferHidden: 'balanced',
+  angleChangeOutputs: [],
+
+  // 11. Image to CAD
   imgToCadType: 'render',
   imgToCadOutput: 'detail',
   imgToCadLine: { sensitivity: 50, simplify: 20, connect: true },
@@ -678,16 +689,16 @@ const initialWorkflow: WorkflowSettings = {
   imgToCadFormat: 'dxf',
   imgToCadPreprocess: { guidance: '', focus: [] },
 
-  // 11. Video Studio
+  // 12. Video Studio
   videoState: initialVideoState,
 
-  // 12. Document Translation
+  // 13. Document Translation
   documentTranslate: initialDocumentTranslate,
 
-  // 13. PDF Compression
+  // 14. PDF Compression
   pdfCompression: initialPdfCompression,
 
-  // 14. Headshot Generator
+  // 15. Headshot Generator
   headshot: initialHeadshot,
 };
 

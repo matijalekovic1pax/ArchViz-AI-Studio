@@ -124,6 +124,7 @@ const GENERATION_MODES: readonly GenerationMode[] = [
   'render-cad',
   'masterplan',
   'visual-edit',
+  'angle-change',
   'exploded',
   'section',
   'render-sketch',
@@ -319,6 +320,23 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
     values: ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'none'],
   }),
   workflow('visualExtend.amount', 'Outpaint amount', 'number', ['visual-edit'], { min: 10, max: 200 }),
+
+  workflow('angleChangeDirection', 'Angle Change direction', 'string', ['angle-change'], {
+    values: ['left-90', 'right-90', 'turn-around', 'custom'],
+  }),
+  workflow('angleChangeDegrees', 'Angle Change rotation', 'number', ['angle-change'], { min: -180, max: 180 }),
+  workflow('angleChangePitch', 'Angle Change tilt', 'number', ['angle-change'], { min: -20, max: 20 }),
+  workflow('angleChangeSceneType', 'Angle Change source type', 'string', ['angle-change'], {
+    values: ['auto', 'interior', 'exterior', 'object'],
+  }),
+  workflow('angleChangeLens', 'Angle Change lens', 'string', ['angle-change'], {
+    values: ['match', 'wide', 'normal', 'telephoto'],
+  }),
+  workflow('angleChangePreserveLighting', 'Preserve angle-change lighting', 'boolean', ['angle-change']),
+  workflow('angleChangePreserveFraming', 'Preserve angle-change framing', 'boolean', ['angle-change']),
+  workflow('angleChangeInferHidden', 'Hidden side inference', 'string', ['angle-change'], {
+    values: ['conservative', 'balanced', 'creative'],
+  }),
 
   workflow('explodedDetection', 'Exploded detection', 'string', ['exploded'], { values: ['auto', 'manual', 'category'] }),
   workflow('explodedDirection', 'Explosion direction', 'string', ['exploded'], { values: ['vertical', 'radial', 'custom'] }),

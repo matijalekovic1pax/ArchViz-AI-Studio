@@ -1586,7 +1586,7 @@ const StandardCanvas: React.FC = () => {
         const dataUrl = ev.target?.result as string;
         dispatch({ type: 'SET_IMAGE', payload: dataUrl });
         // For source-locked modes, only set sourceImage if not already set
-        const sourceLockedModes = ['render-3d', 'scene-compose', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'multi-angle', 'img-to-cad'];
+        const sourceLockedModes = ['render-3d', 'scene-compose', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'angle-change', 'multi-angle', 'img-to-cad'];
         const isSourceLocked = sourceLockedModes.includes(state.mode);
         if (!isSourceLocked || !state.sourceImage) {
           dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
@@ -1608,7 +1608,7 @@ const StandardCanvas: React.FC = () => {
         const dataUrl = ev.target?.result as string;
         dispatch({ type: 'SET_IMAGE', payload: dataUrl });
         // For source-locked modes, only set sourceImage if not already set
-        const sourceLockedModes = ['render-3d', 'scene-compose', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'multi-angle', 'img-to-cad'];
+        const sourceLockedModes = ['render-3d', 'scene-compose', 'render-cad', 'render-sketch', 'masterplan', 'exploded', 'section', 'angle-change', 'multi-angle', 'img-to-cad'];
         const isSourceLocked = sourceLockedModes.includes(state.mode);
         if (!isSourceLocked || !state.sourceImage) {
           dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });

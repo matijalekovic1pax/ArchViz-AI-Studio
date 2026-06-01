@@ -45,6 +45,7 @@ const WORKFLOW_LABEL_KEY_BY_MODE: Record<GenerationMode, string> = {
   'render-cad': 'workflows.renderCad',
   'masterplan': 'workflows.masterplan',
   'visual-edit': 'workflows.visualEdit',
+  'angle-change': 'workflows.angleChange',
   'exploded': 'workflows.exploded',
   'section': 'workflows.section',
   'render-sketch': 'workflows.renderSketch',

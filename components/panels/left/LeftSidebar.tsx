@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
-  Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera,
+  Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera, Orbit,
   ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -17,6 +17,7 @@ import { LeftVisualEditPanel } from './LeftVisualEditPanel';
 import { LeftExplodedPanel } from './LeftExplodedPanel';
 import { LeftSectionPanel } from './LeftSectionPanel';
 import { LeftSketchPanel } from './LeftSketchPanel';
+import { LeftAngleChangePanel } from './LeftAngleChangePanel';
 import { LeftMultiAnglePanel } from './LeftMultiAnglePanel';
 import { LeftUpscalePanel } from './LeftUpscalePanel';
 import { LeftImageToCADPanel } from './LeftImageToCADPanel';
@@ -34,6 +35,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
+  { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
@@ -67,6 +69,7 @@ export const LeftSidebar: React.FC = () => {
       case 'pdf-compression': return <LeftPdfCompressionPanel />;
       case 'masterplan': return <LeftMasterplanPanel />;
       case 'visual-edit': return <LeftVisualEditPanel />;
+      case 'angle-change': return <LeftAngleChangePanel />;
       case 'exploded': return <LeftExplodedPanel />;
       case 'section': return <LeftSectionPanel />;
       case 'render-sketch': return <LeftSketchPanel />;

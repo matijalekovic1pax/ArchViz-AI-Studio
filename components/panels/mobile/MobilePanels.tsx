@@ -34,7 +34,8 @@ import {
   ZoomIn,
   Minimize2,
   Columns,
-  Download
+  Download,
+  Orbit
 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
@@ -50,6 +51,7 @@ import { LeftVisualEditPanel } from '../left/LeftVisualEditPanel';
 import { LeftExplodedPanel } from '../left/LeftExplodedPanel';
 import { LeftSectionPanel } from '../left/LeftSectionPanel';
 import { LeftSketchPanel } from '../left/LeftSketchPanel';
+import { LeftAngleChangePanel } from '../left/LeftAngleChangePanel';
 import { LeftMultiAnglePanel } from '../left/LeftMultiAnglePanel';
 import { LeftUpscalePanel } from '../left/LeftUpscalePanel';
 import { LeftImageToCADPanel } from '../left/LeftImageToCADPanel';
@@ -62,6 +64,7 @@ import { Render3DPanel } from '../right/Render3DPanel';
 import { CadToRenderPanel } from '../right/CadToRenderPanel';
 import { MasterplanPanel } from '../right/MasterplanPanel';
 import { VisualEditPanel } from '../right/VisualEditPanel';
+import { AngleChangePanel } from '../right/AngleChangePanel';
 import { ExplodedPanel } from '../right/ExplodedPanel';
 import { SectionPanel } from '../right/SectionPanel';
 import { MultiAnglePanel } from '../right/MultiAnglePanel';
@@ -89,6 +92,7 @@ const MOBILE_WORKFLOWS: WorkflowItem[] = [
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
   { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
+  { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
@@ -112,6 +116,7 @@ const renderLeftPanel = (mode: GenerationMode) => {
     case 'pdf-compression': return <LeftPdfCompressionPanel />;
     case 'masterplan': return <LeftMasterplanPanel />;
     case 'visual-edit': return <LeftVisualEditPanel />;
+    case 'angle-change': return <LeftAngleChangePanel />;
     case 'exploded': return <LeftExplodedPanel />;
     case 'section': return <LeftSectionPanel />;
     case 'render-sketch': return <LeftSketchPanel />;
@@ -131,6 +136,7 @@ const renderRightPanel = (mode: GenerationMode) => {
     case 'render-cad': return <CadToRenderPanel />;
     case 'masterplan': return <MasterplanPanel />;
     case 'visual-edit': return <VisualEditPanel />;
+    case 'angle-change': return <AngleChangePanel />;
     case 'exploded': return <ExplodedPanel />;
     case 'section': return <SectionPanel />;
     case 'render-sketch': return <Render3DPanel />;
@@ -175,6 +181,8 @@ const getRightPanelConfig = (mode: GenerationMode, t: (key: string, options?: an
       return { title: t('rightPanel.masterplan.title'), description: t('rightPanel.masterplan.description'), icon: Grid, meta };
     case 'visual-edit':
       return { title: t('rightPanel.visualEdit.title'), description: t('rightPanel.visualEdit.description'), icon: Wrench, meta };
+    case 'angle-change':
+      return { title: t('rightPanel.angleChange.title'), description: t('rightPanel.angleChange.description'), icon: Orbit, meta };
     case 'exploded':
       return { title: t('rightPanel.exploded.title'), description: t('rightPanel.exploded.description'), icon: Layers, meta };
     case 'section':
@@ -218,6 +226,7 @@ const getGenerateLabel = (mode: GenerationMode, t: (key: string, options?: any) 
     case 'video': return t('generation.generateVideo');
     case 'pdf-compression': return t('generation.compressPdfs');
     case 'visual-edit': return t('generation.applyEdits');
+    case 'angle-change': return t('generation.changeAngle');
     case 'material-validation': return t('generation.runValidation');
     case 'render-sketch': return t('generation.renderSketch');
     case 'document-translate': return t('generation.translateDocument');

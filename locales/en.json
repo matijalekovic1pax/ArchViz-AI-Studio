@@ -58,6 +58,7 @@
     "generateExplodedView": "Generate Exploded View",
     "generateSection": "Generate Section",
     "generateAngles": "Generate Angles",
+    "changeAngle": "Change Angle",
     "upscaleImage": "Upscale Image",
     "convertToCAD": "Convert to CAD",
     "generateVideo": "Generate Video",
@@ -77,6 +78,7 @@
     "renderSketch": "Sketch Render",
     "masterplan": "Masterplan",
     "visualEdit": "Visual Edit",
+    "angleChange": "Angle Change",
     "exploded": "Exploded View",
     "section": "Section",
     "multiAngle": "Multi-Angle",
@@ -328,6 +330,7 @@
     "renderCad": "CAD to Render",
     "masterplan": "Masterplans",
     "visualEdit": "Visual Editor",
+    "angleChange": "Angle Change",
     "materialValidation": "Material Validation",
     "documentTranslate": "Doc Translator",
     "pdfCompression": "PDF Compressor",
@@ -703,6 +706,10 @@
     "visualEdit": {
       "title": "Visual Editor",
       "description": "Select tools for in-painting, material swapping, and lighting adjustments on the generated image."
+    },
+    "angleChange": {
+      "title": "Angle Change",
+      "description": "Generate a new camera viewpoint from the current photo or render while preserving scene identity."
     },
     "exploded": {
       "title": "Exploded View",

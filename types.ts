@@ -6,6 +6,7 @@ export type GenerationMode =
   | 'render-cad'
   | 'masterplan'
   | 'visual-edit'
+  | 'angle-change'
   | 'exploded'
   | 'section'
   | 'render-sketch'
@@ -697,7 +698,25 @@ export interface WorkflowSettings {
   multiAngleAngles: { id: string; azimuth: number; elevation: number }[];
   multiAngleOutputs: { id: string; name: string; url: string }[];
 
-  // 10. Image to CAD
+  // 10. Angle Change
+  angleChangeDirection: 'left-90' | 'right-90' | 'turn-around' | 'custom';
+  angleChangeDegrees: number;
+  angleChangePitch: number;
+  angleChangeSceneType: 'auto' | 'interior' | 'exterior' | 'object';
+  angleChangeLens: 'match' | 'wide' | 'normal' | 'telephoto';
+  angleChangePreserveLighting: boolean;
+  angleChangePreserveFraming: boolean;
+  angleChangeInferHidden: 'conservative' | 'balanced' | 'creative';
+  angleChangeOutputs: {
+    id: string;
+    name: string;
+    url: string;
+    rotation: number;
+    pitch: number;
+    createdAt: number;
+  }[];
+
+  // 11. Image to CAD
   imgToCadType: 'photo' | 'render';
   imgToCadOutput: 'elevation' | 'plan' | 'detail';
   imgToCadLine: { sensitivity: number; simplify: number; connect: boolean };
@@ -705,16 +724,16 @@ export interface WorkflowSettings {
   imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
   imgToCadPreprocess: { guidance: string; focus: string[] };
 
-  // 11. Video Studio
+  // 12. Video Studio
   videoState: VideoState;
 
-  // 12. Document Translation
+  // 13. Document Translation
   documentTranslate: DocumentTranslateState;
 
-  // 13. PDF Compression
+  // 14. PDF Compression
   pdfCompression: PdfCompressionState;
 
-  // 14. Headshot Generator
+  // 15. Headshot Generator
   headshot: HeadshotSettings;
 }
 

@@ -58,6 +58,7 @@
     "generateExplodedView": "Générer la Vue Éclatée",
     "generateSection": "Générer la Section",
     "generateAngles": "Générer les Angles",
+    "changeAngle": "Changer l'Angle",
     "upscaleImage": "Agrandir l'Image",
     "convertToCAD": "Convertir en CAD",
     "generateVideo": "Générer la Vidéo",
@@ -77,6 +78,7 @@
     "renderSketch": "Rendu d'Esquisse",
     "masterplan": "Plan Directeur",
     "visualEdit": "Édition Visuelle",
+    "angleChange": "Changement d'Angle",
     "exploded": "Vue Éclatée",
     "section": "Section",
     "multiAngle": "Multi-Angle",
@@ -329,6 +331,7 @@
     "renderCad": "CAD vers Rendu",
     "masterplan": "Plans Directeurs",
     "visualEdit": "Editeur Visuel",
+    "angleChange": "Changement d'Angle",
     "materialValidation": "Validation des Materiaux",
     "documentTranslate": "Traducteur de Docs",
     "pdfCompression": "Compression PDF",
@@ -703,6 +706,10 @@
     "visualEdit": {
       "title": "Editeur Visuel",
       "description": "Selectionnez les outils pour l'inpainting, le changement de materiaux et l'eclairage."
+    },
+    "angleChange": {
+      "title": "Changement d'Angle",
+      "description": "Generez un nouveau point de vue camera depuis la photo ou le rendu actuel en conservant l'identite de la scene."
     },
     "exploded": {
       "title": "Vue Eclatee",

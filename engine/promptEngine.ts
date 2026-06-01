@@ -1568,18 +1568,23 @@ const generateVisualEditPrompt = (state: AppState): string => {
   };
 
   if (tool === 'select') {
+    const selectParts: string[] = [];
     const basePrompt = state.prompt?.trim();
+    const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette)\b/i.test(userPrompt || '');
+    selectParts.push('Targeted selected-region edit.');
     if (basePrompt) {
-      parts.push(`Base scene intent: "${basePrompt}".`);
+      selectParts.push(`Scene context only: "${basePrompt}".`);
     }
     if (userPrompt) {
-      parts.push(`Edit instruction: "${userPrompt}".`);
+      selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
-    parts.push('Use the selected area as the primary target for this edit, while allowing natural blending just beyond the selection edge when the image needs it.');
-    parts.push('Keep unrelated architecture, lighting, materials, perspective, and composition stable outside the target area.');
-    parts.push(...selectionParts);
-    parts.push('Do not create a hard-edged cutout, visible mask shape, blank patch, or pasted-looking boundary.');
-    return parts.filter(Boolean).join(' ');
+    selectParts.push('The selection mask is authoritative. Edit only the selected pixels/subject and leave every unselected pixel unchanged.');
+    if (personTarget) {
+      selectParts.push('Person target rule: if the selection contains a plain white, clay, placeholder, silhouette, or low-quality 3D person, convert that exact selected figure into one realistic human. Preserve the original pose, scale, body orientation, ground contact, location, occlusion, and camera perspective. Match the existing scene lighting, shadow direction, color temperature, and render quality. Do not add any extra people, do not modify any other people, and do not change nearby architecture, signage, floor, furniture, vegetation, or background.');
+    }
+    selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the selection, shadows, reflections, and composition outside the selected area.');
+    selectParts.push('Blend the selected edit naturally at the boundary without showing the mask, lasso shape, outline, white patch, smudge, or pasted edge.');
+    return selectParts.filter(Boolean).join(' ');
   }
 
   if (tool === 'material') {
@@ -3154,6 +3159,102 @@ function generateMultiAnglePrompt(state: AppState): string {
   return parts.filter(p => p.trim()).join(' ');
 }
 
+function describeAngleChangeRotation(degrees: number): string {
+  const normalized = Math.max(-180, Math.min(180, Math.round(degrees)));
+  if (normalized === 0) return 'keep the camera facing direction unchanged';
+  if (Math.abs(normalized) === 180) {
+    return 'orbit the camera 180 degrees to the opposite side of the same scene';
+  }
+  const side = normalized < 0 ? 'image-left' : 'image-right';
+  return `orbit the camera ${Math.abs(normalized)} degrees toward the ${side} side of the current view`;
+}
+
+function generateAngleChangePrompt(state: AppState): string {
+  const { workflow, activeStyleId, customStyles, lighting, context } = state;
+  const parts: string[] = [];
+  const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
+  const style = availableStyles.find(s => s.id === activeStyleId);
+  const isNoStyle = style?.id === 'no-style';
+  const rotation = Math.max(-180, Math.min(180, workflow.angleChangeDegrees));
+  const pitch = Math.max(-20, Math.min(20, workflow.angleChangePitch));
+  const sceneTypeLabel: Record<typeof workflow.angleChangeSceneType, string> = {
+    auto: 'infer whether the source is an interior, exterior, object, or rendering and choose the most plausible camera model',
+    interior: 'treat the source as an interior room or architectural interior',
+    exterior: 'treat the source as an exterior architectural view',
+    object: 'treat the source as a product, furniture item, model, or isolated object',
+  };
+  const lensLabel: Record<typeof workflow.angleChangeLens, string> = {
+    match: 'match the apparent focal length and lens character of the source image',
+    wide: 'use a controlled architectural wide lens without fisheye distortion',
+    normal: 'use a natural normal lens with moderate perspective',
+    telephoto: 'use a tighter lens with compressed depth and minimal distortion',
+  };
+  const inferenceLabel: Record<typeof workflow.angleChangeInferHidden, string> = {
+    conservative: 'use conservative hidden-side reconstruction; infer only what is strongly implied by visible geometry, materials, symmetry, reflections, openings, and context',
+    balanced: 'use balanced hidden-side reconstruction; infer plausible continuation of the design while preserving the source identity',
+    creative: 'use creative but coherent hidden-side reconstruction; complete unseen areas with compatible architectural logic, materials, and lighting',
+  };
+
+  parts.push('Single camera angle change from a source image.');
+  parts.push('Input relationship: the attached image is the locked identity reference for the same room, building, object, materials, lighting mood, scale, and design intent. Generate one new image from a different camera position, not a contact sheet, collage, grid, or annotated diagram.');
+  parts.push(`Camera move: ${describeAngleChangeRotation(rotation)}. Left and right are relative to the current image frame, not geographic compass directions.`);
+  parts.push(`Camera pitch: ${pitch === 0 ? 'keep the same vertical tilt and horizon height' : `tilt the camera ${Math.abs(pitch)} degrees ${pitch > 0 ? 'up' : 'down'} while preserving believable verticals`}.`);
+  parts.push(`Scene interpretation: ${sceneTypeLabel[workflow.angleChangeSceneType]}.`);
+  parts.push(`Lens: ${lensLabel[workflow.angleChangeLens]}.`);
+
+  if (workflow.angleChangePreserveFraming) {
+    parts.push('Framing discipline: preserve the source aspect ratio, shot scale, subject prominence, camera height, and visual density. Reframe only as much as required by the new camera position.');
+  } else {
+    parts.push('Framing may adapt naturally to the new viewpoint while keeping the subject recognizable and centered enough for review.');
+  }
+
+  if (workflow.angleChangePreserveLighting) {
+    parts.push('Lighting lock: preserve the same time of day, exposure mood, color temperature, global light direction, shadow softness, reflections, and atmosphere as the source image. Shadows should shift consistently with the new camera position, not reset to a new lighting setup.');
+  } else {
+    parts.push('Lighting may be rebalanced gently for the new viewpoint, but keep it plausible and compatible with the source image.');
+  }
+
+  parts.push(`Hidden geometry policy: ${inferenceLabel[workflow.angleChangeInferHidden]}.`);
+  parts.push('Spatial consistency: preserve structural layout, wall/floor/ceiling relationships, openings, columns, stairs, furniture scale, object count where visible, material palette, facade rhythm, and design language. Newly visible areas must feel like the unseen continuation of the same space, not a redesigned scene.');
+  parts.push(SOURCE_TEXT_SIGNAGE_LOCK);
+  parts.push('Do not mirror the image, simply rotate the bitmap, stretch pixels, add labels, add UI marks, or render before/after text. The final output must be a clean photorealistic camera view.');
+
+  if (!isNoStyle && style?.description) {
+    parts.push(`Style continuity: ${style.description}`);
+  }
+
+  const timeDesc: Record<string, string> = {
+    dawn: 'soft early morning light',
+    morning: 'fresh morning sunlight',
+    noon: 'midday sun',
+    afternoon: 'warm afternoon light',
+    'golden-hour': 'rich golden hour illumination',
+    sunset: 'dramatic sunset colors',
+    dusk: 'fading twilight',
+    night: 'nighttime illumination',
+  };
+  const weatherDesc: Record<string, string> = {
+    clear: 'under clear skies',
+    'partly-cloudy': 'with scattered clouds',
+    overcast: 'under soft overcast conditions',
+    stormy: 'with dramatic storm clouds',
+  };
+  parts.push(`Global lighting context: ${timeDesc[lighting.timeOfDay] || lighting.timeOfDay} ${weatherDesc[lighting.weather] || ''}.`);
+
+  if (context.people) {
+    parts.push('If people are visible or requested, keep them realistically scaled and viewpoint-consistent; do not add crowds unless the source or user notes imply them.');
+  }
+  if (context.vegetation) {
+    parts.push(`Vegetation continuity: keep ${context.season} planting consistent with the source image and the new viewpoint.`);
+  }
+
+  if (state.prompt?.trim()) {
+    parts.push(`Additional user request: ${state.prompt.trim()}. Apply only where it does not conflict with the camera-change and source-identity constraints.`);
+  }
+
+  return parts.filter(p => p.trim()).join(' ');
+}
+
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
 
 function generateMasterplanPrompt(state: AppState): string {
@@ -3787,6 +3888,10 @@ export function generatePrompt(state: AppState): string {
   }
   if (state.mode === 'multi-angle') {
     return generateMultiAnglePrompt(state);
+  }
+
+  if (state.mode === 'angle-change') {
+    return generateAngleChangePrompt(state);
   }
 
   if (state.mode === 'headshot') {

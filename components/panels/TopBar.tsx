@@ -20,6 +20,7 @@ const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'render-cad': 'workflows.renderCad',
   masterplan: 'workflows.masterplan',
   'visual-edit': 'workflows.visualEdit',
+  'angle-change': 'workflows.angleChange',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',
   'pdf-compression': 'workflows.pdfCompression',
@@ -567,6 +568,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       case 'video': return t('generation.generateVideo');
       case 'pdf-compression': return t('generation.compressPdfs');
       case 'visual-edit': return t('generation.applyEdits');
+      case 'angle-change': return t('generation.changeAngle');
       case 'material-validation': return t('generation.runValidation');
       case 'render-sketch': return t('generation.renderSketch');
       case 'document-translate': return t('generation.translateDocument');
