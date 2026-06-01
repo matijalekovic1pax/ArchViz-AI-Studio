@@ -325,6 +325,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
     values: ['left-90', 'right-90', 'turn-around', 'custom'],
   }),
   workflow('angleChangeDegrees', 'Angle Change rotation', 'number', ['angle-change'], { min: -180, max: 180 }),
+  workflow('angleChangePitch', 'Angle Change tilt', 'number', ['angle-change'], { min: -30, max: 30 }),
 
   workflow('explodedDetection', 'Exploded detection', 'string', ['exploded'], { values: ['auto', 'manual', 'category'] }),
   workflow('explodedDirection', 'Explosion direction', 'string', ['exploded'], { values: ['vertical', 'radial', 'custom'] }),

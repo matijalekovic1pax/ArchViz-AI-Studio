@@ -3176,10 +3176,12 @@ function generateAngleChangePrompt(state: AppState): string {
   const style = availableStyles.find(s => s.id === activeStyleId);
   const isNoStyle = style?.id === 'no-style';
   const rotation = Math.max(-180, Math.min(180, workflow.angleChangeDegrees));
+  const pitch = Math.max(-30, Math.min(30, workflow.angleChangePitch));
 
   parts.push('Single camera angle change from a source image.');
   parts.push('Input relationship: the attached image is the locked identity reference for the same room, building, object, materials, lighting mood, scale, and design intent. Generate one new image from a different camera position, not a contact sheet, collage, grid, or annotated diagram.');
   parts.push(`Camera move: ${describeAngleChangeRotation(rotation)}. Left and right are relative to the current image frame, not geographic compass directions.`);
+  parts.push(`Camera tilt: ${pitch === 0 ? 'keep the same vertical tilt and horizon height' : `tilt the camera ${Math.abs(pitch)} degrees ${pitch > 0 ? 'up' : 'down'} while preserving believable verticals`}.`);
   parts.push('Camera discipline: keep the same horizon logic, apparent focal length, aspect ratio, shot scale, subject prominence, and visual density unless the new angle naturally requires a small adjustment.');
   parts.push('Lighting continuity: preserve the same time of day, exposure mood, color temperature, global light direction, shadow softness, reflections, and atmosphere as the source image. Shadows should shift consistently with the new camera position, not reset to a new lighting setup.');
   parts.push('Hidden geometry: infer plausible continuation of unseen areas from visible geometry, materials, symmetry, reflections, openings, and context while preserving the source identity.');

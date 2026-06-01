@@ -673,6 +673,7 @@ const initialWorkflow: WorkflowSettings = {
   // 10. Angle Change
   angleChangeDirection: 'right-90',
   angleChangeDegrees: 90,
+  angleChangePitch: 0,
   angleChangeOutputs: [],
 
   // 11. Image to CAD

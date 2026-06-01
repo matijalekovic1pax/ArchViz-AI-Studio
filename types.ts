@@ -701,11 +701,13 @@ export interface WorkflowSettings {
   // 10. Angle Change
   angleChangeDirection: 'left-90' | 'right-90' | 'turn-around' | 'custom';
   angleChangeDegrees: number;
+  angleChangePitch: number;
   angleChangeOutputs: {
     id: string;
     name: string;
     url: string;
     rotation: number;
+    pitch: number;
     createdAt: number;
   }[];
 

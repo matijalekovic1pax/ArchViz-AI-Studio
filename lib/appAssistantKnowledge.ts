@@ -196,10 +196,10 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Upload or select the source image on the canvas.',
       'Choose Left 90, Right 90, Turn Around, or Custom in the right panel.',
-      'Set the rotation angle.',
+      'Set the rotation and tilt angles.',
       'Generate one clean shifted view, then compare or download it from the left panel outputs.',
     ],
-    controls: ['point of view preset', 'rotation'],
+    controls: ['point of view preset', 'rotation', 'tilt'],
     specificGuidance: [
       'Angle Change changes the camera position of the same image; it is not a bitmap rotation or crop.',
       'Left and Right are relative to the current image frame.',
@@ -634,6 +634,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       lines.push(
         `Direction preset: ${wf.angleChangeDirection}`,
         `Rotation: ${wf.angleChangeDegrees}`,
+        `Tilt: ${wf.angleChangePitch}`,
         `Generated outputs: ${wf.angleChangeOutputs.length}`
       );
       break;

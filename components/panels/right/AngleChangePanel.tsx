@@ -52,45 +52,117 @@ const formatRotation = (degrees: number) => {
   return `${Math.abs(degrees)}° ${degrees < 0 ? 'left' : 'right'}`;
 };
 
-const AngleOrbitPreview: React.FC<{ rotation: number }> = ({ rotation }) => {
-  const radius = 48;
-  const center = 64;
-  const startAngle = -90;
-  const targetAngle = startAngle + clamp(rotation, -180, 180);
-  const targetRad = (targetAngle * Math.PI) / 180;
-  const sourceRad = (startAngle * Math.PI) / 180;
+const formatTilt = (degrees: number) => {
+  if (degrees === 0) return 'level';
+  return `${Math.abs(degrees)}° ${degrees > 0 ? 'up' : 'down'}`;
+};
+
+const AngleOrbitPreview: React.FC<{
+  rotation: number;
+  pitch: number;
+  onAngleChange: (rotation: number, pitch: number) => void;
+}> = ({ rotation, pitch, onAngleChange }) => {
+  const sphereId = React.useId().replace(/:/g, '');
+  const size = 168;
+  const center = size / 2;
+  const radius = 60;
+  const orbitY = radius * 0.58;
+  const yaw = (clamp(rotation, -180, 180) * Math.PI) / 180;
+  const tilt = (clamp(pitch, -30, 30) * Math.PI) / 180;
   const source = {
-    x: center + radius * Math.cos(sourceRad),
-    y: center + radius * Math.sin(sourceRad),
+    x: center,
+    y: center + orbitY,
   };
   const target = {
-    x: center + radius * Math.cos(targetRad),
-    y: center + radius * Math.sin(targetRad),
+    x: center + radius * Math.sin(yaw) * Math.cos(tilt),
+    y: center + orbitY * Math.cos(yaw) * Math.cos(tilt) - radius * 0.46 * Math.sin(tilt),
   };
+  const depth = Math.cos(yaw) * Math.cos(tilt);
+  const targetSize = depth >= 0 ? 7 : 5.5;
+  const targetOpacity = depth >= 0 ? 1 : 0.72;
+  const control = {
+    x: center + (target.x - center) * 0.28,
+    y: Math.max(center - radius * 0.78, Math.min(center + orbitY + 8, center + orbitY * 0.92 - radius * 0.2 * Math.sin(tilt))),
+  };
+  const path = `M ${source.x} ${source.y} Q ${control.x} ${control.y} ${target.x} ${target.y}`;
+
+  const updateFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const rotationRatio = clamp((x - rect.width / 2) / (rect.width * 0.38), -1, 1);
+    const pitchRatio = clamp((rect.height / 2 - y) / (rect.height * 0.36), -1, 1);
+    const nextRotation = Math.round((rotationRatio * 180) / 5) * 5;
+    const nextPitch = Math.round(pitchRatio * 30);
+    onAngleChange(nextRotation, nextPitch);
+  };
+
   return (
     <div className="rounded-lg border border-border bg-surface-elevated p-3">
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="text-foreground-muted">Camera shift</span>
         <span className="font-mono text-foreground-secondary">{formatRotation(rotation)}</span>
       </div>
-      <div className="mt-2 flex items-center gap-3">
-        <svg width={128} height={128} viewBox="0 0 128 128" className="shrink-0 text-foreground-muted">
-          <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" strokeOpacity={0.22} strokeWidth={2} />
-          <rect x={42} y={45} width={44} height={38} rx={4} fill="currentColor" fillOpacity={0.08} stroke="currentColor" strokeOpacity={0.25} />
-          <path d="M49 56h30M49 67h30" stroke="currentColor" strokeOpacity={0.18} strokeWidth={2} strokeLinecap="round" />
-          <circle cx={source.x} cy={source.y} r={5} fill="currentColor" fillOpacity={0.35} />
-          <circle cx={target.x} cy={target.y} r={7} fill="currentColor" />
-          <line x1={center} y1={center} x2={target.x} y2={target.y} stroke="currentColor" strokeOpacity={0.42} strokeWidth={2} strokeLinecap="round" />
-          <text x={source.x} y={source.y - 10} textAnchor="middle" fontSize="9" fill="currentColor" opacity="0.55">src</text>
-          <text x={target.x} y={target.y + 18} textAnchor="middle" fontSize="9" fill="currentColor">new</text>
+
+      <div className="mt-3 flex flex-col items-center">
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          className="cursor-crosshair touch-none text-foreground-muted"
+          role="img"
+          aria-label={`Camera sphere preview, source at bottom, target ${formatRotation(rotation)} and ${formatTilt(pitch)}`}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            updateFromPointer(event);
+          }}
+          onPointerMove={(event) => {
+            if (event.buttons === 1) updateFromPointer(event);
+          }}
+        >
+          <defs>
+            <radialGradient id={`${sphereId}-fill`} cx="38%" cy="28%" r="72%">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+              <stop offset="58%" stopColor="currentColor" stopOpacity="0.07" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0.16" />
+            </radialGradient>
+            <linearGradient id={`${sphereId}-stroke`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+              <stop offset="48%" stopColor="currentColor" stopOpacity="0.42" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0.16" />
+            </linearGradient>
+            <clipPath id={`${sphereId}-clip`}>
+              <circle cx={center} cy={center} r={radius} />
+            </clipPath>
+          </defs>
+          <ellipse cx={center} cy={center + radius + 13} rx={radius * 0.78} ry="8" fill="currentColor" opacity="0.08" />
+          <circle cx={center} cy={center} r={radius} fill={`url(#${sphereId}-fill)`} stroke={`url(#${sphereId}-stroke)`} strokeWidth="1.5" />
+          <g clipPath={`url(#${sphereId}-clip)`} fill="none" stroke="currentColor" strokeLinecap="round">
+            <ellipse cx={center} cy={center} rx={radius * 0.96} ry={orbitY} strokeOpacity="0.26" strokeWidth="1.4" />
+            <ellipse cx={center} cy={center - radius * 0.22} rx={radius * 0.74} ry={orbitY * 0.34} strokeOpacity="0.14" strokeWidth="1" />
+            <ellipse cx={center} cy={center + radius * 0.22} rx={radius * 0.74} ry={orbitY * 0.34} strokeOpacity="0.22" strokeWidth="1" />
+            <ellipse cx={center} cy={center} rx={radius * 0.34} ry={radius * 0.96} strokeOpacity="0.16" strokeWidth="1" />
+            <ellipse cx={center} cy={center} rx={radius * 0.58} ry={radius * 0.96} strokeOpacity="0.12" strokeWidth="1" transform={`rotate(34 ${center} ${center})`} />
+            <ellipse cx={center} cy={center} rx={radius * 0.58} ry={radius * 0.96} strokeOpacity="0.12" strokeWidth="1" transform={`rotate(-34 ${center} ${center})`} />
+          </g>
+          <ellipse cx={center} cy={center} rx={radius * 0.96} ry={orbitY} fill="none" stroke="currentColor" strokeOpacity="0.34" strokeWidth="1.6" strokeDasharray="2 5" />
+          <line x1={center} y1={center - radius * 0.8} x2={center} y2={center + radius * 0.8} stroke="currentColor" strokeOpacity="0.14" strokeWidth="1" strokeLinecap="round" />
+          <path d={path} fill="none" stroke="currentColor" strokeOpacity="0.62" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx={source.x} cy={source.y} r="6" fill="currentColor" opacity="0.42" />
+          <circle cx={source.x} cy={source.y} r="10" fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="1.5" />
+          <circle cx={target.x} cy={target.y} r={targetSize} fill="currentColor" opacity={targetOpacity} />
+          <circle cx={target.x} cy={target.y} r={targetSize + 4} fill="none" stroke="currentColor" strokeOpacity={0.24 + Math.max(depth, 0) * 0.12} strokeWidth="1.4" />
+          <text x={source.x} y={source.y + 20} textAnchor="middle" fontSize="9" fill="currentColor" opacity="0.58">source</text>
+          <text x={target.x} y={target.y - 12} textAnchor="middle" fontSize="9" fill="currentColor" opacity={targetOpacity}>new</text>
         </svg>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="mt-3 grid w-full grid-cols-2 gap-2">
           <div className="rounded-md bg-surface-sunken px-2.5 py-2">
             <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Rotation</div>
             <div className="mt-0.5 text-sm font-semibold text-foreground">{formatRotation(rotation)}</div>
           </div>
-          <div className="rounded-md bg-surface-sunken px-2.5 py-2 text-xs leading-relaxed text-foreground-secondary">
-            The source image stays as the identity reference while the camera moves to the selected angle.
+          <div className="rounded-md bg-surface-sunken px-2.5 py-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Tilt</div>
+            <div className="mt-0.5 text-sm font-semibold text-foreground">{formatTilt(pitch)}</div>
           </div>
         </div>
       </div>
@@ -121,6 +193,19 @@ export const AngleChangePanel = () => {
     );
     updateWf({
       angleChangeDegrees: next,
+      angleChangeDirection: matchingPreset?.id ?? 'custom',
+    });
+  };
+
+  const handleAngleChange = (rotation: number, pitch: number) => {
+    const nextRotation = clamp(Math.round(rotation), -180, 180);
+    const nextPitch = clamp(Math.round(pitch), -30, 30);
+    const matchingPreset = DIRECTION_PRESETS.find(
+      (preset) => preset.id !== 'custom' && preset.degrees === nextRotation
+    );
+    updateWf({
+      angleChangeDegrees: nextRotation,
+      angleChangePitch: nextPitch,
       angleChangeDirection: matchingPreset?.id ?? 'custom',
     });
   };
@@ -160,7 +245,11 @@ export const AngleChangePanel = () => {
             );
           })}
         </div>
-        <AngleOrbitPreview rotation={wf.angleChangeDegrees} />
+        <AngleOrbitPreview
+          rotation={wf.angleChangeDegrees}
+          pitch={wf.angleChangePitch}
+          onAngleChange={handleAngleChange}
+        />
       </div>
 
       <div className="space-y-3">
@@ -173,9 +262,14 @@ export const AngleChangePanel = () => {
           value={wf.angleChangeDegrees}
           onChange={handleRotationChange}
         />
-        <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[10px] leading-relaxed text-foreground-muted">
-          Uses the current canvas image as the source and generates one clean camera-shifted view.
-        </p>
+        <Slider
+          label="Tilt"
+          min={-30}
+          max={30}
+          step={1}
+          value={wf.angleChangePitch}
+          onChange={(value) => updateWf({ angleChangePitch: clamp(Math.round(value), -30, 30) })}
+        />
       </div>
     </div>
   );

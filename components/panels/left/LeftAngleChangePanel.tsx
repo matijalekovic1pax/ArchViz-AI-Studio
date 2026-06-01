@@ -122,6 +122,7 @@ export const LeftAngleChangePanel = () => {
             const isActive = output.url === state.uploadedImage;
             const isChecked = selectedIds.has(output.id);
             const RotationIcon = getRotationIcon(output.rotation);
+            const pitch = output.pitch ?? 0;
             return (
               <button
                 key={output.id}
@@ -156,6 +157,7 @@ export const LeftAngleChangePanel = () => {
                   </div>
                   <div className="mt-0.5 text-[10px] text-foreground-muted">
                     {formatRotation(output.rotation)}
+                    {pitch !== 0 ? `, ${Math.abs(pitch)}° ${pitch > 0 ? 'up' : 'down'}` : ''}
                   </div>
                 </div>
                 {selectMode && (
