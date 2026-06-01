@@ -2,12 +2,12 @@ import React from 'react';
 import {
   ANGLE_MAX,
   ANGLE_MIN,
-  STEP,
+  DEFAULT_FRAME_ANGLE_VALUE,
   TILT_MAX,
   TILT_MIN,
   type FrameAngleValue,
 } from './frameAngleTypes';
-import { clamp, clampFrameAngleValue, describeFrameAngle, roundToStep } from './frameAngleUtils';
+import { clamp, clampFrameAngleValue, describeFrameAngle, formatSignedDegrees, roundToStep } from './frameAngleUtils';
 
 type FrameAnglePadProps = {
   value: FrameAngleValue;
@@ -17,23 +17,36 @@ type FrameAnglePadProps = {
 
 export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, disabled }) => {
   const next = clampFrameAngleValue(value);
-  const leftPercent = ((next.angleDeg - ANGLE_MIN) / (ANGLE_MAX - ANGLE_MIN)) * 100;
-  const topPercent = ((TILT_MAX - next.tiltDeg) / (TILT_MAX - TILT_MIN)) * 100;
+  const dialSize = 164;
+  const center = dialSize / 2;
+  const radius = 58;
+  const angleRad = (next.angleDeg * Math.PI) / 180;
+  const angleDot = {
+    x: center + Math.sin(angleRad) * radius,
+    y: center + Math.cos(angleRad) * radius,
+  };
+  const tiltPercent = ((TILT_MAX - next.tiltDeg) / (TILT_MAX - TILT_MIN)) * 100;
 
   const emit = (candidate: FrameAngleValue) => {
     if (disabled) return;
     onChange(clampFrameAngleValue(candidate));
   };
 
-  const updateFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+  const updateAngleFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
     if (disabled) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const x = event.clientX - rect.left - rect.width / 2;
+    const y = event.clientY - rect.top - rect.height / 2;
+    const angleDeg = clamp(roundToStep((Math.atan2(x, y) * 180) / Math.PI, 1), ANGLE_MIN, ANGLE_MAX);
+    emit({ ...next, angleDeg });
+  };
+
+  const updateTiltFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const rect = event.currentTarget.getBoundingClientRect();
     const y = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-    emit({
-      angleDeg: roundToStep(ANGLE_MIN + x * (ANGLE_MAX - ANGLE_MIN), STEP),
-      tiltDeg: roundToStep(TILT_MAX - y * (TILT_MAX - TILT_MIN), STEP),
-    });
+    const tiltDeg = roundToStep(TILT_MAX - y * (TILT_MAX - TILT_MIN), 1);
+    emit({ ...next, tiltDeg });
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -55,7 +68,7 @@ export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, d
         candidate = { ...next, tiltDeg: next.tiltDeg - delta };
         break;
       case 'Home':
-        candidate = { angleDeg: 0, tiltDeg: 0 };
+        candidate = DEFAULT_FRAME_ANGLE_VALUE;
         break;
       default:
         break;
@@ -68,50 +81,91 @@ export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, d
   };
 
   return (
-    <section className="space-y-2">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Angle / Tilt Pad</h3>
-      <div className="flex justify-center">
+    <section className="space-y-3">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Angle + Tilt</h3>
+      <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-4">
         <div
           tabIndex={disabled ? -1 : 0}
           role="application"
           aria-label="Frame angle and tilt control"
           aria-valuetext={describeFrameAngle(next)}
-          onPointerDown={(event) => {
-            if (disabled) return;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            updateFromPointer(event);
-          }}
-          onPointerMove={(event) => {
-            if (disabled || (event.pointerType === 'mouse' && event.buttons !== 1)) return;
-            updateFromPointer(event);
-          }}
-          onPointerUp={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }
-          }}
           onKeyDown={handleKeyDown}
-          className="relative aspect-square w-full max-w-[280px] touch-none rounded-lg border border-border bg-surface-elevated outline-none transition-colors focus:border-foreground/60 focus:ring-2 focus:ring-foreground/10"
+          className="relative flex aspect-square w-full items-center justify-center touch-none rounded-lg border border-border bg-surface-elevated outline-none transition-colors focus:border-foreground/60 focus:ring-2 focus:ring-foreground/10"
         >
-          <div className="pointer-events-none absolute inset-4 rounded-full border border-border-subtle" />
-          <div className="pointer-events-none absolute left-4 right-4 top-1/2 h-px -translate-y-1/2 bg-border-strong" />
-          <div className="pointer-events-none absolute bottom-4 top-4 left-1/2 w-px -translate-x-1/2 bg-border-strong" />
-          <div className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Angle Left</div>
-          <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Angle Right</div>
-          <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Up</div>
-          <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Down</div>
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30" />
-          <div
-            className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface-elevated bg-foreground shadow-subtle"
-            style={{
-              left: `${leftPercent}%`,
-              top: `${topPercent}%`,
+          <svg
+            width={dialSize}
+            height={dialSize}
+            viewBox={`0 0 ${dialSize} ${dialSize}`}
+            className="touch-none text-foreground-muted"
+            aria-hidden="true"
+            onPointerDown={(event) => {
+              if (disabled) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateAngleFromPointer(event);
             }}
-          />
+            onPointerMove={(event) => {
+              if (disabled || (event.pointerType === 'mouse' && event.buttons !== 1)) return;
+              updateAngleFromPointer(event);
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+          >
+            <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="1.5" />
+            <path
+              d={`M ${center - radius * 0.7} ${center + radius * 0.7} A ${radius} ${radius} 0 0 1 ${center + radius * 0.7} ${center + radius * 0.7}`}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.34"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <line x1={center} y1={center} x2={center} y2={center + radius} stroke="currentColor" strokeOpacity="0.26" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1={center} y1={center} x2={angleDot.x} y2={angleDot.y} stroke="currentColor" strokeOpacity="0.58" strokeWidth="2" strokeLinecap="round" />
+            <circle cx={center} cy={center} r="4" className="fill-foreground" opacity="0.32" />
+            <circle cx={angleDot.x} cy={angleDot.y} r="8" className="fill-foreground" />
+            <circle cx={angleDot.x} cy={angleDot.y} r="12" fill="none" className="stroke-foreground" strokeOpacity="0.16" strokeWidth="2" />
+            <text x={center} y={center + radius + 20} textAnchor="middle" fontSize="9" fill="currentColor" opacity="0.6">0° original</text>
+            <text x={center - radius - 10} y={center + radius * 0.52} textAnchor="end" fontSize="9" fill="currentColor" opacity="0.55">Left</text>
+            <text x={center + radius + 10} y={center + radius * 0.52} textAnchor="start" fontSize="9" fill="currentColor" opacity="0.55">Right</text>
+          </svg>
+          <div className="pointer-events-none absolute top-3 left-3 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">Angle</div>
+          <div className="pointer-events-none absolute top-3 right-3 font-mono text-[10px] text-foreground-muted">{formatSignedDegrees(next.angleDeg)}</div>
+        </div>
+        <div className="flex h-full min-h-[190px] flex-col items-center justify-between rounded-lg border border-border bg-surface-elevated px-3 py-4">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Up</span>
+          <div
+            className="relative h-32 w-7 touch-none rounded-full bg-surface-sunken"
+            onPointerDown={(event) => {
+              if (disabled) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateTiltFromPointer(event);
+            }}
+            onPointerMove={(event) => {
+              if (disabled || (event.pointerType === 'mouse' && event.buttons !== 1)) return;
+              updateTiltFromPointer(event);
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+          >
+            <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-border-strong" />
+            <div className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 bg-border-strong" />
+            <div
+              className="absolute left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface-elevated bg-foreground shadow-subtle"
+              style={{ top: `${tiltPercent}%` }}
+            />
+          </div>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Down</span>
+          <span className="font-mono text-[10px] text-foreground-muted">{formatSignedDegrees(next.tiltDeg)}</span>
         </div>
       </div>
       <p className="text-center text-xs text-foreground-secondary">{describeFrameAngle(next)}</p>
-      <p className="text-center text-[10px] text-foreground-muted">Drag the dot to set the new view angle.</p>
+      <p className="text-center text-[10px] text-foreground-muted">Drag the circle for angle. Drag the vertical slider for tilt.</p>
     </section>
   );
 };
