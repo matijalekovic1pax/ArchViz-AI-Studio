@@ -72,18 +72,25 @@ const AngleOrbitPreview: React.FC<{
   const axisHalf = 58;
   const rotationRatio = clamp(rotation / 180, -1, 1);
   const pitchRatio = clamp(pitch / 30, -1, 1);
+  const frameRotation = rotationRatio * 42;
+  const frameRotationRad = (frameRotation * Math.PI) / 180;
+  const horizontalBow = -pitchRatio * 30;
+  const verticalBow = rotationRatio * 45;
+  const secondaryAxisOpacity = Math.min(0.18, (Math.abs(rotationRatio) + Math.abs(pitchRatio)) * 0.14);
   const targetOffset = {
     x: rotationRatio * axisHalf,
     y: -pitchRatio * axisHalf,
   };
   const target = {
-    x: center + targetOffset.x,
-    y: center + targetOffset.y,
+    x: center + targetOffset.x * Math.cos(frameRotationRad) - targetOffset.y * Math.sin(frameRotationRad),
+    y: center + targetOffset.x * Math.sin(frameRotationRad) + targetOffset.y * Math.cos(frameRotationRad),
   };
   const hasTargetOffset = Math.abs(rotation) > 0 || Math.abs(pitch) > 0;
-  const guideRadiusX = axisHalf;
-  const guideRadiusY = axisHalf * 0.52;
   const neutralLabelY = center + 19;
+  const horizontalAxisPath = `M ${center - axisHalf} ${center} Q ${center} ${center + horizontalBow} ${center + axisHalf} ${center}`;
+  const verticalAxisPath = `M ${center} ${center - axisHalf} Q ${center + verticalBow} ${center} ${center} ${center + axisHalf}`;
+  const horizontalBackPath = `M ${center - axisHalf} ${center} Q ${center} ${center - horizontalBow * 0.55} ${center + axisHalf} ${center}`;
+  const verticalBackPath = `M ${center} ${center - axisHalf} Q ${center - verticalBow * 0.55} ${center} ${center} ${center + axisHalf}`;
 
   const updateFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -120,11 +127,21 @@ const AngleOrbitPreview: React.FC<{
           }}
         >
           <rect x="0" y="0" width={size} height={size} rx="12" fill="transparent" />
-          <ellipse cx={center} cy={center} rx={guideRadiusX} ry={guideRadiusY} fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1.2" />
-          <ellipse cx={center} cy={center} rx={guideRadiusY} ry={guideRadiusX} fill="none" stroke="currentColor" strokeOpacity="0.09" strokeWidth="1.2" />
-          <line x1={center - axisHalf} y1={center} x2={center + axisHalf} y2={center} stroke="currentColor" strokeOpacity="0.38" strokeWidth="1.8" strokeLinecap="round" />
-          <line x1={center} y1={center - axisHalf} x2={center} y2={center + axisHalf} stroke="currentColor" strokeOpacity="0.38" strokeWidth="1.8" strokeLinecap="round" />
-          <g stroke="currentColor" strokeOpacity="0.14" strokeWidth="1" strokeLinecap="round">
+          <g stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" strokeLinecap="round">
+            <line x1={center - axisHalf} y1={center} x2={center + axisHalf} y2={center} />
+            <line x1={center} y1={center - axisHalf} x2={center} y2={center + axisHalf} />
+          </g>
+          <g transform={`rotate(${frameRotation} ${center} ${center})`} fill="none" stroke="currentColor" strokeLinecap="round">
+            {secondaryAxisOpacity > 0 && (
+              <>
+                <path d={horizontalBackPath} strokeOpacity={secondaryAxisOpacity} strokeWidth="1.2" strokeDasharray="2 5" />
+                <path d={verticalBackPath} strokeOpacity={secondaryAxisOpacity * 0.8} strokeWidth="1.2" strokeDasharray="2 5" />
+              </>
+            )}
+            <path d={horizontalAxisPath} strokeOpacity="0.56" strokeWidth="2" />
+            <path d={verticalAxisPath} strokeOpacity="0.56" strokeWidth="2" />
+          </g>
+          <g transform={`rotate(${frameRotation} ${center} ${center})`} stroke="currentColor" strokeOpacity="0.14" strokeWidth="1" strokeLinecap="round">
             <line x1={center - axisHalf} y1={center - 4} x2={center - axisHalf} y2={center + 4} />
             <line x1={center + axisHalf} y1={center - 4} x2={center + axisHalf} y2={center + 4} />
             <line x1={center - 4} y1={center - axisHalf} x2={center + 4} y2={center - axisHalf} />
