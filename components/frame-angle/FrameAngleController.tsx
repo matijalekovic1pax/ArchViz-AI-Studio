@@ -1,7 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
 import { FrameAnglePad } from './FrameAnglePad';
-import { FrameAnglePresets } from './FrameAnglePresets';
 import { FrameAnglePreview } from './FrameAnglePreview';
 import { DEFAULT_FRAME_ANGLE_VALUE, type FrameAngleControllerProps } from './frameAngleTypes';
 import { clampFrameAngleValue } from './frameAngleUtils';
@@ -24,7 +23,6 @@ export const FrameAngleController: React.FC<FrameAngleControllerProps> = ({
           Choose how the generated view should shift from the original image.
         </p>
       </section>
-      <FrameAnglePresets value={next} onChange={handleChange} disabled={disabled} />
       <FrameAnglePad value={next} onChange={handleChange} disabled={disabled} />
       <FrameAnglePreview imageUrl={imageUrl} value={next} />
       <button
