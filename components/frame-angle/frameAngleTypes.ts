@@ -7,13 +7,12 @@ export type FrameAngleControllerProps = {
   imageUrl: string;
   value: FrameAngleValue;
   onChange: (value: FrameAngleValue) => void;
-  onGenerate?: (value: FrameAngleValue) => void;
   disabled?: boolean;
   className?: string;
 };
 
-export const ANGLE_MIN = -45;
-export const ANGLE_MAX = 45;
+export const ANGLE_MIN = -90;
+export const ANGLE_MAX = 90;
 export const TILT_MIN = -30;
 export const TILT_MAX = 30;
 export const STEP = 1;

@@ -10,7 +10,6 @@ export const FrameAngleController: React.FC<FrameAngleControllerProps> = ({
   imageUrl,
   value,
   onChange,
-  onGenerate,
   disabled,
   className,
 }) => {
@@ -26,32 +25,19 @@ export const FrameAngleController: React.FC<FrameAngleControllerProps> = ({
         </p>
       </section>
       <FrameAnglePresets value={next} onChange={handleChange} disabled={disabled} />
-      <FrameAnglePreview imageUrl={imageUrl} value={next} />
       <FrameAnglePad value={next} onChange={handleChange} disabled={disabled} />
-      <section className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => handleChange(DEFAULT_FRAME_ANGLE_VALUE)}
-          className={cn(
-            "rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs font-semibold text-foreground-secondary transition-colors hover:border-foreground/40 hover:text-foreground",
-            disabled && "cursor-not-allowed opacity-60"
-          )}
-        >
-          Reset angle
-        </button>
-        <button
-          type="button"
-          disabled={disabled || !onGenerate}
-          onClick={() => onGenerate?.({ angleDeg: next.angleDeg, tiltDeg: next.tiltDeg })}
-          className={cn(
-            "rounded-lg bg-foreground px-3 py-2 text-xs font-semibold text-background transition-colors hover:bg-foreground-secondary",
-            (disabled || !onGenerate) && "cursor-not-allowed opacity-60"
-          )}
-        >
-          Generate new angle
-        </button>
-      </section>
+      <FrameAnglePreview imageUrl={imageUrl} value={next} />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => handleChange(DEFAULT_FRAME_ANGLE_VALUE)}
+        className={cn(
+          "w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs font-semibold text-foreground-secondary transition-colors hover:border-foreground/40 hover:text-foreground",
+          disabled && "cursor-not-allowed opacity-60"
+        )}
+      >
+        Reset angle
+      </button>
     </div>
   );
 };

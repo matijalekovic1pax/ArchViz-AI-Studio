@@ -2090,7 +2090,7 @@ export function useGeneration(): UseGenerationReturn {
         }
 
         if (isAngleChangeMode) {
-          const angleDeg = Math.max(-45, Math.min(45, Math.round(state.workflow.angleChangeDegrees)));
+          const angleDeg = Math.max(-90, Math.min(90, Math.round(state.workflow.angleChangeDegrees)));
           const tiltDeg = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
           const angleLabel = Math.abs(angleDeg) < 3
             ? 'Original Angle'

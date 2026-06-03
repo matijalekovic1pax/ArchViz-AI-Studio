@@ -3160,7 +3160,7 @@ function generateMultiAnglePrompt(state: AppState): string {
 }
 
 function generateAngleChangePrompt(state: AppState): string {
-  const angleDeg = Math.max(-45, Math.min(45, Math.round(state.workflow.angleChangeDegrees)));
+  const angleDeg = Math.max(-90, Math.min(90, Math.round(state.workflow.angleChangeDegrees)));
   const tiltDeg = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
   const angle =
     Math.abs(angleDeg) < 3
