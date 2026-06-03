@@ -669,7 +669,7 @@ export function useGeneration(): UseGenerationReturn {
       'scene-compose': 'Create a photorealistic architectural scene composition: ',
       'masterplan': 'Generate a detailed masterplan visualization: ',
       'visual-edit': 'Edit this image according to the following instructions: ',
-      'angle-change': 'Change the camera viewpoint of this image: ',
+      'angle-change': 'Reshoot this image from a new camera viewpoint: ',
       'exploded': 'Create an exploded architectural diagram: ',
       'section': 'Generate an architectural section drawing: ',
       'multi-angle': 'Generate a photorealistic architectural view: ',

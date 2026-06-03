@@ -3162,26 +3162,25 @@ function generateMultiAnglePrompt(state: AppState): string {
 function generateAngleChangePrompt(state: AppState): string {
   const angleDeg = Math.max(-90, Math.min(90, Math.round(state.workflow.angleChangeDegrees)));
   const tiltDeg = Math.max(-30, Math.min(30, Math.round(state.workflow.angleChangePitch)));
+  const angleAbs = Math.abs(angleDeg);
+  const tiltAbs = Math.abs(tiltDeg);
   const angle =
     Math.abs(angleDeg) < 3
-      ? 'keep the original horizontal camera angle'
+      ? 'from the original camera direction'
       : angleDeg > 0
-        ? `change the full-scene camera angle ${angleDeg} degrees to the right`
-        : `change the full-scene camera angle ${Math.abs(angleDeg)} degrees to the left`;
+        ? `as if the photographer turned ${angleAbs}° to the right`
+        : `as if the photographer turned ${angleAbs}° to the left`;
   const tilt =
     Math.abs(tiltDeg) < 3
-      ? 'keep the original vertical tilt'
+      ? 'with a level camera'
       : tiltDeg > 0
-        ? `tilt the camera ${tiltDeg} degrees upward`
-        : `tilt the camera ${Math.abs(tiltDeg)} degrees downward`;
+        ? `with the camera tilted ${tiltAbs}° up, showing more ceiling`
+        : `with the camera tilted ${tiltAbs}° down, showing more floor`;
 
   return [
-    'Generate a new view of the same full scene from the source image.',
-    `${angle}.`,
-    `${tilt}.`,
-    'Preserve the same architecture, objects, materials, lighting, proportions, and overall framing.',
-    'Do not rotate individual objects.',
-    'Do not change lens, zoom, field of view, roll, or camera target.',
+    `Show the same space ${angle}, ${tilt}.`,
+    'Keep the design, layout, materials, lighting, and any people consistent with the reference image.',
+    'Do not rotate, flip, or crop the existing picture; create a new upright camera view.',
   ].join(' ');
 }
 
