@@ -1,0 +1,1394 @@
+{
+  "app": {
+    "title": "ArchViz Studio",
+    "subtitle": "无状态会话"
+  },
+  "topBar": {
+    "undo": "撤销",
+    "redo": "重做",
+    "clearImage": "清除图像",
+    "fitToScreen": "适合屏幕",
+    "toggleSplitView": "切换分屏视图",
+    "zoomOut": "缩小",
+    "zoomIn": "放大",
+    "resolution": "分辨率",
+    "controls": "控制",
+    "quickControls": "快速控制",
+    "history": "历史",
+    "canvas": "画布",
+    "fit": "适配",
+    "split": "分屏",
+    "zoom": "缩放",
+    "close": "关闭",
+    "resetProject": "重置项目",
+    "loadProject": "加载项目",
+    "saveProject": "保存项目",
+    "download": "下载",
+    "downloadSettings": "下载设置",
+    "videoResolution": "视频分辨率",
+    "format": "格式",
+    "lossless": "无损",
+    "compact": "紧凑",
+    "fullRes": "完整分辨率",
+    "originalSize": "原始尺寸",
+    "medium": "中等",
+    "scalePercent": "50% 缩放",
+    "downloadNow": "立即下载",
+    "universalVideoFormat": "通用视频格式",
+    "clearCanvas": "清空画布？",
+    "clearCanvasMessage": "确定要清除当前图像吗？此操作无法撤销，并会移除当前工作区内容。",
+    "cancel": "取消",
+    "confirmClear": "清除图像",
+    "saveProjectWorkspace": "保存项目工作区",
+    "saveProjectMessage": "此操作会将当前会话导出为 .json 文件。",
+    "includesHistory": "包含所有生成历史和图像",
+    "preservesSettings": "保留当前提示词、参数和样式设置",
+    "canBeRestored": "可通过“加载项目”按钮恢复",
+    "privacyNotice": "隐私提示",
+    "privacyMessage": "我们的服务器不会存储任何数据。此文件会保存到你的本地设备。",
+    "projectNameLabel": "项目名称",
+    "projectNamePlaceholder": "输入项目名称",
+    "confirmSave": "保存项目",
+    "language": "语言",
+    "modelSelector": {
+      "title": "图像模型",
+      "nano": {
+        "label": "Nanobanana",
+        "shortLabel": "Nanobanana",
+        "description": "更适合强化视觉效果、动态构图和沉浸式色彩。",
+        "bestFor": "用于增强视觉冲击"
+      },
+      "chatgpt": {
+        "label": "ChatGPT Image Generation 2",
+        "shortLabel": "GPT Img 2",
+        "description": "更适合精确控制、保留原貌和文字较多的图像。",
+        "bestFor": "用于控制和文字"
+      }
+    }
+  },
+  "generation": {
+    "generate": "生成",
+    "generating": "正在生成",
+    "generateMasterplan": "生成总平面",
+    "generateExplodedView": "生成爆炸图",
+    "generateSection": "生成剖面",
+    "generateAngles": "生成角度",
+    "changeAngle": "更改角度",
+    "upscaleImage": "提升图像",
+    "convertToCAD": "转换为 CAD",
+    "generateVideo": "生成视频",
+    "compressPdfs": "压缩 PDF",
+    "applyEdits": "应用编辑",
+    "runValidation": "运行验证",
+    "renderSketch": "渲染草图",
+    "generateRender": "生成渲染",
+    "generateOutputFirst": "请先生成输出",
+    "translateDocument": "翻译文档",
+    "cancel": "取消"
+  },
+  "modes": {
+    "render3d": "3D 渲染",
+    "sceneCompose": "场景合成",
+    "renderCad": "CAD 渲染",
+    "renderSketch": "草图渲染",
+    "masterplan": "总平面",
+    "visualEdit": "视觉编辑",
+    "angleChange": "角度更改",
+    "exploded": "爆炸图",
+    "section": "剖面",
+    "multiAngle": "多角度",
+    "upscale": "放大增强",
+    "imgToCAD": "图像转 CAD",
+    "video": "视频",
+    "materialValidation": "材料验证",
+    "generateText": "生成文字",
+    "pdfCompression": "PDF 压缩"
+  },
+  "auth": {
+    "welcome": "欢迎使用 ArchViz Studio",
+    "signIn": "登录",
+    "signInWithGoogle": "使用 Google 登录",
+    "signInMessage": "登录后继续进入你的工作区",
+    "loading": "正在加载..."
+  },
+  "common": {
+    "upload": "上传",
+    "remove": "移除",
+    "add": "添加",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "close": "关闭",
+    "apply": "应用",
+    "reset": "重置",
+    "confirm": "确认",
+    "cancel": "取消",
+    "yes": "是",
+    "no": "否",
+    "ok": "确定",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "auto": "自动",
+    "manual": "手动",
+    "custom": "自定义",
+    "degrees": "度"
+  },
+  "assistant": {
+    "open": "打开助手",
+    "title": "工作室助手",
+    "live": "在线",
+    "contextLabel": "上下文",
+    "clear": "清空聊天",
+    "thinking": "正在读取此功能...",
+    "empty": "我未能生成答案。请增加一些细节后再试。",
+    "error": "暂时无法连接助手。请重试。",
+    "emptyTitle": "告诉我你想做什么。",
+    "emptyBody": "我可以查看当前图像、建议方向、设置控件、优化提示词，并在你确认后渲染。",
+    "hintTitle": "需要帮助？",
+    "hintBody": "向助手询问 {{feature}}。",
+    "inspect": "检查界面元素",
+    "inspectShort": "检查",
+    "inspectHelp": "点击此聊天之外的任意控件组，询问它的用途。按 Esc 取消。",
+    "inspectOverlay": "选择一个控件组进行说明",
+    "inspectActiveTitle": "检查模式",
+    "inspectActiveBody": "点击工作区中的一个控件组。按 Esc 取消。",
+    "inspectCancel": "取消检查模式",
+    "inspectSelectedQuestion": "解释这个已选元素：{{element}}",
+    "attachImage": "附加图像",
+    "removeImage": "移除图像",
+    "placeholder": "询问建议、编辑、设置或渲染...",
+    "send": "发送"
+  },
+  "feedback": {
+    "reportButton": "报告反馈",
+    "adminButton": "管理面板",
+    "title": "报告反馈",
+    "subtitle": "告诉我们哪里出了问题，我们会捕获你的完整项目状态用于排查。",
+    "projectName": "项目名称",
+    "projectNamePlaceholder": "可选项目标签",
+    "titleLabel": "问题标题",
+    "titlePlaceholder": "问题简短摘要",
+    "featureLabel": "反馈功能",
+    "categoryLabel": "类别",
+    "priorityLabel": "优先级",
+    "descriptionLabel": "发生了什么",
+    "descriptionPlaceholder": "详细描述此问题。",
+    "stepsLabel": "复现步骤",
+    "stepsPlaceholder": "列出我们可以遵循的清晰步骤。",
+    "expectedLabel": "期望行为",
+    "expectedPlaceholder": "原本应该发生什么？",
+    "snapshotNoticeTitle": "快照捕获",
+    "snapshotNoticeBody": "提交时，当前项目设置、生成历史以及相关应用状态会被捕获并发送到我们的诊断数据库。",
+    "imageMarkupTitle": "照片标注和单图反馈",
+    "imageMarkupSubtitle": "从项目历史中打开任意照片，圈出问题区域，并为每张图添加具体备注。",
+    "imageSelectedCount": "已选择 {{count}} 个",
+    "imageMarkupEmpty": "当前来源/历史中没有可用图像。",
+    "mediaMarkupEmpty": "当前来源/历史中没有可用图像或文档。",
+    "imageSelected": "已选择",
+    "imageSelect": "选择",
+    "imageOpenMarkup": "打开标注",
+    "imageMarkupCount": "{{count}} 个标注",
+    "imageMarkupEditorTitle": "图像标注编辑器",
+    "imageMarkupHelp": "在图像上点击并拖动，绘制自由套索。",
+    "imageUndoMarkup": "撤销上一个套索",
+    "imageClearMarkup": "清除标注",
+    "imageSpecificFeedback": "此照片的具体反馈",
+    "imageSpecificFeedbackPlaceholder": "准确描述标注区域的问题...",
+    "documentOriginal": "原始文档",
+    "documentTranslated": "已翻译文档",
+    "documentOpen": "打开",
+    "documentDownload": "下载",
+    "submitting": "正在提交...",
+    "submit": "提交报告",
+    "submitSuccess": "反馈报告提交成功。",
+    "submitError": "反馈报告提交失败。",
+    "category": {
+      "bug": "错误",
+      "quality": "输出质量",
+      "ux": "用户体验/可用性",
+      "performance": "性能",
+      "feature_request": "功能请求",
+      "other": "其他"
+    },
+    "priority": {
+      "low": "低",
+      "normal": "普通",
+      "high": "高",
+      "urgent": "紧急"
+    },
+    "status": {
+      "new": "新建",
+      "triaged": "已分诊",
+      "in_progress": "处理中",
+      "resolved": "已解决",
+      "closed": "已关闭"
+    },
+    "admin": {
+      "title": "反馈管理面板",
+      "refresh": "刷新",
+      "noAccessTitle": "访问受限",
+      "noAccessBody": "只有已批准的反馈管理员可以访问此面板。",
+      "allStatuses": "所有状态",
+      "allPriorities": "所有优先级",
+      "allCategories": "所有类别",
+      "searchPlaceholder": "搜索标题/邮箱",
+      "applyFilters": "应用",
+      "noReports": "未找到反馈报告。",
+      "loadError": "加载反馈报告失败。",
+      "detailError": "加载反馈详情失败。",
+      "saveSuccess": "反馈报告已更新。",
+      "saveError": "更新反馈报告失败。",
+      "commentError": "添加评论失败。",
+      "snapshotError": "下载快照失败。",
+      "selectReport": "选择一个报告以查看详情。",
+      "detailUnavailable": "报告详情不可用。",
+      "status": "状态",
+      "priority": "优先级",
+      "feature": "功能",
+      "reporter": "报告人",
+      "mode": "模式",
+      "project": "项目",
+      "historyCount": "历史项",
+      "imageMarkupTitle": "图像标注和单图备注",
+      "imageMarkupEmpty": "未提交单图标注反馈。",
+      "mediaMarkupEmpty": "未提交图像标注或文档反馈。",
+      "imageMarkupImageMissing": "无法从保存的快照中解析图像。",
+      "internalNote": "内部更新备注",
+      "internalNotePlaceholder": "为下一次管理员更新添加上下文...",
+      "downloadSnapshot": "下载快照 JSON",
+      "openSnapshotInApp": "在应用中打开 JSON",
+      "openSnapshotSuccess": "快照已在应用中打开。",
+      "openSnapshotError": "在应用中打开快照失败。",
+      "openSnapshotInvalid": "快照格式对项目恢复无效。",
+      "deleteReport": "删除反馈",
+      "deleteConfirmBody": "删除此反馈项？此操作无法撤销。",
+      "deleteSuccess": "反馈项已删除。",
+      "deleteError": "删除反馈项失败。",
+      "timeline": "活动时间线",
+      "noActivity": "暂无活动。",
+      "commentPlaceholder": "添加管理员评论...",
+      "addComment": "添加评论"
+    }
+  },
+  "workflow": {
+    "geometry": "几何",
+    "camera": "相机",
+    "lighting": "灯光",
+    "materials": "材料",
+    "context": "环境",
+    "output": "输出",
+    "settings": "设置"
+  },
+  "validation": {
+    "materials": "材料",
+    "boq": "工程量清单",
+    "issues": "问题",
+    "uploadDocuments": "上传文档",
+    "runValidation": "运行验证",
+    "validationSummary": "验证摘要",
+    "totalMaterials": "材料总数",
+    "validated": "已验证",
+    "warnings": "警告",
+    "errors": "错误",
+    "noDocuments": "未上传文档",
+    "uploadToStart": "上传材料表和工程量清单文档以开始验证"
+  },
+  "documentTranslate": {
+    "uploadDocument": "文档",
+    "dropOrClick": "拖放或点击上传",
+    "supportedFormats": "PDF、Word (.docx)、Excel (.xlsx)、PowerPoint (.pptx)",
+    "removeDocument": "移除文档",
+    "languagesTitle": "语言",
+    "sourceLanguage": "从",
+    "targetLanguage": "到",
+    "preservesFormatting": "结构保留",
+    "formattingNote": "页眉、页脚、图像和表格会保持原位。只翻译文本内容。",
+    "translationComplete": "翻译完成！",
+    "downloadTranslated": "下载已翻译文档",
+    "noDocumentUploaded": "请在左侧上传文档以开始翻译。",
+    "settings": "设置",
+    "xlsxWarningsTitle": "结构保留警告",
+    "xlsxStatsTitle": "Excel 翻译摘要",
+    "xlsxStatsTranslated": "已翻译单元格：{{count}}",
+    "xlsxStatsSkipped": "已跳过单元格：{{count}}",
+    "xlsxStatsDetected": "检测到的文本单元格：{{count}}",
+    "pdfWarningTitle": "注意：",
+    "pdfWarningMessage": "由于字体嵌入限制，PDF 翻译可能出现轻微版式差异。",
+    "progress": {
+      "parsing": "正在解析文档...",
+      "translating": "正在翻译...",
+      "rebuilding": "正在重建文档...",
+      "complete": "完成",
+      "error": "错误",
+      "batch": "第 {{current}} / {{total}} 批"
+    },
+    "languages": {
+      "auto": "自动检测",
+      "en": "英语",
+      "es": "西班牙语",
+      "fr": "法语",
+      "de": "德语",
+      "it": "意大利语",
+      "pt": "葡萄牙语",
+      "zh": "中文",
+      "ja": "日语",
+      "ko": "韩语",
+      "ar": "阿拉伯语",
+      "ru": "俄语",
+      "sr": "塞尔维亚语"
+    }
+  },
+  "workflows": {
+    "generateText": "生成",
+    "render3d": "3D 转渲染",
+    "sceneCompose": "场景合成",
+    "renderCad": "CAD 转渲染",
+    "masterplan": "总平面",
+    "visualEdit": "视觉编辑器",
+    "angleChange": "角度更改",
+    "materialValidation": "材料验证",
+    "documentTranslate": "文档翻译器",
+    "pdfCompression": "PDF 压缩器",
+    "exploded": "爆炸图",
+    "section": "渲染转剖面",
+    "renderSketch": "草图转渲染",
+    "multiAngle": "多角度",
+    "upscale": "图像放大器",
+    "imgToCad": "图像转 CAD",
+    "video": "视频工作室",
+    "headshot": "头像工作室"
+  },
+  "leftSidebar": {
+    "collapse": "折叠侧边栏",
+    "expand": "展开侧边栏",
+    "workflow": "工作流",
+    "parameters": "参数"
+  },
+  "styles": {
+    "browseAll": "浏览所有风格",
+    "names": {
+      "no-style": "无风格",
+      "contemporary-minimalist": "当代极简",
+      "brutalist": "新粗野主义",
+      "parametric": "参数化流动",
+      "vernacular": "现代乡土",
+      "scandinavian": "斯堪的纳维亚",
+      "industrial-loft": "工业 Loft",
+      "biophilic": "亲生物设计",
+      "mid-century": "中世纪现代",
+      "japanese-zen": "日式禅意",
+      "cyberpunk": "赛博朋克",
+      "bauhaus": "包豪斯",
+      "tropical-modern": "热带现代主义",
+      "alpine-chalet": "阿尔卑斯木屋",
+      "desert-modern": "沙漠现代主义",
+      "art-deco": "装饰艺术",
+      "beaux-arts": "美术学院派",
+      "gothic-revival": "哥特复兴",
+      "victorian": "维多利亚",
+      "mediterranean": "地中海复兴",
+      "tudor": "都铎复兴",
+      "craftsman": "工匠风格",
+      "prairie": "草原风格",
+      "international": "国际风格",
+      "deconstructivism": "解构主义",
+      "high-tech": "高技派",
+      "postmodern": "后现代主义",
+      "metabolism": "新陈代谢派",
+      "eco-brutalism": "生态粗野主义",
+      "tiny-house": "微型住宅",
+      "shipping-container": "集装箱建筑",
+      "earthship": "Earthship 生态屋",
+      "bamboo": "竹建筑",
+      "nordic-noir": "北欧黑色",
+      "a-frame": "A 字形建筑",
+      "geodesic": "测地线穹顶",
+      "parametric-timber": "参数化木构",
+      "floating-home": "漂浮建筑",
+      "mars-habitat": "火星栖居",
+      "solarpunk": "太阳朋克",
+      "steampunk": "蒸汽朋克",
+      "islamic-modern": "现代伊斯兰",
+      "chinese-modern": "中式现代",
+      "wabi-sabi": "侘寂",
+      "memphis": "孟菲斯派",
+      "art-nouveau": "新艺术",
+      "neoclassical": "新古典主义",
+      "colonial": "殖民复兴",
+      "ranch": "牧场风格",
+      "swiss-chalet": "瑞士木屋",
+      "pueblo": "普韦布洛复兴",
+      "greek-revival": "希腊复兴",
+      "italianate": "意大利式",
+      "futuristic-organic": "未来有机",
+      "cyber-organic": "赛博有机"
+    }
+  },
+  "render3d": {
+    "sourceAnalysis": {
+      "title": "源图分析",
+      "originalSource": "原始来源",
+      "lockedForConsistency": "已锁定以保持渲染一致",
+      "resetSource": "重置源图",
+      "sourceType": "来源类型",
+      "viewType": "视图类型",
+      "sourceOptions": {
+        "rhino": "Rhino",
+        "revit": "Revit",
+        "sketchup": "SketchUp",
+        "blender": "Blender",
+        "3dsmax": "3ds Max",
+        "archicad": "ArchiCAD",
+        "cinema4d": "Cinema 4D",
+        "clay": "白模渲染",
+        "other": "其他"
+      },
+      "viewOptions": {
+        "exterior": "外部",
+        "interior": "内部",
+        "aerial": "鸟瞰"
+      }
+    },
+    "style": {
+      "title": "风格"
+    },
+    "styleReference": {
+      "presets": "预设",
+      "image": "图像",
+      "activeLabel": "参考图像",
+      "upload": "上传风格参考...",
+      "change": "更换风格参考...",
+      "hint": "仅将此图像用于渲染风格",
+      "remove": "移除风格参考",
+      "alt": "风格参考"
+    },
+    "backgroundReference": {
+      "title": "背景参考",
+      "upload": "上传参考...",
+      "change": "更换参考...",
+      "remove": "移除参考",
+      "alt": "背景参考"
+    },
+    "problemAreas": {
+      "title": "问题区域",
+      "description": "AI 会标记可能需要额外处理的细节或图案区域。颜色表示难度。",
+      "run": "运行 AI 预处理",
+      "rerun": "重新运行 AI 预处理",
+      "analyzing": "正在分析...",
+      "analyzingStatus": "正在分析问题区域...",
+      "waiting": "正在等待分析结果...",
+      "none": "尚未检测到问题区域。",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    }
+  },
+  "masterplan": {
+    "planType": {
+      "title": "规划类型"
+    },
+    "planTypes": {
+      "site": "场地平面",
+      "urban": "城市",
+      "zoning": "分区",
+      "massing": "体量"
+    },
+    "scaleOrientation": {
+      "title": "比例和方向",
+      "scale": "比例",
+      "customScale": "自定义比例：1:",
+      "northRotation": "北向旋转",
+      "north": "N"
+    },
+    "scale": {
+      "1_200": "1:200（建筑细节）",
+      "1_500": "1:500（场地细节）",
+      "1_1000": "1:1000（标准场地）",
+      "1_2500": "1:2500（片区）",
+      "1_5000": "1:5000（城市）",
+      "1_10000": "1:10000（都会区）",
+      "custom": "自定义..."
+    },
+    "zones": {
+      "title": "区域定义",
+      "autoDetect": "自动检测区域",
+      "detecting": "正在检测区域...",
+      "newZonePlaceholder": "新区域名称",
+      "add": "添加区域",
+      "addCta": "+ 添加区域",
+      "defaultName": "区域 {{index}}",
+      "errors": {
+        "uploadFirst": "请先上传图像以自动检测区域。",
+        "noneDetected": "未检测到区域。请重试或优化图像。",
+        "failed": "自动检测失败。请重试。"
+      }
+    },
+    "zoneTypes": {
+      "residentialLow": "住宅 - 低密度",
+      "residentialMedium": "住宅 - 中密度",
+      "residentialHigh": "住宅 - 高密度",
+      "commercial": "商业",
+      "retail": "零售",
+      "office": "办公",
+      "industrial": "工业",
+      "mixed": "混合用途",
+      "green": "绿地/公园",
+      "water": "水体",
+      "infra": "基础设施/道路",
+      "institutional": "机构",
+      "civic": "市政/公共",
+      "parking": "停车",
+      "future": "预留/未来"
+    },
+    "boundary": {
+      "title": "场地边界",
+      "lassoOn": "套索已开启（点击禁用）",
+      "lassoOff": "套索边界",
+      "instructions": "直接在画布上绘制绿色套索以设置场地边界。"
+    },
+    "context": {
+      "title": "环境",
+      "clear": "清除环境",
+      "load": "从位置加载"
+    },
+    "outputStyles": {
+      "photorealistic": "照片级真实",
+      "diagrammatic": "图解",
+      "hybrid": "混合",
+      "illustrative": "插画"
+    },
+    "viewAngles": {
+      "top": "俯视",
+      "isoNe": "等轴东北",
+      "isoNw": "等轴西北",
+      "isoSe": "等轴东南",
+      "isoSw": "等轴西南",
+      "custom": "自定义"
+    },
+    "buildingStyles": {
+      "contemporaryMixed": "当代混合",
+      "modernMinimal": "现代极简",
+      "highTechGlass": "高技派玻璃",
+      "brutalist": "粗野主义",
+      "traditionalEuropean": "传统欧式",
+      "mediterranean": "地中海",
+      "colonial": "殖民风格",
+      "asianContemporary": "亚洲当代",
+      "industrialWarehouse": "工业/仓储",
+      "mixedIndustrial": "混合工业",
+      "matchSurroundings": "匹配周边（AI）"
+    },
+    "roofStyles": {
+      "flat": "平屋顶",
+      "gabled": "山墙屋顶",
+      "hip": "四坡屋顶",
+      "mansard": "曼萨尔屋顶",
+      "green": "绿色屋顶",
+      "mixed": "混合"
+    },
+    "labelStyles": {
+      "modern": "现代",
+      "classic": "经典",
+      "technical": "技术",
+      "handwritten": "手写",
+      "minimal": "极简"
+    },
+    "legendStyles": {
+      "compact": "紧凑",
+      "detailed": "详细",
+      "professional": "专业",
+      "minimal": "极简"
+    },
+    "sections": {
+      "outputStyle": {
+        "title": "输出风格"
+      },
+      "viewAngle": {
+        "title": "视角",
+        "elevation": "仰角",
+        "rotation": "旋转角",
+        "perspective": "透视强度"
+      },
+      "buildings": {
+        "title": "建筑",
+        "heightMode": "高度模式",
+        "heightModeOptions": {
+          "uniform": "统一",
+          "fromColor": "来自颜色",
+          "vary": "变化"
+        },
+        "defaultHeight": "默认高度",
+        "heightRange": "高度范围",
+        "floorHeight": "层高",
+        "showShadows": "显示建筑阴影",
+        "transparent": "透明建筑",
+        "facadeVariation": "立面变化",
+        "showFloorLabels": "显示层数标签"
+      },
+      "landscape": {
+        "title": "景观",
+        "seasonOptions": {
+          "spring": "春季",
+          "summer": "夏季",
+          "autumn": "秋季",
+          "winter": "冬季"
+        },
+        "vegetationDensity": "植被密度",
+        "treeVariation": "树木尺寸变化",
+        "trees": "树木和灌木",
+        "grass": "草地和地被",
+        "water": "水景",
+        "pathways": "步道和广场",
+        "streetFurniture": "街道家具",
+        "vehicles": "车辆",
+        "people": "人物",
+        "vegetationStyleOptions": {
+          "realistic": "真实",
+          "stylized": "风格化/图标化",
+          "watercolor": "水彩",
+          "technical": "技术（符号）"
+        }
+      },
+      "annotations": {
+        "title": "标注",
+        "zoneLabels": "区域标签",
+        "streetNames": "街道名称",
+        "buildingLabels": "建筑标签",
+        "lotNumbers": "地块编号",
+        "scaleBar": "比例尺",
+        "northArrow": "指北针",
+        "dimensions": "尺寸",
+        "areaCalculations": "面积计算",
+        "contourLabels": "等高线标签",
+        "labelSizeOptions": {
+          "small": "小",
+          "medium": "中",
+          "large": "大"
+        },
+        "labelColorOptions": {
+          "auto": "自动",
+          "dark": "深色",
+          "light": "浅色"
+        },
+        "labelHalo": "标签背景（光晕）"
+      },
+      "legend": {
+        "title": "图例",
+        "include": "包含图例",
+        "positionOptions": {
+          "topLeft": "左上",
+          "topRight": "右上",
+          "bottom": "底部"
+        },
+        "zoneColorsNames": "区域颜色和名称",
+        "zoneAreas": "区域面积",
+        "buildingTypes": "建筑类型",
+        "landscapeElements": "景观元素",
+        "infrastructure": "基础设施"
+      }
+    }
+  },
+  "rightPanel": {
+    "settings": {
+      "title": "设置",
+      "description": "调整当前工作流的设置。"
+    },
+    "expand": "展开面板",
+    "collapse": "折叠面板",
+    "toggleHelp": "切换帮助",
+    "panelInfo": "面板信息",
+    "viewDocs": "查看文档 →",
+    "selectWorkflow": "选择工作流",
+    "generateText": {
+      "title": "图像生成"
+    },
+    "render3d": {
+      "title": "3D 转渲染",
+      "description": "控制灯光、氛围、场景和输出设置，将 3D 模型转换为照片级渲染。"
+    },
+    "sceneCompose": {
+      "title": "场景合成",
+      "description": "将参考照片作为堆栈上传，为每张添加说明，并以照片级渲染方式合成到基础场景中。"
+    },
+    "renderCad": {
+      "title": "CAD 转渲染",
+      "description": "配置线条解读、空间设置和自动布置，用 CAD 图纸生成渲染。"
+    },
+    "masterplan": {
+      "title": "总平面",
+      "description": "为大尺度总平面可视化设置规划类型、区域检测和景观选项。"
+    },
+    "visualEdit": {
+      "title": "视觉编辑器",
+      "description": "选择用于补绘、材料替换和生成图像灯光调整的工具。"
+    },
+    "angleChange": {
+      "title": "角度更改",
+      "description": "为当前照片或渲染设置完整画幅角度和倾斜，生成新视图。"
+    },
+    "exploded": {
+      "title": "爆炸图",
+      "description": "管理构件分离和动画设置，创建爆炸轴测视图。"
+    },
+    "section": {
+      "title": "渲染转剖面",
+      "description": "定义剖切平面、线宽和填充样式，生成建筑剖面。"
+    },
+    "renderSketch": {
+      "title": "草图转渲染",
+      "description": "控制灯光、氛围、场景和输出设置，将草图转换为渲染。"
+    },
+    "multiAngle": {
+      "title": "多角度",
+      "description": "在保持灯光和风格锁定的同时，生成多个一致视角。"
+    },
+    "upscale": {
+      "title": "放大增强",
+      "description": "配置增强设置和输出格式，获得更高分辨率结果。"
+    },
+    "imgToCad": {
+      "title": "图像转 CAD",
+      "description": "将位图矢量化为 DXF 或 DWG 等 CAD 就绪格式的设置。"
+    },
+    "video": {
+      "title": "视频工作室",
+      "description": "设置时长、相机运动和转场效果，用于 AI 视频生成。",
+      "presets": {
+        "title": "社交媒体预设",
+        "linkedin": {
+          "name": "LinkedIn",
+          "description": "用于帖子的专业横版视频"
+        },
+        "instagramStory": {
+          "name": "Instagram Story",
+          "description": "用于快拍的竖版格式"
+        },
+        "instagramPost": {
+          "name": "Instagram Post",
+          "description": "用于动态的方形格式"
+        },
+        "tiktok": {
+          "name": "TikTok",
+          "description": "短竖版视频"
+        },
+        "youtubeShorts": {
+          "name": "YouTube Shorts",
+          "description": "YouTube 竖版短视频"
+        },
+        "websiteHero": {
+          "name": "Website Hero",
+          "description": "电影感横幅视频"
+        }
+      },
+      "motionStyles": {
+        "title": "运动风格",
+        "smooth": {
+          "label": "平滑",
+          "description": "柔和流畅的运动"
+        },
+        "dynamic": {
+          "label": "动态",
+          "description": "节奏较快、吸引人的运动"
+        },
+        "energetic": {
+          "label": "高能",
+          "description": "高能量快速运动"
+        },
+        "elegant": {
+          "label": "优雅",
+          "description": "优雅精致的运动"
+        },
+        "cinematic": {
+          "label": "电影感",
+          "description": "电影式运动"
+        },
+        "subtle": {
+          "label": "微妙",
+          "description": "最小且柔和的运动"
+        },
+        "dramatic": {
+          "label": "戏剧化",
+          "description": "大胆有冲击力的运动"
+        },
+        "gentle": {
+          "label": "轻柔",
+          "description": "柔和顺滑的运动"
+        }
+      },
+      "model": {
+        "title": "视频模型",
+        "veo": {
+          "name": "Veo 3.1",
+          "description": "高保真 8 秒视频 • 720p/1080p/4K • 竖屏和横屏"
+        },
+        "kling": {
+          "name": "Kling 2.6",
+          "description": "带相机控制的高级模型 - 最长 10 秒，最高 1080p"
+        },
+        "providers": {
+          "piapi": "PiAPI 提供商",
+          "ulazai": "UlazAI 提供商",
+          "wavespeedai": "WaveSpeedAI 提供商"
+        }
+      },
+      "duration": {
+        "label": "时长"
+      },
+      "aspectRatio": {
+        "label": "宽高比"
+      },
+      "resolution": {
+        "label": "分辨率"
+      },
+      "frameRate": {
+        "label": "帧率"
+      },
+      "motionAmount": {
+        "label": "运动量"
+      },
+      "advanced": {
+        "title": "高级设置"
+      },
+      "seed": {
+        "label": "种子"
+      },
+      "inputSequence": {
+        "title": "输入序列"
+      },
+      "camera": {
+        "type": {
+          "label": "相机运动",
+          "static": "静止",
+          "pan": "平移",
+          "orbit": "环绕",
+          "dolly": "推轨",
+          "crane": "升降",
+          "drone": "航拍",
+          "rotate": "旋转",
+          "pushIn": "推进",
+          "pullOut": "拉出",
+          "custom": "自定义"
+        },
+        "direction": "方向",
+        "directionValue": "方向：{{value}}°",
+        "speed": {
+          "label": "速度",
+          "slow": "慢",
+          "normal": "正常",
+          "fast": "快"
+        },
+        "smoothness": "平滑度"
+      },
+      "quality": {
+        "label": "质量",
+        "draft": "草稿",
+        "standard": "标准",
+        "high": "高",
+        "ultra": "超高"
+      },
+      "transition": {
+        "label": "转场效果",
+        "cut": "切换",
+        "fade": "淡入淡出",
+        "dissolve": "溶解",
+        "wipe": "擦除",
+        "none": "无"
+      },
+      "progress": {
+        "initializing": "正在初始化...",
+        "processing": "正在处理视频...",
+        "rendering": "正在渲染...",
+        "complete": "视频生成完成！",
+        "error": "视频生成失败",
+        "eta": "预计剩余：{{seconds}} 秒"
+      },
+      "inputMode": {
+        "title": "视频模式",
+        "imageAnimate": "图像动画",
+        "cameraPath": "相机路径",
+        "imageMorph": "变形序列",
+        "multiShot": "多镜头",
+        "descriptions": {
+          "imageAnimate": "为静止图像添加运动",
+          "cameraPath": "从 3D 或图像创建飞行漫游",
+          "imageMorph": "在视图之间过渡",
+          "multiShot": "剪辑组合"
+        }
+      },
+      "quickSettings": {
+        "title": "快速设置",
+        "compareMode": "对比模式",
+        "lockSeed": "锁定种子",
+        "on": "开启",
+        "off": "关闭",
+        "locked": "已锁定",
+        "random": "随机"
+      },
+      "lock": {
+        "title": "视频工作室已锁定",
+        "message": "此功能正在开发中，暂时对用户不可用。",
+        "passwordLabel": "密码",
+        "placeholder": "输入密码",
+        "unlock": "解锁",
+        "error": "密码不正确。",
+        "notice": "仅供内部使用。"
+      },
+      "timeline": {
+        "addKeyframe": "添加关键帧",
+        "removeKeyframe": "移除关键帧",
+        "keyframeLabel": "关键帧 {{index}}"
+      },
+      "output": {
+        "title": "生成的视频",
+        "download": "下载视频",
+        "recentGenerations": "最近生成",
+        "load": "加载",
+        "noVideo": "尚未生成视频",
+        "configure": "配置设置并生成",
+        "frameAlt": "视频帧",
+        "originalImage": "原始图像"
+      }
+    },
+    "materialValidation": {
+      "title": "验证",
+      "description": "根据 BoQ 和技术规范审查检测到的材料。"
+    },
+    "documentTranslate": {
+      "title": "翻译",
+      "description": "配置翻译设置并下载已翻译文档。"
+    },
+    "pdfCompression": {
+      "title": "PDF 压缩",
+      "description": "将 PDF 加入队列、预览页面并下载压缩输出。"
+    },
+    "headshot": {
+      "title": "头像工作室",
+      "description": "使用 AI 从参考照片生成专业和自定义团队头像。"
+    }
+  },
+  "sceneCompose": {
+    "insertions": {
+      "title": "自定义插入",
+      "description": "上传要插入的家具/元素参考照片。为每项添加简短说明，描述放置或造型意图。",
+      "addButton": "添加参考照片",
+      "emptyHint": "还没有插入参考。添加家具/元素参考并为每项添加说明，让模型知道要放置什么。",
+      "referenceLabel": "参考 {{index}}",
+      "referenceAlt": "插入参考",
+      "captionPlaceholder": "示例：将这张沙发放在靠窗位置，面向茶几。",
+      "remove": "移除参考",
+      "placementArmed": "参考 {{index}} 已进入放置模式。点击画布放下定位点。",
+      "placementArmedNamed": "放置模式已激活：{{label}}。点击画布放下定位点。",
+      "placeOnCanvas": "放置到画布",
+      "repositionOnCanvas": "重新在画布定位",
+      "cancelPlacement": "取消放置",
+      "clearPlacement": "清除放置点",
+      "placementSet": "放置点已设置在 x {{x}}%，y {{y}}%",
+      "placementNotSet": "尚未设置放置点。",
+      "clearAll": "清除所有参考",
+      "limitReached": "已达到参考上限（最多 {{max}} 个）。移除一个后再添加。",
+      "limitWarning": "仅保留了前 {{max}} 个参考。",
+      "uploadError": "一个或多个参考图像上传失败。"
+    }
+  },
+  "pdfCompression": {
+    "uploadDocument": "文档",
+    "dropOrClick": "拖放或点击上传 PDF",
+    "supportedFormats": "仅 PDF",
+    "queueTitle": "PDF 队列",
+    "removeDocument": "移除文档",
+    "emptyQueue": "尚未添加 PDF。",
+    "addPdfs": "+ 添加 PDF",
+    "addPdfsCount": "+ 添加 PDF（剩余 {{count}} 个）",
+    "queueFull": "队列已满（最多 {{count}} 个）",
+    "uploading": "正在上传 PDF...",
+    "uploadHint": "大文件可能需要一些时间",
+    "clearAll": "全部清除",
+    "previewTitle": "PDF 预览",
+    "settingsTitle": "压缩设置",
+    "levelLabel": "压缩级别",
+    "levels": {
+      "light": "轻度",
+      "balanced": "平衡",
+      "aggressive": "强力"
+    },
+    "preserveTextLabel": "保留文本清晰度",
+    "preserveVectorLabel": "保留矢量图形",
+    "stripMetadataLabel": "移除元数据",
+    "imageQualityLabel": "图像质量",
+    "settingsHint": "启用后，其他压缩选项会显示在这里。",
+    "remainingFiles": "剩余 {{count}} 个文档",
+    "remainingCredits": "剩余 {{count}} 个积分",
+    "alerts": {
+      "success": "已成功压缩 {{count}} 个 PDF。平均压缩率：{{avg}}%",
+      "notConfigured": "未配置 iLovePDF API 密钥。请将 VITE_ILOVEPDF_PUBLIC_KEY 添加到 .env 文件。可在 https://developer.ilovepdf.com/ 获取免费密钥。",
+      "failed": "PDF 压缩失败：{{message}}。请稍后重试。"
+    },
+    "processingOutputs": "已压缩 PDF",
+    "downloadAll": "全部下载",
+    "downloadSelected": "下载所选",
+    "downloadSingle": "下载",
+    "selectAll": "全选",
+    "noOutputs": "尚未生成压缩 PDF。",
+    "noDocumentUploaded": "请在左侧上传 PDF 以预览。",
+    "compressAll": "压缩所有 PDF",
+    "compressing": "正在压缩",
+    "compressionSettings": "压缩设置",
+    "imageQuality": "图像质量",
+    "imageQualityDesc": "质量越低，文件越小。推荐 70% 以获得最佳平衡。",
+    "maxImageSize": "最大图像尺寸",
+    "maxImageSizeDesc": "大于此尺寸的图像会被缩小，以减少文件大小。",
+    "compressImages": "压缩图像",
+    "removeMetadata": "移除元数据"
+  },
+  "bottomPanel": {
+    "copyPrompt": "复制提示词",
+    "tabs": {
+      "prompt": "提示词",
+      "history": "历史",
+      "timeline": "时间线",
+      "legend": "图例",
+      "edit-stack": "编辑堆栈",
+      "cleanup": "清理"
+    },
+    "history": {
+      "empty": "此会话中没有历史记录。",
+      "downloadAll": "全部下载",
+      "downloadSelected": "下载所选",
+      "select": "选择",
+      "cancelSelection": "取消"
+    },
+    "timeline": {
+      "mainSequence": "主序列",
+      "start": "开始",
+      "keyframe": "关键帧",
+      "end": "结束"
+    }
+  },
+  "canvas": {
+    "promptHistory": {
+      "title": "提示词历史",
+      "emptyTitle": "还没有提示词",
+      "emptySubtitle": "最近的提示词会显示在这里。",
+      "addReference": "添加参考图像"
+    },
+    "promptBar": {
+      "placeholder": "描述你的建筑愿景...",
+      "pressEnter": "按 Enter 生成"
+    },
+    "compare": {
+      "original": "原图",
+      "preview": "预览"
+    },
+    "upload": {
+      "title": "上传源图像",
+      "subtitle": "拖放或点击浏览"
+    },
+    "fullscreen": {
+      "close": "关闭全屏（Esc）",
+      "clickToClose": "点击关闭"
+    },
+    "generating": {
+      "subtitle": "正在优化灯光"
+    },
+    "empty": {
+      "title": "画布已就绪",
+      "subtitle": "在下方输入提示词生成。结果会显示在这里。"
+    }
+  },
+  "render3dSettings": {
+    "generationMode": {
+      "title": "生成模式",
+      "options": {
+        "strictRealism": {
+          "label": "严格真实",
+          "desc": "将 3D/Revit 截图转换为超写实渲染。"
+        },
+        "enhance": {
+          "label": "增强",
+          "desc": "优化真实渲染：风格、灯光、氛围和清晰度。"
+        },
+        "conceptPush": {
+          "label": "概念推进",
+          "desc": "创建不那么真实、偏人工概念的渲染，并加入更大胆的想法。"
+        }
+      }
+    },
+    "sections": {
+      "lighting": {
+        "title": "灯光",
+        "sunPosition": "光源",
+        "lightSourceNote": "方向相对于图像。右侧表示光从此视图右侧可见的门、窗或明亮开口进入。",
+        "intensity": "强度",
+        "colorTemp": "色温",
+        "shadows": {
+          "title": "阴影",
+          "opacity": "不透明度"
+        },
+        "timeOfDay": {
+          "label": "一天中的时间",
+          "options": {
+            "preDawn": "黎明前",
+            "sunrise": "日出",
+            "earlyMorning": "清晨",
+            "highNoon": "正午",
+            "lateAfternoon": "午后",
+            "goldenHour": "黄金时刻",
+            "sunsetGlow": "日落余晖",
+            "blueHour": "蓝调时刻",
+            "moonlitNight": "月夜"
+          }
+        }
+      },
+      "atmosphere": {
+        "title": "氛围",
+        "moods": {
+          "natural": "自然",
+          "warm": "温暖",
+          "cool": "冷调",
+          "dramatic": "戏剧化",
+          "soft": "柔和",
+          "moody": "情绪化",
+          "luxury": "奢华",
+          "cinematic": "电影感",
+          "hazy": "朦胧",
+          "crisp": "清爽",
+          "stormy": "暴风雨",
+          "noir": "黑色电影"
+        },
+        "fog": {
+          "title": "雾",
+          "density": "密度"
+        },
+        "bloom": {
+          "title": "泛光",
+          "intensity": "强度"
+        }
+      },
+      "scenery": {
+        "title": "场景",
+        "people": {
+          "title": "人物",
+          "count": "数量"
+        },
+        "vegetation": {
+          "title": "植被",
+          "density": "密度"
+        },
+        "vehicles": {
+          "title": "车辆",
+          "count": "数量"
+        },
+        "contextPreset": {
+          "label": "环境预设",
+          "groups": {
+            "terminalPublic": "航站楼和公共区域",
+            "securityProcessing": "安检和处理",
+            "waitingLounges": "等候和休息区",
+            "baggage": "行李",
+            "retailDining": "零售和餐饮",
+            "transportAccess": "交通和出入口",
+            "operationsSupport": "运营和支持",
+            "exterior": "外部"
+          },
+          "options": {
+            "departureHall": "出发大厅",
+            "arrivalsHall": "到达大厅",
+            "checkInCounter": "值机柜台",
+            "ticketingArea": "票务区",
+            "mainConcourse": "主大厅",
+            "terminalAtrium": "航站楼中庭",
+            "securityCheckpoint": "安检口",
+            "passportControl": "护照检查",
+            "customsHall": "海关大厅",
+            "immigrationArea": "移民检查区",
+            "tsaScreening": "TSA 安检",
+            "gateWaitingArea": "登机口等候区",
+            "businessClassLounge": "商务舱休息室",
+            "firstClassLounge": "头等舱休息室",
+            "airlineLounge": "航空公司休息室",
+            "transitLounge": "中转休息区",
+            "familyWaitingArea": "家庭等候区",
+            "baggageClaim": "行李提取",
+            "baggageDropoff": "行李托运",
+            "oversizedBaggage": "超大行李",
+            "lostBaggageOffice": "失物行李办公室",
+            "dutyFreeShop": "免税店",
+            "foodCourt": "美食广场",
+            "restaurantBar": "餐厅/酒吧",
+            "retailCorridor": "零售走廊",
+            "newsstand": "报刊亭/便利店",
+            "jetBridgeGate": "廊桥/登机口",
+            "busGateArea": "巴士登机口区",
+            "groundTransportation": "地面交通",
+            "taxiRidesharePickup": "出租车/网约车上客区",
+            "parkingGarage": "停车楼",
+            "rentalCarCenter": "租车中心",
+            "informationDesk": "问讯处",
+            "airportOffice": "机场办公室",
+            "controlTowerExterior": "控制塔（外部）",
+            "maintenanceHangar": "维修机库",
+            "cargoTerminal": "货运航站楼",
+            "terminalCurbside": "航站楼路侧",
+            "runwayView": "跑道视图",
+            "apronTarmac": "停机坪",
+            "airportEntryPlaza": "机场入口广场"
+          }
+        }
+      },
+      "render": {
+        "title": "渲染格式",
+        "aspectRatio": "宽高比"
+      }
+    }
+  },
+  "cadToRender": {
+    "sections": {
+      "camera": {
+        "title": "相机和视点",
+        "height": "相机高度（m）",
+        "focalLength": "焦距（mm）",
+        "positionPicker": "相机位置选择器",
+        "positionHint": "点击平面图放置相机。",
+        "lookAt": "注视方向",
+        "verticalCorrection": "垂直校正"
+      },
+      "furnishing": {
+        "title": "布置",
+        "occupancy": "使用感",
+        "occupancyOptions": {
+          "empty": "空置",
+          "staged": "布置展示",
+          "livedIn": "有人居住感"
+        },
+        "clutterLevel": "杂物程度",
+        "peopleEntourage": "人物/配景",
+        "entourageLevel": "配景程度"
+      },
+      "context": {
+        "title": "环境（外部视图）",
+        "landscapeStyle": "景观风格",
+        "landscapeOptions": {
+          "formalGarden": "正式花园",
+          "nativePlanting": "本土植物",
+          "minimal": "极简",
+          "lushTropical": "繁茂热带",
+          "dryXeriscape": "干旱旱景"
+        },
+        "environment": "环境",
+        "environmentOptions": {
+          "urban": "城市",
+          "suburban": "郊区",
+          "rural": "乡村"
+        },
+        "season": "季节",
+        "seasonOptions": {
+          "spring": "春季",
+          "summer": "夏季",
+          "autumn": "秋季",
+          "winter": "冬季"
+        }
+      }
+    }
+  },
+  "exploded": {
+    "dissectionStyles": {
+      "stacked": "堆叠层",
+      "radial": "径向展开",
+      "sequential": "顺序剥离",
+      "coreShell": "核心 + 外壳",
+      "sliceLift": "切片抬升",
+      "systems": "系统聚焦"
+    },
+    "view": {
+      "title": "视图",
+      "type": {
+        "axonometric": "轴测",
+        "perspective": "透视"
+      },
+      "angle": "角度",
+      "iso": {
+        "ne": "等轴东北",
+        "nw": "等轴西北",
+        "se": "等轴东南",
+        "sw": "等轴西南"
+      },
+      "cameraHeight": "相机高度（m）",
+      "fieldOfView": "视场角（度）",
+      "lookAt": "注视",
+      "lookAtOptions": {
+        "center": "中心",
+        "top": "顶部",
+        "bottom": "底部"
+      }
+    },
+    "sections": {
+      "dissectionStyle": {
+        "title": "拆解风格",
+        "colorMode": "颜色模式",
+        "colorModeOptions": {
+          "material": "材料颜色",
+          "system": "系统颜色",
+          "monochrome": "单色"
+        },
+        "systemColors": {
+          "structure": "结构",
+          "envelope": "围护",
+          "mep": "机电",
+          "interior": "室内"
+        },
+        "edgeStyle": "边线风格",
+        "edgeStyleOptions": {
+          "hiddenRemoved": "移除隐藏线",
+          "hiddenDashed": "隐藏线为虚线",
+          "allVisible": "所有边线可见",
+          "silhouette": "仅轮廓"
+        },
+        "lineWeight": "线宽"
+      },
+      "annotations": {
+        "title": "标注",
+        "componentLabels": "构件标签",
+        "leaderLines": "引出线",
+        "dimensions": "尺寸",
+        "assemblyNumbers": "装配编号",
+        "materialCallouts": "材料标注",
+        "labelStyle": "标签风格",
+        "labelStyleOptions": {
+          "minimal": "极简",
+          "technical": "技术",
+          "descriptive": "描述性"
+        },
+        "leaderStyle": "引线风格",
+        "leaderStyleOptions": {
+          "straight": "直线",
+          "angled": "折线",
+          "curved": "曲线"
+        },
+        "fontSize": "字体大小",
+        "fontSizeOptions": {
+          "small": "S",
+          "medium": "M",
+          "large": "L"
+        }
+      }
+    }
+  },
+  "locationModal": {
+    "title": "从位置加载环境",
+    "mapPreview": "地图预览",
+    "empty": "在右侧搜索位置",
+    "searchPlaceholder": "搜索地址或坐标...",
+    "radius": "半径",
+    "radiusHint": "以中心点为圆心 {{radius}}m 范围",
+    "dataToLoad": "要加载的数据",
+    "data": {
+      "buildings": "建筑",
+      "roads": "道路",
+      "water": "水体",
+      "terrain": "地形",
+      "transit": "公交线路"
+    },
+    "loading": "正在加载...",
+    "loadContext": "加载环境"
+  }
+}

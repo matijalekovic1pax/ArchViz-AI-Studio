@@ -102,7 +102,7 @@ Deployed to Cloudflare Workers with SPA fallback (`not_found_handling: "single-p
 **`pdf-converter-api/`** - Python Vercel serverless API for PDF/DOCX conversion. Uses PyPDF2, python-docx, reportlab, and proxies to iLovePDF API. 10-second timeout on free tier.
 
 ### Internationalization
-i18next with browser language detection. Translation files in `locales/` (en, es, fr).
+i18next with browser language detection. Translation files in `locales/` (en, es, fr, zh).
 
 ### Keyboard Shortcuts
 Defined in `App.tsx` via `ShortcutsListener`:

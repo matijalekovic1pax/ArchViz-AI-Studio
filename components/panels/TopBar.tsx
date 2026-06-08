@@ -35,6 +35,15 @@ const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   headshot: 'workflows.headshot',
 };
 
+const APP_LANGUAGES = [
+  { code: 'en', label: 'EN', title: 'English' },
+  { code: 'es', label: 'ES', title: 'Spanish' },
+  { code: 'fr', label: 'FR', title: 'French' },
+  { code: 'zh', label: 'ZH', title: 'Chinese' },
+] as const;
+
+type AppLanguage = (typeof APP_LANGUAGES)[number]['code'];
+
 export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) => void }> = ({ onToggleMobilePanel }) => {
   const { state, dispatch } = useAppStore();
   const { t, i18n } = useTranslation();
@@ -407,7 +416,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     }
   };
 
-  const handleLanguageChange = (lang: string) => {
+  const handleLanguageChange = (lang: AppLanguage) => {
     i18n.changeLanguage(lang);
     setShowLanguageMenu(false);
   };
@@ -576,12 +585,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   const getLanguageLabel = () => {
     const lang = (i18n.language || 'en').split('-')[0];
-    switch (lang) {
-      case 'es': return 'ES';
-      case 'fr': return 'FR';
-      default: return 'EN';
-    }
+    return APP_LANGUAGES.find((language) => language.code === lang)?.label || 'EN';
   };
+
+  const activeLanguage = (i18n.language || 'en').split('-')[0];
 
   const activeImageGenerationModel = state.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
   const getModelCopy = (model: ImageGenerationModel) => {
@@ -662,19 +669,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   ref={languageMenuRef}
                   className="absolute right-0 top-full z-50 mt-2 w-16 origin-top-right rounded-lg border border-border bg-surface-elevated p-1 shadow-elevated"
                 >
-                  {(['en', 'es', 'fr'] as const).map((language) => (
+                  {APP_LANGUAGES.map((language) => (
                     <button
-                      key={language}
-                      onClick={() => handleLanguageChange(language)}
+                      key={language.code}
+                      onClick={() => handleLanguageChange(language.code)}
                       className={cn(
                         "w-full rounded-md px-2 py-1.5 text-center text-[10px] font-semibold uppercase transition-colors",
-                        i18n.language === language
+                        activeLanguage === language.code
                           ? "bg-foreground text-background"
                           : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
                       )}
-                      title={language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'French'}
+                      title={language.title}
                     >
-                      {language}
+                      {language.label}
                     </button>
                   ))}
                 </div>
@@ -1100,42 +1107,21 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               ref={languageMenuRef}
               className="absolute left-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-left"
             >
-              <button
-                onClick={() => handleLanguageChange('en')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'en'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="English"
-              >
-                EN
-              </button>
-              <button
-                onClick={() => handleLanguageChange('es')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'es'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="Spanish"
-              >
-                ES
-              </button>
-              <button
-                onClick={() => handleLanguageChange('fr')}
-                className={cn(
-                  "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                  i18n.language === 'fr'
-                    ? "bg-foreground text-background"
-                    : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                )}
-                title="French"
-              >
-                FR
-              </button>
+              {APP_LANGUAGES.map((language) => (
+                <button
+                  key={language.code}
+                  onClick={() => handleLanguageChange(language.code)}
+                  className={cn(
+                    "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
+                    activeLanguage === language.code
+                      ? "bg-foreground text-background"
+                      : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                  )}
+                  title={language.title}
+                >
+                  {language.label}
+                </button>
+              ))}
             </div>
           )}
         </div>
