@@ -6,6 +6,7 @@
  */
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+import { CHATGPT_IMAGE_MODEL_ACCESS_HEADER, getChatGPTImageModelAccessCode } from '../lib/imageModelAccess';
 import type {
   FeedbackActivityItem,
   FeedbackDocumentAttachment,
@@ -232,8 +233,15 @@ export async function openAIImageRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
+  const headers: Record<string, string> = {};
+  const accessCode = getChatGPTImageModelAccessCode();
+  if (accessCode) {
+    headers[CHATGPT_IMAGE_MODEL_ACCESS_HEADER] = accessCode;
+  }
+
   const resp = await gatewayFetch('/api/openai/images', {
     method: 'POST',
+    headers,
     body: JSON.stringify(body),
     signal: options?.signal,
     timeoutMs: 180_000,

@@ -63,7 +63,13 @@
         "shortLabel": "GPT Img 2",
         "description": "更适合精确控制、保留原貌和文字较多的图像。",
         "bestFor": "用于控制和文字"
-      }
+      },
+      "lockedBadge": "已锁定",
+      "unlockTitle": "试用访问",
+      "unlockDescription": "使用 ChatGPT 点数前请输入测试密码。",
+      "unlockPlaceholder": "密码",
+      "unlockAction": "解锁",
+      "unlockError": "密码不正确"
     }
   },
   "generation": {

@@ -66,9 +66,11 @@ VITE_VEO_PROXY_URL="https://veo-proxy.your-subdomain.workers.dev"
    wrangler secret put VERTEX_AI_TOKEN
    wrangler secret put GOOGLE_PROJECT_ID
    wrangler secret put OPENAI_API_KEY
+   wrangler secret put OPENAI_IMAGE_LOCK_PASSWORD
    ```
 
    `OPENAI_API_KEY` enables the ChatGPT Image Generation 2 option, which is routed to OpenAI's `gpt-image-2` Images API model.
+   `OPENAI_IMAGE_LOCK_PASSWORD` is optional and overrides the temporary ChatGPT image access password, which defaults to `1234`.
 
 3. **Rate Limiting**
 

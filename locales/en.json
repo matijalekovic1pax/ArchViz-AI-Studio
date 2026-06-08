@@ -63,7 +63,13 @@
         "shortLabel": "GPT Img 2",
         "description": "Best for precision, preservation, and text-heavy images.",
         "bestFor": "Use for control and text"
-      }
+      },
+      "lockedBadge": "Locked",
+      "unlockTitle": "Trial access",
+      "unlockDescription": "Enter the test password before using ChatGPT credits.",
+      "unlockPlaceholder": "Password",
+      "unlockAction": "Unlock",
+      "unlockError": "Incorrect password"
     }
   },
   "generation": {
