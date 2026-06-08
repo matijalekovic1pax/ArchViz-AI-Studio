@@ -675,19 +675,72 @@ async function handleGeminiProxy(request, env, subpath) {
 
 // ─── Route: POST /api/openai/images ─────────────────────────────────────────
 
-function normalizeOpenAIAspectRatio(aspectRatio) {
-  if (typeof aspectRatio !== 'string') return '1536x1024';
-  if (aspectRatio === '1:1') return '1024x1024';
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_EDGE_MULTIPLE = 16;
+const OPENAI_IMAGE_MAX_PROMPT_CHARS = 32_000;
+const OPENAI_IMAGE_MAX_INPUT_IMAGES = 16;
+const OPENAI_IMAGE_MAX_OUTPUTS = 10;
 
+function roundToOpenAIEdge(value) {
+  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.round(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+}
+
+function floorToOpenAIEdge(value) {
+  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.floor(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+}
+
+function ceilToOpenAIEdge(value) {
+  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.ceil(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+}
+
+function getOpenAITargetLongEdge(imageSize) {
+  if (imageSize === '4K') return 3840;
+  if (imageSize === '1K') return 1024;
+  return 2048;
+}
+
+function parseAspectRatio(aspectRatio) {
+  if (typeof aspectRatio !== 'string') return 16 / 9;
   const [widthRaw, heightRaw] = aspectRatio.split(':').map(Number);
-  if (!Number.isFinite(widthRaw) || !Number.isFinite(heightRaw) || heightRaw <= 0) {
-    return '1536x1024';
+  if (!Number.isFinite(widthRaw) || !Number.isFinite(heightRaw) || widthRaw <= 0 || heightRaw <= 0) {
+    return 16 / 9;
   }
 
   const ratio = widthRaw / heightRaw;
-  if (ratio < 0.9) return '1024x1536';
-  if (ratio > 1.1) return '1536x1024';
-  return '1024x1024';
+  return Math.min(3, Math.max(1 / 3, ratio));
+}
+
+function normalizeOpenAISize(aspectRatio, imageSize) {
+  const ratio = parseAspectRatio(aspectRatio);
+  const targetLongEdge = getOpenAITargetLongEdge(imageSize);
+  let width = ratio >= 1 ? targetLongEdge : targetLongEdge * ratio;
+  let height = ratio >= 1 ? targetLongEdge / ratio : targetLongEdge;
+
+  width = roundToOpenAIEdge(width);
+  height = roundToOpenAIEdge(height);
+
+  const fitWithinLimits = () => {
+    const edgeScale = Math.min(1, OPENAI_IMAGE_MAX_EDGE / Math.max(width, height));
+    const pixelScale = Math.min(1, Math.sqrt(OPENAI_IMAGE_MAX_PIXELS / (width * height)));
+    const scale = Math.min(edgeScale, pixelScale);
+    if (scale < 1) {
+      width = floorToOpenAIEdge(width * scale);
+      height = floorToOpenAIEdge(height * scale);
+    }
+  };
+
+  fitWithinLimits();
+
+  if (width * height < OPENAI_IMAGE_MIN_PIXELS) {
+    const scale = Math.sqrt(OPENAI_IMAGE_MIN_PIXELS / (width * height));
+    width = ceilToOpenAIEdge(width * scale);
+    height = ceilToOpenAIEdge(height * scale);
+    fitWithinLimits();
+  }
+
+  return `${width}x${height}`;
 }
 
 function normalizeOpenAIQuality(imageSize) {
@@ -699,7 +752,7 @@ function normalizeOpenAIQuality(imageSize) {
 function getOpenAIImageOptions(generationConfig = {}) {
   const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
   return {
-    size: normalizeOpenAIAspectRatio(imageConfig.aspectRatio || '16:9'),
+    size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
   };
@@ -725,7 +778,7 @@ function decodeBase64Image(image, index) {
 function normalizeOpenAIImages(input) {
   if (!Array.isArray(input)) return [];
   return input
-    .slice(0, 8)
+    .slice(0, OPENAI_IMAGE_MAX_INPUT_IMAGES)
     .map((image, index) => decodeBase64Image(image, index))
     .filter(Boolean);
 }
@@ -780,12 +833,15 @@ async function handleOpenAIImages(request, env) {
 
   try {
     const body = await request.json();
-    const prompt = sanitizeText(body.prompt, 60000);
+    const prompt = sanitizeText(body.prompt, OPENAI_IMAGE_MAX_PROMPT_CHARS);
     if (!prompt) return badRequest(origin, 'Missing prompt');
 
     const images = normalizeOpenAIImages(body.images);
     const maskImage = decodeBase64Image(body.maskImage, 0);
-    const numberOfImages = Math.max(1, Math.min(4, Math.floor(clampNumber(body.numberOfImages, 1, 4, 1))));
+    const numberOfImages = Math.max(1, Math.min(
+      OPENAI_IMAGE_MAX_OUTPUTS,
+      Math.floor(clampNumber(body.numberOfImages, 1, OPENAI_IMAGE_MAX_OUTPUTS, 1))
+    ));
     const { size, quality, outputFormat } = getOpenAIImageOptions(body.generationConfig);
     const model = body.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL;
 

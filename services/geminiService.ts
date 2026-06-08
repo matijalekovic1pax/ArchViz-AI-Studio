@@ -171,6 +171,29 @@ export class ImageUtils {
     return `data:${imageData.mimeType};base64,${imageData.base64}`;
   }
 
+  static async convertImageFormat(imageData: ImageData, mimeType: ImageMimeType): Promise<ImageData> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+
+        const dataUrl = canvas.toDataURL(mimeType);
+        resolve({
+          ...ImageUtils.dataUrlToImageData(dataUrl),
+          width: img.width,
+          height: img.height
+        });
+      };
+      img.onerror = () => resolve(imageData);
+      img.src = ImageUtils.imageDataToDataUrl(imageData);
+    });
+  }
+
   static async urlToImageData(url: string): Promise<ImageData> {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -501,7 +524,10 @@ export class GeminiService {
     if (request.referenceImages?.length) images.push(...request.referenceImages);
 
     if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
-      const openAIImages = [request.sourceImage];
+      const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
+        ? await ImageUtils.convertImageFormat(request.sourceImage, request.maskImage.mimeType)
+        : request.sourceImage;
+      const openAIImages = [openAISourceImage];
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
 
       return this.generateOpenAIImages({

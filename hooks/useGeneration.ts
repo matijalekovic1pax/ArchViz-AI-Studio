@@ -113,13 +113,13 @@ const drawMaskImageData = (
   return canvas;
 };
 
-const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean): Promise<string> => {
-  if (!invert) return maskDataUrl;
+const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean, alphaMask = false): Promise<string> => {
+  if (!invert && !alphaMask) return maskDataUrl;
   const mask = await loadCanvasImage(maskDataUrl);
   const width = mask.naturalWidth || mask.width;
   const height = mask.naturalHeight || mask.height;
   if (!width || !height) return maskDataUrl;
-  return drawMaskImageData(mask, width, height, { invert })?.toDataURL('image/png') || maskDataUrl;
+  return drawMaskImageData(mask, width, height, { invert, alphaMask })?.toDataURL('image/png') || maskDataUrl;
 };
 
 const STRICT_VISUAL_MASK_TOOLS = new Set(['select', 'material', 'adjust', 'background']);
@@ -1783,7 +1783,11 @@ export function useGeneration(): UseGenerationReturn {
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
         const editableMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl
-          ? await createEditableMaskDataUrl(selectedMaskDataUrl, editOutsideSelection)
+          ? await createEditableMaskDataUrl(
+              selectedMaskDataUrl,
+              editOutsideSelection,
+              state.imageGenerationModel === 'chatgpt-image-generation-2'
+            )
           : null;
         const maskImage = editableMaskDataUrl
           ? dataUrlToImageData(editableMaskDataUrl)
