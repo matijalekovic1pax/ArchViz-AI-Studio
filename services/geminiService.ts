@@ -4,7 +4,8 @@
  * Public API is unchanged from the SDK-based version.
  */
 
-import { geminiRequest, geminiStreamRequest } from './apiGateway';
+import { geminiRequest, geminiStreamRequest, openAIImageRequest } from './apiGateway';
+import { type ImageGenerationModel } from '../types';
 
 // ============================================================================
 // Types & Interfaces
@@ -13,6 +14,7 @@ import { geminiRequest, geminiStreamRequest } from './apiGateway';
 export const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
 export const IMAGE_MODEL = 'gemini-3-pro-image-preview';
 export const TEXT_MODEL = 'gemini-3-pro-preview';
+export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -39,6 +41,7 @@ export interface GeminiRequest {
   attachments?: AttachmentData[];
   generationConfig?: GenerationConfig;
   model?: string;
+  imageGenerationModel?: ImageGenerationModel;
 }
 
 export interface ImageConfig {
@@ -82,6 +85,7 @@ export interface BatchImageRequest {
   numberOfImages: number;
   imageConfig?: ImageConfig;
   abortSignal?: AbortSignal;
+  imageGenerationModel?: ImageGenerationModel;
 }
 
 export interface BatchImageResponse {
@@ -107,6 +111,7 @@ export interface ImageEditRequest {
   prompt: string;
   editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace' | 'people';
   generationConfig?: GenerationConfig;
+  imageGenerationModel?: ImageGenerationModel;
 }
 
 export class GeminiError extends Error {
@@ -260,6 +265,10 @@ export class GeminiService {
   // --------------------------------------------------------------------------
 
   async generate(request: GeminiRequest): Promise<GeminiResponse> {
+    if (this.isOpenAIImageRequest(request)) {
+      return this.generateOpenAIImages(request);
+    }
+
     const contents = this.buildContents(request);
     const generationConfig = this.buildGenerationConfig(request.generationConfig, ['TEXT', 'IMAGE']);
 
@@ -293,6 +302,10 @@ export class GeminiService {
   }
 
   async generateImages(request: GeminiRequest): Promise<GeminiResponse> {
+    if (this.isOpenAIImageRequest(request)) {
+      return this.generateOpenAIImages(request);
+    }
+
     const imagePrompt = request.prompt.includes('generate') || request.prompt.includes('create')
       ? request.prompt
       : `Generate an image: ${request.prompt}`;
@@ -327,6 +340,7 @@ export class GeminiService {
         this.generateImages({
           prompt,
           images: request.referenceImages,
+          imageGenerationModel: request.imageGenerationModel,
           generationConfig: {
             imageConfig: request.imageConfig,
             abortSignal: request.abortSignal
@@ -486,9 +500,23 @@ export class GeminiService {
     if (request.maskImage) images.push(request.maskImage);
     if (request.referenceImages?.length) images.push(...request.referenceImages);
 
+    if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
+      const openAIImages = [request.sourceImage];
+      if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
+
+      return this.generateOpenAIImages({
+        prompt: editPrompt,
+        images: openAIImages,
+        maskImage: request.maskImage,
+        imageGenerationModel: request.imageGenerationModel,
+        generationConfig: request.generationConfig,
+      });
+    }
+
     return this.generate({
       prompt: editPrompt,
       images,
+      imageGenerationModel: request.imageGenerationModel,
       generationConfig: request.generationConfig
     });
   }
@@ -722,6 +750,27 @@ export class GeminiService {
   // Private Helper Methods
   // --------------------------------------------------------------------------
 
+  private isOpenAIImageRequest(request: GeminiRequest): boolean {
+    return request.imageGenerationModel === 'chatgpt-image-generation-2';
+  }
+
+  private async generateOpenAIImages(
+    request: GeminiRequest & { numberOfImages?: number; maskImage?: ImageData }
+  ): Promise<GeminiResponse> {
+    const response = await this.executeWithRetry(() =>
+      openAIImageRequest({
+        model: OPENAI_IMAGE_MODEL,
+        prompt: request.prompt,
+        images: request.images,
+        maskImage: request.maskImage,
+        numberOfImages: request.numberOfImages || 1,
+        generationConfig: request.generationConfig,
+      }, { signal: request.generationConfig?.abortSignal })
+    );
+
+    return this.parseOpenAIResponse(response);
+  }
+
   private buildContents(request: GeminiRequest): Array<{ role: 'user'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
     const attachments = request.attachments || [];
@@ -881,6 +930,29 @@ export class GeminiService {
     }
 
     return result;
+  }
+
+  private parseOpenAIResponse(response: any): GeminiResponse {
+    const images: GeneratedImage[] = Array.isArray(response?.images)
+      ? response.images
+          .map((image: any): GeneratedImage | null => {
+            const base64 = image?.base64 || image?.b64_json;
+            if (!base64 || typeof base64 !== 'string') return null;
+            const mimeType = (image?.mimeType || image?.mime_type || 'image/png') as ImageMimeType;
+            return {
+              base64,
+              mimeType,
+              dataUrl: image?.dataUrl || `data:${mimeType};base64,${base64}`,
+            };
+          })
+          .filter((image: GeneratedImage | null): image is GeneratedImage => Boolean(image))
+      : [];
+
+    return {
+      text: typeof response?.text === 'string' ? response.text : null,
+      images,
+      finishReason: response?.finishReason,
+    };
   }
 
   private isThoughtPart(part: any): boolean {

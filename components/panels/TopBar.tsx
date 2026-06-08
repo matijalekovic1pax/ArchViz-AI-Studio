@@ -12,6 +12,7 @@ import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
+import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'generate-text': 'workflows.generateText',
@@ -48,9 +49,12 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const modelButtonRef = useRef<HTMLButtonElement>(null);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const projectButtonRef = useRef<HTMLButtonElement>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -408,6 +412,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowLanguageMenu(false);
   };
 
+  const handleModelChange = (model: ImageGenerationModel) => {
+    dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: model });
+    setShowModelMenu(false);
+  };
+
   const closeTopBarOverlays = () => {
     setShowDownloadMenu(false);
     setShowControlsMenu(false);
@@ -416,6 +425,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowAdminDashboard(false);
     setShowClearConfirm(false);
     setShowLanguageMenu(false);
+    setShowModelMenu(false);
     setShowProjectMenu(false);
   };
 
@@ -465,6 +475,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowControlsMenu(false);
     setShowDownloadMenu(false);
     setShowLanguageMenu(false);
+    setShowModelMenu(false);
     setShowProjectMenu(false);
   }, [isMobile]);
 
@@ -473,6 +484,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowControlsMenu(false);
     setShowDownloadMenu(false);
     setShowLanguageMenu(false);
+    setShowModelMenu(false);
     setShowProjectMenu(false);
   }, [state.isGenerating]);
 
@@ -489,6 +501,18 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   }, [showLanguageMenu]);
 
   useEffect(() => {
+    if (!showModelMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (modelMenuRef.current?.contains(target)) return;
+      if (modelButtonRef.current?.contains(target)) return;
+      setShowModelMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showModelMenu]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (
@@ -499,6 +523,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           showAdminDashboard ||
           showClearConfirm ||
           showLanguageMenu ||
+          showModelMenu ||
           showProjectMenu
         ) {
           event.preventDefault();
@@ -544,6 +569,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     showDownloadMenu,
     showFeedbackDialog,
     showLanguageMenu,
+    showModelMenu,
     showProjectMenu,
     showSaveInfo,
   ]);
@@ -556,6 +582,25 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       default: return 'EN';
     }
   };
+
+  const activeImageGenerationModel = state.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
+  const getModelCopy = (model: ImageGenerationModel) => {
+    if (model === 'chatgpt-image-generation-2') {
+      return {
+        label: t('topBar.modelSelector.chatgpt.label'),
+        shortLabel: t('topBar.modelSelector.chatgpt.shortLabel'),
+        description: t('topBar.modelSelector.chatgpt.description'),
+        bestFor: t('topBar.modelSelector.chatgpt.bestFor'),
+      };
+    }
+    return {
+      label: t('topBar.modelSelector.nano.label'),
+      shortLabel: t('topBar.modelSelector.nano.shortLabel'),
+      description: t('topBar.modelSelector.nano.description'),
+      bestFor: t('topBar.modelSelector.nano.bestFor'),
+    };
+  };
+  const activeModelCopy = getModelCopy(activeImageGenerationModel);
 
   const getGenerateLabel = () => {
     switch (state.mode) {
@@ -1091,6 +1136,69 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               >
                 FR
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Model Selector */}
+        <div className="relative shrink-0">
+          <button
+            ref={modelButtonRef}
+            onClick={() => setShowModelMenu(!showModelMenu)}
+            className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
+            title={t('topBar.modelSelector.title')}
+          >
+            {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
+              <Shield size={12} className="text-foreground-muted" />
+            ) : (
+              <Sparkles size={12} className="text-foreground-muted" />
+            )}
+            <span className="whitespace-nowrap">{activeModelCopy.shortLabel}</span>
+            <ChevronDown size={10} className={cn("transition-transform", showModelMenu && "rotate-180")} />
+          </button>
+
+          {showModelMenu && (
+            <div
+              ref={modelMenuRef}
+              className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated z-50 animate-fade-in origin-top-left"
+            >
+              <div className="px-2 pb-2 pt-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                  {t('topBar.modelSelector.title')}
+                </div>
+              </div>
+              <div className="space-y-1">
+                {IMAGE_GENERATION_MODELS.map((model) => {
+                  const copy = getModelCopy(model);
+                  const selected = activeImageGenerationModel === model;
+                  const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
+
+                  return (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => handleModelChange(model)}
+                      className={cn(
+                        "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
+                        selected
+                          ? "bg-foreground text-background"
+                          : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                      )}
+                    >
+                      <Icon size={14} className={cn("mt-0.5 shrink-0", selected ? "text-background" : "text-foreground-muted")} />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-bold leading-tight">{copy.label}</span>
+                        <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
+                          {copy.description}
+                        </span>
+                        <span className={cn("mt-1 block text-[9px] font-semibold uppercase leading-snug tracking-wide", selected ? "text-background/70" : "text-foreground-muted")}>
+                          {copy.bestFor}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

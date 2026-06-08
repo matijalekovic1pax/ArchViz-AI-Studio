@@ -49,7 +49,22 @@
     "projectNameLabel": "Nombre del proyecto",
     "projectNamePlaceholder": "Introduce un nombre de proyecto",
     "confirmSave": "Guardar Proyecto",
-    "language": "Idioma"
+    "language": "Idioma",
+    "modelSelector": {
+      "title": "Modelo de Imagen",
+      "nano": {
+        "label": "Nanobanana",
+        "shortLabel": "Nanobanana",
+        "description": "Mejor para visuales más potentes, composiciones dinámicas y color inmersivo.",
+        "bestFor": "Usar para impacto visual"
+      },
+      "chatgpt": {
+        "label": "ChatGPT Image Generation 2",
+        "shortLabel": "GPT Img 2",
+        "description": "Mejor para precisión, preservación e imágenes con mucho texto.",
+        "bestFor": "Usar para control y texto"
+      }
+    }
   },
   "generation": {
     "generate": "Generar",

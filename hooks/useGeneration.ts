@@ -1127,6 +1127,17 @@ export function useGeneration(): UseGenerationReturn {
         if (abortSignal.aborted) {
           throw new DOMException('Request aborted', 'AbortError');
         }
+
+        if (state.imageGenerationModel === 'chatgpt-image-generation-2') {
+          const result = await service.generateImages({
+            ...request,
+            prompt: buildImagePrompt(request.prompt),
+            imageGenerationModel: state.imageGenerationModel,
+          });
+          updateProgress(result.images.length > 0 ? 95 : 85);
+          return result;
+        }
+
         let chunkCount = 0;
         let sawImage = false;
         let text: string | null = null;
@@ -1512,6 +1523,7 @@ export function useGeneration(): UseGenerationReturn {
           () => service.generateImages({
             prompt: gridPrompt,
             images: images.length > 0 ? images : undefined,
+            imageGenerationModel: state.imageGenerationModel,
             generationConfig: gridGenerationConfig
           })
         );
@@ -1654,6 +1666,7 @@ export function useGeneration(): UseGenerationReturn {
                 service.generateImages({
                   prompt: fullPrompt,
                   images: [source],
+                  imageGenerationModel: state.imageGenerationModel,
                   generationConfig: {
                     ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
                     abortSignal
@@ -1850,6 +1863,7 @@ export function useGeneration(): UseGenerationReturn {
               referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
               prompt: basePrompt,
               editType,
+              imageGenerationModel: state.imageGenerationModel,
               generationConfig: generationConfigWithAbort
             }));
           }
@@ -1870,6 +1884,7 @@ export function useGeneration(): UseGenerationReturn {
             referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
             prompt: basePrompt,
             editType,
+            imageGenerationModel: state.imageGenerationModel,
             generationConfig: generationConfigWithAbort
           }));
         }
@@ -2031,6 +2046,7 @@ export function useGeneration(): UseGenerationReturn {
           referenceImages: images.length > 0 ? images : undefined,
           numberOfImages: options.numberOfImages,
           imageConfig: generationConfig.imageConfig,
+          imageGenerationModel: state.imageGenerationModel,
           abortSignal
         }));
         result = { text: batchResult.text, images: batchResult.images };
@@ -2272,12 +2288,15 @@ export function useGeneration(): UseGenerationReturn {
         lowerMessage.includes('overloaded');
       const isImageMode = !TEXT_ONLY_MODES.includes(state.mode);
       if (isImageMode && isServiceUnavailable) {
+        const providerName = state.imageGenerationModel === 'chatgpt-image-generation-2'
+          ? 'ChatGPT Image Generation 2'
+          : 'Gemini image service';
         dispatch({
           type: 'SET_APP_ALERT',
           payload: {
             id: nanoid(),
             tone: 'warning',
-            message: 'Gemini image service is temporarily unavailable (503). Please retry in a moment.'
+            message: `${providerName} is temporarily unavailable (503). Please retry in a moment.`
           }
         });
       }

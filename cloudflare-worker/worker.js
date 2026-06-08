@@ -9,7 +9,7 @@
  *
  * Secrets (set via `wrangler secret put`):
  *   JWT_SECRET, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
- *   GEMINI_API_KEY, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_PROJECT_ID,
+ *   GEMINI_API_KEY, OPENAI_API_KEY, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_PROJECT_ID,
  *   KLING_PIAPI_API_KEY, KLING_ULAZAI_API_KEY, KLING_WAVESPEEDAI_API_KEY,
  *   CONVERTAPI_SECRET, ILOVEPDF_PUBLIC_KEY,
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_FEEDBACK_BUCKET (optional)
@@ -30,6 +30,8 @@ const MAX_PAYLOAD_BYTES = 95 * 1024 * 1024; // 95 MB
 const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const OPENAI_API_BASE = 'https://api.openai.com/v1';
+const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
 const CONVERTAPI_BASE = 'https://v2.convertapi.com';
 const ILOVEPDF_BASE   = 'https://api.ilovepdf.com/v1';
@@ -667,6 +669,173 @@ async function handleGeminiProxy(request, env, subpath) {
     status: upstreamResp.status,
     headers: respHeaders,
   });
+}
+
+// ─── Route: POST /api/openai/images ─────────────────────────────────────────
+
+function normalizeOpenAIAspectRatio(aspectRatio) {
+  if (typeof aspectRatio !== 'string') return '1536x1024';
+  if (aspectRatio === '1:1') return '1024x1024';
+
+  const [widthRaw, heightRaw] = aspectRatio.split(':').map(Number);
+  if (!Number.isFinite(widthRaw) || !Number.isFinite(heightRaw) || heightRaw <= 0) {
+    return '1536x1024';
+  }
+
+  const ratio = widthRaw / heightRaw;
+  if (ratio < 0.9) return '1024x1536';
+  if (ratio > 1.1) return '1536x1024';
+  return '1024x1024';
+}
+
+function normalizeOpenAIQuality(imageSize) {
+  if (imageSize === '4K') return 'high';
+  if (imageSize === '1K') return 'low';
+  return 'medium';
+}
+
+function getOpenAIImageOptions(generationConfig = {}) {
+  const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
+  return {
+    size: normalizeOpenAIAspectRatio(imageConfig.aspectRatio || '16:9'),
+    quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
+    outputFormat: 'png',
+  };
+}
+
+function decodeBase64Image(image, index) {
+  if (!image || typeof image.base64 !== 'string') return null;
+  const mimeType = typeof image.mimeType === 'string' && /^image\/(png|jpe?g|webp)$/i.test(image.mimeType)
+    ? image.mimeType.toLowerCase().replace('image/jpg', 'image/jpeg')
+    : 'image/png';
+
+  const binary = atob(image.base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
+  return {
+    blob: new Blob([bytes], { type: mimeType }),
+    filename: `input-${index + 1}.${ext}`,
+  };
+}
+
+function normalizeOpenAIImages(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .slice(0, 8)
+    .map((image, index) => decodeBase64Image(image, index))
+    .filter(Boolean);
+}
+
+function extractOpenAIError(data, fallback) {
+  if (data?.error?.message) return data.error.message;
+  if (typeof data?.error === 'string') return data.error;
+  return fallback;
+}
+
+function normalizeOpenAIImageResponse(data) {
+  const outputFormat = data?.output_format || 'png';
+  const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
+  const images = Array.isArray(data?.data)
+    ? data.data
+        .map((entry) => {
+          const base64 = entry?.b64_json;
+          if (!base64 || typeof base64 !== 'string') return null;
+          return {
+            base64,
+            mimeType,
+            dataUrl: `data:${mimeType};base64,${base64}`,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    text: null,
+    images,
+    usage: data?.usage || null,
+    model: OPENAI_IMAGE_MODEL,
+  };
+}
+
+async function handleOpenAIImages(request, env) {
+  const origin = request.headers.get('Origin') || '';
+
+  if (!env.OPENAI_API_KEY) {
+    return corsResponse(origin, {
+      error: 'OPENAI_API_KEY is not configured. Add it with `wrangler secret put OPENAI_API_KEY` after enabling OpenAI billing.',
+    }, { status: 500 });
+  }
+
+  try {
+    const body = await request.json();
+    const prompt = sanitizeText(body.prompt, 60000);
+    if (!prompt) return badRequest(origin, 'Missing prompt');
+
+    const images = normalizeOpenAIImages(body.images);
+    const maskImage = decodeBase64Image(body.maskImage, 0);
+    const numberOfImages = Math.max(1, Math.min(4, Math.floor(clampNumber(body.numberOfImages, 1, 4, 1))));
+    const { size, quality, outputFormat } = getOpenAIImageOptions(body.generationConfig);
+    const model = body.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL;
+
+    let upstreamResp;
+    if (images.length > 0) {
+      const form = new FormData();
+      form.append('model', model);
+      form.append('prompt', prompt);
+      form.append('n', String(numberOfImages));
+      form.append('size', size);
+      form.append('quality', quality);
+      form.append('output_format', outputFormat);
+
+      images.forEach((image) => {
+        form.append('image[]', image.blob, image.filename);
+      });
+      if (maskImage) {
+        form.append('mask', maskImage.blob, `mask-${maskImage.filename}`);
+      }
+
+      upstreamResp = await fetch(`${OPENAI_API_BASE}/images/edits`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        },
+        body: form,
+      });
+    } else {
+      upstreamResp = await fetch(`${OPENAI_API_BASE}/images/generations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          prompt,
+          n: numberOfImages,
+          size,
+          quality,
+          output_format: outputFormat,
+        }),
+      });
+    }
+
+    const data = await upstreamResp.json().catch(() => null);
+    if (!upstreamResp.ok) {
+      const message = extractOpenAIError(data, `OpenAI image API error (${upstreamResp.status})`);
+      return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+    }
+
+    const normalized = normalizeOpenAIImageResponse(data);
+    if (normalized.images.length === 0) {
+      return corsResponse(origin, { error: 'OpenAI image API returned no image data.' }, { status: 502 });
+    }
+
+    return corsResponse(origin, normalized);
+  } catch (err) {
+    return corsResponse(origin, { error: err.message || 'OpenAI image generation failed.' }, { status: 500 });
+  }
 }
 
 // ─── Route: POST /api/veo/generate ──────────────────────────────────────────
@@ -2140,6 +2309,9 @@ export default {
       const subpath = path.replace('/api/gemini/', '') + url.search;
       return handleGeminiProxy(request, env, subpath);
     }
+
+    // OpenAI Image API
+    if (path === '/api/openai/images' && request.method === 'POST') return handleOpenAIImages(request, env);
 
     // Veo video generation
     if (path === '/api/veo/generate' && request.method === 'POST') return handleVeoGenerate(request, env);

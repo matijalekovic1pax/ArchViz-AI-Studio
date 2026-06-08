@@ -49,7 +49,22 @@
     "projectNameLabel": "Project Name",
     "projectNamePlaceholder": "Enter a project name",
     "confirmSave": "Save Project",
-    "language": "Language"
+    "language": "Language",
+    "modelSelector": {
+      "title": "Image Model",
+      "nano": {
+        "label": "Nanobanana",
+        "shortLabel": "Nanobanana",
+        "description": "Best for stronger visuals, dynamic compositions, and immersive color.",
+        "bestFor": "Use for visual impact"
+      },
+      "chatgpt": {
+        "label": "ChatGPT Image Generation 2",
+        "shortLabel": "GPT Img 2",
+        "description": "Best for precision, preservation, and text-heavy images.",
+        "bestFor": "Use for control and text"
+      }
+    }
   },
   "generation": {
     "generate": "Generate",

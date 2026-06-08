@@ -65,9 +65,10 @@ VITE_VEO_PROXY_URL="https://veo-proxy.your-subdomain.workers.dev"
    ```bash
    wrangler secret put VERTEX_AI_TOKEN
    wrangler secret put GOOGLE_PROJECT_ID
+   wrangler secret put OPENAI_API_KEY
    ```
 
-   Then modify the worker to use these secrets instead of accepting them in the request body.
+   `OPENAI_API_KEY` enables the ChatGPT Image Generation 2 option, which is routed to OpenAI's `gpt-image-2` Images API model.
 
 3. **Rate Limiting**
 

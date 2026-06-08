@@ -226,6 +226,30 @@ export async function geminiGetOperation(operationName: string): Promise<any> {
   return resp.json();
 }
 
+// ─── OpenAI Image API ───────────────────────────────────────────────────────
+
+export async function openAIImageRequest(
+  body: any,
+  options?: { signal?: AbortSignal }
+): Promise<any> {
+  const resp = await gatewayFetch('/api/openai/images', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options?.signal,
+    timeoutMs: 180_000,
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    let msg = `OpenAI image API error (${resp.status})`;
+    try {
+      const parsed = JSON.parse(errText);
+      msg = parsed.error?.message || parsed.error || msg;
+    } catch {}
+    throw new Error(msg);
+  }
+  return resp.json();
+}
+
 // ─── Veo Video Generation ────────────────────────────────────────────────────
 
 export interface VeoGenerateRequest {

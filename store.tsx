@@ -1,12 +1,18 @@
 
 import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 const normalizeRenderMode = (mode: unknown): RenderGenerationMode => {
   return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
     ? mode as RenderGenerationMode
     : DEFAULT_RENDER_GENERATION_MODE;
+};
+
+const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => {
+  return IMAGE_GENERATION_MODELS.includes(model as ImageGenerationModel)
+    ? model as ImageGenerationModel
+    : DEFAULT_IMAGE_GENERATION_MODEL;
 };
 
 const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
@@ -856,6 +862,7 @@ const initialCanvas: CanvasState = {
 
 const initialState: AppState = {
   mode: 'generate-text', // CHANGED: Set to 'generate-text' for default starting tab
+  imageGenerationModel: DEFAULT_IMAGE_GENERATION_MODEL,
   activeStyleId: 'no-style',
   uploadedImage: null,
   sourceImage: null,
@@ -890,6 +897,10 @@ const initialState: AppState = {
 function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default', prompt: '' };
+    case 'SET_IMAGE_GENERATION_MODEL': return {
+      ...state,
+      imageGenerationModel: normalizeImageGenerationModel(action.payload)
+    };
     case 'SET_PROMPT': return { ...state, prompt: action.payload };
     case 'SET_STYLE': return {
       ...state,
@@ -945,6 +956,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
     case 'LOAD_PROJECT': return {
       ...action.payload,
+      imageGenerationModel: normalizeImageGenerationModel(action.payload?.imageGenerationModel),
       workflow: normalizeWorkflow(action.payload.workflow),
       sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
       appAlert: action.payload?.appAlert ?? null

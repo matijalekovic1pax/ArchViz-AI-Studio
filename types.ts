@@ -19,6 +19,15 @@ export type GenerationMode =
   | 'pdf-compression'
   | 'headshot';
 
+export type ImageGenerationModel = 'nano-banana' | 'chatgpt-image-generation-2';
+
+export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';
+
+export const IMAGE_GENERATION_MODELS: readonly ImageGenerationModel[] = [
+  'nano-banana',
+  'chatgpt-image-generation-2',
+] as const;
+
 export interface StyleConfiguration {
   id: string;
   name: string;
@@ -1372,6 +1381,7 @@ export interface AppAlert {
 
 export interface AppState {
   mode: GenerationMode;
+  imageGenerationModel: ImageGenerationModel;
   activeStyleId: string;
   uploadedImage: string | null;
   sourceImage: string | null;
@@ -1411,6 +1421,7 @@ export interface AppState {
 
 export type Action = 
   | { type: 'SET_MODE'; payload: GenerationMode }
+  | { type: 'SET_IMAGE_GENERATION_MODEL'; payload: ImageGenerationModel }
   | { type: 'SET_STYLE'; payload: string }
   | { type: 'SET_IMAGE'; payload: string | null }
   | { type: 'SET_SOURCE_IMAGE'; payload: string | null }
