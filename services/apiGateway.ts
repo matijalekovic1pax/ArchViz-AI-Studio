@@ -21,6 +21,7 @@ import type {
 } from '../types';
 
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
+const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
@@ -289,7 +290,7 @@ export interface VeoStatusResult {
 }
 
 export async function veoGenerate(request: VeoGenerateRequest): Promise<VeoStatusResult> {
-  return gatewayPost('/api/veo/generate', request, { timeoutMs: 60_000 });
+  return gatewayPost('/api/veo/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
 }
 
 export async function veoCheckStatus(operationName: string, useVertexAi = false): Promise<VeoStatusResult> {
@@ -330,7 +331,7 @@ export interface KlingGenerateRequest {
 }
 
 export async function klingGenerate(request: KlingGenerateRequest): Promise<{ taskId: string; provider: string }> {
-  return gatewayPost('/api/kling/generate', request, { timeoutMs: 60_000 });
+  return gatewayPost('/api/kling/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
 }
 
 export async function klingCheckStatus(taskId: string, provider = 'piapi'): Promise<any> {
