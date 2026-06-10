@@ -122,6 +122,14 @@ export const LeftSectionPanel = () => {
     }
   };
 
+  useEffect(() => {
+    const handleAssistantDetection = () => {
+      void handleAutoDetectAreas();
+    };
+    window.addEventListener('archviz:assistant-run-section-area-detection', handleAssistantDetection);
+    return () => window.removeEventListener('archviz:assistant-run-section-area-detection', handleAssistantDetection);
+  });
+
   const updateArea = (id: string, updates: Partial<typeof wf.sectionAreas[number]>) => {
     const next = wf.sectionAreas.map((area) => (area.id === id ? { ...area, ...updates } : area));
     updateWf({ sectionAreas: next });

@@ -1,7 +1,143 @@
 
-import React, { createContext, useContext, useReducer, useEffect, PropsWithChildren } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
 import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
+
+type ArchwizTestAssetSummary = {
+  present: boolean;
+  mimeType: string | null;
+  bytesApprox: number | null;
+  chars: number;
+  preview: string;
+};
+
+type ArchwizTestHooks = {
+  version: 1;
+  getState: () => AppState;
+  getSnapshot: () => unknown;
+  getPrompt: () => string;
+  dispatchAction: (action: Action) => void;
+  setMode: (mode: AppState['mode']) => void;
+  setPrompt: (prompt: string) => void;
+  setImageDataUrl: (dataUrl: string | null, options?: { setAsSource?: boolean }) => void;
+  applyWorkflowPatch: (patch: Partial<WorkflowSettings>) => void;
+  applyStatePatch: (patch: {
+    workflow?: Partial<WorkflowSettings>;
+    output?: Partial<OutputState>;
+    geometry?: Partial<GeometryState>;
+    camera?: Partial<CameraState>;
+    lighting?: Partial<LightingState>;
+    materials?: Partial<MaterialState>;
+    context?: Partial<ContextState>;
+    prompt?: string;
+  }) => void;
+  resetProject: () => void;
+};
+
+type ArchwizTestCommandDetail = {
+  id?: string;
+  command?: 'snapshot' | 'reset';
+};
+
+declare global {
+  interface Window {
+    __ARCHWIZ_TEST_HOOKS__?: ArchwizTestHooks;
+  }
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const deepMerge = <T,>(base: T, patch: unknown): T => {
+  if (!isPlainObject(base) || !isPlainObject(patch)) {
+    return patch as T;
+  }
+
+  const next: Record<string, unknown> = { ...base };
+  Object.entries(patch).forEach(([key, value]) => {
+    const previous = next[key];
+    next[key] = isPlainObject(previous) && isPlainObject(value)
+      ? deepMerge(previous, value)
+      : value;
+  });
+  return next as T;
+};
+
+const summarizeDataUrl = (value: string | null): ArchwizTestAssetSummary | null => {
+  if (!value) return null;
+  const match = value.match(/^data:([^;]+);base64,(.*)$/);
+  const base64 = match?.[2] || '';
+  const bytesApprox = base64 ? Math.round((base64.length * 3) / 4) : null;
+  return {
+    present: true,
+    mimeType: match?.[1] || null,
+    bytesApprox,
+    chars: value.length,
+    preview: value.slice(0, 96),
+  };
+};
+
+const sanitizeForTestSnapshot = (value: unknown, depth = 0): unknown => {
+  if (typeof value === 'string') {
+    if (value.startsWith('data:')) {
+      return summarizeDataUrl(value);
+    }
+    return value;
+  }
+
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+
+  if (depth > 6) {
+    return '[MaxDepth]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForTestSnapshot(item, depth + 1));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      sanitizeForTestSnapshot(item, depth + 1),
+    ])
+  );
+};
+
+const createTestSnapshot = (state: AppState) => ({
+  mode: state.mode,
+  imageGenerationModel: state.imageGenerationModel,
+  activeStyleId: state.activeStyleId,
+  prompt: state.prompt,
+  isGenerating: state.isGenerating,
+  progress: state.progress,
+  uploadedImage: summarizeDataUrl(state.uploadedImage),
+  sourceImage: summarizeDataUrl(state.sourceImage),
+  canvas: state.canvas,
+  output: state.output,
+  appAlert: state.appAlert,
+  activeRightTab: state.activeRightTab,
+  activeBottomTab: state.activeBottomTab,
+  workflow: sanitizeForTestSnapshot(state.workflow),
+  materialValidation: sanitizeForTestSnapshot(state.materialValidation),
+  history: state.history.map((item) => ({
+    ...item,
+    thumbnail: summarizeDataUrl(item.thumbnail),
+    attachments: item.attachments?.map((attachment) => summarizeDataUrl(attachment)),
+  })),
+});
+
+const isArchwizTestBridgeEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('archwizTest')) return true;
+  try {
+    return window.localStorage.getItem('archwiz:test') === '1';
+  } catch {
+    return false;
+  }
+};
 
 const normalizeRenderMode = (mode: unknown): RenderGenerationMode => {
   return RENDER_GENERATION_MODES.includes(mode as RenderGenerationMode)
@@ -521,11 +657,6 @@ const initialWorkflow: WorkflowSettings = {
     preserveDepth: true,
     quality: 'standard',
   },
-  editLayers: [
-    { id: '1', name: 'Material - Floor', type: 'material', visible: true, locked: false },
-    { id: '2', name: 'Lighting Adj', type: 'lighting', visible: true, locked: false },
-    { id: '3', name: 'Original', type: 'background', visible: true, locked: true },
-  ],
 
   // 5. Exploded
   explodedSource: {
@@ -973,6 +1104,76 @@ const StoreContext = createContext<{
 
 export function AppProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    if (!isArchwizTestBridgeEnabled()) return;
+
+    const writeBridgeResult = (id: string, payload: unknown) => {
+      document.documentElement.setAttribute(
+        'data-archwiz-test-result',
+        JSON.stringify({ id, payload })
+      );
+    };
+
+    const handleBridgeCommand = (event: Event) => {
+      const detail = (event as CustomEvent<ArchwizTestCommandDetail>).detail || {};
+      const id = detail.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      if (detail.command === 'reset') {
+        dispatch({ type: 'RESET_PROJECT' });
+        window.setTimeout(() => writeBridgeResult(id, createTestSnapshot(stateRef.current)), 80);
+        return;
+      }
+      writeBridgeResult(id, createTestSnapshot(stateRef.current));
+    };
+
+    const hooks: ArchwizTestHooks = {
+      version: 1,
+      getState: () => stateRef.current,
+      getSnapshot: () => createTestSnapshot(stateRef.current),
+      getPrompt: () => generatePrompt(stateRef.current),
+      dispatchAction: (action) => dispatch(action),
+      setMode: (mode) => dispatch({ type: 'SET_MODE', payload: mode }),
+      setPrompt: (prompt) => dispatch({ type: 'SET_PROMPT', payload: prompt }),
+      setImageDataUrl: (dataUrl, options = {}) => {
+        dispatch({ type: 'SET_IMAGE', payload: dataUrl });
+        if (options.setAsSource !== false) {
+          dispatch({ type: 'SET_SOURCE_IMAGE', payload: dataUrl });
+        }
+      },
+      applyWorkflowPatch: (patch) => {
+        const workflow = deepMerge(stateRef.current.workflow, patch);
+        dispatch({ type: 'UPDATE_WORKFLOW', payload: workflow });
+      },
+      applyStatePatch: (patch) => {
+        if (patch.workflow) {
+          const workflow = deepMerge(stateRef.current.workflow, patch.workflow);
+          dispatch({ type: 'UPDATE_WORKFLOW', payload: workflow });
+        }
+        if (patch.output) dispatch({ type: 'UPDATE_OUTPUT', payload: patch.output });
+        if (patch.geometry) dispatch({ type: 'UPDATE_GEOMETRY', payload: patch.geometry });
+        if (patch.camera) dispatch({ type: 'UPDATE_CAMERA', payload: patch.camera });
+        if (patch.lighting) dispatch({ type: 'UPDATE_LIGHTING', payload: patch.lighting });
+        if (patch.materials) dispatch({ type: 'UPDATE_MATERIALS', payload: patch.materials });
+        if (patch.context) dispatch({ type: 'UPDATE_CONTEXT', payload: patch.context });
+        if (typeof patch.prompt === 'string') dispatch({ type: 'SET_PROMPT', payload: patch.prompt });
+      },
+      resetProject: () => dispatch({ type: 'RESET_PROJECT' }),
+    };
+
+    window.__ARCHWIZ_TEST_HOOKS__ = hooks;
+    window.addEventListener('archwiz:test-store-command', handleBridgeCommand);
+    return () => {
+      window.removeEventListener('archwiz:test-store-command', handleBridgeCommand);
+      if (window.__ARCHWIZ_TEST_HOOKS__ === hooks) {
+        delete window.__ARCHWIZ_TEST_HOOKS__;
+      }
+    };
+  }, [dispatch]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

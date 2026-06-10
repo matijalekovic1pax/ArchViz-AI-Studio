@@ -53,10 +53,10 @@
     "modelSelector": {
       "title": "图像模型",
       "nano": {
-        "label": "Nanobanana",
-        "shortLabel": "Nanobanana",
-        "description": "更适合强化视觉效果、动态构图和沉浸式色彩。",
-        "bestFor": "用于增强视觉冲击"
+        "label": "普通 Nano Banana",
+        "shortLabel": "Nano Banana",
+        "description": "适合自然语言提示、快速视觉探索，以及基于源图的编辑。",
+        "bestFor": "用于灵活图像工作"
       },
       "chatgpt": {
         "label": "ChatGPT Image Generation 2",
@@ -334,6 +334,14 @@
       "es": "西班牙语",
       "fr": "法语",
       "de": "德语",
+      "hu": "匈牙利语",
+      "hr": "克罗地亚语",
+      "bs": "波斯尼亚语",
+      "sl": "斯洛文尼亚语",
+      "mk": "马其顿语",
+      "bg": "保加利亚语",
+      "ro": "罗马尼亚语",
+      "sq": "阿尔巴尼亚语",
       "it": "意大利语",
       "pt": "葡萄牙语",
       "zh": "中文",
@@ -1053,7 +1061,6 @@
       "history": "历史",
       "timeline": "时间线",
       "legend": "图例",
-      "edit-stack": "编辑堆栈",
       "cleanup": "清理"
     },
     "history": {

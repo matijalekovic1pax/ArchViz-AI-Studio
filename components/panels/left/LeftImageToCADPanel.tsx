@@ -1,5 +1,5 @@
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { SegmentedControl } from '../../ui/SegmentedControl';
@@ -105,6 +105,14 @@ export const LeftImageToCADPanel = () => {
       }
    }, [ensureServiceInitialized, isPreprocessing, sourceImage, updateWf]);
 
+   useEffect(() => {
+      const handleAssistantPreprocess = () => {
+         void handlePreprocess();
+      };
+      window.addEventListener('archviz:assistant-run-image-to-cad-preprocess', handleAssistantPreprocess);
+      return () => window.removeEventListener('archviz:assistant-run-image-to-cad-preprocess', handleAssistantPreprocess);
+   }, [handlePreprocess]);
+
    return (
       <div className="space-y-6">
          <div>
@@ -173,4 +181,3 @@ export const LeftImageToCADPanel = () => {
       </div>
    );
 };
-

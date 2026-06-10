@@ -314,6 +314,7 @@ const StandardCanvas: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeSelection, setActiveSelection] = useState<SelectionShape | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [brushPreviewPoint, setBrushPreviewPoint] = useState<CanvasPoint | null>(null);
   const [selectionAdjustHandle, setSelectionAdjustHandle] = useState<SelectionAdjustTarget | null>(null);
   const [activeBoundary, setActiveBoundary] = useState<CanvasPoint[] | null>(null);
   const [isBoundarySelecting, setIsBoundarySelecting] = useState(false);
@@ -1229,6 +1230,20 @@ const StandardCanvas: React.FC = () => {
     };
   }, [getImageLayout, state.canvas.zoom]);
 
+  const updateBrushPreview = useCallback((e: React.MouseEvent, clamp = false) => {
+    if (!state.uploadedImage || !isSelectTool || selectionMode !== 'brush') {
+      setBrushPreviewPoint(null);
+      return;
+    }
+
+    const point = getSelectionPoint(e, clamp);
+    setBrushPreviewPoint((prev) => {
+      if (!point) return prev ? null : prev;
+      if (prev && Math.hypot(point.x - prev.x, point.y - prev.y) < 0.25) return prev;
+      return point;
+    });
+  }, [getSelectionPoint, isSelectTool, selectionMode, state.uploadedImage]);
+
   const startSelection = useCallback((e: React.MouseEvent) => {
     if (!state.uploadedImage || e.button !== 0) return;
     if (rafRef.current !== null) {
@@ -1241,6 +1256,9 @@ const StandardCanvas: React.FC = () => {
     lastPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
+    if (selectionMode === 'brush') {
+      setBrushPreviewPoint(point);
+    }
     if (selectionMode === 'adjust') {
       const target = getSelectionAdjustTargetAtPoint(point, state.workflow.visualSelections);
       if (!target) return;
@@ -1335,6 +1353,9 @@ const StandardCanvas: React.FC = () => {
   const updateSelectionPath = useCallback((e: React.MouseEvent) => {
     const point = getSelectionPoint(e, true);
     if (!point) return;
+    if (selectionMode === 'brush') {
+      setBrushPreviewPoint(point);
+    }
     pendingPointRef.current = point;
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -1722,6 +1743,8 @@ const StandardCanvas: React.FC = () => {
         updateSelectionPath(e);
       } else if (selectionMode === 'adjust') {
         updateSelectionAdjustHover(e);
+      } else if (selectionMode === 'brush') {
+        updateBrushPreview(e);
       }
       return;
     }
@@ -1742,6 +1765,7 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseLeave = () => {
+    setBrushPreviewPoint(null);
     if (isBoundaryTool && isBoundarySelecting) {
       finishBoundarySelection();
     }
@@ -1842,6 +1866,12 @@ const StandardCanvas: React.FC = () => {
     setIsPlaying(false);
   }, [state.workflow.videoState.generatedVideoUrl]);
 
+
+  useEffect(() => {
+    if (!state.uploadedImage || !isSelectTool || selectionMode !== 'brush') {
+      setBrushPreviewPoint(null);
+    }
+  }, [isSelectTool, selectionMode, state.uploadedImage]);
 
   useEffect(() => {
     if (!state.uploadedImage) {
@@ -2047,6 +2077,8 @@ const StandardCanvas: React.FC = () => {
     brushFill: 'rgba(56, 189, 248, 0.14)',
     brushFillActive: 'rgba(56, 189, 248, 0.18)',
     brushOutline: 'rgba(56, 189, 248, 0.6)',
+    brushPreviewFill: 'rgba(56, 189, 248, 0.10)',
+    brushPreviewStroke: 'rgba(14, 165, 233, 0.92)',
   };
   const selectionShapes =
     state.mode === 'visual-edit'
@@ -2107,6 +2139,32 @@ const StandardCanvas: React.FC = () => {
         strokeLinejoin="round"
         fill="none"
       />
+    );
+  };
+
+  const renderBrushPreview = () => {
+    if (!currentImageLayout || !brushPreviewPoint || !isSelectTool || selectionMode !== 'brush') return null;
+    const center = mapPoint(brushPreviewPoint);
+    const radius = Math.max(2, getDisplayBrushSize(getImageBrushSize()) / 2);
+    const dash = `${Math.max(1, 5 / state.canvas.zoom)} ${Math.max(1, 4 / state.canvas.zoom)}`;
+    return (
+      <g>
+        <circle
+          cx={center.x}
+          cy={center.y}
+          r={radius}
+          fill={selectionColors.brushPreviewFill}
+          stroke={selectionColors.brushPreviewStroke}
+          strokeWidth={selectionStroke}
+          strokeDasharray={dash}
+        />
+        <circle
+          cx={center.x}
+          cy={center.y}
+          r={Math.max(1.4, 1.8 / state.canvas.zoom)}
+          fill={selectionColors.brushPreviewStroke}
+        />
+      </g>
     );
   };
 
@@ -2677,6 +2735,7 @@ const StandardCanvas: React.FC = () => {
                                               </g>
                                             </>
                                           )}
+                                          {renderBrushPreview()}
                                           {otherShapes.map((shape, index) => (
                                             <g key={`${shape.id}-${index}`}>
                                               {renderSelectionShape(shape, shape.id === 'active')}

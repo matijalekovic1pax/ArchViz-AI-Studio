@@ -25,7 +25,7 @@ export const LeftRender3DPanel = () => {
   const analyzingRef = useRef(false);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const wf = state.workflow;
-  const PREPROCESS_MODEL = 'gemini-3-flash-preview';
+  const PREPROCESS_MODEL = 'gemini-3.5-flash';
   const PREPROCESS_TIMEOUT_MS = 60000;
 
   const availableStyles = useMemo(

@@ -11,6 +11,26 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const TEST_AUTH_USER: AuthUser = {
+  email: 'archwiz-test@local',
+  name: 'ArchWiz Test MCP',
+  picture: '',
+  domain: 'local',
+};
+
+const isArchwizTestAuthBypassEnabled = () => {
+  const env = (import.meta as any).env;
+  const bypassAllowed = Boolean(env?.DEV) || env?.VITE_ARCHWIZ_TEST_AUTH_BYPASS === '1';
+  if (!bypassAllowed || typeof window === 'undefined') return false;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('archwizTest')) return true;
+  try {
+    return window.localStorage.getItem('archwiz:test') === '1';
+  } catch {
+    return false;
+  }
+};
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -30,6 +50,8 @@ export function AuthGate({ children }: PropsWithChildren) {
     const savedUser = loadAuthSession();
     if (savedUser) {
       setUser(savedUser);
+    } else if (isArchwizTestAuthBypassEnabled()) {
+      setUser(TEST_AUTH_USER);
     }
     setIsLoading(false);
   }, []);
@@ -59,6 +81,7 @@ export function AuthGate({ children }: PropsWithChildren) {
   // Force logout if user profile is present but the JWT is missing or expired
   useEffect(() => {
     if (!user) return;
+    if (isArchwizTestAuthBypassEnabled()) return;
     if (!isGatewayAuthenticated()) {
       logout(true);
     }

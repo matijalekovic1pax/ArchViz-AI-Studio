@@ -6,7 +6,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
-import { generatePrompt } from '../engine/promptEngine';
+import { adaptImagePromptForModel, generatePrompt } from '../engine/promptEngine';
 import {
   getGeminiService,
   isGeminiServiceInitialized,
@@ -63,6 +63,77 @@ const SOURCE_FIDELITY_CONTRACT = [
   'If any user instruction conflicts with the source image, follow the source image.'
 ].join(' ');
 
+const ISOLATED_BACKGROUND_REQUEST_PATTERN = /(?:transparent|transparente|alpha|png)\s+(?:background|fondo)|(?:background|fondo)\s+(?:transparent|transparente)|(?:no|without|remove)\s+(?:background|fondo)|sin\s+fondo|fondo\s+transparente|png\s+transparente/i;
+const ISOLATED_ASSET_PATTERN = /\b(emoji|emojis|emoticon|emoticono|emoticonos|emote|sticker|stickers|icon|icons|icono|iconos|avatar|badge|badges|cutout|cut-out)\b/i;
+const PLAIN_FOLLOW_UP_PATTERN = /^(change|make|turn|set|replace|modify|edit|adjust|update|remove|add|keep|preserve|only|just|now|same|try|haz|cambia|cambiar|pon|poner|quita|editar|modifica)\b|\b(her|his|their|its|the same|same image|helmet|casco|color)\b/i;
+
+const ISOLATED_ASSET_OUTPUT_INSTRUCTION = [
+  'Isolated asset output:',
+  'The selected image models do not provide real alpha transparency, so use a clean pure white background instead.',
+  'Do not render a checkerboard pattern, gray transparency grid, photo backdrop, shadow box, or visible scene background.',
+  'Keep the subject centered with clean anti-aliased edges and a tight icon/sticker-safe silhouette.'
+].join(' ');
+
+const shouldUseIsolatedAssetOutput = (prompt: string): boolean => {
+  const normalized = prompt.trim();
+  if (!normalized) return false;
+  return ISOLATED_BACKGROUND_REQUEST_PATTERN.test(normalized) || ISOLATED_ASSET_PATTERN.test(normalized);
+};
+
+const getRecentPlainGenerateHistory = (history: AppState['history'], limit = 4): AppState['history'] =>
+  history
+    .filter((item) => item.mode === 'generate-text' && item.settings?.kind !== 'source')
+    .slice(-limit);
+
+const getLatestPlainGenerateImage = (state: AppState): string | null => {
+  if (state.uploadedImage?.startsWith('data:image/')) return state.uploadedImage;
+  const latestHistoryImage = [...state.history]
+    .reverse()
+    .find((item) =>
+      item.mode === 'generate-text' &&
+      item.settings?.kind !== 'source' &&
+      item.thumbnail?.startsWith('data:image/')
+    );
+  return latestHistoryImage?.thumbnail || null;
+};
+
+const isLikelyPlainGenerateFollowUp = (prompt: string): boolean =>
+  PLAIN_FOLLOW_UP_PATTERN.test(prompt.trim());
+
+const buildPlainGenerateConversationPrompt = (
+  currentPrompt: string,
+  history: AppState['history'],
+  options: {
+    hasContextImage: boolean;
+    isLikelyFollowUp: boolean;
+    wantsIsolatedAssetOutput: boolean;
+  }
+): string => {
+  const recentHistory = getRecentPlainGenerateHistory(history);
+  if (!recentHistory.length && !options.hasContextImage && !options.wantsIsolatedAssetOutput) {
+    return currentPrompt;
+  }
+
+  const historyLines = recentHistory.map((item, index) =>
+    `${index + 1}. User asked: ${item.prompt.replace(/\s+/g, ' ').trim().slice(0, 500) || '(image prompt not recorded)'}`
+  );
+
+  return [
+    'You are continuing a plain image-generation conversation.',
+    historyLines.length > 0
+      ? ['Recent image-generation turns, oldest to newest:', ...historyLines].join('\n')
+      : '',
+    options.hasContextImage
+      ? 'A reference image is attached. Treat it as the latest generated image when the current request is a follow-up edit.'
+      : '',
+    `Current user request: ${currentPrompt}`,
+    options.isLikelyFollowUp
+      ? 'Apply the current request as an edit to the latest generated image. Preserve subject identity, composition, style, and all unchanged details.'
+      : 'If the current request is a follow-up, edit the latest generated image and preserve unchanged details. If it is a standalone new request, ignore unrelated prior turns and create a new image from the current request.',
+    options.wantsIsolatedAssetOutput ? ISOLATED_ASSET_OUTPUT_INSTRUCTION : ''
+  ].filter(Boolean).join('\n\n');
+};
+
 const loadCanvasImage = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = new Image();
@@ -113,6 +184,38 @@ const drawMaskImageData = (
   return canvas;
 };
 
+const getGuidanceMaskFeatherRadius = (width: number, height: number, featherAmount: number): number => {
+  const longEdge = Math.max(width, height);
+  const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
+  const radius = longEdge * (0.006 + normalizedFeather * 0.028);
+  return Math.round(Math.min(96, Math.max(4, radius)));
+};
+
+const createGuidanceMaskDataUrl = async (
+  maskDataUrl: string,
+  featherAmount: number
+): Promise<string> => {
+  const mask = await loadCanvasImage(maskDataUrl);
+  const width = mask.naturalWidth || mask.width;
+  const height = mask.naturalHeight || mask.height;
+  if (!width || !height) return maskDataUrl;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return maskDataUrl;
+
+  const radius = getGuidanceMaskFeatherRadius(width, height, featherAmount);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
+  ctx.filter = `blur(${radius}px)`;
+  ctx.drawImage(mask, 0, 0, width, height);
+  ctx.filter = 'none';
+
+  return canvas.toDataURL('image/png');
+};
+
 const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean, alphaMask = false): Promise<string> => {
   if (!invert && !alphaMask) return maskDataUrl;
   const mask = await loadCanvasImage(maskDataUrl);
@@ -122,15 +225,13 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean, a
   return drawMaskImageData(mask, width, height, { invert, alphaMask })?.toDataURL('image/png') || maskDataUrl;
 };
 
-const STRICT_VISUAL_MASK_TOOLS = new Set(['select', 'material', 'adjust', 'background']);
-
 const getVisualMaskMode = (
   activeVisualTool: string,
   shouldUseSelectionMask: boolean,
   editOutsideSelection: boolean
 ): ImageEditRequest['maskMode'] | undefined => {
   if (!shouldUseSelectionMask) return undefined;
-  return editOutsideSelection || STRICT_VISUAL_MASK_TOOLS.has(activeVisualTool) ? 'strict' : 'guided';
+  return editOutsideSelection ? 'strict' : 'guided';
 };
 
 const materialPreviewToImageData = async (previewUrl: string): Promise<ImageData | null> => {
@@ -754,6 +855,9 @@ export function useGeneration(): UseGenerationReturn {
       const keepsStructuredPrompt = isSourceLockedMode || state.mode === 'upscale';
       const sourceImage = state.sourceImage || state.uploadedImage;
       const baseImage = isSourceLockedMode ? sourceImage : state.uploadedImage;
+      const plainGenerateContextImage = state.mode === 'generate-text'
+        ? getLatestPlainGenerateImage(state)
+        : null;
 
       // Build prompt. Source-based modes always keep the structured prompt so
       // preservation constraints cannot be bypassed by a freeform prompt.
@@ -793,19 +897,32 @@ export function useGeneration(): UseGenerationReturn {
       }
 
       const modePrefix = getModePromptPrefix(state.mode, state.workflow.renderMode);
-      const fullPrompt = state.mode === 'material-validation'
+      const isolatedPlainOutput = state.mode === 'generate-text' && shouldUseIsolatedAssetOutput([
+        explicitPrompt,
+        basePrompt,
+        options.prompt || '',
+        state.prompt || ''
+      ].filter(Boolean).join('\n'));
+      let fullPrompt = state.mode === 'material-validation'
         ? buildMaterialValidationPrompt(options.prompt)
         : [
             modePrefix + basePrompt,
             usesStrictSourceFidelity && baseImage ? SOURCE_FIDELITY_CONTRACT : ''
           ].filter(Boolean).join('\n\n');
+      if (state.mode === 'generate-text') {
+        fullPrompt = buildPlainGenerateConversationPrompt(fullPrompt, state.history, {
+          hasContextImage: Boolean(plainGenerateContextImage),
+          isLikelyFollowUp: isLikelyPlainGenerateFollowUp(explicitPrompt || basePrompt),
+          wantsIsolatedAssetOutput: isolatedPlainOutput
+        });
+      }
       const attachmentUrls = options.attachments
         ? options.attachments.map((attachment) =>
             typeof attachment === 'string' ? attachment : attachment.dataUrl
           )
         : [];
 
-      const primaryRatioSource = baseImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
+      const primaryRatioSource = baseImage || plainGenerateContextImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
       const inputAspectRatio = await resolveClosestAspectRatio(primaryRatioSource);
       const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'
         ? state.workflow.visualAdjust.aspectRatio
@@ -828,6 +945,18 @@ export function useGeneration(): UseGenerationReturn {
       // Add uploaded image if available (skip for material validation and headshot — headshot adds its own reference images below)
       if (baseImage && state.mode !== 'material-validation' && state.mode !== 'headshot') {
         const imgData = dataUrlToImageData(baseImage);
+        if (imgData) {
+          images.push(imgData);
+        }
+      }
+
+      if (
+        state.mode === 'generate-text' &&
+        !baseImage &&
+        plainGenerateContextImage &&
+        isLikelyPlainGenerateFollowUp(explicitPrompt || basePrompt)
+      ) {
+        const imgData = dataUrlToImageData(plainGenerateContextImage);
         if (imgData) {
           images.push(imgData);
         }
@@ -1070,13 +1199,14 @@ export function useGeneration(): UseGenerationReturn {
       }
 
       const buildImagePrompt = (prompt: string) => (
-        prompt.includes('generate') || prompt.includes('create')
+        /\b(generate|create|edit|convert|transform|model:|task:|output artifact:)\b/i.test(prompt)
           ? prompt
           : `Generate an image: ${prompt}`
       );
 
       const DEFAULT_MAX_RETRIES = 3;
       const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
+      const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60 * 1000;
 
       const runWithRetry = async <T>(
         label: string,
@@ -1092,17 +1222,20 @@ export function useGeneration(): UseGenerationReturn {
             throw new DOMException('Request aborted', 'AbortError');
           }
 
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
           try {
             const result = await Promise.race([
               fn(),
               new Promise<never>((_, reject) => {
-                setTimeout(() => {
+                timeoutId = setTimeout(() => {
                   reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
                 }, timeoutMs);
               })
             ]);
+            if (timeoutId) clearTimeout(timeoutId);
             return result;
           } catch (error) {
+            if (timeoutId) clearTimeout(timeoutId);
             lastError = error as Error;
             if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
               throw error;
@@ -1117,6 +1250,9 @@ export function useGeneration(): UseGenerationReturn {
 
         throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
       };
+      const openAIImageRetryOptions = state.imageGenerationModel === 'chatgpt-image-generation-2'
+        ? { timeoutMs: OPENAI_IMAGE_TIMEOUT_MS, maxRetries: 0 }
+        : undefined;
 
       const runStreamedImageGeneration = async (request: {
         prompt: string;
@@ -1180,13 +1316,28 @@ export function useGeneration(): UseGenerationReturn {
       const generationConfig = buildGenerationConfig(state, headshotAspectRatio ?? aspectRatioOverride);
       const generationConfigWithAbort: GenerationConfig = {
         ...generationConfig,
-        abortSignal
+        abortSignal,
+        openAI: isolatedPlainOutput
+          ? { background: 'opaque' }
+          : undefined
       };
 
       let result: GeminiResponse;
+      const isTextOnlyMode = TEXT_ONLY_MODES.includes(state.mode);
+      const hasImageSourceForPrompt = Boolean(
+        baseImage ||
+        plainGenerateContextImage ||
+        (isHeadshotMode && images.length > 0)
+      );
+      const imageModelPrompt = !isTextOnlyMode && !isVideoMode && !isVisualEditMode
+        ? adaptImagePromptForModel(state, fullPrompt, {
+            hasSourceImage: hasImageSourceForPrompt,
+            hasReferenceImages: images.length > (hasImageSourceForPrompt ? 1 : 0),
+            promptKind: options.numberOfImages && options.numberOfImages > 1 ? 'batch' : 'generation'
+          })
+        : fullPrompt;
 
       // Handle different modes
-      const isTextOnlyMode = TEXT_ONLY_MODES.includes(state.mode);
       if (isTextOnlyMode) {
         if (state.mode === 'material-validation') {
           dispatch({
@@ -1502,12 +1653,17 @@ export function useGeneration(): UseGenerationReturn {
           ``,
           ...frameDescriptions,
           ``,
-          `IMPORTANT: Do not add any text labels, letters, or markings (A, B, C, etc.) to the images. Generate clean panels without any annotations.`,
+          `Do not add text labels, letters, markings, or panel IDs such as A, B, or C. Generate clean panels without annotations.`,
           ``,
           `Lighting Instruction: Maintain a fixed global light source so that shadows shift realistically as the camera moves around the building. No hallucinations or added features.`,
           ``,
           fullPrompt ? `Additional requirements: ${fullPrompt}` : '',
         ].filter(p => p.trim()).join(' ');
+        const gridPromptForModel = adaptImagePromptForModel(state, gridPrompt, {
+          hasSourceImage: images.length > 0,
+          hasReferenceImages: false,
+          promptKind: 'grid'
+        });
 
         updateProgress(10);
 
@@ -1521,11 +1677,12 @@ export function useGeneration(): UseGenerationReturn {
         const gridResult = await runWithRetry(
           'multi-angle grid',
           () => service.generateImages({
-            prompt: gridPrompt,
+            prompt: gridPromptForModel,
             images: images.length > 0 ? images : undefined,
             imageGenerationModel: state.imageGenerationModel,
             generationConfig: gridGenerationConfig
-          })
+          }),
+          openAIImageRetryOptions
         );
 
         const gridImage = pickFinalImage(gridResult.images);
@@ -1555,7 +1712,7 @@ export function useGeneration(): UseGenerationReturn {
             id: nanoid(),
             timestamp: Date.now(),
             thumbnail: gridImage.dataUrl,
-            prompt: gridPrompt,
+            prompt: gridPromptForModel,
             attachments: attachmentUrls,
             mode: state.mode,
             settings: {
@@ -1662,9 +1819,14 @@ export function useGeneration(): UseGenerationReturn {
               }
 
               // Create a timeout-aware generation call
+              const upscalePrompt = adaptImagePromptForModel(state, fullPrompt, {
+                hasSourceImage: true,
+                hasReferenceImages: false,
+                promptKind: 'edit'
+              });
               const upscaleResult = await Promise.race([
                 service.generateImages({
-                  prompt: fullPrompt,
+                  prompt: upscalePrompt,
                   images: [source],
                   imageGenerationModel: state.imageGenerationModel,
                   generationConfig: {
@@ -1782,17 +1944,24 @@ export function useGeneration(): UseGenerationReturn {
           activeVisualTool !== 'extend' &&
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
-        const editableMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl
+        const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
+        const effectiveFeatherAmount = state.workflow.visualSelection.featherEnabled
+          ? state.workflow.visualSelection.featherAmount
+          : 35;
+        const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided'
+          ? await createGuidanceMaskDataUrl(selectedMaskDataUrl, effectiveFeatherAmount)
+          : selectedMaskDataUrl;
+        const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl
           ? await createEditableMaskDataUrl(
-              selectedMaskDataUrl,
+              guidanceMaskDataUrl,
               editOutsideSelection,
-              state.imageGenerationModel === 'chatgpt-image-generation-2'
+              state.imageGenerationModel === 'chatgpt-image-generation-2' && maskMode === 'strict'
             )
           : null;
         const maskImage = editableMaskDataUrl
           ? dataUrlToImageData(editableMaskDataUrl)
           : null;
-        const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
+        const localSelectionMaskDataUrl = shouldUseSelectionMask ? guidanceMaskDataUrl : null;
         let visualMaskHandledLocally = false;
 
         const editTypeMap: Record<string, ImageEditRequest['editType']> = {
@@ -1842,7 +2011,7 @@ export function useGeneration(): UseGenerationReturn {
         if (hasLocalMaskedMaterialEdit && selectedMaskDataUrl && materialReference) {
           const materialImage = await applyMaskedMaterialReplacement(
             sourceImageUrl!,
-            selectedMaskDataUrl,
+            localSelectionMaskDataUrl || selectedMaskDataUrl,
             materialReference,
             state.workflow.visualMaterial
           );
@@ -1860,37 +2029,47 @@ export function useGeneration(): UseGenerationReturn {
             result = { text: null, images: [materialImage] };
             updateProgress(90);
           } else {
-            result = await runWithRetry('image edit', () => service.editImage({
+            result = await runWithRetry(
+              'image edit',
+              () => service.editImage({
+                sourceImage,
+                maskImage: maskImage || undefined,
+                maskMode,
+                referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
+                prompt: basePrompt,
+                editType,
+                activeTool: activeVisualTool,
+                imageGenerationModel: state.imageGenerationModel,
+                generationConfig: generationConfigWithAbort
+              }),
+              openAIImageRetryOptions
+            );
+          }
+        } else if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
+          const adjustedImage = await applyVisualPostProduction(
+            sourceImageUrl!,
+            adjust,
+            localSelectionMaskDataUrl
+          );
+          result = { text: null, images: [adjustedImage] };
+          visualMaskHandledLocally = shouldUseSelectionMask;
+          updateProgress(90);
+        } else {
+          result = await runWithRetry(
+            'image edit',
+            () => service.editImage({
               sourceImage,
               maskImage: maskImage || undefined,
               maskMode,
               referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
               prompt: basePrompt,
               editType,
+              activeTool: activeVisualTool,
               imageGenerationModel: state.imageGenerationModel,
               generationConfig: generationConfigWithAbort
-            }));
-          }
-        } else if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
-          const adjustedImage = await applyVisualPostProduction(
-            sourceImageUrl!,
-            adjust,
-            shouldUseSelectionMask ? selectedMaskDataUrl : null
+            }),
+            openAIImageRetryOptions
           );
-          result = { text: null, images: [adjustedImage] };
-          visualMaskHandledLocally = shouldUseSelectionMask;
-          updateProgress(90);
-        } else {
-          result = await runWithRetry('image edit', () => service.editImage({
-            sourceImage,
-            maskImage: maskImage || undefined,
-            maskMode,
-            referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-            prompt: basePrompt,
-            editType,
-            imageGenerationModel: state.imageGenerationModel,
-            generationConfig: generationConfigWithAbort
-          }));
         }
 
         if (!visualMaskHandledLocally && shouldUseSelectionMask && maskMode === 'strict' && selectedMaskDataUrl && result.images?.length) {
@@ -2045,22 +2224,31 @@ export function useGeneration(): UseGenerationReturn {
       } else if (options.numberOfImages && options.numberOfImages > 1) {
         updateProgress(10);
         // Batch image generation
-        const batchResult = await runWithRetry('batch image generation', () => service.generateBatchImages({
-          prompt: fullPrompt,
-          referenceImages: images.length > 0 ? images : undefined,
-          numberOfImages: options.numberOfImages,
-          imageConfig: generationConfig.imageConfig,
-          imageGenerationModel: state.imageGenerationModel,
-          abortSignal
-        }));
+        const batchResult = await runWithRetry(
+          'batch image generation',
+          () => service.generateBatchImages({
+            prompt: imageModelPrompt,
+            referenceImages: images.length > 0 ? images : undefined,
+            numberOfImages: options.numberOfImages,
+            imageConfig: generationConfig.imageConfig,
+            openAI: generationConfigWithAbort.openAI,
+            imageGenerationModel: state.imageGenerationModel,
+            abortSignal
+          }),
+          openAIImageRetryOptions
+        );
         result = { text: batchResult.text, images: batchResult.images };
       } else {
         // Standard image generation
-        result = await runWithRetry('image generation', () => runStreamedImageGeneration({
-          prompt: fullPrompt,
-          images: images.length > 0 ? images : undefined,
-          generationConfig: generationConfigWithAbort
-        }));
+        result = await runWithRetry(
+          'image generation',
+          () => runStreamedImageGeneration({
+            prompt: imageModelPrompt,
+            images: images.length > 0 ? images : undefined,
+            generationConfig: generationConfigWithAbort
+          }),
+          openAIImageRetryOptions
+        );
       }
       updateProgress(95);
 
@@ -2294,7 +2482,7 @@ export function useGeneration(): UseGenerationReturn {
       if (isImageMode && isServiceUnavailable) {
         const providerName = state.imageGenerationModel === 'chatgpt-image-generation-2'
           ? 'ChatGPT Image Generation 2'
-          : 'Gemini image service';
+          : 'regular Nano Banana';
         dispatch({
           type: 'SET_APP_ALERT',
           payload: {

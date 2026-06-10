@@ -538,7 +538,6 @@ export interface WorkflowSettings {
     preserveDepth: boolean;
     quality: 'draft' | 'standard' | 'high';
   };
-  editLayers: { id: string; name: string; type: string; visible: boolean; locked: boolean }[];
 
   // 5. Exploded
   explodedSource: {

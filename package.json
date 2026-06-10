@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
-    "mcp:feedback": "node mcp/feedback-mcp-server.mjs"
+    "setup:appwrite-feedback": "node scripts/setup-appwrite-feedback.mjs",
+    "mcp:feedback": "node mcp/feedback-mcp-server.mjs",
+    "mcp:test": "node mcp/archwiz-test-mcp-server.mjs",
+    "verify:assistant": "node scripts/verify-assistant-integration.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",

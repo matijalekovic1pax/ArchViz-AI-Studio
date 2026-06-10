@@ -6,15 +6,18 @@
 
 import { geminiRequest, geminiStreamRequest, openAIImageRequest } from './apiGateway';
 import { type ImageGenerationModel } from '../types';
+import { adaptPromptForImageGenerationModel } from '../engine/promptEngine';
 
 // ============================================================================
 // Types & Interfaces
 // ============================================================================
 
-export const DEFAULT_MODEL = 'gemini-3-pro-image-preview';
-export const IMAGE_MODEL = 'gemini-3-pro-image-preview';
-export const TEXT_MODEL = 'gemini-3-pro-preview';
+export const DEFAULT_MODEL = 'gemini-2.5-flash-image';
+export const IMAGE_MODEL = 'gemini-2.5-flash-image';
+export const TEXT_MODEL = 'gemini-3.5-flash';
+export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:regular Nano Banana|ChatGPT Image Generation 2)\b/i;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -65,6 +68,9 @@ export interface GenerationConfig {
     thinkingBudget?: number;
     thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
   };
+  openAI?: {
+    background?: 'opaque' | 'auto';
+  };
 }
 
 export interface GeminiResponse {
@@ -84,6 +90,7 @@ export interface BatchImageRequest {
   referenceImages?: ImageData[];
   numberOfImages: number;
   imageConfig?: ImageConfig;
+  openAI?: GenerationConfig['openAI'];
   abortSignal?: AbortSignal;
   imageGenerationModel?: ImageGenerationModel;
 }
@@ -110,6 +117,7 @@ export interface ImageEditRequest {
   referenceImages?: ImageData[];
   prompt: string;
   editType: 'inpaint' | 'outpaint' | 'style-transfer' | 'enhance' | 'remove' | 'replace' | 'people';
+  activeTool?: string;
   generationConfig?: GenerationConfig;
   imageGenerationModel?: ImageGenerationModel;
 }
@@ -288,18 +296,23 @@ export class GeminiService {
   // --------------------------------------------------------------------------
 
   async generate(request: GeminiRequest): Promise<GeminiResponse> {
-    if (this.isOpenAIImageRequest(request)) {
-      return this.generateOpenAIImages(request);
+    const wantsImage = (request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']).includes('IMAGE');
+    const preparedRequest = wantsImage
+      ? { ...request, prompt: this.prepareImagePrompt(request, 'generation') }
+      : request;
+
+    if (this.isOpenAIImageRequest(preparedRequest)) {
+      return this.generateOpenAIImages(preparedRequest);
     }
 
-    const contents = this.buildContents(request);
-    const generationConfig = this.buildGenerationConfig(request.generationConfig, ['TEXT', 'IMAGE']);
+    const contents = this.buildContents(preparedRequest);
+    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE']);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(this.model, 'generateContent', {
         contents,
         generationConfig,
-      }, { signal: request.generationConfig?.abortSignal })
+      }, { signal: preparedRequest.generationConfig?.abortSignal })
     );
 
     return this.parseResponse(response);
@@ -325,22 +338,27 @@ export class GeminiService {
   }
 
   async generateImages(request: GeminiRequest): Promise<GeminiResponse> {
-    if (this.isOpenAIImageRequest(request)) {
-      return this.generateOpenAIImages(request);
+    const preparedRequest = {
+      ...request,
+      prompt: this.prepareImagePrompt(request, 'generation')
+    };
+
+    if (this.isOpenAIImageRequest(preparedRequest)) {
+      return this.generateOpenAIImages(preparedRequest);
     }
 
-    const imagePrompt = request.prompt.includes('generate') || request.prompt.includes('create')
-      ? request.prompt
-      : `Generate an image: ${request.prompt}`;
+    const imagePrompt = /\b(generate|create|edit|convert|transform|model:|task:|output artifact:)\b/i.test(preparedRequest.prompt)
+      ? preparedRequest.prompt
+      : `Generate an image: ${preparedRequest.prompt}`;
 
-    const contents = this.buildContents({ ...request, prompt: imagePrompt });
-    const generationConfig = this.buildGenerationConfig(request.generationConfig, ['TEXT', 'IMAGE']);
+    const contents = this.buildContents({ ...preparedRequest, prompt: imagePrompt });
+    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE']);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(IMAGE_MODEL, 'generateContent', {
         contents,
         generationConfig,
-      }, { signal: request.generationConfig?.abortSignal })
+      }, { signal: preparedRequest.generationConfig?.abortSignal })
     );
 
     return this.parseResponse(response);
@@ -366,6 +384,7 @@ export class GeminiService {
           imageGenerationModel: request.imageGenerationModel,
           generationConfig: {
             imageConfig: request.imageConfig,
+            openAI: request.openAI,
             abortSignal: request.abortSignal
           }
         })
@@ -430,9 +449,9 @@ export class GeminiService {
   async editImage(request: ImageEditRequest): Promise<GeminiResponse> {
     let editPrompt = request.prompt;
     const referenceCount = request.referenceImages?.length || 0;
-    const maskMode = request.maskMode ?? 'strict';
+    const maskMode = request.maskMode ?? 'guided';
     const referenceInstructions = referenceCount > 0
-      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and mask' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
+      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and selection guidance' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
       : '';
     const cameraAndTextLock = [
       'Preserve the original camera position, field of view, horizon, crop, perspective, and aspect ratio unless the edit type explicitly changes the canvas.',
@@ -441,10 +460,11 @@ export class GeminiService {
     ].join(' ');
     const maskScopeInstructions = maskMode === 'guided'
       ? [
-          'Use the white mask pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout or alpha edge.',
-          'You may naturally reconstruct and blend nearby pixels just beyond the mask where required for texture continuation, shadows, reflections, occlusion, or cleanup.',
+          'Use the bright selection pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout, clipping stencil, or alpha edge.',
+          'The selected shape is a pointer to the intended object, surface, or area. If that target naturally continues slightly beyond the bright pixels, refine and blend those nearby connected pixels as needed.',
+          'You may naturally reconstruct and blend nearby pixels beyond the selection where required for texture continuation, material falloff, shadows, reflections, occlusion, or cleanup.',
           'Preserve unrelated architecture, materials, people, signage, camera, perspective, and overall composition.',
-          'Never draw, expose, fill, or preserve the black-and-white mask itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
+          'Never draw, expose, fill, or preserve the selection guidance itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
         ].join(' ')
       : [
           'White mask pixels are the ONLY editable pixels. Black mask pixels are locked and must remain visually identical to the original source image.',
@@ -456,7 +476,9 @@ export class GeminiService {
             ? 'You are given input images in this exact order:'
             : 'You are given two input images in this exact order:',
           '1. The original source image.',
-          '2. A black-and-white selection mask with the same framing as the source image.',
+          maskMode === 'guided'
+            ? '2. A soft selection guidance map with the same framing as the source image; bright areas mark the intended target focus.'
+            : '2. A black-and-white selection mask with the same framing as the source image.',
           cameraAndTextLock,
           maskScopeInstructions,
           'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
@@ -473,9 +495,9 @@ export class GeminiService {
       'For blurry, tiny, distant, or ambiguous areas, keep the same shapes and approximate detail rather than inventing new content. When enhancement conflicts with preservation, preserve.'
     ].join(' ');
     const guidedRemoveTargetInstructions = [
-      'For removal requests, treat the selection mask as target guidance for the complete subject centered inside the selected area, not as a request to remove only small high-contrast fragments.',
+      'For removal requests, treat the selection guidance as target guidance for the complete subject centered inside the selected area, not as a request to remove only small high-contrast fragments.',
       'If the centered target is a person, remove the entire person silhouette: head, torso, limbs, clothing, hair, hands, feet, carried bags, wheeled luggage, straps, personal items, contact shadows, and reflections.',
-      'If the whole person or object extends slightly beyond the white mask, remove those connected parts too when needed so no body, accessory, shadow, or ghosted remnant remains.',
+      'If the whole person or object extends slightly beyond the bright guidance area, remove those connected parts too when needed so no body, accessory, shadow, or ghosted remnant remains.',
       'Do not remove only luggage, bags, shadows, or accessories while leaving the selected person or main object visible.',
       'Treat selected floor, wall, kiosk, ceiling, sign, and architectural pixels as reconstruction context unless they are clearly the central selected subject.'
     ].join(' ');
@@ -488,33 +510,35 @@ export class GeminiService {
     switch (request.editType) {
       case 'inpaint':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Apply the requested edit to the target indicated by the selection mask: ${request.prompt}. Keep the edit focused on the selected content while allowing seamless reconstruction beyond the mask edge when visually necessary.`
+          ? `${maskInstructions} Apply the requested edit to the target indicated by the selection guidance: ${request.prompt}. Keep the edit focused on the intended selected target while allowing seamless reconstruction beyond the guidance edge when visually necessary.`
           : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
         editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Continue the source perspective lines, horizon, lighting direction, materials, shadows, reflections, and visible text/signage shapes into the new canvas area. Do not change existing source pixels unless needed only at the extension seam.`;
         break;
       case 'style-transfer':
-        editPrompt = `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;
+        editPrompt = maskMode === 'guided'
+          ? `${maskInstructions} Transform the existing target surface or object finish indicated by the selection guidance: ${request.prompt}. This is a material/color/finish edit only, not object generation. Treat the selection as a pointer to the intended material or object, not as the exact visible boundary of the final change. If the same selected surface or object continues slightly beyond the bright guidance area, continue the finish naturally across the connected visible target where needed for a seamless result. Preserve the source image composition, camera, geometry, object count, object positions, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface or object and leave uncertain areas unchanged.`
+          : `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;
         break;
       case 'enhance':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Apply the enhancement primarily to the target indicated by the selection mask. ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`
+          ? `${maskInstructions} Apply the enhancement primarily to the target indicated by the selection guidance. ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`
           : `${maskInstructions} ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`;
         break;
       case 'remove':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} ${guidedRemoveTargetInstructions} Remove the unwanted content indicated by the selection mask as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
+          ? `${maskInstructions} ${guidedRemoveTargetInstructions} Remove the unwanted content indicated by the selection guidance as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
           : `${maskInstructions} ${strictRemoveTargetInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
         break;
       case 'replace':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Replace the target indicated by the selection mask with: ${request.prompt}. Keep the replacement anchored to the selected content while allowing natural blending, contact shadows, reflections, and occlusion beyond the mask edge where necessary.`
+          ? `${maskInstructions} Replace the target indicated by the selection guidance with: ${request.prompt}. Keep the replacement anchored to the selected target while allowing natural blending, contact shadows, reflections, and occlusion beyond the guidance edge where necessary.`
           : `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
         break;
       case 'people':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Edit the human figures and their immediate personal accessories indicated by the selection mask according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the targeted people only; preserve architecture, floors, furniture, signage, lighting, camera, and perspective. Selected non-person pixels are context and must be naturally reconstructed around the people, not filled with text, white shapes, or decorative marks.`
+          ? `${maskInstructions} Edit the human figures and their immediate personal accessories indicated by the selection guidance according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the targeted people only; preserve architecture, floors, furniture, signage, lighting, camera, and perspective. Selected non-person pixels are context and must be naturally reconstructed around the people, not filled with text, white shapes, or decorative marks.`
           : `${maskInstructions} Edit only human figures and their immediate personal accessories inside the allowed masked area according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. Replace or refine the selected people only; preserve architecture, floors, furniture, signage, lighting, camera, perspective, and every locked pixel. Selected non-person pixels are context and must be naturally reconstructed, not filled with text or decorative marks.`;
         break;
     }
@@ -522,25 +546,46 @@ export class GeminiService {
     const images: ImageData[] = [request.sourceImage];
     if (request.maskImage) images.push(request.maskImage);
     if (request.referenceImages?.length) images.push(...request.referenceImages);
+    const editIntentTool: Record<ImageEditRequest['editType'], string> = {
+      inpaint: 'select',
+      outpaint: 'extend',
+      'style-transfer': 'material',
+      enhance: 'adjust',
+      remove: 'remove',
+      replace: 'object',
+      people: 'people'
+    };
+    const adaptedEditPrompt = adaptPromptForImageGenerationModel(
+      editPrompt,
+      request.imageGenerationModel || 'nano-banana',
+      {
+        mode: 'visual-edit',
+        activeTool: request.activeTool || editIntentTool[request.editType],
+        hasSourceImage: true,
+        hasReferenceImages: referenceCount > 0,
+        promptKind: 'edit'
+      }
+    );
 
     if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
         ? await ImageUtils.convertImageFormat(request.sourceImage, request.maskImage.mimeType)
         : request.sourceImage;
       const openAIImages = [openAISourceImage];
+      if (request.maskImage && maskMode === 'guided') openAIImages.push(request.maskImage);
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
 
       return this.generateOpenAIImages({
-        prompt: editPrompt,
+        prompt: adaptedEditPrompt,
         images: openAIImages,
-        maskImage: request.maskImage,
+        maskImage: maskMode === 'strict' ? request.maskImage : undefined,
         imageGenerationModel: request.imageGenerationModel,
         generationConfig: request.generationConfig,
       });
     }
 
     return this.generate({
-      prompt: editPrompt,
+      prompt: adaptedEditPrompt,
       images,
       imageGenerationModel: request.imageGenerationModel,
       generationConfig: request.generationConfig
@@ -632,14 +677,24 @@ export class GeminiService {
   // --------------------------------------------------------------------------
 
   async *generateStream(request: GeminiRequest): AsyncGenerator<Partial<GeminiResponse>> {
-    const contents = this.buildContents(request);
-    const generationConfig = this.buildGenerationConfig(request.generationConfig, request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
+    const wantsImage = (request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']).includes('IMAGE');
+    const preparedRequest = wantsImage
+      ? { ...request, prompt: this.prepareImagePrompt(request, 'generation') }
+      : request;
 
-    const model = request.model || this.model;
+    if (wantsImage && this.isOpenAIImageRequest(preparedRequest)) {
+      yield await this.generateOpenAIImages(preparedRequest);
+      return;
+    }
+
+    const contents = this.buildContents(preparedRequest);
+    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, preparedRequest.generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
+
+    const model = preparedRequest.model || this.model;
     const response = await geminiStreamRequest(model, {
       contents,
       generationConfig,
-    }, { signal: request.generationConfig?.abortSignal });
+    }, { signal: preparedRequest.generationConfig?.abortSignal });
 
     const contentType = response.headers.get('content-type') || '';
     if (!response.body || contentType.includes('application/json')) {
@@ -780,6 +835,25 @@ export class GeminiService {
     return request.imageGenerationModel === 'chatgpt-image-generation-2';
   }
 
+  private prepareImagePrompt(
+    request: GeminiRequest & { maskImage?: ImageData },
+    promptKind: 'generation' | 'batch' | 'edit' | 'grid' = 'generation'
+  ): string {
+    const prompt = request.prompt || '';
+    if (!prompt.trim() || ADAPTED_IMAGE_PROMPT_PATTERN.test(prompt)) return prompt;
+
+    return adaptPromptForImageGenerationModel(
+      prompt,
+      request.imageGenerationModel || 'nano-banana',
+      {
+        mode: request.maskImage ? 'visual-edit' : 'generate-text',
+        hasSourceImage: Boolean(request.images?.length),
+        hasReferenceImages: Boolean(request.images && request.images.length > 1),
+        promptKind
+      }
+    );
+  }
+
   private async generateOpenAIImages(
     request: GeminiRequest & { numberOfImages?: number; maskImage?: ImageData }
   ): Promise<GeminiResponse> {
@@ -836,7 +910,7 @@ export class GeminiService {
   ): Record<string, any> {
     if (!config) return { responseModalities: defaultModalities };
 
-    const { abortSignal, responseFormat, ...rest } = config;
+    const { abortSignal, responseFormat, openAI, ...rest } = config;
     const result: Record<string, any> = {
       ...rest,
       responseModalities: config.responseModalities || defaultModalities,

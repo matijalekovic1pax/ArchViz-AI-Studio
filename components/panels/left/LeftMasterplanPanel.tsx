@@ -151,6 +151,14 @@ export const LeftMasterplanPanel = () => {
     }
   };
 
+  useEffect(() => {
+    const handleAssistantZoneDetection = () => {
+      void handleAutoDetectZones();
+    };
+    window.addEventListener('archviz:assistant-run-masterplan-zone-detection', handleAssistantZoneDetection);
+    return () => window.removeEventListener('archviz:assistant-run-masterplan-zone-detection', handleAssistantZoneDetection);
+  });
+
   return (
     <div className="space-y-6">
       <div>

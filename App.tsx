@@ -101,7 +101,7 @@ const Layout: React.FC = () => {
         </div>
       )}
       {state.appAlert && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] w-[92vw] max-w-xl">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-xl">
           <div
             role="alert"
             className={cn(

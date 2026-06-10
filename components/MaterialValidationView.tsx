@@ -7,6 +7,7 @@ import {
   Filter
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { downloadMaterialValidationReport } from '../lib/materialValidationExport';
 import { ParsedMaterial, ValidationIssue, BoQItem } from '../types';
 
 // --- TYPES ---
@@ -260,6 +261,9 @@ export const MaterialValidationView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { materials, issues, boqItems, error } = state.materialValidation;
+  const handleExportReport = () => {
+    void downloadMaterialValidationReport(state.materialValidation);
+  };
   const technicalIssueTypes = new Set<ValidationIssue['type']>(['technical', 'drawing', 'documentation']);
   const issuesByCode = new Map<string, ValidationIssue[]>();
 
@@ -367,7 +371,10 @@ export const MaterialValidationView: React.FC = () => {
             </div>
           </div>
 
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold border border-border rounded-lg hover:bg-surface-sunken transition-colors shrink-0">
+          <button
+            onClick={handleExportReport}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold border border-border rounded-lg hover:bg-surface-sunken transition-colors shrink-0"
+          >
             <Download size={12} /> Export
           </button>
         </div>

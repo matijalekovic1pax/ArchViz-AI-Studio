@@ -1,6 +1,1086 @@
 
-import { AppState, DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
+import { AppState, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
+
+type ImagePromptMode = AppState['mode'];
+type ImagePromptTool = AppState['workflow']['activeTool'] | string | undefined;
+
+interface PromptIntent {
+  artifact: string;
+  task: string;
+  keep: string;
+  change: string;
+  textRule: string;
+}
+
+interface ImagePromptAdapterOptions {
+  mode?: ImagePromptMode | string;
+  activeTool?: ImagePromptTool;
+  hasSourceImage?: boolean;
+  hasReferenceImages?: boolean;
+  promptKind?: 'generation' | 'edit' | 'batch' | 'grid';
+  settingsDigest?: string[];
+  modelGuidance?: string[];
+}
+
+const DEFAULT_PROMPT_INTENT: PromptIntent = {
+  artifact: 'complete image',
+  task: 'Create the requested visual result from the brief.',
+  keep: 'Keep any attached source image faithful wherever the feature does not explicitly request a change.',
+  change: 'Apply only the requested feature settings and user brief.',
+  textRule: 'Preserve existing visible text and render new visible text only when the user explicitly requests it.'
+};
+
+const getPromptIntent = (mode?: string, activeTool?: ImagePromptTool): PromptIntent => {
+  if (mode === 'visual-edit') {
+    const tool = activeTool === 'replace' ? 'object' : activeTool;
+    const visualEditIntents: Record<string, PromptIntent> = {
+      select: {
+        artifact: 'targeted image edit',
+        task: 'Use the selection as target guidance for a focused edit.',
+        keep: 'Keep unrelated source camera, architecture, people, materials, signage, and composition unchanged.',
+        change: 'Apply the user instruction to the selected target, allowing natural blending beyond the drawn edge when needed.',
+        textRule: 'Do not render the prompt wording as captions or labels; preserve existing text unless text editing is requested.'
+      },
+      material: {
+        artifact: 'material replacement edit',
+        task: 'Change the intended or clearly named target surface finish.',
+        keep: 'Keep geometry, seams, edges, reflections, object count, layout, camera, and unrelated materials unchanged.',
+        change: 'Apply the requested material, color, texture scale, roughness, tint, and lighting response to the target surface only.',
+        textRule: 'Preserve all existing signs, labels, logos, and text-shaped marks.'
+      },
+      lighting: {
+        artifact: 'relit image',
+        task: 'Relight the existing scene without redesigning it.',
+        keep: 'Keep objects, architecture, materials, camera, sky unless requested, text, and composition unchanged.',
+        change: 'Apply the requested light type, direction, color temperature, shadow softness, and mood.',
+        textRule: 'Preserve existing visible text and do not add captions.'
+      },
+      object: {
+        artifact: 'object insertion or replacement edit',
+        task: 'Place or replace the requested object naturally in the existing scene.',
+        keep: 'Keep source architecture, camera, materials, layout, people, signage, and unrelated objects unchanged.',
+        change: 'Add or replace only the specified object with correct scale, perspective, occlusion, grounding, and shadows.',
+        textRule: 'Do not add labels or prompt text unless the requested object explicitly contains quoted text.'
+      },
+      sky: {
+        artifact: 'sky replacement edit',
+        task: 'Replace the sky and harmonize the atmosphere.',
+        keep: 'Keep buildings, horizon logic, camera, materials, people, ground, signage, and composition unchanged.',
+        change: 'Apply the requested sky, cloud density, horizon, brightness, reflections, and matching light.',
+        textRule: 'Preserve all existing text and signage.'
+      },
+      remove: {
+        artifact: 'object removal edit',
+        task: 'Remove the selected or named unwanted content.',
+        keep: 'Keep every unrelated object, person, architectural element, material boundary, camera, and text unchanged.',
+        change: 'Remove the whole target including attached accessories, shadows, and reflections, then reconstruct the background naturally.',
+        textRule: 'Do not replace removed content with labels, blank marks, or prompt text.'
+      },
+      adjust: {
+        artifact: 'post-production adjustment',
+        task: 'Apply color, tone, detail, crop/aspect, or perspective adjustments only.',
+        keep: 'Keep object count, architecture, material identity, people, signage, and scene layout unchanged.',
+        change: 'Apply the requested adjustment directions at the specified strength without inventing content.',
+        textRule: 'Preserve existing text and signage as source-faithful marks.'
+      },
+      extend: {
+        artifact: 'outpainted image',
+        task: 'Extend the canvas in the requested direction.',
+        keep: 'Keep original source pixels and source camera logic unchanged.',
+        change: 'Paint only the new canvas area, continuing perspective, materials, light, shadows, reflections, and context.',
+        textRule: 'Continue existing text/signage shapes only when physically present at the extension edge; do not invent new text.'
+      },
+      background: {
+        artifact: 'background replacement edit',
+        task: 'Replace only the background around the protected selection.',
+        keep: 'Keep the selected foreground pixels untouched and preserve their identity, geometry, and details.',
+        change: 'Create a new background that matches perspective, horizon, lighting, depth, and color grade.',
+        textRule: 'Preserve text in the protected selection exactly and do not add prompt labels.'
+      },
+      people: {
+        artifact: 'people-focused architectural edit',
+        task: 'Improve, repopulate, or clean up human figures only.',
+        keep: 'Keep architecture, materials, landscaping, vehicles, sky, signage, camera, and composition unchanged.',
+        change: 'Modify only people and immediate personal accessories according to the people settings.',
+        textRule: 'Do not render captions, labels, UI, handwriting, or prompt wording.'
+      }
+    };
+    return visualEditIntents[String(tool)] || visualEditIntents.select;
+  }
+
+  const modeIntents: Partial<Record<ImagePromptMode, PromptIntent>> = {
+    'generate-text': {
+      artifact: 'standalone generated image',
+      task: 'Create a new image from the user brief.',
+      keep: 'If references are attached, preserve only the requested subject, object, material, mood, or style relationship.',
+      change: 'Build one coherent complete image from the brief rather than a keyword collage.',
+      textRule: 'Render visible text only if the user asks for it; exact text should be quoted.'
+    },
+    'render-3d': {
+      artifact: 'architectural render from a 3D source',
+      task: 'Convert or enhance the 3D/model source into a believable architectural visualization.',
+      keep: 'Preserve source architecture, camera, massing, openings, scale, composition, and existing text/signage.',
+      change: 'Apply render mode, style, lighting, atmosphere, entourage, context, and output format settings.',
+      textRule: 'Keep existing text/signage as source-faithful shapes; do not invent new labels.'
+    },
+    'scene-compose': {
+      artifact: 'source-based scene composition',
+      task: 'Insert reference objects or entourage into the base scene.',
+      keep: 'Preserve base architecture, camera, layout, material boundaries, and existing composition.',
+      change: 'Use each reference only for the explicitly requested object, material, placement, mood, or style.',
+      textRule: 'Do not render placement pins, markers, captions, or prompt metadata.'
+    },
+    'render-cad': {
+      artifact: 'CAD-derived architectural visualization',
+      task: 'Transform the CAD/drawing source into the requested visualization.',
+      keep: 'Preserve drawing geometry, orientation, scale logic, wall/opening positions, labels, dimensions, and line hierarchy.',
+      change: 'Apply room, camera, furnishing, material, context, render mode, lighting, atmosphere, and format settings.',
+      textRule: 'Preserve source drawing text; render new text only when annotation settings request it.'
+    },
+    masterplan: {
+      artifact: 'masterplan visualization',
+      task: 'Create a presentation-ready site, urban, zoning, or massing plan.',
+      keep: 'Preserve boundaries, parcels, roads, water, footprints, north orientation, labels, and legend positions from any source plan.',
+      change: 'Apply plan type, scale, view angle, building, landscape, annotation, legend, and export settings.',
+      textRule: 'Use concise exact labels only when annotation or legend settings request them.'
+    },
+    exploded: {
+      artifact: 'exploded architectural diagram',
+      task: 'Separate the source model into an explanatory exploded assembly.',
+      keep: 'Preserve component geometry, scale, internal alignment, project identity, facade rhythm, openings, and material identity.',
+      change: 'Apply explosion direction, view, dissection style, color mode, edge style, labels, and background settings.',
+      textRule: 'Render labels, leaders, dimensions, and assembly numbers only when requested.'
+    },
+    section: {
+      artifact: 'architectural section or cutaway',
+      task: 'Create the requested section cut and reveal style.',
+      keep: 'Preserve source geometry, scale, section position, projection logic, floor datums, structural grid, and source labels.',
+      change: 'Apply cut plane, reveal style, focus, program colors, poché, hatching, line weight, labels, and depth settings.',
+      textRule: 'Use sharp exact labels only when requested; preserve existing source text where visible.'
+    },
+    'render-sketch': {
+      artifact: 'sketch-to-render transformation',
+      task: 'Transform the sketch into the requested architectural visualization.',
+      keep: 'Preserve sketch composition, perspective, silhouette, proportions, line positions, openings, roof, and floor datums according to settings.',
+      change: 'Interpret ambiguous areas only to the allowed degree and apply material, style, lighting, context, and render mode settings.',
+      textRule: 'Do not add labels unless requested; preserve source notes as source-faithful marks if present.'
+    },
+    'img-to-cad': {
+      artifact: 'CAD-style technical drawing',
+      task: 'Convert the source image into a clean CAD drawing.',
+      keep: 'Preserve visible proportions, structural rhythm, opening positions, edge relationships, and readable annotations or dimensions.',
+      change: 'Apply output drawing type, line sensitivity, simplification, layer, preprocessing, and export settings.',
+      textRule: 'Convert readable source annotations exactly where possible; do not invent unsupported labels.'
+    },
+    upscale: {
+      artifact: 'enhanced source image',
+      task: 'Upscale and restore the source image conservatively.',
+      keep: 'Preserve source layout, camera, object count, identity, materials, text, signage, and composition.',
+      change: 'Improve resolution, clarity, detail, noise, compression artifacts, and optional user-requested finish.',
+      textRule: 'Preserve text and signage as source-faithful marks; do not rewrite them.'
+    },
+    'multi-angle': {
+      artifact: 'multi-panel architectural angle study',
+      task: 'Show the same building from multiple requested angles.',
+      keep: 'Preserve building identity, materials, massing, facade rhythm, openings, scale, and lighting logic across panels.',
+      change: 'Change only the camera angle per panel and apply grid/count/distribution settings.',
+      textRule: 'Do not add panel labels or annotations unless explicitly requested.'
+    },
+    'angle-change': {
+      artifact: 'new camera-view image',
+      task: 'Reshoot the same scene from the requested angle and pitch.',
+      keep: 'Preserve design, layout, materials, lighting, people, source identity, and overall style.',
+      change: 'Create a new upright camera view with the requested rotation and tilt.',
+      textRule: 'Preserve existing text/signage; do not add captions.'
+    },
+    headshot: {
+      artifact: 'professional headshot',
+      task: 'Create the requested professional headshot from the reference image.',
+      keep: 'Preserve the person identity, facial likeness, age, and natural proportions.',
+      change: 'Apply headshot style, background, crop, wardrobe, lighting, and color settings.',
+      textRule: 'Do not add visible text or watermarks.'
+    }
+  };
+
+  return modeIntents[mode as ImagePromptMode] || DEFAULT_PROMPT_INTENT;
+};
+
+const compactItems = (items: Array<string | false | null | undefined>): string[] =>
+  items
+    .filter((item): item is string => Boolean(item && item.trim()))
+    .map((item) => item.replace(/\s+/g, ' ').trim());
+
+const describeSettingStrength = (value: number, low: string, medium: string, high: string): string => {
+  if (value <= 35) return low;
+  if (value >= 70) return high;
+  return medium;
+};
+
+const describeCanvasPosition = (position: { x: number; y: number }): string => {
+  const horizontal = position.x <= 35 ? 'left' : position.x >= 65 ? 'right' : 'center';
+  const vertical = position.y <= 35 ? 'upper' : position.y >= 65 ? 'lower' : 'middle';
+  return `${vertical}-${horizontal}`;
+};
+
+const summarizeChangedChannels = (
+  channels: Array<{ name: string; values: number[] }>
+): string[] =>
+  channels
+    .filter((channel) => channel.values.some((value) => value !== 0))
+    .map((channel) => channel.name);
+
+const summarizeRenderSettings = (state: AppState): string[] => {
+  const { workflow } = state;
+  const render = workflow.render3d;
+  const activeEntourage = compactItems([
+    render.scenery.people.enabled ? `people ${describeSettingStrength(render.scenery.people.count, 'sparse', 'balanced', 'busy')}` : null,
+    render.scenery.trees.enabled ? `vegetation ${describeSettingStrength(render.scenery.trees.count, 'light', 'moderate', 'lush')}` : null,
+    render.scenery.cars.enabled ? 'vehicles included' : null
+  ]);
+
+  return compactItems([
+    `render mode ${workflow.renderMode}`,
+    `view ${workflow.viewType}, source ${workflow.sourceType}`,
+    `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? `, ${describeSettingStrength(render.lighting.sun.intensity, 'soft', 'balanced', 'strong')} sun` : ', no direct sun'}${render.lighting.shadows.enabled ? `, ${describeSettingStrength(render.lighting.shadows.intensity, 'light', 'natural', 'strong')} shadows` : ', soft/no shadows'}`,
+    `ambient ${describeSettingStrength(render.lighting.ambient.intensity, 'low', 'balanced', 'bright')}, occlusion ${describeSettingStrength(render.lighting.ambient.occlusion, 'subtle', 'natural', 'deep')}`,
+    `atmosphere ${render.atmosphere.mood}${render.atmosphere.fog.enabled ? `, ${describeSettingStrength(render.atmosphere.fog.density, 'light haze', 'moderate haze', 'dense haze')}` : ''}${render.atmosphere.bloom.enabled ? `, ${describeSettingStrength(render.atmosphere.bloom.intensity, 'subtle bloom', 'balanced bloom', 'strong bloom')}` : ''}`,
+    activeEntourage.length ? `context ${render.scenery.preset}; ${activeEntourage.join(', ')}` : `context ${render.scenery.preset}`,
+    workflow.styleReferenceEnabled && workflow.styleReferenceImage ? 'style reference enabled' : null,
+    workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage ? 'environment reference enabled' : null,
+    `output ${render.render.aspectRatio}, ${render.render.resolution}, ${render.render.viewType}`
+  ]);
+};
+
+const summarizeVisualEditSettings = (state: AppState): string[] => {
+  const { workflow } = state;
+  const rawTool = workflow.activeTool;
+  const tool = rawTool === 'replace' ? 'object' : rawTool;
+  const selectionSummary = workflow.visualSelections.length > 0 || workflow.visualSelectionMask
+    ? `selection-guided ${workflow.visualSelection.mode} edit`
+    : 'no explicit selection; infer target conservatively';
+  const selectionControls = compactItems([
+    workflow.visualSelection.featherEnabled ? `feather ${describeSettingStrength(workflow.visualSelection.featherAmount, 'subtle', 'balanced', 'soft')}` : null,
+    workflow.visualSelection.strength !== 60 ? `selection strength ${describeSettingStrength(workflow.visualSelection.strength, 'light', 'balanced', 'strong')}` : null,
+    workflow.visualSelection.autoTargets.length ? `auto targets ${workflow.visualSelection.autoTargets.join(', ')}` : null
+  ]);
+
+  if (tool === 'material') {
+    const material = getMaterialById(workflow.visualMaterial.materialId);
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      workflow.visualMaterial.referenceEnabled ? 'material from reference image' : `material ${material?.label || workflow.visualMaterial.materialId}`,
+      `surface ${workflow.visualMaterial.surfaceType}, scale ${describeSettingStrength(workflow.visualMaterial.scale, 'fine', 'balanced', 'large')}`,
+      workflow.visualMaterial.rotation ? `rotation ${workflow.visualMaterial.rotation} degrees` : null,
+      `roughness ${describeSettingStrength(workflow.visualMaterial.roughness, 'polished', 'natural', 'matte')}`,
+      workflow.visualMaterial.colorTint && workflow.visualMaterial.colorTint !== '#ffffff' ? `tint ${workflow.visualMaterial.colorTint}` : null,
+      workflow.visualMaterial.matchLighting ? 'match existing lighting' : 'material lighting can shift subtly',
+      workflow.visualMaterial.preserveReflections ? 'preserve reflections' : null
+    ]);
+  }
+
+  if (tool === 'lighting') {
+    const lighting = workflow.visualLighting;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `lighting mode ${lighting.mode}`,
+      lighting.mode === 'sun'
+        ? `sun ${describeSettingStrength(lighting.sun.intensity, 'soft', 'balanced', 'strong')}, shadows ${describeSettingStrength(lighting.sun.shadowSoftness, 'crisp', 'natural', 'soft')}`
+        : null,
+      lighting.mode === 'sun' ? `sun color ${describeSettingStrength(lighting.sun.colorTemp, 'warm', 'neutral', 'cool')}` : null,
+      lighting.mode === 'hdri' ? `HDRI ${lighting.hdri.preset}, ${describeSettingStrength(lighting.hdri.intensity, 'subtle', 'balanced', 'strong')} environment` : null,
+      lighting.mode === 'artificial' ? `${lighting.artificial.type} artificial light at ${describeCanvasPosition(lighting.artificial.position)}, ${describeSettingStrength(lighting.artificial.intensity, 'soft', 'balanced', 'strong')} intensity, ${describeSettingStrength(lighting.artificial.falloff, 'wide', 'natural', 'tight')} falloff` : null,
+      `ambient ${describeSettingStrength(lighting.ambient, 'low', 'balanced', 'bright')}`,
+      lighting.preserveShadows ? 'preserve source shadow logic' : null
+    ]);
+  }
+
+  if (rawTool === 'replace') {
+    const replace = workflow.visualReplace;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `replace mode ${replace.mode}, variation ${describeSettingStrength(replace.variation, 'close match', 'moderate variation', 'strong variation')}`,
+      `replacement ${replace.category}, style ${replace.style}`,
+      replace.prompt?.trim() ? `custom replacement ${replace.prompt.trim()}` : null,
+      replace.matchScale ? 'match source scale' : null,
+      replace.matchLighting ? 'match scene lighting' : null,
+      replace.preserveShadows ? 'preserve/contact shadows' : null
+    ]);
+  }
+
+  if (tool === 'object') {
+    const object = workflow.visualObject;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `${object.placementMode} ${object.category}${object.subcategory ? `/${object.subcategory}` : ''}`,
+      `depth ${object.depth}, scale ${describeSettingStrength(object.scale, 'small', 'natural', 'large')}`,
+      object.rotation ? `rotation ${object.rotation} degrees` : null,
+      `position ${describeCanvasPosition(object.position)}`,
+      object.autoPerspective ? 'auto-match perspective' : null,
+      object.shadow ? 'cast contact shadow' : null,
+      object.groundContact ? 'ground object physically' : null
+    ]);
+  }
+
+  if (tool === 'sky') {
+    const sky = workflow.visualSky;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `sky ${sky.preset}, clouds ${describeSettingStrength(sky.cloudDensity, 'clear', 'partly cloudy', 'cloudy')}`,
+      `brightness ${describeSettingStrength(sky.brightness, 'subtle', 'balanced', 'bright')}`,
+      `horizon ${sky.horizonLine}, atmosphere ${describeSettingStrength(sky.atmosphere, 'clear', 'light haze', 'atmospheric')}`,
+      sky.matchLighting ? 'harmonize scene lighting' : null,
+      sky.reflectInGlass ? 'reflect sky in glass' : null,
+      sky.sunFlare ? 'include restrained sun flare' : null
+    ]);
+  }
+
+  if (tool === 'remove') {
+    const remove = workflow.visualRemove;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `remove mode ${remove.mode}`,
+      remove.quickRemove.length ? `targets ${remove.quickRemove.join(', ')}` : null,
+      `brush ${describeSettingStrength(remove.brushSize, 'small', 'medium', 'large')}, edge ${describeSettingStrength(remove.hardness, 'soft', 'balanced', 'hard')}`,
+      remove.mode === 'clone' ? `clone aligned ${formatToggle(remove.cloneAligned)}${remove.sourcePoint ? `, source ${describeCanvasPosition(remove.sourcePoint)}` : ''}` : null,
+      remove.autoDetectEdges ? 'detect object edges' : null,
+      remove.preserveStructure ? 'preserve architecture while reconstructing background' : null
+    ]);
+  }
+
+  if (tool === 'adjust') {
+    const adjust = workflow.visualAdjust;
+    const toneChanges = summarizeChangedChannels([
+      { name: 'exposure', values: [adjust.exposure] },
+      { name: 'contrast', values: [adjust.contrast] },
+      { name: 'highlights/shadows', values: [adjust.highlights, adjust.shadows] },
+      { name: 'white/black point', values: [adjust.whites, adjust.blacks] },
+      { name: 'gamma', values: [adjust.gamma] }
+    ]);
+    const colorChanges = summarizeChangedChannels([
+      { name: 'saturation/vibrance', values: [adjust.saturation, adjust.vibrance] },
+      { name: 'temperature/tint', values: [adjust.temperature, adjust.tint] },
+      { name: 'hue shift', values: [adjust.hueShift] }
+    ]);
+    const hslChanges = summarizeChangedChannels([
+      { name: 'reds', values: [adjust.hslRedsHue, adjust.hslRedsSaturation, adjust.hslRedsLuminance] },
+      { name: 'oranges', values: [adjust.hslOrangesHue, adjust.hslOrangesSaturation, adjust.hslOrangesLuminance] },
+      { name: 'yellows', values: [adjust.hslYellowsHue, adjust.hslYellowsSaturation, adjust.hslYellowsLuminance] },
+      { name: 'greens', values: [adjust.hslGreensHue, adjust.hslGreensSaturation, adjust.hslGreensLuminance] },
+      { name: 'aquas', values: [adjust.hslAquasHue, adjust.hslAquasSaturation, adjust.hslAquasLuminance] },
+      { name: 'blues', values: [adjust.hslBluesHue, adjust.hslBluesSaturation, adjust.hslBluesLuminance] },
+      { name: 'purples', values: [adjust.hslPurplesHue, adjust.hslPurplesSaturation, adjust.hslPurplesLuminance] },
+      { name: 'magentas', values: [adjust.hslMagentasHue, adjust.hslMagentasSaturation, adjust.hslMagentasLuminance] }
+    ]);
+    const gradeChanges = summarizeChangedChannels([
+      { name: 'shadow grade', values: [adjust.colorGradeShadowsHue, adjust.colorGradeShadowsSaturation] },
+      { name: 'midtone grade', values: [adjust.colorGradeMidtonesHue, adjust.colorGradeMidtonesSaturation] },
+      { name: 'highlight grade', values: [adjust.colorGradeHighlightsHue, adjust.colorGradeHighlightsSaturation] },
+      { name: 'grade balance', values: [adjust.colorGradeBalance] }
+    ]);
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      adjust.aspectRatio !== 'same' ? `target aspect ${adjust.aspectRatio}` : 'same aspect ratio',
+      toneChanges.length ? `tone ${toneChanges.join(', ')}` : null,
+      colorChanges.length ? `color ${colorChanges.join(', ')}` : null,
+      `detail clarity ${describeSettingStrength(Math.abs(adjust.clarity), 'gentle', 'balanced', 'strong')}, sharpness ${describeSettingStrength(Math.abs(adjust.sharpness), 'gentle', 'balanced', 'strong')}, noise cleanup ${describeSettingStrength(Math.max(Math.abs(adjust.noiseReduction), Math.abs(adjust.noiseReductionColor)), 'light', 'balanced', 'strong')}`,
+      hslChanges.length ? `selective color ${hslChanges.join(', ')}` : null,
+      gradeChanges.length ? `color grade ${gradeChanges.join(', ')}` : null,
+      adjust.vignette || adjust.grain || adjust.bloom || adjust.chromaticAberration ? `effects ${compactItems([
+        adjust.vignette ? 'vignette' : null,
+        adjust.grain ? 'grain' : null,
+        adjust.bloom ? 'bloom' : null,
+        adjust.chromaticAberration ? 'chromatic edge' : null
+      ]).join(', ')}` : null,
+      adjust.styleStrength !== 50 ? `global adjustment strength ${adjust.styleStrength}` : null,
+      adjust.transformRotate || adjust.transformHorizontal || adjust.transformVertical || adjust.transformPerspective
+        ? 'geometry transform requested'
+        : null
+    ]);
+  }
+
+  if (tool === 'extend') {
+    const extend = workflow.visualExtend;
+    return compactItems([
+      `extend ${extend.direction}`,
+      `amount ${describeSettingStrength(extend.amount, 'slight', 'moderate', 'large')}`,
+      `target aspect ${extend.targetAspectRatio === 'custom' ? `${extend.customRatio.width}:${extend.customRatio.height}` : extend.targetAspectRatio}`
+    ]);
+  }
+
+  if (tool === 'background') {
+    const background = workflow.visualBackground;
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `background mode ${background.mode}`,
+      background.mode === 'image' ? `reference ${background.referenceMode}` : `prompt background ${background.prompt || 'from user direction'}`,
+      background.matchPerspective ? 'match perspective' : null,
+      background.matchLighting ? 'match lighting' : null,
+      background.seamlessBlend ? 'seamless blend' : null,
+      background.preserveDepth ? 'preserve depth relationships' : null,
+      `quality ${background.quality}`
+    ]);
+  }
+
+  if (tool === 'people') {
+    const people = workflow.visualPeople;
+    const staffTypes = compactItems([
+      people.includeAirportStaff ? 'airport staff' : null,
+      people.includeSecurityPersonnel ? 'security' : null,
+      people.includeAirlineCrew ? 'airline crew' : null,
+      people.includeGroundCrew ? 'ground crew' : null,
+      people.includeServiceStaff ? 'service staff' : null
+    ]);
+    return compactItems([
+      selectionSummary,
+      ...selectionControls,
+      `people mode ${people.mode}, airport zone ${people.airportZone}`,
+      `demographics ${people.ageDistribution}, ${people.genderBalance}, regions ${people.regionMix.slice(0, 4).join(', ') || 'mixed'}`,
+      `diversity children ${describeSettingStrength(people.childrenPresence, 'few', 'some', 'many')}, body variety ${describeSettingStrength(people.bodyTypeVariety, 'low', 'moderate', 'high')}`,
+      `density ${describeSettingStrength(people.density, 'sparse', 'balanced', 'crowded')}, flow ${people.flowPattern}`,
+      `movement ${people.movementDirection}, pace ${people.paceOfMovement}, grouping ${people.grouping}, clustering ${describeSettingStrength(people.clusteringTendency, 'spread out', 'natural clusters', 'clustered')}`,
+      `wardrobe ${people.wardrobeStyle}, season ${people.seasonalClothing}, formality ${describeSettingStrength(people.formalityLevel, 'casual', 'smart-casual', 'formal')}`,
+      people.activities.length ? `activities ${people.activities.join(', ')}` : null,
+      people.luggageTypes.length ? `luggage ${people.luggageTypes.join(', ')}, amount ${describeSettingStrength(people.luggageAmount, 'light', 'moderate', 'heavy')}` : null,
+      people.trolleyUsage || people.personalDevices || people.travelAccessories ? `accessories trolleys ${describeSettingStrength(people.trolleyUsage, 'few', 'some', 'many')}, devices ${describeSettingStrength(people.personalDevices, 'few', 'some', 'many')}` : null,
+      staffTypes.length ? `staff ${staffTypes.join(', ')}, density ${describeSettingStrength(people.staffDensity, 'few', 'some', 'many')}` : null,
+      `quality realism ${describeSettingStrength(people.realism, 'stylized', 'natural', 'high')}, scale ${describeSettingStrength(people.scaleAccuracy, 'loose', 'balanced', 'strict')}, placement ${describeSettingStrength(people.placementDiscipline, 'loose', 'balanced', 'strict')}`,
+      people.motionBlur ? `motion blur ${describeSettingStrength(people.motionBlur, 'subtle', 'moderate', 'noticeable')}` : null,
+      people.preserveExisting ? 'preserve existing people where possible' : null,
+      people.matchLighting ? 'match lighting' : null,
+      people.matchPerspective ? 'match perspective' : null,
+      people.groundContact ? 'ground every figure' : null,
+      people.removeArtifacts ? 'remove people artifacts' : null
+    ]);
+  }
+
+  return compactItems([selectionSummary, workflow.visualPrompt ? `instruction ${workflow.visualPrompt}` : null]);
+};
+
+const summarizeWorkflowSettings = (state: AppState): string[] => {
+  const { workflow } = state;
+
+  if (state.mode === 'render-3d') return summarizeRenderSettings(state);
+  if (state.mode === 'render-cad') {
+    const materialAssignments = Object.entries(workflow.cadMaterialAssignments || {})
+      .slice(0, 3)
+      .map(([target, material]) => `${target}=${material}`);
+    return compactItems([
+      `CAD ${workflow.cadDrawingType}${workflow.cadScale ? `, scale ${workflow.cadScale}` : ''}, orientation ${workflow.cadOrientation}`,
+      workflow.cadLayerDetectionEnabled ? `visible layers ${workflow.cadLayers.filter((layer) => layer.visible).map((layer) => layer.name).join(', ') || 'auto'}` : null,
+      `space ${workflow.cadSpace.roomType}, ${workflow.cadSpace.ceilingStyle} ceiling, ${workflow.cadSpace.windowStyle} windows, ${workflow.cadSpace.doorStyle} doors`,
+      `spatial assumptions ${describeSettingStrength(workflow.cadSpatial.style, 'conservative', 'balanced', 'creative')}, ${workflow.cadSpatial.ceilingHeight < 2.7 ? 'low ceiling' : workflow.cadSpatial.ceilingHeight > 3.4 ? 'tall ceiling' : 'typical ceiling'}`,
+      `camera ${workflow.cadCamera.angle}, look ${workflow.cadCamera.lookAt}, ${workflow.cadCamera.focalLength < 28 ? 'wide lens' : workflow.cadCamera.focalLength > 60 ? 'compressed lens' : 'natural lens'}${workflow.cadCamera.verticalCorrection ? ', corrected verticals' : ''}`,
+      `furnishing ${workflow.cadFurnishing.auto ? 'auto' : 'manual'} ${workflow.cadFurnishing.occupancy}, density ${describeSettingStrength(workflow.cadFurnishing.density, 'sparse', 'balanced', 'full')}, clutter ${describeSettingStrength(workflow.cadFurnishing.clutter, 'clean', 'styled', 'lived-in')}`,
+      workflow.cadFurnishing.styles.length ? `furniture styles ${workflow.cadFurnishing.styles.join(', ')}` : null,
+      workflow.cadFurnishing.people ? `people/entourage ${describeSettingStrength(workflow.cadFurnishing.entourage, 'light', 'balanced', 'busy')}` : null,
+      materialAssignments.length ? `materials ${materialAssignments.join(', ')}` : null,
+      `context ${workflow.cadContext.environment}, ${workflow.cadContext.season}, ${workflow.cadContext.landscape} landscape`,
+      ...summarizeRenderSettings(state)
+    ]);
+  }
+  if (state.mode === 'render-sketch') {
+    const preserve = compactItems([
+      workflow.sketchPreserveOutline ? 'outline' : null,
+      workflow.sketchPreserveOpenings ? 'openings' : null,
+      workflow.sketchPreserveRoof ? 'roof' : null,
+      workflow.sketchPreserveFloors ? 'floors' : null,
+      workflow.sketchPreserveProportions ? 'proportions' : null
+    ]);
+    return compactItems([
+      `sketch ${workflow.sketchType}, perspective ${workflow.sketchPerspectiveType}`,
+      `analysis auto ${formatToggle(workflow.sketchAutoDetect)}, cleanup ${workflow.sketchCleanupIntensity}, line weight ${workflow.sketchLineWeight}`,
+      `line processing enhance faint ${formatToggle(workflow.sketchEnhanceFaint)}, connect ${formatToggle(workflow.sketchConnectLines)}, straighten ${formatToggle(workflow.sketchStraighten)}, remove construction ${formatToggle(workflow.sketchRemoveConstruction)}`,
+      `line quality ${describeSettingStrength(workflow.sketchLineQuality, 'rough', 'readable', 'clean')}, completeness ${describeSettingStrength(workflow.sketchCompleteness, 'sparse', 'partial', 'complete')}`,
+      `view horizon ${workflow.sketchHorizonLine}, camera ${workflow.sketchCameraHeight}${workflow.sketchPerspectiveCorrect ? `, perspective correction ${describeSettingStrength(workflow.sketchPerspectiveStrength, 'subtle', 'balanced', 'strong')}` : ''}${workflow.sketchFixVerticals ? ', fix verticals' : ''}`,
+      `interpretation ${describeSettingStrength(workflow.sketchInterpretation, 'conservative', 'balanced', 'creative')}`,
+      `ambiguity ${workflow.sketchAmbiguityMode}`,
+      preserve.length ? `preserve ${preserve.join(', ')}` : null,
+      workflow.sketchAllowDetails || workflow.sketchAllowMaterials || workflow.sketchAllowEntourage || workflow.sketchAllowExtend ? `allowed additions ${compactItems([
+        workflow.sketchAllowDetails ? 'details' : null,
+        workflow.sketchAllowMaterials ? 'materials' : null,
+        workflow.sketchAllowEntourage ? 'entourage' : null,
+        workflow.sketchAllowExtend ? 'extend scene' : null
+      ]).join(', ')}` : null,
+      workflow.sketchRefs.length ? `${workflow.sketchRefs.length} ${workflow.sketchRefType} reference image${workflow.sketchRefs.length === 1 ? '' : 's'}, influence ${describeSettingStrength(workflow.sketchRefInfluence, 'light', 'balanced', 'strong')}` : null,
+      `palette ${workflow.sketchMaterialPalette}, mood ${workflow.sketchMoodPreset}`,
+      ...summarizeRenderSettings(state)
+    ]);
+  }
+  if (state.mode === 'scene-compose') {
+    const references = workflow.sceneInsertionReferences || [];
+    const placed = references.filter((reference) => reference.placement).length;
+    return compactItems([
+      `base ${workflow.viewType} scene from ${workflow.sourceType}`,
+      `${references.length} insertion reference${references.length === 1 ? '' : 's'}, ${placed} pinned placement${placed === 1 ? '' : 's'}`,
+      workflow.styleReferenceEnabled && workflow.styleReferenceImage ? 'style reference enabled' : null,
+      workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage ? 'environment reference enabled' : null
+    ]);
+  }
+  if (state.mode === 'masterplan') {
+    const annotations = compactItems([
+      workflow.mpAnnotations.zoneLabels ? 'zone labels' : null,
+      workflow.mpAnnotations.streetNames ? 'street names' : null,
+      workflow.mpAnnotations.buildingLabels ? 'building labels' : null,
+      workflow.mpAnnotations.scaleBar ? 'scale bar' : null,
+      workflow.mpAnnotations.northArrow ? 'north arrow' : null,
+      workflow.mpAnnotations.dimensions ? 'dimensions' : null
+    ]);
+    return compactItems([
+      `plan ${workflow.mpPlanType}, style ${workflow.mpOutputStyle}, view ${workflow.mpViewAngle}`,
+      `scale ${workflow.mpScale === 'custom' ? `1:${workflow.mpCustomScale}` : workflow.mpScale}, north ${Math.round(workflow.mpNorthRotation)} degrees, zones ${workflow.mpZoneDetection}/${workflow.mpZones.length}`,
+      `boundary ${workflow.mpBoundary.mode}${workflow.mpBoundary.mode === 'custom' ? `/${workflow.mpBoundary.points.length} points` : ''}`,
+      workflow.mpContext.location ? `location ${workflow.mpContext.location}, radius ${workflow.mpContext.radius}m` : null,
+      workflow.mpContext.loadedData ? `context data buildings ${workflow.mpContext.loadedData.buildings}, roads ${workflow.mpContext.loadedData.roads}, water ${workflow.mpContext.loadedData.water}, transit ${workflow.mpContext.loadedData.transit}` : `context layers ${compactItems([
+        workflow.mpContext.loadBuildings ? 'buildings' : null,
+        workflow.mpContext.loadRoads ? 'roads' : null,
+        workflow.mpContext.loadWater ? 'water' : null,
+        workflow.mpContext.loadTerrain ? 'terrain' : null,
+        workflow.mpContext.loadTransit ? 'transit' : null
+      ]).join(', ') || 'none'}`,
+      `buildings ${workflow.mpBuildings.style}, heights ${workflow.mpBuildings.heightMode}, roof ${workflow.mpBuildings.roofStyle}${workflow.mpBuildings.showShadows ? ', shadows' : ''}${workflow.mpBuildings.transparent ? ', ghosted massing' : ''}${workflow.mpBuildings.facadeVariation ? ', facade variation' : ''}`,
+      workflow.mpBuildings.showFloorLabels ? 'building floor labels enabled' : null,
+      `landscape ${workflow.mpLandscape.vegetationStyle}, ${workflow.mpLandscape.season}, density ${describeSettingStrength(workflow.mpLandscape.vegetationDensity, 'minimal', 'balanced', 'lush')}, tree variation ${describeSettingStrength(workflow.mpLandscape.treeVariation, 'regular', 'varied', 'diverse')}`,
+      `site elements ${compactItems([
+        workflow.mpLandscape.trees ? 'trees' : null,
+        workflow.mpLandscape.grass ? 'grass' : null,
+        workflow.mpLandscape.water ? 'water' : null,
+        workflow.mpLandscape.pathways ? 'paths' : null,
+        workflow.mpLandscape.streetFurniture ? 'street furniture' : null,
+        workflow.mpLandscape.vehicles ? 'vehicles' : null,
+        workflow.mpLandscape.people ? 'people' : null
+      ]).join(', ') || 'minimal'}`,
+      annotations.length ? `annotations ${annotations.join(', ')}, ${workflow.mpAnnotations.labelStyle}/${workflow.mpAnnotations.labelSize}/${workflow.mpAnnotations.labelColor}${workflow.mpAnnotations.labelHalo ? '/halo' : ''}` : 'no new labels unless source requires them',
+      workflow.mpLegend.include ? `legend ${workflow.mpLegend.position}, ${workflow.mpLegend.style}, content ${compactItems([
+        workflow.mpLegend.showZones ? 'zones' : null,
+        workflow.mpLegend.showZoneAreas ? 'areas' : null,
+        workflow.mpLegend.showBuildings ? 'buildings' : null,
+        workflow.mpLegend.showLandscape ? 'landscape' : null,
+        workflow.mpLegend.showInfrastructure ? 'infrastructure' : null
+      ]).join(', ') || 'minimal'}` : null,
+      `export ${workflow.mpExport.resolution}, ${workflow.mpExport.format}${workflow.mpExport.exportLayers ? ', layers' : ''}${workflow.mpExport.cadCompatible ? ', CAD hierarchy' : ''}${workflow.mpExport.includeSketch ? ', include sketch' : ''}`
+    ]);
+  }
+  if (state.mode === 'exploded') {
+    const activeComponents = workflow.explodedComponents.filter((component) => component.active);
+    const annotations = compactItems([
+      workflow.explodedAnnotations.labels ? 'labels' : null,
+      workflow.explodedAnnotations.leaders ? 'leaders' : null,
+      workflow.explodedAnnotations.dimensions ? 'dimensions' : null,
+      workflow.explodedAnnotations.assemblyNumbers ? 'assembly numbers' : null,
+      workflow.explodedAnnotations.materialCallouts ? 'material callouts' : null
+    ]);
+    return compactItems([
+      `source ${workflow.explodedSource.type}, detection ${workflow.explodedDetection}, components ${activeComponents.length || workflow.explodedSource.componentCount}`,
+      `explode ${workflow.explodedDirection}, separation ${describeSettingStrength(workflow.explodedView.separation, 'tight', 'clear', 'wide')}`,
+      `view ${workflow.explodedView.type}/${workflow.explodedView.angle}, camera ${workflow.explodedView.cameraHeight < 5 ? 'low' : workflow.explodedView.cameraHeight < 15 ? 'eye-level' : 'elevated'}, look ${workflow.explodedView.lookAt}`,
+      workflow.explodedDirection === 'custom' ? `axis x${workflow.explodedAxis.x} y${workflow.explodedAxis.y} z${workflow.explodedAxis.z}` : null,
+      `diagram style ${workflow.explodedStyle.render}, color ${workflow.explodedStyle.colorMode}, edges ${workflow.explodedStyle.edgeStyle}, line ${describeSettingStrength(workflow.explodedStyle.lineWeight, 'thin', 'balanced', 'heavy')}`,
+      annotations.length ? `annotations ${annotations.join(', ')}, ${workflow.explodedAnnotations.labelStyle}/${workflow.explodedAnnotations.fontSize}/${workflow.explodedAnnotations.leaderStyle}` : 'no new labels',
+      workflow.explodedAnim.generate ? `animation intent ${workflow.explodedAnim.type}, ${workflow.explodedAnim.easing}` : null,
+      `output ${workflow.explodedOutput.resolution}, background ${workflow.explodedOutput.background}${workflow.explodedOutput.groundPlane ? ', ground plane' : ''}${workflow.explodedOutput.shadow ? ', shadows' : ''}${workflow.explodedOutput.grid ? ', grid' : ''}${workflow.explodedOutput.exportLayers ? ', layers' : ''}`
+    ]);
+  }
+  if (state.mode === 'section') {
+    const programAnnotations = compactItems([
+      workflow.sectionProgram.labels ? 'space labels' : null,
+      workflow.sectionProgram.leaderLines ? 'leader lines' : null,
+      workflow.sectionProgram.areaTags ? 'area tags' : null
+    ]);
+    return compactItems([
+      `cut ${workflow.sectionCut.type}, plane ${workflow.sectionCut.plane}, direction ${workflow.sectionCut.direction}, depth ${describeSettingStrength(workflow.sectionCut.depth, 'shallow', 'primary spaces', 'deep')}`,
+      `area detection ${workflow.sectionAreaDetection}`,
+      `reveal ${workflow.sectionReveal.style}, focus ${workflow.sectionReveal.focus}, facade ${describeSettingStrength(workflow.sectionReveal.facadeOpacity, 'ghosted', 'translucent', 'opaque')}, depth fade ${describeSettingStrength(workflow.sectionReveal.depthFade, 'subtle', 'balanced', 'strong')}`,
+      `style poché ${workflow.sectionStyle.poche}, hatch ${workflow.sectionStyle.hatch}, weight ${workflow.sectionStyle.weight}, beyond ${describeSettingStrength(workflow.sectionStyle.showBeyond, 'minimal', 'balanced', 'deep')}`,
+      workflow.sectionAreas.filter((area) => area.active).length ? `${workflow.sectionAreas.filter((area) => area.active).length} highlighted section area${workflow.sectionAreas.filter((area) => area.active).length === 1 ? '' : 's'}` : null,
+      programAnnotations.length ? `annotations ${programAnnotations.join(', ')}, ${workflow.sectionProgram.labelStyle}/${workflow.sectionProgram.fontSize}` : 'no new labels',
+      `program color ${workflow.sectionProgram.colorMode}, show beyond ${workflow.sectionStyle.showBeyond}`
+    ]);
+  }
+  if (state.mode === 'visual-edit') return summarizeVisualEditSettings(state);
+  if (state.mode === 'upscale') {
+    return compactItems([
+      `upscale ${workflow.upscaleFactor}`,
+      `sharpness ${describeSettingStrength(workflow.upscaleSharpness, 'soft', 'balanced', 'crisp')}`,
+      `clarity ${describeSettingStrength(workflow.upscaleClarity, 'gentle', 'balanced', 'strong')}`,
+      `edge definition ${describeSettingStrength(workflow.upscaleEdgeDefinition, 'soft', 'balanced', 'defined')}`,
+      `fine detail ${describeSettingStrength(workflow.upscaleFineDetail, 'restrained', 'balanced', 'enhanced')}`,
+      `format ${workflow.upscaleFormat}${workflow.upscalePreserveMetadata ? ', preserve metadata' : ''}`,
+      workflow.upscaleBatch.length ? `batch ${workflow.upscaleBatch.length} image${workflow.upscaleBatch.length === 1 ? '' : 's'}` : null
+    ]);
+  }
+  if (state.mode === 'multi-angle') {
+    return compactItems([
+      `preset ${workflow.multiAnglePreset}, views ${workflow.multiAngleViewCount}, ${workflow.multiAngleDistribution} distribution`,
+      `azimuth ${workflow.multiAngleAzimuthRange[0]} to ${workflow.multiAngleAzimuthRange[1]} degrees`,
+      `elevation ${workflow.multiAngleElevationRange[0]} to ${workflow.multiAngleElevationRange[1]} degrees`,
+      workflow.multiAngleDistribution === 'manual' && workflow.multiAngleAngles.length ? `manual angles ${workflow.multiAngleAngles.slice(0, 6).map((angle) => `${angle.azimuth}/${angle.elevation}`).join(', ')}` : null,
+      workflow.multiAngleLockConsistency ? 'lock identity/material consistency' : null
+    ]);
+  }
+  if (state.mode === 'angle-change') {
+    return compactItems([
+      `rotate ${Math.round(workflow.angleChangeDegrees)} degrees`,
+      `pitch ${Math.round(workflow.angleChangePitch)} degrees`
+    ]);
+  }
+  if (state.mode === 'img-to-cad') {
+    const layers = compactItems([
+      workflow.imgToCadLayers.walls ? 'walls' : null,
+      workflow.imgToCadLayers.windows ? 'windows' : null,
+      workflow.imgToCadLayers.details ? 'details' : null,
+      workflow.imgToCadLayers.hidden ? 'hidden lines' : null
+    ]);
+    return compactItems([
+      `source ${workflow.imgToCadType}, output ${workflow.imgToCadOutput}`,
+      `line sensitivity ${workflow.imgToCadLine.sensitivity}, simplification ${workflow.imgToCadLine.simplify}, connect gaps ${formatToggle(workflow.imgToCadLine.connect)}`,
+      layers.length ? `layers ${layers.join(', ')}` : null,
+      `format ${workflow.imgToCadFormat.toUpperCase()}`,
+      workflow.imgToCadPreprocess.guidance?.trim() ? `preprocess guidance ${workflow.imgToCadPreprocess.guidance.trim()}` : null,
+      workflow.imgToCadPreprocess.focus?.length ? `preprocess focus ${workflow.imgToCadPreprocess.focus.join(', ')}` : null
+    ]);
+  }
+  if (state.mode === 'headshot') {
+    const headshot = workflow.headshot;
+    return compactItems([
+      `style ${headshot.style}, purpose ${headshot.purpose}`,
+      `tone ${headshot.tone}, color ${headshot.colorMode}`,
+      headshot.style === 'professional' ? `background ${headshot.background}` : `website role ${headshot.role || 'unspecified'}, facing ${headshot.facing}`,
+      `quality ${headshot.quality}`,
+      `references ${compactItems([
+        headshot.frontImage ? 'front' : null,
+        headshot.leftImage ? 'left' : null,
+        headshot.rightImage ? 'right' : null
+      ]).join(', ') || 'single/current'}`
+    ]);
+  }
+  if (state.mode === 'generate-text') {
+    return compactItems([
+      state.prompt?.trim() ? 'user prompt is the primary brief' : null,
+      workflow.textPrompt?.trim() ? 'workflow text prompt is the primary brief' : null
+    ]);
+  }
+
+  return [];
+};
+
+const getModelSpecificGuidance = (
+  state: AppState,
+  model: ImageGenerationModel,
+  promptKind?: ImagePromptAdapterOptions['promptKind']
+): string[] => {
+  const mode = state.mode;
+  const tool = state.workflow.activeTool === 'replace' ? 'object' : state.workflow.activeTool;
+  const isDiagramMode = mode === 'masterplan' || mode === 'exploded' || mode === 'section' || mode === 'img-to-cad';
+  const isSourceMode = mode !== 'generate-text' && mode !== 'headshot';
+  const isEditMode = mode === 'visual-edit' || mode === 'upscale' || mode === 'angle-change';
+  const toolKey = String(tool || 'select');
+
+  const gptModeGuidance: Partial<Record<ImagePromptMode, string[]>> = {
+    'generate-text': [
+      'Describe the final artifact as a composed image with subject, setting, layout, lighting, and style.',
+      'For posters, UI, slides, maps, labels, or infographics, treat text as layout content with exact quoted spelling.'
+    ],
+    'render-3d': [
+      'Read the source as a 3D/model capture; preserve massing, facade rhythm, openings, camera, and scale before applying render polish.',
+      'Group changes into lighting, atmosphere, material finish, entourage, and output format; do not let style rewrite the building.'
+    ],
+    'render-cad': [
+      'Read the drawing as geometry and hierarchy first; preserve orientation, line relationships, labels, walls, openings, and dimensions.',
+      'Convert drawing conventions into spatial visualization only where settings request it; keep technical text exact.'
+    ],
+    'render-sketch': [
+      'Use the sketch as a layout and perspective scaffold; resolve ambiguity conservatively unless settings request creative interpretation.',
+      'Preserve major strokes, silhouette, openings, roof, floor datums, and viewpoint before adding materials or lighting.'
+    ],
+    'scene-compose': [
+      'Treat the base image as the locked scene and each later image as a role-specific reference.',
+      'Use placement pins as spatial guidance only; never render pins, callouts, UI marks, or reference-frame artifacts.'
+    ],
+    masterplan: [
+      'Preserve source plan geometry, north logic, boundaries, parcels, roads, water, footprints, legend, and existing labels.',
+      'Keep new labels minimal, exact, aligned, and tied to annotation settings.'
+    ],
+    exploded: [
+      'Preserve component identity and alignment while separating parts; show assembly logic through spacing, hierarchy, edge style, and optional labels.',
+      'Avoid decorative scatter: every offset should explain a system, layer, or assembly sequence.'
+    ],
+    section: [
+      'Keep cut plane, floor datums, projection logic, structural grid, and source labels coherent.',
+      'Make poche, hatching, depth fade, program color, and labels support section readability rather than illustration noise.'
+    ],
+    'img-to-cad': [
+      'Convert visible evidence into a clean technical drawing; do not invent hidden rooms, openings, dimensions, or labels.',
+      'Prioritize line hierarchy, continuous polylines, orthographic correction, and exact readable source annotations.'
+    ],
+    upscale: [
+      'Treat this as restoration, not re-generation: sharpen and de-noise only evidence already visible in the source.',
+      'Do not fabricate readable letters, faces, material seams, plants, people, or architectural details from blur.'
+    ],
+    'multi-angle': [
+      'Keep all panels as one controlled study: same building identity, materials, scale, light logic, and output style.',
+      'Only camera orbit and pitch may change; no panel labels unless explicitly requested.'
+    ],
+    'angle-change': [
+      'Create a new upright camera view of the same scene instead of rotating or stretching the source bitmap.',
+      'Preserve design identity, layout, people, materials, light mood, and text/signage shapes.'
+    ],
+    headshot: [
+      'Identity fidelity outranks styling; preserve face shape, age, skin tone, hairline, distinctive features, and natural proportions.',
+      'Apply only the requested wardrobe, crop, background, lighting, website context, and polish.'
+    ]
+  };
+
+  const nanoModeGuidance: Partial<Record<ImagePromptMode, string[]>> = {
+    'generate-text': [
+      'Use one natural descriptive paragraph: subject, setting, composition, lighting, style, and any exact text.',
+      'For stickers, icons, or assets, request a white background because this model does not output real transparency.'
+    ],
+    'render-3d': [
+      'State the source-to-render transformation plainly and keep the source architecture as the anchor.',
+      'Avoid dense camera math; describe the desired view, light, atmosphere, and material mood in ordinary language.'
+    ],
+    'render-cad': [
+      'Say what the drawing should become, then name the few drawing facts that must stay fixed.',
+      'Keep labels and dimensions source-faithful; do not ask for unsupported hidden information.'
+    ],
+    'render-sketch': [
+      'Use the sketch as a coherent visual brief rather than a line-by-line checklist.',
+      'Name only the key preserved sketch facts: viewpoint, silhouette, proportions, openings, and major line positions.'
+    ],
+    'scene-compose': [
+      'Explain the relationship between the base scene and each reference in simple terms.',
+      'Ask for natural integration with matching scale, occlusion, contact shadows, and lighting instead of collage-like copying.'
+    ],
+    masterplan: [
+      'Ask for simple graphic clarity and plan hierarchy, not dense annotation.',
+      'Use source labels only when readable and add new labels only when settings request them.'
+    ],
+    exploded: [
+      'Describe the assembly separation as a clear visual explanation with simple component hierarchy.',
+      'Keep labels sparse and avoid requesting tiny text-heavy callouts.'
+    ],
+    section: [
+      'Describe the section cut and reveal style as one readable diagram.',
+      'Favor clear poche, depth, and program hierarchy over many labels or small details.'
+    ],
+    'img-to-cad': [
+      'Ask for a clean CAD-style drawing based only on visible evidence.',
+      'Favor simple line hierarchy and exact visible annotations over speculative detail.'
+    ],
+    upscale: [
+      'Ask for faithful restoration in plain language: cleaner, sharper, less noisy, same image.',
+      'Tell the model to leave ambiguous or tiny areas slightly soft rather than inventing detail.'
+    ],
+    'multi-angle': [
+      'Ask for a clean unlabeled grid of the same building from different camera angles.',
+      'Repeat that identity, materials, scale, and light should stay consistent across every panel.'
+    ],
+    'angle-change': [
+      'Ask for a new view of the same place, not a rotated existing image.',
+      'Name the requested turn and tilt in simple camera language.'
+    ],
+    headshot: [
+      'Ask for a natural professional portrait while keeping the person recognizable.',
+      'Keep styling requests simple: crop, background, wardrobe, lighting, and purpose.'
+    ]
+  };
+
+  const gptToolGuidance: Record<string, string[]> = {
+    select: [
+      'The selection/mask identifies the intended target; use it as guidance, not as a hard clipping boundary.',
+      'Blend naturally beyond the drawn edge when needed and never draw mask edges, outlines, or white patches.'
+    ],
+    material: [
+      'Treat material edits as surface-finish replacement on existing geometry: color, grain, texture scale, roughness, and reflectivity only.',
+      'Preserve seams, joints, UV direction, object edges, reflections, and adjacent materials.'
+    ],
+    lighting: [
+      'Relight the existing scene without changing objects, sky, geometry, materials, camera, or text.',
+      'Apply light direction, color temperature, shadow softness, and ambient fill as the visible change set.'
+    ],
+    object: [
+      'Insert or replace only the specified object with correct scale, perspective, occlusion, grounding, and contact shadow.',
+      'Do not use reference backgrounds or unrelated reference objects as scene content.'
+    ],
+    sky: [
+      'Replace sky and atmosphere only, preserving silhouettes, buildings, ground, people, signage, and horizon logic.',
+      'Harmonize reflections and scene light only as needed to match the new sky.'
+    ],
+    remove: [
+      'Remove the whole selected or named target, including attached accessories, shadows, and reflections.',
+      'Reconstruct the revealed background from surrounding evidence without simplifying unrelated content.'
+    ],
+    adjust: [
+      'Treat every slider as post-production, not content generation.',
+      'Apply tone, color, detail, and geometry adjustments without adding, removing, or relocating scene elements.'
+    ],
+    extend: [
+      'Outpaint only the new canvas area; preserve original pixels unchanged.',
+      'Continue perspective, material boundaries, lighting, shadows, reflections, and text fragments only when they physically reach the edge.'
+    ],
+    background: [
+      'Keep protected selection pixels untouched and replace only the surrounding background.',
+      'Match perspective, horizon, color grade, depth cues, and lighting so the foreground and new background read as one photograph.'
+    ],
+    people: [
+      'Change only human figures and immediate personal accessories.',
+      'Preserve architecture, signage, vehicles, landscaping, materials, camera, and composition.'
+    ]
+  };
+
+  const nanoToolGuidance: Record<string, string[]> = {
+    select: [
+      'Make one clear target-area edit guided by the selection and preserve unrelated scene content.',
+      'Describe the intended target plainly; avoid hard selection edges, labels, outlines, or mask artifacts.'
+    ],
+    material: [
+      'Describe the desired material finish in natural language and keep the existing shape unchanged.',
+      'Ask for matching light and reflections without changing nearby surfaces.'
+    ],
+    lighting: [
+      'Describe the new light mood and direction in simple scene terms.',
+      'Keep the scene itself unchanged except for light, shadows, reflections, and color temperature.'
+    ],
+    object: [
+      'Describe the object to add or replace and where it belongs in the scene.',
+      'Ask for natural scale, contact, shadow, and occlusion rather than many numeric placement details.'
+    ],
+    sky: [
+      'Describe the desired sky and mood while preserving the building silhouette and foreground.',
+      'Ask for scene light to harmonize gently with the new sky.'
+    ],
+    remove: [
+      'Say exactly what should disappear and ask for natural reconstruction from nearby content.',
+      'Keep all unrelated objects and architecture unchanged.'
+    ],
+    adjust: [
+      'Summarize color and tone changes in simple words while preserving content.',
+      'Avoid treating slider numbers as permission to redraw or restyle the scene.'
+    ],
+    extend: [
+      'Ask for a natural continuation of the scene beyond the edge.',
+      'Keep original image content unchanged and continue perspective, light, and materials.'
+    ],
+    background: [
+      'Describe the new background as a believable environment around the protected foreground.',
+      'Keep the protected subject unchanged and blend with matching horizon, light, and color.'
+    ],
+    people: [
+      'Describe the people edit as one focused human-figure task.',
+      'Keep the architectural scene and all non-people content anchored to the source.'
+    ]
+  };
+
+  if (model === 'chatgpt-image-generation-2') {
+    return compactItems([
+      'Use a structured artifact plan: preserve/source constraints first, then visible changes, then style and quality.',
+      ...(gptModeGuidance[mode] || []),
+      ...(mode === 'visual-edit' ? gptToolGuidance[toolKey] || [] : []),
+      isDiagramMode ? 'For diagrams, prioritize readable hierarchy, clean alignment, exact requested labels, and no invented annotation text.' : null,
+      mode === 'generate-text' ? 'If the request is poster, UI, slide, map, label, or infographic-like, treat text as a first-class layout element with exact spelling.' : null,
+      isEditMode ? 'For edits, split the job mentally into Change and Preserve; do not reinterpret untouched regions.' : null,
+      mode === 'scene-compose' ? 'Treat each reference image as a role-specific source; never blend unrelated reference background or framing into the base scene.' : null,
+      mode === 'multi-angle' || promptKind === 'grid' ? 'Keep all panels consistent as a single designed study; only camera position changes between panels.' : null,
+      mode === 'headshot' ? 'Identity fidelity outranks styling; preserve face shape, age, expression realism, and natural proportions.' : null
+    ]);
+  }
+
+  return compactItems([
+    'Use natural language and one coherent visual goal; treat settings as intent cues, not a keyword checklist.',
+    ...(nanoModeGuidance[mode] || []),
+    ...(mode === 'visual-edit' ? nanoToolGuidance[toolKey] || [] : []),
+    isSourceMode ? 'Keep the source image as the visual anchor and make only the requested transformation.' : null,
+    isDiagramMode ? 'Prefer simple graphic clarity over dense text; use labels only when the feature settings request them.' : null,
+    mode === 'generate-text' ? 'Avoid over-specifying camera math; describe the scene, subject, context, lighting, and mood in plain language.' : null,
+    mode === 'visual-edit' ? `Make a single ${tool} edit and preserve everything outside the tool scope.` : null,
+    mode === 'scene-compose' ? 'Insert referenced objects by relationship and placement; avoid collage-like copying.' : null,
+    mode === 'upscale' ? 'Restore existing evidence; do not sharpen by inventing new architecture, people, or text.' : null,
+    mode === 'multi-angle' || promptKind === 'grid' ? 'Keep the grid clean and unlabeled; maintain the same building identity across every view.' : null,
+    mode === 'headshot' ? 'Keep the person recognizable and natural; avoid beauty-filter drift.' : null
+  ]);
+};
+
+const normalizePromptWhitespace = (prompt: string): string =>
+  prompt
+    .replace(/\*\*/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const sanitizeUnsupportedTransparencyRequest = (prompt: string): string =>
+  prompt
+    .replace(/\btransparent\s+(background|fondo)\b/gi, 'plain pure white background')
+    .replace(/\b(background|fondo)\s+(transparent|transparente)\b/gi, 'plain pure white background')
+    .replace(/\balpha\s+transparency\b/gi, 'plain pure white background')
+    .replace(/\btransparent\s+png\b/gi, 'PNG-style image on a pure white background');
+
+const simplifyNanoBananaPrompt = (prompt: string): string =>
+  normalizePromptWhitespace(sanitizeUnsupportedTransparencyRequest(prompt))
+    .replace(/\b(stunning|compelling|breathtaking|masterpiece|ultra[- ]?detailed)\b/gi, '')
+    .replace(/\s*\((\d+% intensity|\d+K)\)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+const wordCount = (text: string): number =>
+  text.trim().split(/\s+/).filter(Boolean).length;
+
+const splitPromptSentences = (prompt: string): string[] =>
+  (prompt.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [prompt])
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+
+const isLowValueBriefSentence = (sentence: string): boolean => {
+  const lower = sentence.toLowerCase();
+  return [
+    'camera lock:',
+    'text/signage lock:',
+    'unchanged content lock:',
+    'source fidelity contract:',
+    'prompting framework:',
+    'final output should',
+    'use positive, concrete visual language',
+    'when visible text is requested',
+    'instruction labels are for the model only'
+  ].some(prefix => lower.startsWith(prefix)) ||
+    lower.includes('treat front as camera-side') ||
+    lower.includes('do not rotate, mirror, stretch, or reframe the source accidentally') ||
+    lower.includes('do not copy unrelated background content');
+};
+
+const isHighValueBriefSentence = (sentence: string): boolean =>
+  /user brief|user request|edit instruction|current user request|additional user request|material assignments?|furnish|people|crowd|object|sky|background|lighting|reference|labels?|legend|zones?|components?|section|sketch|drawing|cad|upscale|grid|angle|headshot|poster|sticker|icon|pure white|quoted|"/i.test(sentence);
+
+const buildConciseFeatureBrief = (
+  prompt: string,
+  model: ImageGenerationModel
+): string => {
+  const normalized = model === 'nano-banana'
+    ? simplifyNanoBananaPrompt(prompt)
+    : normalizePromptWhitespace(sanitizeUnsupportedTransparencyRequest(prompt));
+  const maxWords = model === 'nano-banana' ? 230 : 270;
+  if (wordCount(normalized) <= maxWords) return normalized;
+
+  const sentences = splitPromptSentences(normalized);
+  const candidateIndexes = sentences
+    .map((sentence, index) => ({ sentence, index }))
+    .filter(({ sentence }) => !isLowValueBriefSentence(sentence));
+  const selected = new Set<number>();
+  const selectedWordCount = () =>
+    [...selected].reduce((total, index) => total + wordCount(sentences[index]), 0);
+  const addIfRoom = (index: number, reserve = 0): void => {
+    const sentenceWords = wordCount(sentences[index]);
+    if (selected.has(index)) return;
+    if (selectedWordCount() + sentenceWords <= maxWords + reserve) selected.add(index);
+  };
+
+  if (candidateIndexes.length) addIfRoom(candidateIndexes[0].index, 40);
+  candidateIndexes
+    .filter(({ sentence }) => /user brief|user request|edit instruction|current user request|additional user request|"/i.test(sentence))
+    .forEach(({ index }) => addIfRoom(index, 60));
+  candidateIndexes
+    .filter(({ sentence }) => isHighValueBriefSentence(sentence))
+    .forEach(({ index }) => addIfRoom(index));
+  candidateIndexes.forEach(({ index }) => addIfRoom(index));
+
+  const brief = [...selected]
+    .sort((a, b) => a - b)
+    .map(index => sentences[index])
+    .join(' ')
+    .trim();
+
+  return brief || normalized.split(/\s+/).slice(0, maxWords).join(' ');
+};
+
+export function adaptPromptForImageGenerationModel(
+  prompt: string,
+  model: ImageGenerationModel = 'nano-banana',
+  options: ImagePromptAdapterOptions = {}
+): string {
+  const sourcePrompt = buildConciseFeatureBrief(prompt, model);
+  if (!sourcePrompt) return sourcePrompt;
+
+  const intent = getPromptIntent(options.mode, options.activeTool);
+  const sourceLine = options.hasSourceImage
+    ? `Source handling: ${intent.keep}`
+    : options.hasReferenceImages
+      ? `Reference handling: ${intent.keep}`
+      : '';
+  const referenceLine = options.hasReferenceImages && options.hasSourceImage
+    ? 'Reference images are secondary to the source image and only supply the explicitly requested relationship.'
+    : '';
+  const instructionLabel = 'Instruction labels are for the model only; do not render them as visible text.';
+  const settingsDigest = compactItems(options.settingsDigest || []).slice(0, 12);
+  const modelGuidance = compactItems(options.modelGuidance || []).slice(0, model === 'nano-banana' ? 4 : 5);
+  const settingsBlock = settingsDigest.length
+    ? `Active feature settings:\n- ${settingsDigest.join('\n- ')}`
+    : '';
+  const guidanceBlock = modelGuidance.length
+    ? `Model-specific guidance:\n- ${modelGuidance.join('\n- ')}`
+    : '';
+
+  if (model === 'chatgpt-image-generation-2') {
+    return [
+      'Model: ChatGPT Image Generation 2 / GPT Image 2.',
+      instructionLabel,
+      `Output artifact: ${intent.artifact}.`,
+      `Primary task: ${intent.task}`,
+      sourceLine,
+      referenceLine,
+      `Allowed change: ${intent.change}`,
+      `Text discipline: ${intent.textRule} If new visible copy is required, render only exact quoted strings and keep hierarchy, placement, and spelling clean.`,
+      settingsBlock,
+      guidanceBlock,
+      'Follow this priority order: source/reference relationships first, user brief second, feature settings third, style/quality last.',
+      `Feature brief:\n${sourcePrompt}`
+    ].filter(Boolean).join('\n\n');
+  }
+
+  return [
+    'Model: regular Nano Banana / Gemini 2.5 Flash Image.',
+    instructionLabel,
+    'Use this as a short natural-language creative brief, not a keyword stack.',
+    `Task: ${intent.task}`,
+    sourceLine ? `Keep: ${intent.keep}` : '',
+    referenceLine,
+    `Change: ${intent.change}`,
+    `Text: ${intent.textRule}`,
+    settingsBlock,
+    guidanceBlock,
+    'Prefer the source image and the user intent over excessive technical micro-specification. Make one coherent image/edit.',
+    `Brief:\n${sourcePrompt}`
+  ].filter(Boolean).join('\n\n');
+}
+
+export function adaptImagePromptForModel(
+  state: AppState,
+  prompt: string,
+  options: ImagePromptAdapterOptions = {}
+): string {
+  return adaptPromptForImageGenerationModel(prompt, state.imageGenerationModel, {
+    mode: state.mode,
+    activeTool: state.mode === 'visual-edit' ? state.workflow.activeTool : undefined,
+    hasSourceImage: Boolean(state.sourceImage || state.uploadedImage),
+    hasReferenceImages: Boolean(
+      state.workflow.styleReferenceImage ||
+      state.workflow.backgroundReferenceImage ||
+      state.workflow.sceneInsertionReferences?.length ||
+      state.workflow.sketchRefs?.length
+    ),
+    settingsDigest: summarizeWorkflowSettings(state),
+    modelGuidance: getModelSpecificGuidance(state, state.imageGenerationModel, options.promptKind),
+    ...options
+  });
+}
 
 export const BUILT_IN_STYLES: StyleConfiguration[] = [
   {
@@ -990,52 +2070,49 @@ const describeLightSourcePosition = (azimuth: number, elevation: number): string
 };
 
 const describeSunIntensity = (intensity: number): string => {
-  // Precise intensity mapping with exposure implications
-  if (intensity < 15) return `very soft sunlight (${intensity}% intensity) - subdued illumination as through heavy diffusion or atmospheric haze, requiring longer exposure`;
-  if (intensity < 30) return `gentle sunlight (${intensity}% intensity) - delicate illumination as through thin clouds or morning mist`;
-  if (intensity < 50) return `moderate sunlight (${intensity}% intensity) - balanced illumination typical of partly cloudy conditions or early/late day`;
-  if (intensity < 70) return `strong sunlight (${intensity}% intensity) - confident illumination with clear definition between lit and shadowed areas`;
-  if (intensity < 85) return `bright sunlight (${intensity}% intensity) - powerful direct illumination creating high contrast`;
-  return `intense sunlight (${intensity}% intensity) - maximum solar illumination with potential for blown highlights in lighter materials`;
+  if (intensity < 15) return 'very soft diffused sunlight';
+  if (intensity < 30) return 'gentle sunlight';
+  if (intensity < 50) return 'balanced sunlight';
+  if (intensity < 70) return 'clear strong sunlight';
+  if (intensity < 85) return 'bright direct sunlight';
+  return 'intense direct sunlight, controlled to avoid blown highlights';
 };
 
 const describeColorTemperature = (kelvin: number): string => {
-  // Precise Kelvin mapping with real-world equivalents
-  if (kelvin < 2700) return `deeply warm amber light (${kelvin}K) - matching candlelight or tungsten bulbs, casting orange-gold tones across all surfaces`;
-  if (kelvin < 3200) return `warm incandescent light (${kelvin}K) - soft golden illumination like classic interior lighting`;
-  if (kelvin < 4000) return `warm golden daylight (${kelvin}K) - characteristic of golden hour sun, enriching warm materials like wood and brick`;
-  if (kelvin < 4500) return `neutral-warm light (${kelvin}K) - balanced daylight with subtle warmth, flattering to most architectural materials`;
-  if (kelvin < 5500) return `neutral daylight (${kelvin}K) - true color rendering matching midday sun conditions`;
-  if (kelvin < 6500) return `clean daylight (${kelvin}K) - crisp illumination typical of overcast sky or north-facing light`;
-  if (kelvin < 7500) return `cool daylight (${kelvin}K) - blue-tinted illumination suggesting shade or cloudy conditions`;
-  return `cold blue light (${kelvin}K) - distinctly cool tones matching deep shade or heavily overcast winter sky`;
+  if (kelvin < 2700) return 'deep warm amber light';
+  if (kelvin < 3200) return 'warm interior light';
+  if (kelvin < 4000) return 'warm golden daylight';
+  if (kelvin < 4500) return 'neutral-warm daylight';
+  if (kelvin < 5500) return 'neutral daylight';
+  if (kelvin < 6500) return 'clean cool daylight';
+  if (kelvin < 7500) return 'cool blue daylight';
+  return 'cold blue overcast light';
 };
 
 const describeShadows = (intensity: number): string => {
   const intensityDesc = intensity > 80
-    ? `deep cast shadows at high density (${intensity}% intensity)`
+    ? 'deep cast shadows'
     : intensity > 60
-      ? `clear cast shadows at medium-high density (${intensity}% intensity)`
+      ? 'clear cast shadows'
       : intensity > 40
-        ? `balanced cast shadows at ${intensity}% intensity`
+        ? 'balanced cast shadows'
         : intensity > 20
-          ? `light cast shadows at reduced density (${intensity}% intensity)`
-          : `minimal cast shadows at ${intensity}% intensity`;
+          ? 'light cast shadows'
+          : 'minimal cast shadows';
 
   return `${intensityDesc}, grounded to scene geometry and consistent with the selected light direction`;
 };
 
 const describeLens = (mm: number): string => {
-  // Precise lens characteristics with architectural implications
-  if (mm < 18) return `an extreme ultra-wide ${mm}mm lens - dramatic spatial expansion with significant barrel distortion, requiring careful vertical correction; captures entire rooms from corners`;
-  if (mm < 24) return `an ultra-wide ${mm}mm lens - substantial spatial expansion ideal for confined interiors; some barrel distortion present but manageable with corrections`;
-  if (mm < 28) return `a wide-angle ${mm}mm lens - professional architectural standard for interiors; minimal distortion while capturing generous spatial context`;
-  if (mm < 35) return `a moderate wide-angle ${mm}mm lens - versatile for both interior and exterior work; natural perspective with minimal corrections needed`;
-  if (mm < 50) return `a standard ${mm}mm lens - closest to human eye perspective; minimal distortion, excellent for detail shots and balanced compositions`;
-  if (mm < 70) return `a short telephoto ${mm}mm lens - slight compression flatters architectural facades; reduced keystone effect makes vertical lines naturally straighter`;
-  if (mm < 100) return `a medium telephoto ${mm}mm lens - noticeable perspective compression; ideal for facade details and avoiding foreground distractions`;
-  if (mm < 150) return `a telephoto ${mm}mm lens - significant compression flattening spatial depth; excellent for isolating building elements from distance`;
-  return `a long telephoto ${mm}mm lens - extreme compression creating layered, graphic compositions; requires considerable distance from subject`;
+  if (mm < 18) return `an extreme wide ${mm}mm architectural lens with corrected verticals`;
+  if (mm < 24) return `a wide ${mm}mm interior lens with controlled distortion`;
+  if (mm < 28) return `a wide-angle ${mm}mm architectural lens`;
+  if (mm < 35) return `a moderate wide ${mm}mm lens`;
+  if (mm < 50) return `a natural ${mm}mm lens`;
+  if (mm < 70) return `a short telephoto ${mm}mm lens with slight facade compression`;
+  if (mm < 100) return `a medium telephoto ${mm}mm lens`;
+  if (mm < 150) return `a telephoto ${mm}mm lens`;
+  return `a long telephoto ${mm}mm lens with strong compression`;
 };
 
 const describeAtmosphericMood = (mood: string): string => {
@@ -1090,8 +2167,8 @@ const describeVegetation = (count: number): string => {
 const describeResolution = (res: string): string => {
   const descriptions: Record<string, string> = {
     '720p': 'rendered at HD resolution for quick visualization',
-    '1080p': 'rendered in crisp Full HD with excellent detail',
-    '4k': 'rendered in stunning 4K Ultra HD revealing every nuance',
+    '1080p': 'rendered in Full HD with clean detail',
+    '4k': 'rendered in 4K with clear existing detail',
     'print': 'rendered at print-ready resolution for large-format reproduction',
   };
   return descriptions[res] || res;
@@ -1099,11 +2176,11 @@ const describeResolution = (res: string): string => {
 
 const describeAspectRatio = (ratio: string): string => {
   const descriptions: Record<string, string> = {
-    '16:9': 'in cinematic widescreen format',
+    '16:9': 'in widescreen format',
     '4:3': 'in classic standard format',
     '1:1': 'in balanced square format',
     '3:2': 'in traditional photography format',
-    '21:9': 'in ultra-wide cinematic format',
+    '21:9': 'in panoramic format',
     '9:16': 'in vertical portrait format',
   };
   return descriptions[ratio] || `in ${ratio} format`;
@@ -1119,24 +2196,23 @@ const describeRenderMode = (mode: string): string => {
   const normalizedMode = normalizeRenderGenerationMode(mode);
   const descriptions: Record<RenderGenerationMode, string> = {
     'strict-realism': [
-      'Render Mode: STRICT REALISM.',
-      'Use this as a source-to-hyper-real conversion pass for raw 3D model screenshots, Revit/BIM screenshots, CAD-derived views, clay renders, or shaded viewport captures.',
-      'The goal is a believable architectural photograph: physically plausible daylight or artificial light, accurate global illumination, grounded shadows, realistic material response, natural reflections, and professional camera behavior.',
-      'Preserve the source architecture, camera, perspective, scale, proportions, openings, stairs, columns, ceilings, signage blocks, and major object placement.',
+      'Render mode: strict realism.',
+      'Convert the source into a believable architectural photograph.',
+      'Keep architecture, camera, scale, proportions, openings, stairs, columns, ceilings, signage blocks, and major object placement anchored to the source.',
+      'Use plausible light, grounded shadows, natural reflections, realistic materials, and clean camera behavior.',
       'Do not redesign, stylize, exaggerate, simplify into graphics, invent alternate forms, or add decorative ideas that are not grounded in the source.'
     ].join(' '),
     'enhance': [
-      'Render Mode: ENHANCE.',
-      'Use this only for images that already read as realistic or nearly finished renders.',
-      'Keep the completed rendering, architecture, camera, composition, materials, object layout, and spatial relationships intact.',
-      'Make controlled post-render improvements only: lighting direction or intensity, atmosphere, color grading, style mood, clarity, material polish, shadow quality, reflections, and overall presentation finish.',
+      'Render mode: enhance.',
+      'Keep the existing render, architecture, camera, composition, materials, object layout, and spatial relationships intact.',
+      'Improve only lighting, atmosphere, color grade, clarity, material finish, shadow quality, and reflections.',
       'Do not remodel the project, change the design language, replace major elements, or invent new architecture.'
     ].join(' '),
     'concept-push': [
-      'Render Mode: CONCEPT PUSH.',
-      'Create a deliberately less-realistic, more artificial architectural concept image rather than a photograph.',
-      'Keep the source recognizable through its primary massing, camera angle, spatial organization, and key architectural intent, but allow bolder concept-level interpretation of forms, materials, lighting, atmosphere, and entourage.',
-      'The result may feel synthetic, speculative, CGI-like, maquette-like, competition-board-like, or intentionally fake, with stronger stylization and less naturalistic perfection.',
+      'Render mode: concept push.',
+      'Create an architectural concept image rather than a literal photograph.',
+      'Keep the source recognizable through massing, camera angle, spatial organization, and key design intent.',
+      'Allow bolder interpretation of secondary forms, materials, lighting, atmosphere, and entourage.',
       'Do not drift into an unrelated building or ignore the source composition.'
     ].join(' '),
   };
@@ -1149,19 +2225,19 @@ const describeRenderModeClosing = (mode: string, resolution: string): string => 
 
   if (normalizedMode === 'strict-realism') {
     return isHighResolution
-      ? 'Every highlight, shadow, reflection, material edge, and fine visual detail should reward close inspection. The final image must be indistinguishable from a photograph taken by a master architectural photographer.'
-      : 'The final image must achieve the visual quality of professional architectural photography, with accurate lighting, refined detail, natural materials, and no visible model or viewport artifacts.';
+      ? 'Finish as a clean architectural photograph with source-faithful detail and no visible model or viewport artifacts.'
+      : 'Finish as a believable architectural photograph with accurate light, natural materials, and no viewport artifacts.';
   }
 
   if (normalizedMode === 'enhance') {
     return isHighResolution
-      ? 'The final image must still read as the same completed realistic render, only cleaner, better lit, better graded, sharper, and more polished at close inspection.'
-      : 'The final image must stay faithful to the existing realistic render while improving lighting, mood, clarity, color grade, material polish, and presentation quality.';
+      ? 'Keep the same completed render, only cleaner, better lit, clearer, and more polished.'
+      : 'Keep the same render while improving light, mood, clarity, color grade, and material finish.';
   }
 
   return isHighResolution
-    ? 'The final image should be a polished artificial concept visualization with deliberate synthetic character, crisp design intent, expressive lighting, and presentation-quality detail.'
-    : 'The final image should feel like a polished but intentionally artificial concept render: clear, expressive, slightly fake, and less bound to photographic naturalism.';
+    ? 'Finish as a clear artificial concept visualization with readable design intent.'
+    : 'Finish as a clear, intentionally artificial concept render.';
 };
 
 const describeSourceFidelityForRenderMode = (mode: string): string => {
@@ -1176,23 +2252,22 @@ const getStyleReferenceInstruction = (hasSourceImage: boolean): string => {
   const imageOrder = hasSourceImage
     ? 'provided immediately after the source image'
     : 'provided as an input image';
-  return `**Style Reference (CRITICAL):** A style reference image is ${imageOrder}. Use it only to guide the visual language of the generated render: rendering medium, color grading, contrast curve, material finish, lighting character, atmosphere, camera polish, grain, and overall archviz mood. Do not copy the reference scene, subject, composition, background, furniture, people, signage, logos, or geometry. Preserve the source architecture and requested camera exactly; transfer style cues, not content.`;
+  return `Style reference: a style image is ${imageOrder}. Use it only for rendering medium, color grade, contrast, material finish, lighting character, atmosphere, and camera polish. Do not copy its scene, subject, composition, background, furniture, people, signage, logos, or geometry. Transfer style cues, not content.`;
 };
 
+const getEnvironmentReferenceInstruction = (): string =>
+  'Environment reference: use the reference photo only for time of day, sky, ambient color, haze, weather mood, and color grade. Do not paste it as a backdrop. Integrate the architecture with matching horizon, shadow direction, atmospheric depth, ground plane, and color so the result reads as one image, not a collage.';
+
 const SOURCE_CAMERA_LOCK = [
-  'Camera and POV lock: preserve the source camera position, lens behavior, field of view, horizon line, crop, vanishing points, perspective convergence, and viewer height unless a tool explicitly asks for a new camera.',
-  'Do not rotate, mirror, zoom, reframe, stretch, or change from eye-level to aerial, aerial to eye-level, perspective to orthographic, or orthographic to perspective unless that operation is explicitly requested.'
+  'Camera lock: keep the source view, crop, horizon, perspective, scale, and lens behavior unless a new camera is requested.'
 ].join(' ');
 
 const SOURCE_TEXT_SIGNAGE_LOCK = [
-  'Text and signage lock: preserve all existing words, signs, labels, logos, numbers, UI marks, and graphic blocks as source-faithful shapes.',
-  'Do not translate, rewrite, correct, invent, blur, or remove text unless the active tool explicitly asks to edit that text.',
-  'If any new visible text is requested, render only the exact quoted words and keep them sharp, legible, and in the requested typographic style.'
+  'Text lock: preserve existing words, labels, logos, numbers, and signage as source-faithful marks; add new text only when explicitly quoted.'
 ].join(' ');
 
 const UNCHANGED_CONTENT_LOCK = [
-  'Unchanged content lock: all areas outside the requested operation must remain visually identical in layout, object count, object placement, architectural geometry, material boundaries, shadows, reflections, and scale relationships.',
-  'Style, lighting, and quality instructions are not permission to redraw unaffected parts of the image.'
+  'Unchanged content lock: preserve unaffected layout, objects, geometry, material boundaries, shadows, reflections, and scale relationships.'
 ].join(' ');
 
 const buildSourceImageRelationship = (
@@ -1208,14 +2283,12 @@ const buildSourceImageRelationship = (
 
 const buildReferenceStackRelationship = (referenceRole: string) => [
   `Reference relationship: attachment #1 is the locked source image; later attachments are ${referenceRole}.`,
-  'Use reference images for the explicitly stated relationship only: material, object identity, mood, style, or endpoint frame.',
-  'Do not copy unrelated background content, camera angle, subject placement, signage, logos, people, or composition from reference images into the source.'
+  'Use reference images only for their stated role: material, object identity, mood, style, or endpoint frame.'
 ].join(' ');
 
 const TEXT_TO_IMAGE_FRAMEWORK = [
-  'Prompting framework: treat the user brief as the subject and action, then complete the image with explicit location/context, composition, camera, lighting, materiality, and final visual style.',
-  'Use positive, concrete visual language. Avoid generic keyword lists.',
-  'When visible text is requested, render only the exact quoted text, with the requested font style, placement, color, and hierarchy.'
+  'Prompting framework: turn the brief into one concrete visual scene with subject, setting, composition, lighting, materiality, and style.',
+  'If visible text is requested, render only exact quoted copy with clean placement and hierarchy.'
 ].join(' ');
 
 // Generate comprehensive prompt for 3D Render mode
@@ -1231,27 +2304,27 @@ function generate3DRenderPrompt(state: AppState): string {
 
   const parts: string[] = [];
 
-  // 1. SUBJECT & SOURCE - More evocative opening
+  // 1. SUBJECT & SOURCE
   const sourceDescriptions: Record<string, string> = {
-    'rhino': 'a meticulously crafted Rhino 3D model',
-    'revit': 'a detailed Revit BIM model with full architectural data',
+    'rhino': 'a Rhino 3D model',
+    'revit': 'a Revit BIM model',
     'sketchup': 'a SketchUp model',
-    'blender': 'a Blender scene with carefully arranged elements',
-    '3dsmax': 'a professionally modeled 3ds Max scene',
-    'archicad': 'an ArchiCAD model with rich architectural detail',
+    'blender': 'a Blender scene',
+    '3dsmax': 'a 3ds Max scene',
+    'archicad': 'an ArchiCAD model',
     'cinema4d': 'a Cinema 4D scene',
     'clay': 'a clean clay render as the foundation',
     'other': 'a 3D architectural model',
   };
 
   const viewDescriptions: Record<string, string> = {
-    'exterior': 'Create a stunning exterior visualization that captures the building\'s presence in its environment',
-    'interior': 'Create an immersive interior visualization that conveys the spatial quality and atmosphere',
-    'aerial': 'Create a commanding aerial visualization that reveals the building\'s form and urban context',
-    'detail': 'Create a focused detail visualization that celebrates the craftsmanship and presentation quality',
+    'exterior': 'Create an exterior architectural render showing the building in its setting',
+    'interior': 'Create an interior architectural render showing spatial quality and atmosphere',
+    'aerial': 'Create an aerial architectural render showing form and context',
+    'detail': 'Create a detail render focused on the selected architectural element',
   };
 
-  const viewIntro = viewDescriptions[workflow.viewType] || 'Create a photorealistic architectural visualization';
+  const viewIntro = viewDescriptions[workflow.viewType] || 'Create an architectural render';
   parts.push(`${viewIntro}, rendered from ${sourceDescriptions[workflow.sourceType] || 'a 3D architectural model'}.`);
   if (hasSourceImage) {
     parts.push(buildSourceImageRelationship(
@@ -1262,7 +2335,7 @@ function generate3DRenderPrompt(state: AppState): string {
     parts.push(TEXT_TO_IMAGE_FRAMEWORK);
   }
 
-  // 2. STYLE - More narrative description
+  // 2. STYLE
   if (hasStyleReference) {
     parts.push(getStyleReferenceInstruction(hasSourceImage));
   } else if (!isNoStyle && style) {
@@ -1273,7 +2346,7 @@ function generate3DRenderPrompt(state: AppState): string {
     }
   }
 
-  // 3. GENERATION MODE - Use descriptive helper
+  // 3. GENERATION MODE
   parts.push(describeRenderMode(workflow.renderMode));
 
   if (workflow.prioritizationEnabled) {
@@ -1285,19 +2358,19 @@ function generate3DRenderPrompt(state: AppState): string {
         .filter((el) => el.detail?.trim())
         .map((el) => {
           const priority = el.confidence >= 0.8
-            ? 'CRITICAL'
+            ? 'must fix'
             : el.confidence >= 0.6
-              ? 'IMPORTANT'
+              ? 'address'
               : 'Note';
           return `[${priority}] ${el.detail.trim()}`;
         });
       if (instructions.length > 0) {
-        parts.push(`**Rendering Instructions for Problem Areas:** ${instructions.join(' ')}`);
+        parts.push(`Rendering instructions for detected problem areas: ${instructions.join(' ')}`);
       }
     }
   }
 
-  // 5. LIGHTING - Rich descriptive language
+  // 5. LIGHTING
   const light = r3d.lighting;
   const lightParts: string[] = [];
 
@@ -1315,7 +2388,7 @@ function generate3DRenderPrompt(state: AppState): string {
 
   parts.push(`${lightParts.join('')}.`);
 
-  // 8. ATMOSPHERE & MOOD - Immersive description
+  // 8. ATMOSPHERE & MOOD
   const atm = r3d.atmosphere;
   parts.push(`The atmosphere conveys ${describeAtmosphericMood(atm.mood)}.`);
 
@@ -1327,7 +2400,7 @@ function generate3DRenderPrompt(state: AppState): string {
     parts.push(`Light sources and bright areas have ${describeBloom(atm.bloom.intensity)}.`);
   }
 
-  // 9. SCENERY & CONTEXT - Vivid scene setting
+  // 9. SCENERY & CONTEXT
   const scene = r3d.scenery;
   const sceneParts: string[] = [];
 
@@ -1335,7 +2408,7 @@ function generate3DRenderPrompt(state: AppState): string {
     'urban': 'set within a vibrant urban environment',
     'suburban': 'nestled in a peaceful suburban neighborhood',
     'rural': 'situated in a serene rural landscape',
-    'coastal': 'positioned along a stunning coastal setting',
+    'coastal': 'positioned along a coastal setting',
     'forest': 'embraced by a natural forest environment',
     'mountain': 'set against a dramatic mountain backdrop',
     'desert': 'placed in an expansive desert landscape',
@@ -1358,20 +2431,33 @@ function generate3DRenderPrompt(state: AppState): string {
 
   // 9b. BACKGROUND REFERENCE - Environment matching instruction
   if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
-    parts.push(`**Environment Reference (CRITICAL):** A reference photo showing the desired environment context is provided. IMPORTANT: Do NOT simply paste or composite the background behind the subject. Instead, use the reference to understand and recreate the environmental qualities: the time of day, sky conditions, ambient light color temperature, atmospheric haze and depth, weather mood, and overall color grading. The architecture must appear as if it was actually photographed in that environment - with matching shadow directions, consistent horizon line, natural atmospheric perspective (distant elements should have appropriate haze/desaturation), unified color palette, and seamless ground plane integration. The final image must look like a single cohesive photograph, not a collage.`);
+    parts.push(getEnvironmentReferenceInstruction());
   }
 
-  // 10. RENDER FORMAT & OUTPUT - Professional finish description
+  // 10. RENDER FORMAT & OUTPUT
   const rend = r3d.render;
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
-  // 11. TECHNICAL QUALITY - mode-specific finish
+  // 11. TECHNICAL QUALITY
   parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
 
 const formatToggle = (value: boolean) => (value ? 'on' : 'off');
+
+const summarizeMaterialAssignments = (assignments: Record<string, string>, limit = 6): string => {
+  const entries = Object.entries(assignments || {})
+    .filter(([, materialId]) => Boolean(materialId))
+    .slice(0, limit)
+    .map(([elementId, materialId]) => {
+      const material = getMaterialById(materialId);
+      return `${elementId}: ${material?.label || materialId}`;
+    });
+  const total = Object.keys(assignments || {}).length;
+  if (!entries.length) return '';
+  return `${entries.join('; ')}${total > limit ? '; additional assignments follow same logic' : ''}`;
+};
 
 const buildSelectionBounds = (
   shapes: VisualSelectionShape[],
@@ -1480,7 +2566,7 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
     } else if (role === 'guide') {
       parts.push(`The user has selected ${summaryParts.join(' and ')} as spatial guidance for the primary target area. Use the selection to identify where the edit belongs, but do not treat the boundary as a hard cutout or paste edge; allow natural reconstruction and blending slightly beyond it when needed.`);
     } else {
-      parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define exactly where changes should occur. Apply all edits precisely within this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
+      parts.push(`The user has selected ${summaryParts.join(' and ')} to indicate the intended target area. Use the selection to identify what should change, but do not treat its outline as a literal cut line; allow natural reconstruction and blending slightly beyond it when needed.`);
     }
 
     if (workflow.visualSelectionMask) {
@@ -1489,7 +2575,7 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
           ? 'A selection mask is provided to identify the protected selected region; the app may invert it before editing so only unselected pixels are changed.'
           : role === 'guide'
             ? 'A selection mask is provided as target guidance. White areas indicate the user intended focus area, but the final edit must blend naturally and must not show the mask, a white patch, an outline, or a hard-edged silhouette.'
-          : 'A selection mask is provided where white areas indicate the only regions to be edited.'
+          : 'A selection mask is provided as target guidance. White areas indicate the intended focus area, but they are not a hard output boundary and must not appear as a visible edge.'
       );
     }
 
@@ -1498,7 +2584,9 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
       parts.push(
         role === 'guide'
           ? `Selection geometry summary in normalized image coordinates for reference only; use it as target guidance rather than a literal output boundary: ${JSON.stringify(bounds)}.`
-          : `Selection geometry summary in normalized image coordinates for reference only; the mask remains authoritative: ${JSON.stringify(bounds)}.`
+          : role === 'preserve'
+            ? `Selection geometry summary in normalized image coordinates for reference only; the protected mask remains authoritative: ${JSON.stringify(bounds)}.`
+            : `Selection geometry summary in normalized image coordinates for reference only; use it as target guidance rather than a literal output boundary: ${JSON.stringify(bounds)}.`
       );
     }
   }
@@ -1522,7 +2610,7 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
       ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Preserve every pixel inside the selected region exactly. Confine modifications strictly to the unselected background/tool scope and blend naturally at the selection edge.'
       : role === 'guide'
         ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep edits focused on the selected target area while preserving unrelated architecture, layout, materials, people, and signage. Natural texture continuation, cleanup, reflections, contact shadows, and occlusion may extend slightly beyond the selection only when required for a seamless result.'
-      : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Confine all modifications strictly to the intended selection or tool scope. Leave unrelated architectural elements, layout, and materials completely untouched. Ensure all edges blend seamlessly and naturally into the surrounding image.'
+      : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep modifications focused on the intended selected target or tool scope while leaving unrelated architectural elements, layout, people, signage, and materials untouched. Let edges blend seamlessly and naturally into the surrounding image instead of following the drawn selection outline.'
   );
 
   return parts;
@@ -1551,12 +2639,11 @@ const generateVisualEditPrompt = (state: AppState): string => {
   const selectionCount = workflow.visualSelections.length;
   const userPrompt = workflow.visualPrompt?.trim();
   const selectionParts = buildSelectionContext(workflow, 'guide');
-  const strictSelectionParts = buildSelectionContext(workflow);
   const parts: string[] = [];
   parts.push('Image editing framework: make only the requested change, then actively preserve everything else from the source image.');
   parts.push(buildSourceImageRelationship(
     'image being edited',
-    'The requested tool scope is the only area allowed to change; all unrelated scene content stays locked.'
+    'The requested target/tool scope is the intended focus of change; all unrelated scene content stays locked while local blending may extend as needed.'
   ));
 
   // User's creative intent
@@ -1571,39 +2658,40 @@ const generateVisualEditPrompt = (state: AppState): string => {
     const selectParts: string[] = [];
     const basePrompt = state.prompt?.trim();
     const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette)\b/i.test(userPrompt || '');
-    selectParts.push('Targeted selected-region edit.');
+    selectParts.push('Selection-guided target edit.');
     if (basePrompt) {
       selectParts.push(`Scene context only: "${basePrompt}".`);
     }
     if (userPrompt) {
       selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
-    selectParts.push('The selection mask is authoritative. Edit only the selected pixels/subject and leave every unselected pixel unchanged.');
+    selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
+    selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');
     if (personTarget) {
       selectParts.push('Person target rule: if the selection contains a plain white, clay, placeholder, silhouette, or low-quality 3D person, convert that exact selected figure into one realistic human. Preserve the original pose, scale, body orientation, ground contact, location, occlusion, and camera perspective. Match the existing scene lighting, shadow direction, color temperature, and render quality. Do not add any extra people, do not modify any other people, and do not change nearby architecture, signage, floor, furniture, vegetation, or background.');
     }
-    selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the selection, shadows, reflections, and composition outside the selected area.');
+    selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the intended target, shadows, reflections, and overall composition.');
     selectParts.push('Blend the selected edit naturally at the boundary without showing the mask, lasso shape, outline, white patch, smudge, or pasted edge.');
     return selectParts.filter(Boolean).join(' ');
   }
 
   if (tool === 'material') {
-    parts.push('Transform the surface materials within the selected area while preserving the underlying architectural form.');
-    parts.push(...strictSelectionParts);
+    parts.push('Transform the surface materials indicated by the selection while preserving the underlying architectural form.');
+    parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
     const material = workflow.visualMaterial;
     const selectedMaterial = getMaterialById(material.materialId);
     const hasAuthoritativeSelection = selectionCount > 0 || Boolean(workflow.visualSelectionMask);
     if (hasAuthoritativeSelection) {
-      parts.push('The selection mask is authoritative: change material only inside the selected white pixels. Do not expand the edit to nearby, connected, or visually similar surfaces outside the selection.');
-      parts.push('Treat the edit as a surface finish replacement on the existing selected geometry. Preserve the exact outline, floor inlay shape, seams, joints, perspective, reflections, and shadow structure of the selected area.');
+      parts.push('The selection indicates the intended material target. Use it to identify the surface or object to refinish, not as the exact visible edge of the material change.');
+      parts.push('Treat the edit as a surface finish replacement on the existing target geometry. Continue the finish naturally over the connected visible target where needed, while preserving real object edges, seams, joints, perspective, reflections, and shadow structure.');
     } else if (workflow.visualMaterial.surfaceType === 'auto') {
       parts.push('No mask is provided, so infer the target only from the user instruction and modify only existing objects or surfaces that clearly match that target.');
       parts.push('For object-specific requests such as machines, counters, kiosks, appliances, panels, doors, or fixtures, change only the visible finish of those existing target objects. Do not edit surrounding queues, posts, belts, floors, walls, ceilings, signage, luggage, furniture, people, or reflections except for physically consistent reflections on the target object itself.');
       parts.push('If the target object is ambiguous, make the smallest conservative material-only change to the clearly matching area and leave all uncertain areas unchanged.');
     } else {
-      parts.push('Apply the new material strictly within the defined selection boundaries.');
+      parts.push('Apply the new material to the intended selected target and blend naturally instead of following the selection boundary as a visible edge.');
     }
 
     // Describe material in natural language
@@ -1646,7 +2734,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Maintain realistic reflections that match the environment.');
     }
 
-    parts.push('Critical constraints: only the surface appearance may change. The geometry, edge profiles, joints, seams, material layout, selected region shape, and overall UV orientation must remain exactly as they are. Do not affect any adjacent materials, redraw the room, blur details, lower image resolution, add objects, remove objects, duplicate objects, or alter object positions.');
+    parts.push('Material lock: change only the target surface finish. Preserve geometry, edges, joints, seams, UV direction, adjacent materials, objects, positions, camera, and image clarity.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -1692,7 +2780,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Preserve the essential character of existing shadows while adjusting the overall lighting.');
     }
 
-    parts.push('Constraints: modify only the lighting. Do not replace the sky, alter any materials or textures, or change the geometry. Keep the camera position fixed. If a selection is active, relight only within that region with smooth, natural falloff at the edges.');
+    parts.push('Constraints: modify only the lighting. Do not replace the sky, alter any materials or textures, or change the geometry. Keep the camera position fixed. If a selection is active, use it as the lighting focus and allow smooth, natural falloff beyond the drawn edge.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -1702,7 +2790,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     const replacePrompt = replace.prompt?.trim();
 
     if (object.placementMode === 'replace') {
-      parts.push('Replace the existing object within the selection with a new one that fits naturally into the scene.');
+      parts.push('Replace the existing object indicated by the selection with a new one that fits naturally into the scene.');
       parts.push(...selectionParts);
       parts.push(describeUserIntent(userPrompt));
 
@@ -1761,336 +2849,135 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Since no specific area is selected, intelligently choose the most appropriate location based on the context and keep the addition minimal and purposeful.');
     }
 
-    parts.push('Critical constraints: only add or replace objects as specified. Do not modify the building architecture, change materials, or alter the spatial layout. Ensure correct perspective alignment, appropriate scale relative to surroundings, proper occlusion with other elements, and convincing contact shadows. The object must not float, overlap incorrectly, or clip through surfaces.');
+    parts.push('Object lock: add or replace only the requested object. Preserve architecture, materials, spatial layout, camera, and all unrelated scene content. Match scale, perspective, occlusion, grounding, and contact shadows.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
-    parts.push('Focus exclusively on 3D people in this architectural airport render. Preserve all architecture, materials, landscaping, vehicles, signage, and background elements exactly.');
+    const describeRange = (value: number, low: string, mid: string, high: string) =>
+      value > 65 ? high : value > 30 ? mid : low;
+    const joinIf = (items: Array<string | false | null | undefined>) => compactItems(items).join(', ');
+
+    parts.push('People-only architectural edit. Modify human figures and immediate personal accessories only; keep architecture, materials, landscaping, vehicles, signage, camera, and composition unchanged.');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
     if (userPrompt) {
-      parts.push('The user-entered people instruction is the primary goal for this edit. Use the People panel settings only as supporting context when they do not conflict with that instruction.');
+      parts.push('User instruction is primary; People panel settings are supporting constraints unless they conflict.');
     }
 
     if (selectionCount === 0) {
-      parts.push('No selection is provided; auto-detect all people across the frame and target them only.');
+      parts.push('No selection is provided: detect people across the frame and target people only.');
     } else {
-      parts.push('Within the selected area, identify existing human figures and replace or refine those people only. Treat selected floors, furniture, walls, and background pixels as context to reconstruct naturally around the edited people, not as content to overwrite.');
+      parts.push('Within the selected area, identify human figures and edit those people only; floors, furniture, walls, and background pixels are reconstruction context, not overwrite targets.');
     }
 
-    // Operation mode
-    if (people.mode === 'enhance') {
-      parts.push('Enhance existing people without changing the overall count unless absolutely necessary for realism.');
-    } else if (people.mode === 'repopulate') {
-      parts.push('Repopulate the scene with better-quality people, adjusting the count to match the desired density and configuration.');
-    } else {
-      parts.push('Clean up the people: remove artifacts, fix distortions, and eliminate unrealistic silhouettes.');
-    }
-
-    // Airport zone context
     const zoneDescriptions: Record<string, string> = {
-      'terminal-general': 'a general airport terminal concourse with open circulation',
-      'check-in': 'an airport check-in hall with counters, queues, and self-service kiosks',
-      'security': 'an airport security screening area with queues and scanning equipment',
-      'departure-gate': 'a departure gate waiting area with seating and boarding zones',
-      'arrival-hall': 'an arrivals hall where passengers emerge to meet greeters',
-      'baggage-claim': 'a baggage claim area with carousels and waiting passengers',
-      'retail-area': 'an airport retail/duty-free shopping zone',
-      'food-court': 'an airport food court or restaurant area',
-      'lounge': 'an airport lounge with premium seating and a calm atmosphere',
-      'transit-corridor': 'a transit corridor connecting gates or terminals',
+      'terminal-general': 'general terminal concourse',
+      'check-in': 'check-in hall with counters, queues, and kiosks',
+      'security': 'security screening area',
+      'departure-gate': 'departure gate waiting area',
+      'arrival-hall': 'arrival hall',
+      'baggage-claim': 'baggage claim area',
+      'retail-area': 'airport retail zone',
+      'food-court': 'airport food court',
+      'lounge': 'airport lounge',
+      'transit-corridor': 'transit corridor',
     };
-    parts.push(`Airport context: This is ${zoneDescriptions[people.airportZone] || 'a general airport terminal'}.`);
 
-    // Demographics & Diversity
-    if (people.regionMix.length > 0) {
-      const regionLabels: Record<string, string> = {
-        'european': 'European',
-        'east-asian': 'East Asian',
-        'south-asian': 'South Asian',
-        'southeast-asian': 'Southeast Asian',
-        'middle-eastern': 'Middle Eastern',
-        'african': 'African',
-        'latin-american': 'Latin American',
-        'pacific-islander': 'Pacific Islander',
-        'central-asian': 'Central Asian',
-      };
-      const selectedRegions = people.regionMix.map(r => regionLabels[r] || r).join(', ');
-      if (people.regionMix.length >= 6) {
-        parts.push(`Ethnic diversity: Highly diverse international crowd representing ${selectedRegions} appearances. Skin tones, facial features, and hair types should vary widely to reflect a global airport.`);
-      } else {
-        parts.push(`Ethnic/regional mix: Predominantly ${selectedRegions} appearances. Reflect appropriate skin tones, facial features, and hair types for these regions.`);
-      }
-    } else {
-      parts.push('Ethnic diversity: Generic diverse crowd with varied appearances.');
-    }
-
+    const operationDesc: Record<string, string> = {
+      enhance: 'enhance existing people while preserving count and placement unless a small correction is needed',
+      repopulate: 'replace or repopulate people to match requested density and flow',
+      cleanup: 'clean up people artifacts, distorted bodies, unrealistic silhouettes, and bad hands or faces',
+    };
     const ageDescriptions: Record<string, string> = {
-      'young-adults': 'Predominantly young adults (20s-30s)',
-      'adults': 'Mostly adults (30s-50s)',
-      'mixed-all-ages': 'Full age range from children to elderly, reflecting a realistic airport cross-section',
-      'families': 'Many family groups with children, parents, and some grandparents',
-      'elderly-included': 'Notable presence of elderly travelers alongside other ages',
+      'young-adults': 'mostly young adults',
+      'adults': 'mostly adults',
+      'mixed-all-ages': 'mixed ages',
+      'families': 'family groups',
+      'elderly-included': 'elderly travelers included',
     };
-    parts.push(`Age distribution: ${ageDescriptions[people.ageDistribution] || 'Mixed ages'}.`);
-
     const genderDesc: Record<string, string> = {
-      'balanced': 'roughly equal male and female representation',
-      'male-leaning': 'slightly more male travelers (e.g. business hub)',
-      'female-leaning': 'slightly more female travelers',
+      balanced: 'balanced gender mix',
+      'male-leaning': 'slightly male-leaning crowd',
+      'female-leaning': 'slightly female-leaning crowd',
     };
-    parts.push(`Gender: ${genderDesc[people.genderBalance] || 'balanced'}.`);
-
-    if (people.childrenPresence > 50) {
-      parts.push(`Children are prominently present — include toddlers held by parents, children walking alongside families, and teenagers.`);
-    } else if (people.childrenPresence > 20) {
-      parts.push('Some children visible among family groups.');
-    } else if (people.childrenPresence > 0) {
-      parts.push('Very few children, mostly an adult crowd.');
-    }
-
-    if (people.bodyTypeVariety > 60) {
-      parts.push('Wide variety of body types and builds — tall, short, slim, heavy-set, athletic — for a realistic cross-section.');
-    } else if (people.bodyTypeVariety > 30) {
-      parts.push('Some variety in body types for natural realism.');
-    }
-
-    // Crowd configuration
-    const densityDesc = people.density > 85
-      ? 'very high occupancy — packed terminal with dense foot traffic'
-      : people.density > 65
-        ? 'high occupancy with lively, bustling activity'
-        : people.density > 45
-          ? 'moderate, balanced occupancy with a realistic crowd level'
-          : people.density > 20
-            ? 'lightly populated with intentionally placed figures'
-            : 'minimal people presence — nearly empty terminal';
-    parts.push(`Population density: ${densityDesc}.`);
-
     const groupingDescriptions: Record<string, string> = {
-      'solo-dominant': 'Mostly solo travelers walking or waiting independently',
-      'couples': 'Many traveling couples and pairs',
-      'families': 'Prominent family groups with children and luggage',
-      'business-groups': 'Groups of colleagues and business travelers together',
-      'mixed-groups': 'A natural mix of solo travelers, couples, families, and small groups',
+      'solo-dominant': 'mostly solo travelers',
+      couples: 'couples and pairs',
+      families: 'family groups',
+      'business-groups': 'business groups',
+      'mixed-groups': 'mixed solo travelers, pairs, families, and small groups',
     };
-    parts.push(`Social grouping: ${groupingDescriptions[people.grouping] || 'Mixed groups'}.`);
-
     const flowDescriptions: Record<string, string> = {
-      'random': 'People moving in various directions organically',
-      'directional': 'A dominant flow direction as if heading to gates or exits',
-      'converging': 'People converging toward a focal point (gate, exit, attraction)',
-      'dispersing': 'People dispersing outward from a central area (e.g. just arrived)',
-      'queuing': 'Visible queue formations — people lined up at counters, gates, or security',
+      random: 'organic mixed movement',
+      directional: 'dominant directional flow',
+      converging: 'people converging toward a focal point',
+      dispersing: 'people dispersing outward',
+      queuing: 'visible queue formations',
     };
-    parts.push(`Flow pattern: ${flowDescriptions[people.flowPattern] || 'Random movement'}.`);
-
     const directionDescriptions: Record<string, string> = {
-      'mixed': 'Movement in various directions',
-      'mostly-left': 'Most people moving toward the left side of frame',
-      'mostly-right': 'Most people moving toward the right side of frame',
-      'toward-camera': 'Most people walking toward the camera viewpoint',
-      'away-from-camera': 'Most people walking away from the camera',
+      mixed: 'mixed directions',
+      'mostly-left': 'mostly moving left',
+      'mostly-right': 'mostly moving right',
+      'toward-camera': 'mostly toward camera',
+      'away-from-camera': 'mostly away from camera',
     };
-    parts.push(`Direction: ${directionDescriptions[people.movementDirection] || 'Mixed directions'}.`);
-
     const paceDescriptions: Record<string, string> = {
-      'relaxed': 'Relaxed, leisurely pace — people strolling, browsing, taking their time',
-      'moderate': 'Moderate walking pace typical of airport navigation',
-      'hurried': 'Hurried, purposeful movement — people rushing to gates, checking watches',
-      'mixed': 'A mix of paces — some rushing, some strolling',
+      relaxed: 'relaxed pace',
+      moderate: 'moderate airport walking pace',
+      hurried: 'hurried purposeful movement',
+      mixed: 'mixed pace',
     };
-    parts.push(`Pace: ${paceDescriptions[people.paceOfMovement] || 'Moderate pace'}.`);
-
-    if (people.clusteringTendency > 60) {
-      parts.push('People tend to cluster in groups and gather near amenities, seating, and screens — leave some open space between clusters.');
-    } else if (people.clusteringTendency > 30) {
-      parts.push('Natural clustering around points of interest with even distribution elsewhere.');
-    } else {
-      parts.push('People are evenly distributed throughout the space with minimal clustering.');
-    }
-
-    // Appearance & Wardrobe
     const wardrobeMap: Record<string, string> = {
-      'business': 'business professional attire — suits, blazers, dress shoes, neat grooming',
-      'casual': 'casual everyday clothing — jeans, t-shirts, sneakers, comfortable wear',
-      'travel': 'travel-ready practical outfits — layered clothing, comfortable shoes, easy-to-move-in garments',
-      'luxury': 'upscale, designer-looking clothing — quality fabrics, refined accessories, premium luggage matching the outfits',
-      'sporty': 'athleisure and sporty outfits — tracksuits, running shoes, gym bags',
-      'mixed': 'a realistic mix of business, casual, travel, and luxury attire reflecting an international airport crowd',
+      business: 'business attire',
+      casual: 'casual travel clothing',
+      travel: 'practical layered travel outfits',
+      luxury: 'upscale travel attire',
+      sporty: 'athleisure and sporty outfits',
+      mixed: 'mixed airport wardrobe',
     };
-    parts.push(`Wardrobe direction: ${wardrobeMap[people.wardrobeStyle] || 'mixed attire'}.`);
-
     const seasonDescriptions: Record<string, string> = {
-      'summer': 'Summer clothing — light fabrics, short sleeves, sunglasses, sandals, linen, bright colors',
-      'winter': 'Winter clothing — coats, scarves, boots, gloves, layered outfits, darker tones',
-      'spring-fall': 'Spring/autumn transitional clothing — light jackets, layered looks, moderate coverage',
-      'tropical': 'Tropical climate wear — loose-fitting, breathable fabrics, vibrant patterns, resort-style',
-      'mixed': 'Mixed seasonal wear reflecting travelers from various climates and destinations',
+      summer: 'summer clothing',
+      winter: 'winter layers',
+      'spring-fall': 'transitional spring/autumn clothing',
+      tropical: 'tropical travel clothing',
+      mixed: 'mixed seasonal clothing',
     };
-    parts.push(`Seasonal clothing: ${seasonDescriptions[people.seasonalClothing] || 'Mixed seasonal'}.`);
+    const selectedRegions = people.regionMix.length ? people.regionMix.join(', ') : 'diverse international mix';
+    const staffTypes = compactItems([
+      people.includeAirportStaff ? 'airport or airline staff' : null,
+      people.includeSecurityPersonnel ? 'security staff' : null,
+      people.includeAirlineCrew ? 'airline crew' : null,
+      people.includeGroundCrew ? 'ground crew' : null,
+      people.includeServiceStaff ? 'service staff' : null
+    ]);
 
-    if (people.formalityLevel > 70) {
-      parts.push('High formality — more suits, polished looks, and well-groomed appearances.');
-    } else if (people.formalityLevel > 40) {
-      parts.push('Moderate formality — a mix of smart-casual and some formal attire.');
-    } else {
-      parts.push('Low formality — predominantly casual, comfortable clothing.');
-    }
-
-    if (people.culturalAttire > 60) {
-      parts.push('Significant presence of cultural and traditional clothing: hijabs, saris, kaftans, kimonos, dashikis, turbans, kippahs, and other traditional garments appropriate to the selected regional mix.');
-    } else if (people.culturalAttire > 25) {
-      parts.push('Some travelers in cultural or traditional dress (hijabs, saris, etc.) mixed naturally with Western attire.');
-    } else if (people.culturalAttire > 5) {
-      parts.push('Occasional cultural garments visible in the crowd.');
-    }
-
-    // Activities & Behavior
-    if (people.activities.length > 0) {
-      const activityLabels: Record<string, string> = {
-        'walking': 'walking through the terminal',
-        'standing': 'standing and waiting',
-        'sitting': 'sitting in seating areas',
-        'rushing': 'rushing or jogging to catch flights',
-        'queuing': 'standing in queues or lines',
-        'browsing-shops': 'browsing retail shops and duty-free',
-        'eating': 'eating or drinking at food areas',
-        'phone-use': 'looking at or using smartphones',
-        'reading': 'reading books, magazines, or departure screens',
-        'conversation': 'engaged in conversations with companions',
-        'sleeping': 'sleeping or dozing in seats',
-        'working-laptop': 'working on laptops at seats or tables',
-        'taking-photos': 'taking photos or selfies',
-        'pushing-stroller': 'pushing baby strollers',
-        'wheelchair': 'using wheelchairs or mobility assistance',
-      };
-      const actDesc = people.activities.map(a => activityLabels[a] || a).join('; ');
-      parts.push(`Activities to depict: ${actDesc}.`);
-    }
-
-    if (people.interactionLevel > 60) {
-      parts.push('High social interaction — many people talking in groups, couples holding hands, parents engaging with children, staff helping passengers.');
-    } else if (people.interactionLevel > 30) {
-      parts.push('Moderate interaction — some conversation groups and couples, alongside many solo travelers.');
-    } else {
-      parts.push('Low interaction — mostly solo travelers in their own space, few conversations.');
-    }
-
-    // Luggage & Accessories
-    if (people.luggageTypes.length > 0) {
-      const luggageLabels: Record<string, string> = {
-        'rolling-suitcase': 'rolling suitcases (various sizes)',
-        'backpack': 'backpacks and rucksacks',
-        'carry-on': 'cabin-sized carry-on bags',
-        'duffel-bag': 'duffel bags and soft travel bags',
-        'oversized': 'oversized luggage or sports equipment cases',
-        'shopping-bags': 'shopping bags from airport retail',
-        'duty-free': 'duty-free shopping bags',
-        'briefcase': 'briefcases and laptop bags',
-        'garment-bag': 'garment bags',
-      };
-      const luggageDesc = people.luggageTypes.map(l => luggageLabels[l] || l).join(', ');
-      parts.push(`Luggage types visible: ${luggageDesc}.`);
-    }
-
-    if (people.luggageAmount > 70) {
-      parts.push('Heavy luggage presence — most travelers carry bags, many with multiple pieces.');
-    } else if (people.luggageAmount > 40) {
-      parts.push('Moderate luggage — many travelers have bags, some traveling light.');
-    } else if (people.luggageAmount > 10) {
-      parts.push('Light luggage presence — some carry-ons visible, many people without visible bags.');
-    } else {
-      parts.push('Minimal luggage visible.');
-    }
-
-    if (people.trolleyUsage > 50) {
-      parts.push('Noticeable airport trolley/cart usage — several passengers with loaded luggage carts.');
-    } else if (people.trolleyUsage > 15) {
-      parts.push('A few luggage trolleys visible in the scene.');
-    }
-
-    if (people.personalDevices > 60) {
-      parts.push('Many people using personal devices — smartphones, tablets, laptops, headphones, and earbuds clearly visible.');
-    } else if (people.personalDevices > 30) {
-      parts.push('Some people on phones or wearing headphones.');
-    }
-
-    if (people.travelAccessories > 60) {
-      parts.push('Prominent travel accessories: neck pillows, sunglasses on heads, hats, water bottles, travel mugs, passport holders, lanyards.');
-    } else if (people.travelAccessories > 25) {
-      parts.push('Some travel accessories visible: occasional neck pillows, sunglasses, and water bottles.');
-    }
-
-    // Airport Staff
-    const staffTypes: string[] = [];
-    if (people.includeAirportStaff) staffTypes.push('airline or airport counter staff in branded uniforms');
-    if (people.includeSecurityPersonnel) staffTypes.push('security personnel in uniform (clearly identifiable with badges)');
-    if (people.includeAirlineCrew) staffTypes.push('airline crew members — pilots in uniform with captain hats and flight attendants in airline livery');
-    if (people.includeGroundCrew) staffTypes.push('ground crew in high-visibility vests');
-    if (people.includeServiceStaff) staffTypes.push('service staff — retail workers, food court employees, and cleaning personnel in work attire');
+    parts.push(`Operation: ${operationDesc[people.mode] || people.mode}. Airport zone: ${zoneDescriptions[people.airportZone] || people.airportZone}.`);
+    parts.push(`Crowd: ${describeRange(people.density, 'sparse', 'balanced', 'dense')} density; ${groupingDescriptions[people.grouping] || people.grouping}; ${flowDescriptions[people.flowPattern] || people.flowPattern}; ${directionDescriptions[people.movementDirection] || people.movementDirection}; ${paceDescriptions[people.paceOfMovement] || people.paceOfMovement}; ${describeRange(people.clusteringTendency, 'evenly distributed', 'some natural clustering', 'clustered near amenities')}.`);
+    parts.push(`Demographics: ${selectedRegions}; ${ageDescriptions[people.ageDistribution] || people.ageDistribution}; ${genderDesc[people.genderBalance] || people.genderBalance}; children ${describeRange(people.childrenPresence, 'minimal', 'some', 'prominent')}; body variety ${describeRange(people.bodyTypeVariety, 'low', 'moderate', 'high')}.`);
+    parts.push(`Wardrobe: ${wardrobeMap[people.wardrobeStyle] || people.wardrobeStyle}; ${seasonDescriptions[people.seasonalClothing] || people.seasonalClothing}; formality ${describeRange(people.formalityLevel, 'casual', 'smart-casual', 'formal')}; cultural attire ${describeRange(people.culturalAttire, 'occasional', 'some', 'significant')}.`);
+    parts.push(`Behavior and accessories: ${joinIf([
+      people.activities.length ? `activities ${people.activities.join(', ')}` : null,
+      `interaction ${describeRange(people.interactionLevel, 'low', 'moderate', 'high')}`,
+      people.luggageTypes.length ? `luggage ${people.luggageTypes.join(', ')}` : null,
+      `luggage amount ${describeRange(people.luggageAmount, 'light', 'moderate', 'heavy')}`,
+      `trolleys ${describeRange(people.trolleyUsage, 'few', 'some', 'many')}`,
+      `devices ${describeRange(people.personalDevices, 'few', 'some', 'many')}`,
+      `travel accessories ${describeRange(people.travelAccessories, 'few', 'some', 'prominent')}`
+    ])}.`);
     if (staffTypes.length > 0) {
-      parts.push(`Airport staff to include: ${staffTypes.join('; ')}. Staff should comprise roughly ${people.staffDensity}% of all visible people.`);
+      parts.push(`Staff: include ${staffTypes.join(', ')} at about ${people.staffDensity}% of visible people.`);
     }
-
-    // Quality & Integration
-    const realismDesc = people.realism > 75
-      ? 'ultra-realistic, cinematic-quality people with readable facial features and fabric textures'
-      : people.realism > 45
-        ? 'natural, believable people at architectural visualization quality'
-        : 'stylized or simplified people appropriate for conceptual renders';
-    parts.push(`Realism goal: ${realismDesc}.`);
-
-    const sharpnessDesc = people.sharpness > 75
-      ? 'crisp edges and readable micro-details in clothing, faces, and accessories'
-      : people.sharpness > 45
-        ? 'clean, moderately sharp people'
-        : 'softer detail — people can be slightly impressionistic at distance';
-    parts.push(`Detail sharpness: ${sharpnessDesc}.`);
-
-    const scaleDesc = people.scaleAccuracy > 75
-      ? 'strict scale accuracy — people must be correctly proportioned relative to the architecture, doors, furniture, and ceiling heights'
-      : people.scaleAccuracy > 45
-        ? 'balanced scale accuracy relative to surroundings'
-        : 'gentle scale, approximate proportions acceptable';
-    parts.push(`Scale accuracy: ${scaleDesc}.`);
-
-    const placementDesc = people.placementDiscipline > 75
-      ? 'strict placement — people only on walkable surfaces (floors, seating, escalators), proper spacing, no floating or clipping'
-      : people.placementDiscipline > 45
-        ? 'realistic placement and spacing on appropriate surfaces'
-        : 'looser placement while still believable';
-    parts.push(`Placement discipline: ${placementDesc}.`);
-
-    const motionDesc = people.motionBlur > 70
-      ? 'pronounced motion blur on moving figures for a long-exposure photography feel'
-      : people.motionBlur > 40
-        ? 'subtle motion blur on fast-moving figures'
-        : 'mostly sharp, frozen motion — all people clearly defined';
-    parts.push(`Motion treatment: ${motionDesc}.`);
-
-    // Advanced toggles
-    if (people.preserveExisting) {
-      parts.push('Preserve existing people where possible, refining instead of replacing.');
-    } else {
-      parts.push('Allow replacing or removing existing people to achieve the desired result.');
-    }
-    if (people.matchLighting) {
-      parts.push('Match scene lighting precisely on all people: intensity, direction, color temperature, and ambient occlusion.');
-    }
-    if (people.matchPerspective) {
-      parts.push('Match camera perspective and lens distortion so people sit naturally in the scene.');
-    }
-    if (people.groundContact) {
-      parts.push('Ensure perfect ground contact with correct cast shadows and no floating figures.');
-    }
-    if (people.removeArtifacts) {
-      parts.push('Remove AI artifacts: extra limbs, warped faces, smeared textures, missing hands, or inconsistent silhouettes.');
-    }
-
-    parts.push('Critical constraints: ONLY modify people and their immediate accessories. Do not change the building, landscape, vehicles, sky, signage, or materials. Keep camera, perspective, and composition locked. Do not add visible text, labels, captions, handwriting, UI, or prompt wording into the image. Any edits must integrate seamlessly with the original render.');
+    parts.push(`Quality: realism ${describeRange(people.realism, 'stylized', 'natural archviz', 'high realism')}; detail ${describeRange(people.sharpness, 'soft', 'clean', 'crisp')}; scale ${describeRange(people.scaleAccuracy, 'approximate', 'balanced', 'strict')}; placement ${describeRange(people.placementDiscipline, 'loose but plausible', 'realistic', 'strictly on walkable surfaces')}; motion ${describeRange(people.motionBlur, 'mostly sharp', 'subtle motion blur', 'noticeable motion blur')}.`);
+    parts.push(`Integration locks: ${joinIf([
+      people.preserveExisting ? 'preserve existing people where possible' : 'allow replacing existing people as needed',
+      people.matchLighting ? 'match scene lighting' : null,
+      people.matchPerspective ? 'match perspective and lens' : null,
+      people.groundContact ? 'ground every figure with contact shadows' : null,
+      people.removeArtifacts ? 'remove people artifacts' : null
+    ])}.`);
+    parts.push('Constraints: modify only people and immediate accessories. Do not change building, landscape, vehicles, sky, signage, materials, camera, perspective, or composition. Do not add captions, labels, UI, handwriting, or prompt text.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -2174,115 +3061,61 @@ const generateVisualEditPrompt = (state: AppState): string => {
   }
 
   if (tool === 'adjust') {
-    parts.push('Apply precise color grading and tonal adjustments to this architectural image. Follow these exact numerical specifications (values range from -100 to +100 where 0 is neutral):');
+    parts.push('Apply a focused post-production adjustment to this architectural image. Treat settings as visual intent, not permission to redraw content.');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
     const adjust = workflow.visualAdjust;
-
-    // Helper to describe intensity with number
-    const describeValue = (val: number, posDesc: string, negDesc: string) => {
-      const sign = val > 0 ? '+' : '';
-      return `${sign}${val} (${val > 0 ? posDesc : negDesc})`;
+    const describeDirection = (value: number, positive: string, negative: string) =>
+      value > 0 ? positive : value < 0 ? negative : '';
+    const describeAmount = (value: number) => {
+      const abs = Math.abs(value);
+      return abs > 65 ? 'strong' : abs > 30 ? 'moderate' : 'subtle';
     };
+    const describeSigned = (value: number, positive: string, negative: string) =>
+      value === 0 ? '' : `${describeAmount(value)} ${describeDirection(value, positive, negative)}`;
+    const joinAdjustments = (items: Array<string | false | null | undefined>) => compactItems(items).join(', ');
 
-    // Aspect ratio change
     if (adjust.aspectRatio && adjust.aspectRatio !== 'same') {
-      parts.push(`[ASPECT RATIO] Change to ${adjust.aspectRatio}. Preserve composition and perspective. Prefer extending canvas with content-aware fill rather than cropping; if cropping is unavoidable, crop minimally without stretching.`);
+      parts.push(`Composition: adapt to ${adjust.aspectRatio} while preserving perspective; extend canvas naturally before cropping, and never stretch the scene.`);
     }
 
-    // === BASIC TONE CURVE ===
-    const toneChanges: string[] = [];
-    if (adjust.exposure !== 0) {
-      toneChanges.push(`Exposure: ${describeValue(adjust.exposure, 'brighter', 'darker')}`);
-    }
-    if (adjust.contrast !== 0) {
-      toneChanges.push(`Contrast: ${describeValue(adjust.contrast, 'more punch/separation', 'flatter/softer')}`);
-    }
-    if (adjust.highlights !== 0) {
-      toneChanges.push(`Highlights: ${describeValue(adjust.highlights, 'lift bright areas', 'recover/pull down bright areas')}`);
-    }
-    if (adjust.shadows !== 0) {
-      toneChanges.push(`Shadows: ${describeValue(adjust.shadows, 'open up dark areas', 'deepen/crush dark areas')}`);
-    }
-    if (adjust.whites !== 0) {
-      toneChanges.push(`Whites: ${describeValue(adjust.whites, 'expand white point', 'compress white point')}`);
-    }
-    if (adjust.blacks !== 0) {
-      toneChanges.push(`Blacks: ${describeValue(adjust.blacks, 'lift blacks', 'crush to true black')}`);
-    }
-    if (adjust.gamma !== 0) {
-      toneChanges.push(`Gamma: ${describeValue(adjust.gamma, 'brighten midtones', 'darken midtones')}`);
-    }
-    if (toneChanges.length > 0) {
-      parts.push(`[TONE CURVE] ${toneChanges.join('; ')}.`);
+    const tone = joinAdjustments([
+      describeSigned(adjust.exposure, 'brighter exposure', 'darker exposure'),
+      describeSigned(adjust.contrast, 'stronger contrast', 'softer contrast'),
+      describeSigned(adjust.highlights, 'brighter highlights', 'recovered highlights'),
+      describeSigned(adjust.shadows, 'more open shadows', 'deeper shadows'),
+      describeSigned(adjust.whites, 'cleaner white point', 'softer white point'),
+      describeSigned(adjust.blacks, 'lifted blacks', 'deeper blacks'),
+      describeSigned(adjust.gamma, 'brighter midtones', 'darker midtones')
+    ]);
+    if (tone) {
+      parts.push(`Tone: ${tone}.`);
     }
 
-    // === COLOR ADJUSTMENTS ===
-    const colorChanges: string[] = [];
-    if (adjust.saturation !== 0) {
-      colorChanges.push(`Saturation: ${describeValue(adjust.saturation, 'more vivid colors', 'toward monochrome')}`);
-    }
-    if (adjust.vibrance !== 0) {
-      colorChanges.push(`Vibrance: ${describeValue(adjust.vibrance, 'boost muted colors', 'reduce muted colors')}`);
-    }
-    if (adjust.temperature !== 0) {
-      colorChanges.push(`Temperature: ${describeValue(adjust.temperature, 'warmer/orange', 'cooler/blue')}`);
-    }
-    if (adjust.tint !== 0) {
-      colorChanges.push(`Tint: ${describeValue(adjust.tint, 'toward magenta', 'toward green')}`);
-    }
-    if (adjust.hueShift !== 0) {
-      const degrees = Math.round(adjust.hueShift * 1.8);
-      colorChanges.push(`Hue Shift: ${degrees}° rotation on color wheel`);
-    }
-    if (colorChanges.length > 0) {
-      parts.push(`[COLOR] ${colorChanges.join('; ')}.`);
+    const color = joinAdjustments([
+      describeSigned(adjust.saturation, 'richer saturation', 'lower saturation'),
+      describeSigned(adjust.vibrance, 'stronger muted colors', 'quieter muted colors'),
+      describeSigned(adjust.temperature, 'warmer color temperature', 'cooler color temperature'),
+      describeSigned(adjust.tint, 'magenta tint', 'green tint'),
+      adjust.hueShift !== 0 ? `${describeAmount(adjust.hueShift)} global hue shift` : null
+    ]);
+    if (color) {
+      parts.push(`Color: ${color}.`);
     }
 
-    // === DETAIL & PRESENCE ===
-    const detailChanges: string[] = [];
-    if (adjust.clarity !== 0) {
-      detailChanges.push(`Clarity: ${describeValue(adjust.clarity, 'enhance local midtone contrast', 'soften local contrast')}`);
-    }
-    if (adjust.texture !== 0) {
-      detailChanges.push(`Texture: ${describeValue(adjust.texture, 'enhance surface detail', 'smooth surfaces')}`);
-    }
-    if (adjust.dehaze !== 0) {
-      detailChanges.push(`Dehaze: ${describeValue(adjust.dehaze, 'reduce atmospheric haze', 'add atmospheric haze')}`);
-    }
-    if (adjust.sharpness !== 0) {
-      detailChanges.push(`Sharpness: ${describeValue(adjust.sharpness, 'sharpen edges', 'soften/blur')}`);
-      if (adjust.sharpnessRadius !== 0) {
-        detailChanges.push(`Sharpness Radius: ${adjust.sharpnessRadius} (${adjust.sharpnessRadius > 50 ? 'wide/large structures' : 'tight/fine details'})`);
-      }
-      if (adjust.sharpnessDetail !== 0) {
-        detailChanges.push(`Sharpness Detail: ${adjust.sharpnessDetail} (${adjust.sharpnessDetail > 50 ? 'emphasize high-freq' : 'suppress noise'})`);
-      }
-      if (adjust.sharpnessMasking !== 0) {
-        detailChanges.push(`Sharpness Masking: ${adjust.sharpnessMasking} (${adjust.sharpnessMasking > 50 ? 'edges only' : 'uniform'})`);
-      }
-    }
-    if (detailChanges.length > 0) {
-      parts.push(`[DETAIL/PRESENCE] ${detailChanges.join('; ')}.`);
+    const detail = joinAdjustments([
+      describeSigned(adjust.clarity, 'clearer local contrast', 'softer local contrast'),
+      describeSigned(adjust.texture, 'more visible surface texture', 'smoother surface texture'),
+      describeSigned(adjust.dehaze, 'less haze', 'more atmospheric haze'),
+      describeSigned(adjust.sharpness, 'sharper edges', 'softer edges'),
+      adjust.noiseReduction !== 0 ? `${describeAmount(adjust.noiseReduction)} luminance noise cleanup` : null,
+      adjust.noiseReductionColor !== 0 ? `${describeAmount(adjust.noiseReductionColor)} color-noise cleanup` : null
+    ]);
+    if (detail) {
+      parts.push(`Detail: ${detail}. Preserve real architectural edges; do not invent small features.`);
     }
 
-    // === NOISE REDUCTION ===
-    const noiseChanges: string[] = [];
-    if (adjust.noiseReduction !== 0) {
-      noiseChanges.push(`Luminance NR: ${adjust.noiseReduction}%`);
-    }
-    if (adjust.noiseReductionColor !== 0) {
-      noiseChanges.push(`Color NR: ${adjust.noiseReductionColor}%`);
-    }
-    if (adjust.noiseReductionDetail !== 0) {
-      noiseChanges.push(`NR Detail Preservation: ${adjust.noiseReductionDetail}%`);
-    }
-    if (noiseChanges.length > 0) {
-      parts.push(`[NOISE REDUCTION] ${noiseChanges.join('; ')}.`);
-    }
-
-    // === HSL PER-CHANNEL ADJUSTMENTS ===
     const hslChanges: string[] = [];
     const hslChannels = [
       { name: 'Reds', hue: adjust.hslRedsHue, sat: adjust.hslRedsSaturation, lum: adjust.hslRedsLuminance },
@@ -2296,90 +3129,60 @@ const generateVisualEditPrompt = (state: AppState): string => {
     ];
     for (const ch of hslChannels) {
       const changes: string[] = [];
-      if (ch.hue !== 0) changes.push(`H:${ch.hue > 0 ? '+' : ''}${ch.hue}`);
-      if (ch.sat !== 0) changes.push(`S:${ch.sat > 0 ? '+' : ''}${ch.sat}`);
-      if (ch.lum !== 0) changes.push(`L:${ch.lum > 0 ? '+' : ''}${ch.lum}`);
+      if (ch.hue !== 0) changes.push(ch.hue > 0 ? 'warmer hue' : 'cooler hue');
+      if (ch.sat !== 0) changes.push(ch.sat > 0 ? 'more saturated' : 'less saturated');
+      if (ch.lum !== 0) changes.push(ch.lum > 0 ? 'lighter' : 'darker');
       if (changes.length > 0) {
-        hslChanges.push(`${ch.name}[${changes.join(',')}]`);
+        hslChanges.push(`${ch.name.toLowerCase()} ${changes.join('/')}`);
       }
     }
     if (hslChanges.length > 0) {
-      parts.push(`[HSL COLOR TARGETING] Per-channel adjustments: ${hslChanges.join('; ')}.`);
+      parts.push(`Selective color: ${hslChanges.join('; ')}.`);
     }
 
-    // === COLOR GRADING (SPLIT TONING) ===
-    const gradeChanges: string[] = [];
-    if (adjust.colorGradeShadowsHue !== 0 || adjust.colorGradeShadowsSaturation !== 0) {
-      gradeChanges.push(`Shadows: Hue=${adjust.colorGradeShadowsHue}°, Sat=${adjust.colorGradeShadowsSaturation}%`);
-    }
-    if (adjust.colorGradeMidtonesHue !== 0 || adjust.colorGradeMidtonesSaturation !== 0) {
-      gradeChanges.push(`Midtones: Hue=${adjust.colorGradeMidtonesHue}°, Sat=${adjust.colorGradeMidtonesSaturation}%`);
-    }
-    if (adjust.colorGradeHighlightsHue !== 0 || adjust.colorGradeHighlightsSaturation !== 0) {
-      gradeChanges.push(`Highlights: Hue=${adjust.colorGradeHighlightsHue}°, Sat=${adjust.colorGradeHighlightsSaturation}%`);
-    }
-    if (adjust.colorGradeBalance !== 0) {
-      gradeChanges.push(`Balance: ${adjust.colorGradeBalance > 0 ? '+' : ''}${adjust.colorGradeBalance} (${adjust.colorGradeBalance > 0 ? 'bias highlights' : 'bias shadows'})`);
-    }
-    if (gradeChanges.length > 0) {
-      parts.push(`[COLOR GRADING/SPLIT TONING] ${gradeChanges.join('; ')}.`);
+    const grade = joinAdjustments([
+      adjust.colorGradeShadowsHue !== 0 || adjust.colorGradeShadowsSaturation !== 0 ? 'tint shadows with the requested grade' : null,
+      adjust.colorGradeMidtonesHue !== 0 || adjust.colorGradeMidtonesSaturation !== 0 ? 'tint midtones with the requested grade' : null,
+      adjust.colorGradeHighlightsHue !== 0 || adjust.colorGradeHighlightsSaturation !== 0 ? 'tint highlights with the requested grade' : null,
+      describeSigned(adjust.colorGradeBalance, 'grade biased toward highlights', 'grade biased toward shadows')
+    ]);
+    if (grade) {
+      parts.push(`Color grade: ${grade}.`);
     }
 
-    // === EFFECTS ===
-    const effects: string[] = [];
-    if (adjust.vignette !== 0) {
-      effects.push(`Vignette: ${adjust.vignette > 0 ? '+' : ''}${adjust.vignette} (${adjust.vignette > 0 ? 'darken corners' : 'brighten corners'}), Midpoint=${adjust.vignetteMidpoint}%, Roundness=${adjust.vignetteRoundness}, Feather=${adjust.vignetteFeather}%`);
-    }
-    if (adjust.grain !== 0) {
-      effects.push(`Film Grain: Amount=${adjust.grain}%, Size=${adjust.grainSize}, Roughness=${adjust.grainRoughness}%`);
-    }
-    if (adjust.bloom !== 0) {
-      effects.push(`Bloom/Glow: ${adjust.bloom}%`);
-    }
-    if (adjust.chromaticAberration !== 0) {
-      effects.push(`Chromatic Aberration: ${adjust.chromaticAberration}%`);
-    }
-    if (effects.length > 0) {
-      parts.push(`[EFFECTS] ${effects.join('; ')}.`);
+    const effects = joinAdjustments([
+      adjust.vignette !== 0 ? `${describeAmount(adjust.vignette)} ${adjust.vignette > 0 ? 'dark-corner' : 'bright-corner'} vignette` : null,
+      adjust.grain !== 0 ? `${describeAmount(adjust.grain)} film grain` : null,
+      adjust.bloom !== 0 ? `${describeAmount(adjust.bloom)} bloom around bright areas` : null,
+      adjust.chromaticAberration !== 0 ? `${describeAmount(adjust.chromaticAberration)} chromatic edge separation` : null
+    ]);
+    if (effects) {
+      parts.push(`Effects: ${effects}. Keep effects photographic and restrained.`);
     }
 
-    // === TRANSFORM ===
-    const transforms: string[] = [];
-    if (adjust.transformRotate !== 0) {
-      transforms.push(`Rotation: ${adjust.transformRotate.toFixed(1)}° (${adjust.transformRotate > 0 ? 'clockwise' : 'counter-clockwise'})`);
-    }
-    if (adjust.transformHorizontal !== 0) {
-      transforms.push(`Horizontal Perspective: ${adjust.transformHorizontal > 0 ? '+' : ''}${adjust.transformHorizontal} (${adjust.transformHorizontal > 0 ? 'keystone right' : 'keystone left'})`);
-    }
-    if (adjust.transformVertical !== 0) {
-      transforms.push(`Vertical Perspective: ${adjust.transformVertical > 0 ? '+' : ''}${adjust.transformVertical} (${adjust.transformVertical > 0 ? 'correct converging verticals upward' : 'keystone downward'})`);
-    }
-    if (adjust.transformDistortion !== 0) {
-      transforms.push(`Lens Distortion: ${adjust.transformDistortion > 0 ? '+' : ''}${adjust.transformDistortion} (${adjust.transformDistortion > 0 ? 'barrel correction' : 'pincushion correction'})`);
-    }
-    if (adjust.transformPerspective !== 0) {
-      transforms.push(`Perspective Depth: ${adjust.transformPerspective > 0 ? '+' : ''}${adjust.transformPerspective} (${adjust.transformPerspective > 0 ? 'increase depth' : 'flatten'})`);
-    }
-    if (transforms.length > 0) {
-      parts.push(`[TRANSFORM/GEOMETRY] ${transforms.join('; ')}.`);
+    const transforms = joinAdjustments([
+      adjust.transformRotate !== 0 ? `${describeAmount(adjust.transformRotate)} rotation correction` : null,
+      adjust.transformHorizontal !== 0 ? `${describeAmount(adjust.transformHorizontal)} horizontal perspective correction` : null,
+      adjust.transformVertical !== 0 ? `${describeAmount(adjust.transformVertical)} vertical perspective correction` : null,
+      adjust.transformDistortion !== 0 ? `${describeAmount(adjust.transformDistortion)} lens distortion correction` : null,
+      adjust.transformPerspective !== 0 ? `${describeAmount(adjust.transformPerspective)} perspective-depth correction` : null
+    ]);
+    if (transforms) {
+      parts.push(`Geometry correction: ${transforms}. Preserve straight architectural lines and avoid warping people, objects, or text.`);
     }
 
-    // === STYLE STRENGTH / GLOBAL INTENSITY ===
     const intensityPercent = Math.round(adjust.styleStrength);
     if (adjust.styleStrength !== 50) {
-      parts.push(`[GLOBAL INTENSITY] Apply all above adjustments at ${intensityPercent}% strength (100%=full effect, 50%=normal, 0%=no effect). ${
-        intensityPercent > 75 ? 'Bold, dramatic result expected.' :
-        intensityPercent > 50 ? 'Slightly stronger than normal.' :
-        intensityPercent > 25 ? 'Subtle, natural-looking adjustments.' :
-        'Very subtle, barely perceptible changes.'
-      }`);
+      const strength = intensityPercent > 75 ? 'strong' :
+        intensityPercent > 50 ? 'slightly strong' :
+        intensityPercent > 25 ? 'subtle' : 'very subtle';
+      parts.push(`Overall strength: ${strength}; keep the image believable and architectural.`);
     }
 
-    // Final constraints
     parts.push(
       adjust.aspectRatio && adjust.aspectRatio !== 'same'
-        ? '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, or perspective beyond specified transform corrections. If a selection mask is active, use it to focus the adjustment target and blend naturally without a hard boundary.'
-        : '[CONSTRAINTS] Apply ONLY the specified color, tone, and adjustment parameters above. Do NOT add, remove, replace, or relocate any objects, people, or elements. Do NOT alter the architectural geometry, structure, perspective, or crop/resize the image in any way. If a selection mask is active, use it to focus the adjustment target and blend naturally without a hard boundary.'
+        ? 'Constraints: adjust tone, color, detail, effects, and requested format only. Do not add, remove, replace, or relocate objects or people; do not redesign architecture; blend any selected adjustment naturally.'
+        : 'Constraints: adjust tone, color, detail, and effects only. Do not crop, resize, add, remove, replace, or relocate objects or people; do not redesign architecture; blend any selected adjustment naturally.'
     );
     return parts.filter(Boolean).join(' ');
   }
@@ -2419,19 +3222,19 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push(`Target a ${extend.customRatio.width}:${extend.customRatio.height} aspect ratio.`);
     }
 
-    parts.push('Critical constraints: do not modify any existing pixels in the original image area. Only paint into the new canvas space, continuing the existing perspective lines, horizon placement, architectural materials, lighting conditions, shadows, reflections, and visible text/signage shapes seamlessly. Avoid duplicating, repeating, or warping elements from the original image.');
+    parts.push('Outpaint lock: preserve the original image area unchanged. Paint only the new canvas space, continuing perspective, horizon, materials, lighting, shadows, reflections, and edge text/signage shapes naturally.');
     return parts.filter(Boolean).join(' ');
   }
 
   if (tool === 'background') {
-    parts.push('Replace the background of this architectural image while preserving the selected area completely untouched.');
+    parts.push('Replace the background of this architectural image while keeping the selected area unchanged.');
     parts.push(...buildSelectionContext(workflow, 'preserve'));
     const background = workflow.visualBackground;
     const backgroundPrompt = background.prompt?.trim() || userPrompt;
 
     if (background.mode === 'image' && background.referenceImage) {
-      parts.push('Background Reference: A reference image is provided showing the desired background environment.');
-      parts.push('IMPORTANT: The selected area must remain COMPLETELY UNCHANGED - do not modify, retouch, or alter any pixels within the selection. Only replace the background around it.');
+      parts.push('Background reference: a reference image shows the desired background environment.');
+      parts.push('Keep the selected area unchanged. Do not modify, retouch, or alter pixels within the selection; replace only the background around it.');
 
       if (background.referenceMode === 'absolute') {
         parts.push('Treat the reference image as the exact background to integrate into. Preserve its layout, horizon line, dominant elements, and overall composition. Do not introduce new background elements that conflict with the reference.');
@@ -2468,7 +3271,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       background.quality === 'standard' ? 'with balanced quality' : 'with faster processing';
     parts.push(`Process ${qualityDesc}.`);
 
-    parts.push('Critical constraints: ABSOLUTELY NO modifications to pixels within the selected area. Only replace the background. Ensure matching horizon lines, consistent color grading, unified atmospheric conditions, proper ground plane integration, and natural depth cues. The selection and new background must appear as a single unified photograph, never as a composite or collage.');
+    parts.push('Constraints: keep pixels inside the selected area unchanged. Replace only the background. Match horizon lines, color grade, atmosphere, ground plane, and depth cues so the result reads as one unified photograph, not a collage.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -2563,12 +3366,12 @@ function generateCadRenderPrompt(state: AppState): string {
 
   const parts: string[] = [];
 
-  // Evocative opening based on CAD drawing type
+  // Opening based on CAD drawing type
   const cadTypeDescriptions: Record<string, string> = {
-    'plan': 'Transform this architectural floor plan into a stunning visualization that brings the spatial layout to life',
-    'section': 'Convert this architectural section drawing into a vivid visualization revealing the building\'s inner workings',
-    'elevation': 'Render this elevation drawing into a photorealistic facade visualization',
-    'site': 'Transform this site plan into an immersive bird\'s eye visualization of the development',
+    'plan': 'Transform this architectural floor plan into a clear visualization of the spatial layout',
+    'section': 'Convert this architectural section drawing into a visualization of the building interior and structure',
+    'elevation': 'Render this elevation drawing as a facade visualization',
+    'site': 'Transform this site plan into an overhead visualization of the development',
   };
 
   const projectionDescriptions: Record<string, string> = {
@@ -2589,17 +3392,25 @@ function generateCadRenderPrompt(state: AppState): string {
   if (workflow.cadScale) {
     parts.push(`The drawing is prepared at ${workflow.cadScale} scale.`);
   }
+  if (workflow.cadOrientation) {
+    parts.push(`Preserve the drawing orientation at ${Math.round(workflow.cadOrientation)} degrees; do not rotate or normalize it unless the camera settings require a rendered viewpoint.`);
+  }
 
   parts.push(describeRenderMode(workflow.renderMode));
 
-  // Fidelity constraints in natural language
-  parts.push(describeSourceFidelityForRenderMode(workflow.renderMode));
+  if (normalizeRenderGenerationMode(workflow.renderMode) === 'concept-push') {
+    parts.push(describeSourceFidelityForRenderMode(workflow.renderMode));
+  }
 
   if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
     const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
     if (visibleLayers.length) {
       parts.push(`Focus on rendering these visible layers: ${visibleLayers.join(', ')}.`);
     }
+  }
+  const cadMaterials = summarizeMaterialAssignments(workflow.cadMaterialAssignments);
+  if (cadMaterials) {
+    parts.push(`Material assignments from the CAD setup: ${cadMaterials}. Use these only on their assigned elements.`);
   }
 
   // Space description
@@ -2610,7 +3421,7 @@ function generateCadRenderPrompt(state: AppState): string {
     'kitchen': 'a functional kitchen',
     'bathroom': 'a clean bathroom',
     'office': 'a productive office environment',
-    'commercial': 'a professional commercial space',
+    'commercial': 'a commercial space',
     'retail': 'an inviting retail environment',
     'restaurant': 'a welcoming dining space',
   };
@@ -2625,10 +3436,10 @@ function generateCadRenderPrompt(state: AppState): string {
   };
   const ceilingDesc = ceilingDescMap[space.ceilingStyle] || `${space.ceilingStyle} ceilings`;
   parts.push(`The space features ${ceilingDesc}, ${space.windowStyle} windows, and ${space.doorStyle} doors.`);
-
-  if (hasSourceImage) {
-    parts.push('The input image establishes the ground-truth for geometry, source labels, drawing orientation, and material clues.');
-  }
+  const spatial = workflow.cadSpatial;
+  const spatialStyle = spatial.style < 35 ? 'conservative interpretation' :
+    spatial.style > 70 ? 'creative spatial interpretation' : 'balanced spatial interpretation';
+  parts.push(`Use CAD spatial assumptions: ceiling height ${spatial.ceilingHeight}m, wall thickness ${spatial.wallThick}m, floor thickness ${spatial.floorThick}m, ${spatialStyle}.`);
 
   // Style
   if (hasStyleReference) {
@@ -2643,15 +3454,9 @@ function generateCadRenderPrompt(state: AppState): string {
 
   // Camera in natural language
   const cam = workflow.cadCamera;
-  const heightDesc = cam.height < 1.2 ? 'low, intimate viewpoint as if seated' :
+  const heightDesc = cam.height < 1.2 ? 'low viewpoint as if seated' :
     cam.height < 1.7 ? 'natural eye-level perspective' :
-    cam.height < 2.5 ? 'slightly elevated viewpoint' : 'commanding elevated perspective';
-  parts.push(`The view is captured from a ${heightDesc}, using ${describeLens(cam.focalLength)}.`);
-
-  if (cam.position) {
-    parts.push(`Camera position on plan: ${Math.round(cam.position.x)}% from left, ${Math.round(cam.position.y)}% from top.`);
-  }
-
+    cam.height < 2.5 ? 'slightly elevated viewpoint' : 'elevated perspective';
   const lookAtDesc: Record<string, string> = {
     n: 'looking north',
     ne: 'looking northeast',
@@ -2662,27 +3467,33 @@ function generateCadRenderPrompt(state: AppState): string {
     w: 'looking west',
     nw: 'looking northwest',
   };
-  if (cam.lookAt) {
-    parts.push(`View direction is ${lookAtDesc[cam.lookAt] || `looking ${cam.lookAt}`}.`);
-  }
-
-  if (cam.verticalCorrection) {
-    parts.push('Vertical lines are corrected to appear perfectly straight, as in professional architectural photography.');
-  }
+  parts.push(compactItems([
+    `Camera: ${heightDesc}, ${describeLens(cam.focalLength)}`,
+    cam.position ? `from ${Math.round(cam.position.x)}% left / ${Math.round(cam.position.y)}% top on plan` : null,
+    cam.lookAt ? lookAtDesc[cam.lookAt] || `looking ${cam.lookAt}` : null,
+    cam.verticalCorrection ? 'straight corrected verticals' : null
+  ]).join(', ') + '.');
 
   // Furnishing description
   const furn = workflow.cadFurnishing;
   const occupancyDesc: Record<string, string> = {
     'empty': 'completely empty, showing pure architectural space',
-    'minimal': 'minimally furnished with essential pieces only',
-    'moderate': 'comfortably furnished with a lived-in feel',
-    'full': 'fully furnished and styled for presentation',
+    'staged': 'staged with selected furniture for presentation',
+    'lived-in': 'furnished with a natural lived-in feel',
   };
-  parts.push(`The space is ${occupancyDesc[furn.occupancy] || furn.occupancy}.`);
-
+  const furnishingNotes = compactItems([
+    occupancyDesc[furn.occupancy] || furn.occupancy,
+    furn.auto ? 'automatic furnishing only where it clarifies room function' : null,
+    furn.styles.length > 0 ? `style ${furn.styles.join(', ')}` : null,
+    `density ${describeSettingStrength(furn.density, 'sparse', 'balanced', 'full')}`
+  ]);
+  if (furn.auto) {
+    furnishingNotes.push('do not obscure source geometry');
+  }
   const clutterDesc = furn.clutter > 60 ? 'with realistic everyday items adding authenticity' :
     furn.clutter > 30 ? 'with tasteful accessories and details' : 'kept clean and uncluttered';
-  parts.push(`Styling is ${clutterDesc}.`);
+  furnishingNotes.push(clutterDesc);
+  parts.push(`Furnishing: ${furnishingNotes.join('; ')}.`);
 
   if (furn.people) {
     const entourageDesc = furn.entourage < 30 ? 'a few people adding human scale' :
@@ -2745,7 +3556,7 @@ function generateCadRenderPrompt(state: AppState): string {
 
   // Background Reference - Environment matching instruction
   if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
-    parts.push(`**Environment Reference (CRITICAL):** A reference photo showing the desired environment context is provided. IMPORTANT: Do NOT simply paste or composite the background behind the subject. Instead, use the reference to understand and recreate the environmental qualities: the time of day, sky conditions, ambient light color temperature, atmospheric haze and depth, weather mood, and overall color grading. The architecture must appear as if it was actually photographed in that environment - with matching shadow directions, consistent horizon line, natural atmospheric perspective (distant elements should have appropriate haze/desaturation), unified color palette, and seamless ground plane integration. The final image must look like a single cohesive photograph, not a collage.`);
+    parts.push(getEnvironmentReferenceInstruction());
   }
 
   // Output quality
@@ -2771,7 +3582,7 @@ function generateSketchPrompt(state: AppState): string {
   if (state.prompt?.trim()) {
     parts.push(`Transform this sketch according to the user brief: "${state.prompt.trim()}".`);
   } else {
-    parts.push('Transform this hand-drawn architectural sketch into a stunning photorealistic visualization that brings the designer\'s vision to life.');
+    parts.push('Transform this hand-drawn architectural sketch into a clear architectural visualization.');
   }
   parts.push(buildSourceImageRelationship(
     'architectural sketch',
@@ -2780,26 +3591,28 @@ function generateSketchPrompt(state: AppState): string {
 
   // Sketch type description
   const sketchTypeDesc: Record<string, string> = {
-    'concept': 'This is an early concept sketch capturing the initial design idea',
-    'development': 'This is a development sketch showing refined design thinking',
-    'presentation': 'This is a presentation-quality sketch ready for client visualization',
-    'quick': 'This is a quick study sketch',
-    'detailed': 'This is a detailed architectural sketch with careful linework',
+    'exterior': 'This is an exterior architectural sketch',
+    'interior': 'This is an interior architectural sketch',
+    'detail': 'This is a detail sketch focused on a specific architectural element',
+    'aerial': 'This is an aerial or site-oriented sketch',
   };
   parts.push(`${sketchTypeDesc[workflow.sketchType] || `This is a ${workflow.sketchType} sketch`}.`);
+  parts.push(`Sketch handling: auto-detect ${formatToggle(workflow.sketchAutoDetect)}, ${workflow.sketchLineWeight} line weight, cleanup ${describeSettingStrength(workflow.sketchCleanupIntensity, 'light', 'balanced', 'strong')}.`);
 
   // Perspective and composition constraints
   const perspDesc: Record<string, string> = {
-    'one-point': 'one-point perspective with a central vanishing point',
-    'two-point': 'two-point perspective with converging horizontals',
-    'three-point': 'dramatic three-point perspective',
+    '1-point': 'one-point perspective with a central vanishing point',
+    '2-point': 'two-point perspective with converging horizontals',
+    '3-point': 'three-point perspective',
     'isometric': 'clean isometric projection',
     'axonometric': 'axonometric view',
+    'freehand': 'freehand perspective with approximate viewpoint cues',
   };
   parts.push(`The sketch uses ${perspDesc[workflow.sketchPerspectiveType] || workflow.sketchPerspectiveType}.`);
+  parts.push(`View cues: horizon around ${workflow.sketchHorizonLine}% of image height, camera height ${workflow.sketchCameraHeight}.`);
 
   // Main fidelity constraints in natural language
-  parts.push('Treat this sketch as the sacred blueprint for composition and form. The viewpoint must remain exactly as drawn - no reframing, cropping, or rotation is permitted. Preserve the silhouette, proportions, and the position of every line. Only the surface materials, lighting quality, and photorealistic rendering may be enhanced.');
+  parts.push('Use the sketch as the composition and form blueprint. Preserve viewpoint, silhouette, proportions, and major line positions; add only the material, light, and context allowed by settings.');
 
   if (workflow.sketchDetectedPerspective) {
     parts.push(`The detected perspective (${workflow.sketchDetectedPerspective}) must be matched precisely.`);
@@ -2822,7 +3635,9 @@ function generateSketchPrompt(state: AppState): string {
     workflow.sketchCompleteness > 60 ? 'substantially complete' :
     workflow.sketchCompleteness > 40 ? 'partially complete with areas left to interpretation' : 'sparse, leaving much to be imagined';
 
-  parts.push(`The sketch linework is ${lineQualityDesc} and ${completenessDesc}.`);
+  if (workflow.sketchLineQuality > 0 || workflow.sketchCompleteness > 0) {
+    parts.push(`The sketch linework is ${lineQualityDesc} and ${completenessDesc}.`);
+  }
 
   // Line processing in natural language
   const lineProcessing: string[] = [];
@@ -2872,8 +3687,9 @@ function generateSketchPrompt(state: AppState): string {
 
   // Ambiguity handling
   const ambiguityDesc: Record<string, string> = {
+    'ask': 'If sketch ambiguity cannot be resolved visually, choose the most conservative interpretation',
     'conservative': 'When encountering ambiguous areas, make conservative, safe interpretations that don\'t add unnecessary complexity',
-    'neutral': 'Handle ambiguous areas with balanced judgment, neither too conservative nor too creative',
+    'typical': 'Resolve ambiguous areas using typical architectural logic for this building type',
     'creative': 'Where the sketch is ambiguous, feel free to make creative decisions that enhance the architectural vision',
   };
   parts.push(`${ambiguityDesc[workflow.sketchAmbiguityMode] || 'Handle ambiguous areas thoughtfully'}.`);
@@ -3020,41 +3836,28 @@ function generateUpscalePrompt(state: AppState): string {
   const userPrompt = state.prompt?.trim();
   const outputResolution = state.output?.resolution?.toUpperCase?.() || '4K';
   const describeSlider = (value: number, low: string, high: string) => {
-    if (value <= 20) return `${low} (very low)`;
-    if (value <= 40) return `${low} (low)`;
+    if (value <= 20) return `very ${low}`;
+    if (value <= 40) return low;
     if (value <= 60) return 'balanced';
-    if (value <= 80) return `${high} (high)`;
-    return `${high} (very high)`;
+    if (value <= 80) return high;
+    return `very ${high}`;
   };
 
   parts.push('Conservative architectural image restoration and upscale.');
-  parts.push('The input image is the only source of truth. Produce the same image at higher apparent quality, as if the original render were exported at a higher resolution with cleaner sampling.');
   parts.push(buildSourceImageRelationship(
     'upscale/restoration source',
-    'This is a restoration pass, not generation from imagination. Improve sampling quality only where the source already contains visual evidence.'
+    'This is a restoration pass, not generation from imagination. Make the same image cleaner, sharper, and less noisy using only visible source evidence.'
   ));
-  parts.push(`Target upscale factor: ${workflow.upscaleFactor}. Treat this as a clarity goal only; do not zoom, crop, extend, or reframe the canvas.`);
-  parts.push(`Output resolution target: ${outputResolution}. If the API caps output below this target, use the highest supported size and prioritize faithful detail preservation.`);
-  parts.push('Allowed operations: reduce noise and compression artifacts, gently deblur, sharpen existing edges, recover local contrast, clarify already-visible microtexture, and improve anti-aliasing.');
-  parts.push('Forbidden operations: redraw the scene, redesign architecture, invent details, remove details, simplify crowded areas, add objects, remove objects, replace materials, alter colors, alter lighting direction, beautify faces, change clothing, or rewrite signage.');
-  parts.push('Frame lock: preserve crop, aspect ratio, camera position, perspective, scale, geometry, object count, object locations, and all spatial relationships exactly.');
-  parts.push('Architectural detail lock: preserve ceiling slats, wall panels, columns, mullions, railings, floor joints, reflections, signage blocks, lighting fixtures, furniture, screens, plants, vehicles, and distant objects in their exact positions and proportions.');
-  parts.push('People lock: preserve every person exactly in count, position, pose, clothing color, silhouette, and scale. Do not merge people, delete people, create new people, distort limbs, or invent facial detail.');
-  parts.push('Material lock: preserve original material color, texture pattern, grain direction, reflectivity, transparency, polish level, and finish. Sharpen what exists; do not substitute or stylize materials.');
-  parts.push('Text and signage lock: keep existing text/signage shapes source-faithful. Do not translate, correct, invent, or make unreadable text newly readable. If text is tiny or blurry in the source, keep it visually consistent rather than fabricating letters.');
-  parts.push('Ambiguity rule: when an area is blurry, tiny, occluded, or uncertain, preserve its original shape and approximate texture. Better slightly soft and correct than sharp and wrong.');
-  parts.push('Slider intent:');
-  parts.push(`Sharpness: ${workflow.upscaleSharpness}/100 (${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}) using restrained edge sharpening only.`);
-  parts.push(`Clarity: ${workflow.upscaleClarity}/100 (${describeSlider(workflow.upscaleClarity, 'low', 'high')}) using local contrast without changing exposure or mood.`);
-  parts.push(`Edge definition: ${workflow.upscaleEdgeDefinition}/100 (${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}) preserving all line positions.`);
-  parts.push(`Fine detail: ${workflow.upscaleFineDetail}/100 (${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}) enhancing only details already visible in the source.`);
+  parts.push(`Upscale goal: ${workflow.upscaleFactor} toward ${outputResolution}; keep the original crop, aspect ratio, camera, perspective, object count, people, material identity, colors, lighting direction, and signage layout.`);
+  parts.push(`Restoration intent: sharpness ${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}, clarity ${describeSlider(workflow.upscaleClarity, 'low', 'high')}, edge definition ${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}, fine detail ${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}.`);
+  parts.push('Allowed changes: reduce noise and compression artifacts, gently deblur, improve anti-aliasing, recover local contrast, and clarify already-visible texture.');
+  parts.push('Ambiguity rule: blurry, tiny, occluded, or uncertain areas should stay source-faithful and slightly soft rather than sharp and invented.');
 
   if (userPrompt) {
     parts.push(`User notes, subordinate to preservation rules: ${userPrompt}.`);
   }
 
-  parts.push('Final check before returning: compare against the source and reject any change in composition, object count, person placement, material color, signage layout, plant shape, ceiling pattern, floor reflection, or architectural geometry.');
-  parts.push('If enhancement and fidelity conflict, preserve the source image exactly.');
+  parts.push('Final check: if enhancement and fidelity conflict, preserve the source image.');
 
   return parts.filter(p => p.trim()).join('\n');
 }
@@ -3190,12 +3993,12 @@ function generateMasterplanPrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
 
-  // Evocative opening
+  // Opening
   if (state.prompt?.trim()) {
     parts.push(`Create the masterplan visualization from this user brief: "${state.prompt.trim()}".`);
   } else {
     const planTypeDescriptions: Record<string, string> = {
-      site: 'Create a compelling site plan visualization that clearly communicates the development layout and spatial relationships',
+      site: 'Create a site plan visualization that clearly communicates the development layout and spatial relationships',
       urban: 'Generate an urban masterplan visualization showing the broader district context and city fabric',
       zoning: 'Produce a clear zoning diagram that effectively communicates land use designations and boundaries',
       massing: 'Create a massing study visualization that reveals the volumetric relationships between buildings',
@@ -3212,31 +4015,47 @@ function generateMasterplanPrompt(state: AppState): string {
 
   // Fidelity constraints
   const boundaryMode = workflow.mpBoundary?.mode || 'auto';
-  parts.push('If a masterplan drawing is provided as input, treat it as the authoritative layout. Preserve every site boundary, parcel edge, road alignment, water feature, building footprint, existing label block, legend position, and north orientation exactly as shown. Do not rotate, mirror, reframe, redraw, or normalize the plan unless the selected view angle explicitly requires a controlled axonometric translation. Enhancement should be limited to presentation styling, landscaping visualization, labels, and legend elements.');
-  parts.push('Label discipline: if the source already contains readable labels, keep their wording and placement faithful. For new labels, render only concise exact text from the requested annotations and keep typography clean, sharp, and professionally aligned.');
+  parts.push('If a masterplan drawing is provided as input, treat it as the authoritative layout. Preserve boundaries, parcel edges, roads, water, footprints, existing labels, legend position, and north orientation. Do not rotate, mirror, reframe, or redraw the plan unless the selected view angle requires a controlled axonometric translation.');
+  parts.push('Label discipline: preserve readable source labels. For new labels, render only concise exact annotation text with clean, sharp alignment.');
 
   if (boundaryMode === 'custom') {
     parts.push('Respect the custom site boundary exactly as defined.');
   }
+  if (workflow.mpZones.length > 0) {
+    const zoneNames = workflow.mpZones.slice(0, 8).map((zone) => zone.name).filter(Boolean);
+    parts.push(`Use the configured ${workflow.mpZoneDetection} zone logic${zoneNames.length ? ` for zones such as ${zoneNames.join(', ')}` : ''}.`);
+  }
+  const contextData = compactItems([
+    workflow.mpContext.loadBuildings ? 'surrounding buildings' : null,
+    workflow.mpContext.loadRoads ? 'roads' : null,
+    workflow.mpContext.loadWater ? 'water' : null,
+    workflow.mpContext.loadTerrain ? 'terrain' : null,
+    workflow.mpContext.loadTransit ? 'transit' : null
+  ]);
+  if (contextData.length > 0) {
+    parts.push(`Use contextual data cues for ${contextData.join(', ')} while keeping the submitted plan layout authoritative.`);
+  }
 
   // Output style
   const styleDescriptions: Record<string, string> = {
-    'realistic': 'Render in a realistic aerial photography style with natural materials, shadows, and textures',
+    'photorealistic': 'Render in a realistic aerial photography style with natural materials, shadows, and textures',
     'illustrative': 'Create an elegant illustrative style with stylized graphics and clear visual hierarchy',
     'diagrammatic': 'Produce a clean diagrammatic representation optimized for clarity and information',
-    'watercolor': 'Render in a soft watercolor aesthetic appropriate for presentation boards',
+    'hybrid': 'Blend realistic aerial context with clean diagram overlays and readable plan hierarchy',
   };
   parts.push(`${styleDescriptions[workflow.mpOutputStyle] || `Use ${workflow.mpOutputStyle} styling`}.`);
 
   // View angle
   if (workflow.mpViewAngle === 'custom') {
     const perspDesc = workflow.mpViewCustom.perspective > 50 ? 'with noticeable perspective depth' : 'with minimal perspective distortion';
-    parts.push(`View the plan from an elevated angle ${perspDesc}.`);
+    parts.push(`View the plan from a custom angle: elevation ${workflow.mpViewCustom.elevation} degrees, rotation ${workflow.mpViewCustom.rotation} degrees, ${perspDesc}.`);
   } else {
     const viewDescriptions: Record<string, string> = {
-      'top-down': 'View directly from above in true plan view',
-      'axon': 'Present in axonometric projection revealing building heights while maintaining measurability',
-      'perspective': 'Use a gentle aerial perspective that adds depth while keeping the plan readable',
+      'top': 'View directly from above in true plan view',
+      'iso-ne': 'Use a northeast isometric view that reveals building height while keeping plan logic readable',
+      'iso-nw': 'Use a northwest isometric view that reveals building height while keeping plan logic readable',
+      'iso-se': 'Use a southeast isometric view that reveals building height while keeping plan logic readable',
+      'iso-sw': 'Use a southwest isometric view that reveals building height while keeping plan logic readable',
     };
     parts.push(`${viewDescriptions[workflow.mpViewAngle] || workflow.mpViewAngle}.`);
   }
@@ -3266,6 +4085,9 @@ function generateMasterplanPrompt(state: AppState): string {
   }
   if (buildings.facadeVariation) {
     parts.push('Add subtle facade variations to differentiate individual buildings.');
+  }
+  if (buildings.showFloorLabels) {
+    parts.push('Show floor labels only where legible and useful; keep them exact and minimal.');
   }
 
   // Landscape
@@ -3309,7 +4131,7 @@ function generateMasterplanPrompt(state: AppState): string {
   if (annotations.contourLabels) annotationElements.push('topographic contour labels');
 
   if (annotationElements.length > 0) {
-    parts.push(`Add ${annotationElements.join(', ')} using ${annotations.labelStyle} typography that is legible and professional.`);
+    parts.push(`Add ${annotationElements.join(', ')} using ${annotations.labelStyle} typography with clean alignment, ${annotations.labelSize} size, ${annotations.labelColor} label color${annotations.labelHalo ? ', and subtle halos for contrast' : ''}.`);
   }
 
   // Legend
@@ -3331,9 +4153,11 @@ function generateMasterplanPrompt(state: AppState): string {
   if (workflow.mpContext?.location) {
     parts.push(`This development is located in ${workflow.mpContext.location}.`);
   }
+  const exportSettings = workflow.mpExport;
+  parts.push(`Export intent: ${exportSettings.resolution} ${exportSettings.format.toUpperCase()}${exportSettings.exportLayers ? ', layer-friendly output' : ''}${exportSettings.cadCompatible ? ', CAD-compatible graphic hierarchy' : ''}${exportSettings.includeSketch ? ', include sketch traces where useful' : ''}.`);
 
   // Quality closing
-  parts.push('The final visualization should be presentation-ready, communicating the design intent clearly while being visually compelling.');
+  parts.push('The final visualization should clearly communicate the design intent and plan hierarchy.');
 
   return parts.filter(Boolean).join(' ');
 }
@@ -3342,24 +4166,24 @@ function generateExplodedPrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
 
-  // Evocative opening
+  // Opening
   if (state.prompt?.trim()) {
     parts.push(`Create the exploded architectural view from this user brief: "${state.prompt.trim()}".`);
   } else {
-    parts.push('Create a compelling exploded axonometric view that reveals the building\'s construction logic, showing how individual components and systems come together to form the whole.');
+    parts.push('Create an exploded architectural view that explains the building assembly.');
   }
 
   // Fidelity constraints
   parts.push('Treat the input model as the definitive source for all geometry. Each component must maintain its exact shape, scale, and internal alignment. Separate the parts only along the specified explosion axis without introducing any rotation, distortion, or scaling changes. Do not add or remove any components. Keep the camera framing consistent with the source view.');
   parts.push('Source preservation: the exploded result must still read as the same project, with the same proportions, facade rhythm, openings, roof shape, structural grid, material identity, and existing signage or annotation blocks. Only the disassembly spacing, diagram hierarchy, and requested labels may change.');
   parts.push('Text discipline: render new component labels, leader notes, dimensions, and assembly numbers only when requested, with crisp readable typography. Preserve any existing source text as source-faithful marks unless a new diagram label intentionally replaces it.');
+  parts.push(`Component detection mode: ${workflow.explodedDetection}. Source type: ${workflow.explodedSource.type}${workflow.explodedSource.fileName ? ` (${workflow.explodedSource.fileName})` : ''}.`);
 
   // Explosion direction
   const directionDesc: Record<string, string> = {
     'vertical': 'Separate the building layers vertically, lifting floor plates, roof, and systems upward to reveal the stacking logic',
-    'horizontal': 'Pull components apart horizontally to show how the building assembles from side to side',
     'radial': 'Explode components outward from the center, revealing the core and peripheral relationships',
-    'custom': 'Separate components along the specified custom axis',
+    'custom': `Separate components along the custom axis x=${workflow.explodedAxis.x}, y=${workflow.explodedAxis.y}, z=${workflow.explodedAxis.z}`,
   };
   parts.push(`${directionDesc[workflow.explodedDirection] || `Explode ${workflow.explodedDirection}`}.`);
 
@@ -3373,10 +4197,10 @@ function generateExplodedPrompt(state: AppState): string {
   const view = workflow.explodedView;
   if (view.type === 'axon') {
     const angleDesc: Record<string, string> = {
-      'isometric': 'true isometric projection with equal foreshortening on all axes',
-      '30-60': 'a 30-60 axonometric that emphasizes one facade',
-      '45-45': 'a balanced 45-45 axonometric showing two facades equally',
-      'military': 'military projection preserving true plan dimensions',
+      'iso-ne': 'northeast isometric projection with clear front and side faces',
+      'iso-nw': 'northwest isometric projection with clear front and side faces',
+      'iso-se': 'southeast isometric projection with clear front and side faces',
+      'iso-sw': 'southwest isometric projection with clear front and side faces',
     };
     parts.push(`Present the exploded view in ${angleDesc[view.angle] || `${view.angle} axonometric projection`}.`);
   } else {
@@ -3432,8 +4256,7 @@ function generateExplodedPrompt(state: AppState): string {
   const colorDesc: Record<string, string> = {
     'material': 'Color each component according to its actual material appearance',
     'system': 'Use a color-coding scheme to differentiate building systems',
-    'monochrome': 'Keep the palette monochromatic to emphasize form over material',
-    'white': 'Render all components in clean white to create a pure massing study',
+    'mono': 'Keep the palette monochromatic to emphasize form over material',
   };
   parts.push(`${colorDesc[style.colorMode] || `Use ${style.colorMode} coloring`}.`);
 
@@ -3454,6 +4277,13 @@ function generateExplodedPrompt(state: AppState): string {
   if (activeComponents.length > 0) {
     const names = activeComponents.slice(0, 6).map((comp) => comp.title || comp.name);
     parts.push(`Feature these key components in the explosion: ${names.join(', ')}${activeComponents.length > 6 ? ' and others' : ''}.`);
+    const componentNotes = activeComponents
+      .slice(0, 4)
+      .map((comp) => compactItems([comp.description, comp.attributes?.length ? `attributes ${comp.attributes.join(', ')}` : null]).join(', '))
+      .filter(Boolean);
+    if (componentNotes.length > 0) {
+      parts.push(`Component notes: ${componentNotes.join('; ')}.`);
+    }
   }
 
   // Annotations
@@ -3466,7 +4296,7 @@ function generateExplodedPrompt(state: AppState): string {
   if (annotations.materialCallouts) annotationElements.push('material callouts');
 
   if (annotationElements.length > 0) {
-    parts.push(`Add ${annotationElements.join(', ')} using ${annotations.labelStyle} typography.`);
+    parts.push(`Add ${annotationElements.join(', ')} using ${annotations.labelStyle} typography, ${annotations.fontSize} size, and ${annotations.leaderStyle} leader logic where leaders are enabled.`);
   }
 
   // Animation
@@ -3485,11 +4315,12 @@ function generateExplodedPrompt(state: AppState): string {
   const output = workflow.explodedOutput;
   const bgDesc: Record<string, string> = {
     'white': 'a clean white background',
-    'transparent': 'a transparent background for compositing',
-    'gradient': 'a subtle gradient backdrop',
-    'studio': 'a professional studio environment',
+    'gray': 'a neutral gray background',
+    'black': 'a clean black background with readable contrast',
+    'transparent': 'a clean pure white background for compositing',
   };
   parts.push(`Render against ${bgDesc[output.background] || output.background}.`);
+  parts.push(`Output target: ${output.resolution}${output.exportLayers ? ', layer-friendly diagram organization' : ''}.`);
 
   if (output.groundPlane) {
     parts.push('Include a ground plane to anchor the assembly.');
@@ -3501,7 +4332,7 @@ function generateExplodedPrompt(state: AppState): string {
     parts.push('Show a reference grid for scale.');
   }
 
-  parts.push('The final image should clearly communicate the building\'s assembly logic while being visually striking enough for presentation.');
+  parts.push('The final image should clearly communicate the building assembly logic.');
 
   return parts.filter(Boolean).join(' ');
 }
@@ -3510,26 +4341,24 @@ function generateSectionPrompt(state: AppState): string {
   const { workflow } = state;
   const parts: string[] = [];
 
-  // Evocative opening
+  // Opening
   if (state.prompt?.trim()) {
     parts.push(`Create the architectural section from this user brief: "${state.prompt.trim()}".`);
   } else {
-    parts.push('Create a revealing section cutaway that slices through the building to expose its inner spatial qualities, construction logic, and the relationships between interior and exterior.');
+    parts.push('Create an architectural section/cutaway that explains interior space, construction logic, and inside-outside relationships.');
   }
 
   // Fidelity constraints
-  parts.push('Treat the input model or drawing as the authoritative source for all geometry. The cut plane must be positioned exactly as specified - no shifting of the section location, depth, or cutting direction. Preserve the exact scale, orientation, and alignment of all elements. Do not relocate any architectural components or alter proportions. Only reveal what the cut and visibility settings allow.');
-  parts.push('POV and text preservation: keep the requested sectional viewpoint, horizon or projection logic, scale relationships, floor datum alignment, structural grid, and source label positions consistent. Preserve readable source text where it remains visible; render new labels only when requested and keep them exact, sharp, and unobtrusive.');
+  parts.push('Treat the input model or drawing as the authoritative source. Keep the cut plane, scale, orientation, alignment, proportions, and section depth as specified. Do not relocate components or reveal content outside the cut and visibility settings.');
+  parts.push('POV and text preservation: keep the sectional viewpoint, projection logic, floor datums, structural grid, and source label positions consistent. Preserve readable source text; render new labels only when requested, exact, sharp, and unobtrusive.');
+  parts.push(`Section setup: ${workflow.sectionAreaDetection} area detection, cut plane ${workflow.sectionCut.plane}, direction ${workflow.sectionCut.direction}.`);
 
   // Cut description
   const cut = workflow.sectionCut;
   const cutTypeDesc: Record<string, string> = {
     'vertical': 'Cut vertically through the building, revealing the stacked spatial sequence from foundation to roof',
     'horizontal': 'Cut horizontally at the specified height to expose the plan-level organization',
-    'longitudinal': 'Cut longitudinally through the building, revealing the sequence of spaces from front to back',
-    'transverse': 'Cut transversely across the building, showing the cross-sectional organization',
     'diagonal': 'Cut diagonally to reveal unique spatial relationships',
-    'stepped': 'Use a stepped section that shifts to reveal multiple conditions',
   };
   parts.push(`${cutTypeDesc[cut.type] || `Make a ${cut.type} cut`}.`);
 
@@ -3642,10 +4471,17 @@ function generateSectionPrompt(state: AppState): string {
   parts.push(...revealStyleLines);
 
   const focusDesc: Record<string, string> = {
-    'interior': 'Focus attention on the interior spaces and their qualities',
-    'structure': 'Emphasize the structural system and load paths',
+    'residential': 'Focus attention on residential spaces and domestic organization',
+    'parking': 'Emphasize parking, ramps, access, and vehicle circulation',
     'circulation': 'Highlight circulation routes and vertical connections',
-    'envelope': 'Focus on the building envelope and its layers',
+    'services': 'Emphasize service routes, shafts, and mechanical organization',
+    'mixed': 'Balance multiple program types with clear hierarchy',
+    'amenities': 'Highlight amenity spaces and shared program',
+    'lobby': 'Emphasize lobby sequence, entry, and public threshold',
+    'retail': 'Highlight retail frontage, depth, and public access',
+    'office': 'Show office floor organization, cores, and work areas',
+    'mechanical': 'Emphasize mechanical zones and service clearances',
+    'storage': 'Highlight storage areas and back-of-house relationships',
   };
   if (reveal.focus) {
     parts.push(`${focusDesc[reveal.focus] || `Focus on ${reveal.focus}`}.`);
@@ -3677,10 +4513,9 @@ function generateSectionPrompt(state: AppState): string {
   // Program visualization
   const program = workflow.sectionProgram;
   const colorModeDesc: Record<string, string> = {
-    'by-program': 'Color-code spaces by their programmatic use',
-    'by-floor': 'Differentiate floor levels with distinct colors',
-    'monochrome': 'Keep the section monochromatic for a clean, technical look',
+    'program': 'Color-code spaces by their programmatic use',
     'material': 'Show actual material colors in the section',
+    'mono': 'Keep the section monochromatic for a clean, technical look',
   };
   parts.push(`${colorModeDesc[program.colorMode] || `Use ${program.colorMode} coloring`}.`);
 
@@ -3690,7 +4525,7 @@ function generateSectionPrompt(state: AppState): string {
   if (program.areaTags) programAnnotations.push('area measurements');
 
   if (programAnnotations.length > 0) {
-    parts.push(`Add ${programAnnotations.join(', ')} using ${program.labelStyle} typography.`);
+    parts.push(`Add ${programAnnotations.join(', ')} using ${program.labelStyle} typography at ${program.fontSize} size.`);
   }
 
   // Section style
@@ -3726,7 +4561,7 @@ function generateSectionPrompt(state: AppState): string {
     parts.push('Lightly indicate elements beyond the cut plane.');
   }
 
-  parts.push('The final section should be both technically informative and visually compelling, clearly communicating the building\'s spatial organization and construction.');
+  parts.push('The final section should clearly communicate spatial organization and construction.');
 
   return parts.filter(Boolean).join(' ');
 }
@@ -3856,13 +4691,13 @@ export function generatePrompt(state: AppState): string {
 
   let promptParts: string[] = [];
 
-  // 1. Base Prompt / Subject - More evocative opening
+  // 1. Base Prompt / Subject
   if (state.prompt) {
     promptParts.push(`Create an architectural visualization from this user brief: ${state.prompt}.`);
   } else if (style && !isNoStyle) {
-    promptParts.push(`Create a stunning ${style.name.toLowerCase()} architectural visualization that captures the essence of this design`);
+    promptParts.push(`Create a ${style.name.toLowerCase()} architectural visualization of this design`);
   } else {
-    promptParts.push('Create a compelling architectural visualization that brings this design to life');
+    promptParts.push('Create an architectural visualization of this design');
   }
   promptParts.push(TEXT_TO_IMAGE_FRAMEWORK);
 

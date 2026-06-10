@@ -53,10 +53,10 @@
     "modelSelector": {
       "title": "Modèle d'Image",
       "nano": {
-        "label": "Nanobanana",
-        "shortLabel": "Nanobanana",
-        "description": "Idéal pour des visuels plus forts, des compositions dynamiques et des couleurs immersives.",
-        "bestFor": "Pour l'impact visuel"
+        "label": "Nano Banana standard",
+        "shortLabel": "Nano Banana",
+        "description": "Idéal pour suivre des prompts naturels, explorer vite des visuels et éditer avec une source de référence.",
+        "bestFor": "Pour un travail visuel flexible"
       },
       "chatgpt": {
         "label": "ChatGPT Image Generation 2",
@@ -328,6 +328,14 @@
       "es": "Espagnol",
       "fr": "Français",
       "de": "Allemand",
+      "hu": "Hongrois",
+      "hr": "Croate",
+      "bs": "Bosniaque",
+      "sl": "Slovène",
+      "mk": "Macédonien",
+      "bg": "Bulgare",
+      "ro": "Roumain",
+      "sq": "Albanais",
       "it": "Italien",
       "pt": "Portugais",
       "zh": "Chinois",
@@ -1040,7 +1048,6 @@
       "history": "Historique",
       "timeline": "Timeline",
       "legend": "Legende",
-      "edit-stack": "Pile d'edition",
       "cleanup": "Nettoyage"
     },
     "history": {

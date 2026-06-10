@@ -152,6 +152,14 @@ export const LeftExplodedPanel = () => {
     }
   };
 
+  useEffect(() => {
+    const handleAssistantDetection = () => {
+      void handleAutoDetectComponents();
+    };
+    window.addEventListener('archviz:assistant-run-exploded-component-detection', handleAssistantDetection);
+    return () => window.removeEventListener('archviz:assistant-run-exploded-component-detection', handleAssistantDetection);
+  });
+
   const toggleComponent = (id: string, active: boolean) => {
     const next = wf.explodedComponents.map((comp) =>
       comp.id === id ? { ...comp, active } : comp

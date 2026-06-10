@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
-import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, List, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
+import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
 import { Slider } from '../../ui/Slider';
@@ -22,14 +22,20 @@ export const BottomPanel: React.FC = () => {
 
   const showTimeline = state.mode === 'video' || state.mode === 'exploded';
   const showLegend = state.mode === 'masterplan';
-  const showEditStack = state.mode === 'visual-edit';
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
   const isMultiAngleMode = state.mode === 'multi-angle';
   const isVideoLocked = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
+  const bottomTabs = useMemo(() => [
+    ...(isGenerateTextMode ? [] : ['prompt']),
+    'history',
+    ...(showTimeline ? ['timeline'] : []),
+    ...(showLegend ? ['legend'] : []),
+    ...(showCleanup ? ['cleanup'] : [])
+  ], [isGenerateTextMode, showTimeline, showLegend, showCleanup]);
   const resolvedBottomTab = isGenerateTextMode
     ? 'history'
-    : (!showCleanup && state.activeBottomTab === 'cleanup' ? 'prompt' : state.activeBottomTab);
+    : (bottomTabs.includes(state.activeBottomTab) ? state.activeBottomTab : 'prompt');
 
   useEffect(() => {
     if (resolvedBottomTab !== 'history') {
@@ -227,7 +233,7 @@ export const BottomPanel: React.FC = () => {
       );
     }
     
-    // ... (Keep existing handlers for legend, edit-stack, cleanup, history)
+    // ... (Keep existing handlers for legend, cleanup, history)
     if (resolvedBottomTab === 'history') {
         return (
           <div className="absolute inset-0 p-4 flex flex-col gap-3">
@@ -352,14 +358,7 @@ export const BottomPanel: React.FC = () => {
     >
       <div className="h-10 sm:h-9 flex items-center justify-between px-2 sm:px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
         <div className="flex h-full overflow-x-auto no-scrollbar">
-           {[
-             ...(isGenerateTextMode ? [] : ['prompt']),
-             'history',
-             ...(showTimeline ? ['timeline'] : []),
-             ...(showLegend ? ['legend'] : []),
-             ...(showEditStack ? ['edit-stack'] : []),
-             ...(showCleanup ? ['cleanup'] : [])
-           ].map(tab => (
+           {bottomTabs.map(tab => (
              <button 
                key={tab}
                onClick={() => handleBottomTabClick(tab)}
@@ -372,7 +371,6 @@ export const BottomPanel: React.FC = () => {
                {tab === 'history' && <History size={14} />}
                {tab === 'timeline' && <Clock size={14} />}
                {tab === 'legend' && <Layers size={14} />}
-               {tab === 'edit-stack' && <List size={14} />}
                {tab === 'cleanup' && <Wand2 size={14} />}
                {t(`bottomPanel.tabs.${tab}`)}
              </button>

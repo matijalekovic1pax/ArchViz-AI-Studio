@@ -31,9 +31,34 @@ const AVAS_ASSISTANT_GUIDE = [
     title: "Feature availability and removed workflows",
     anchor: "overview",
     guide: [
-      "The current app exposes 17 active features. Do not say that Image-to-3D, mesh reconstruction, or 3D model export is available.",
+      "The current app exposes 18 active features. Do not say that Image-to-3D, mesh reconstruction, or 3D model export is available.",
       "If a user asks for Image-to-3D, redirect them to Image to CAD for linework extraction, 3D Rendering for model screenshots, or Scene Compose for adding referenced objects into a render.",
       "When a user is unsure which mode to use, first identify the source type: prompt, 3D screenshot, CAD export, sketch, render/photo, site map, portrait, document, PDF, or still image for video.",
+    ],
+  },
+  {
+    title: "Image model selector",
+    anchor: "overview",
+    guide: [
+      "The top bar includes an Image Model selector with Regular Nano Banana and ChatGPT Image Generation 2.",
+      "Regular Nano Banana is the default model for flexible image work, natural prompt following, fast exploration, and source-aware edits.",
+      "ChatGPT Image Generation 2 is routed through the gateway to OpenAI gpt-image-2 and is best for precision, preservation, controlled edits, and text-heavy images.",
+      "ChatGPT Image Generation 2 may require trial access from the top-bar selector before generation succeeds.",
+      "For transparent-background, alpha, or no-background requests, explain that the current image models do not guarantee true alpha output; the app steers those requests toward a clean pure white or opaque PNG-style background.",
+    ],
+  },
+  {
+    title: "In-app assistant control",
+    anchor: "overview",
+    guide: [
+      "The embedded App Assistant is connected to the live workspace, not just static documentation.",
+      "It can inspect the active mode, current settings, uploaded images, selections, history, attached chat images, and attached workflow files.",
+      "It can request validated actions to switch modes, change the app language, change the Image Model, open panels and tabs, open feedback/admin/documentation surfaces, set current feature controls, create and select custom style presets, replace structured feature lists such as Masterplan zones, Exploded View components, Section areas, and manual Multi-Angle points, use attached chat images as source/style/background/material/scene/masterplan/upscale/video/headshot references, route attached documents into translation or material validation, route attached PDFs into compression, clear or remove uploaded references, workflow documents, and queue items, import attached project JSON when explicitly requested, reset or clear canvas state, trigger Visual Edit AI auto-selection, trigger AI helpers for 3D analysis, Image to CAD guidance, Masterplan zone detection, Exploded View component detection, and Section area detection, undo/redo selection and custom boundary changes, cancel active generation, reset the whole project when explicitly requested, sign out when explicitly requested, and trigger preprocessing or generation when inputs are ready.",
+      "It can export the current project JSON, export Material Validation reports, download the current image as PNG or JPG at full or medium resolution, and start downloads for outputs that already exist, including history images, generated video, translated documents, compressed PDFs, Multi-Angle outputs, Angle Change outputs, and generated headshots.",
+      "Assistant action batches support up to 16 validated changes at once, including several images, documents, PDF queue items, settings, trigger actions, and cleanup actions in the same response.",
+      "Live assistant model calls require the configured API gateway and a signed-in gateway session. If the session is missing or expired, sign in again before retrying the assistant message.",
+      "In gated test mode, the assistant exposes sanitized live-readiness diagnostics for the gateway URL, session presence, and expiry timing without exposing the app JWT.",
+      "It cannot invent missing files, bypass locked model access, or download an output that has not been generated yet.",
     ],
   },
   {
@@ -86,6 +111,7 @@ const AVAS_ASSISTANT_GUIDE = [
     guide: [
       "Use when there is no source image and the user wants an early architectural concept from a written brief.",
       "Coach the prompt in this order: building type, location/context, style, materials, camera, lighting, season/weather, mood, and any must-have constraints.",
+      "Use Regular Nano Banana for quick flexible concept work. Use ChatGPT Image Generation 2 when precision, preservation, or clean visible text matters.",
       "After generation, suggest Visual Edit for targeted fixes, Scene Compose for referenced additions, Upscale for delivery quality, or Video Studio for motion.",
       "Specific photographic direction beats vague adjectives. Ask for the one missing constraint only when it blocks a useful answer.",
     ],
@@ -106,8 +132,9 @@ const AVAS_ASSISTANT_GUIDE = [
     guide: [
       "Use when the user has an existing image and wants only a selected area changed.",
       "Tell them to select with rectangle, brush, lasso, AI selection, erase, or adjust modes, then choose the tool: material, lighting, object, sky, remove, replace, adjust, extend, background, or people.",
+      "AI selection can target building, facade, windows, doors, roof, walls, floors, ceilings, columns, structure, glass, signage, lighting, seating, furniture, counters, people, vehicles, aircraft, trains, buses, jet bridges, luggage carts, platforms, roads, parking, ground, water, vegetation, sky, and background.",
       "For material changes, mention that they can upload a material reference image and tune category, scale, rotation, roughness, tint, lighting match, and reflections.",
-      "For people edits, guide them to control density, placement area, region mix, staff/visitor roles, and whether the output should feel airport, public, commercial, or project-specific.",
+      "For people edits, guide them to control enhance/repopulate/cleanup mode, airport zone, density, grouping, movement flow, region mix, age balance, children, wardrobe, luggage, airport staff roles, realism, scale accuracy, ground contact, and artifact cleanup.",
       "Keep masks tight for precise edits. Use Scene Compose for many reference insertions and Upscale after major edits are complete.",
     ],
   },
@@ -196,7 +223,7 @@ const AVAS_ASSISTANT_GUIDE = [
     anchor: "mode-translate",
     guide: [
       "Use for DOCX, XLSX, PPTX, and PDF translation.",
-      "Guide users to upload the file, select source language or Auto, and choose a target language. Formatting preservation is always enabled. Supported targets include English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Russian, and Serbian.",
+      "Guide users to upload the file, select source language or Auto, and choose a target language. Formatting preservation is always enabled. Supported targets include English, Spanish, French, German, Hungarian, Croatian, Bosnian, Slovenian, Macedonian, Bulgarian, Romanian, Albanian, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Russian, and Serbian.",
       "DOCX can preserve styles, tables, headers, footers, and footnotes. XLSX translates text cells while preserving numbers, dates, formulas, workbook structure, and formatting. PPTX translates slide, layout, master, speaker-note, chart, and diagram text while preserving media, animations, and slide order.",
       "PDF translation uses ConvertAPI to convert the PDF to Word first and outputs a translated DOCX. Complex PDFs may need layout cleanup after conversion.",
     ],
@@ -260,9 +287,9 @@ const EN_MODES = withModeSpecs([
     detail: "Generate from Text is the fastest way to explore an idea before producing drawings or models. Describe program, location, style, material palette, camera, lighting, season, and mood to steer the result.",
     input: "A text prompt; no image is required.",
     output: "A generated architectural image matching the written brief.",
-    offers: ["Prompt-only image generation for early concepts.", "Support for architectural style, atmosphere, camera, landscape, weather, and detail language.", "Useful first step before moving into Visual Edit, Upscale, or Video Studio."],
+    offers: ["Prompt-only image generation for early concepts.", "Top-bar image model selection between Regular Nano Banana and ChatGPT Image Generation 2.", "Support for architectural style, atmosphere, camera, landscape, weather, and detail language.", "Useful first step before moving into Visual Edit, Upscale, or Video Studio."],
     workflow: ["Write the building type and setting first.", "Add materials, lighting, camera angle, and mood.", "Generate variations, then refine the strongest option with Visual Edit."],
-    tips: ["Specific prompts beat long vague prompts.", "Describe the photograph, not only the building: lens, light, weather, and environment matter."],
+    tips: ["Specific prompts beat long vague prompts.", "Use ChatGPT Image Generation 2 when visible text or strict preservation matters.", "Transparent-background requests are steered to a clean pure white or opaque PNG-style background rather than true alpha.", "Describe the photograph, not only the building: lens, light, weather, and environment matter."],
   },
   {
     title: "Masterplan",
@@ -277,12 +304,12 @@ const EN_MODES = withModeSpecs([
   {
     title: "Visual Edit",
     summary: "Mask part of an image and describe the precise change.",
-    detail: "Visual Edit is the targeted editing workspace. Paint or draw a selection, choose an edit tool, then change only the selected region while preserving the rest of the image.",
+    detail: "Visual Edit is the targeted editing workspace. Paint, draw, or auto-detect a selection, choose an edit tool, then change only the selected region while preserving the rest of the image.",
     input: "An existing render or photo plus a selection mask and edit instruction.",
     output: "A revised image with the selected region changed or enhanced.",
-    offers: ["Rectangle, brush, lasso, AI selection, erase, and adjustment selection tools.", "Material swap with reference images, object add/replace/remove, lighting, sky, people, background, adjustment, and outpaint tools.", "Mask-aware prompts that lock unselected pixels and keep edits spatially coherent."],
+    offers: ["Rectangle, brush with live preview, lasso, AI selection, erase, and adjustment selection tools.", "AI target categories for architecture, transport, people, vegetation, sky, ground, water, and background regions.", "Material swap with reference images, object add/replace/remove, lighting, sky, people, background, adjustment, and outpaint tools.", "Detailed people-edit controls for airport/public scenes, including demographics, flow, wardrobe, luggage, staff, realism, scale, and artifact cleanup.", "Mask-aware prompts that lock unselected pixels and keep edits spatially coherent."],
     workflow: ["Upload or generate an image and select the area to change.", "Pick the relevant edit tool, add a direct instruction, and upload a material or object reference when needed.", "Keep masks tight, generate, then iterate only on the changed region."],
-    tips: ["Small, accurate masks produce cleaner edits.", "Use material references when matching a real finish matters.", "Use Scene Compose for adding many reference objects; use Visual Edit for changing existing pixels."],
+    tips: ["Small, accurate masks produce cleaner edits.", "Use AI selection when the target category is clear; use lasso or brush when the exact edge matters.", "Use material references when matching a real finish matters.", "Use Scene Compose for adding many reference objects; use Visual Edit for changing existing pixels."],
   },
   {
     title: "Exploded View",
@@ -933,7 +960,7 @@ window.AVAS_DOCS = {
       title: "ArchViz AI Studio Documentation",
       lead: "A complete operating manual for image generation, visual editing, scene composition, CAD workflows, video, documents, validation, and export.",
       note: "Use the sidebar for direct navigation or ask the documentation assistant for workflow guidance.",
-      stats: [{ value: "17", label: "features" }, { value: "4", label: "languages" }, { value: "4K", label: "max image output" }, { value: "20", label: "scene references" }],
+      stats: [{ value: "18", label: "features" }, { value: "4", label: "languages" }, { value: "4K", label: "max image output" }, { value: "20", label: "scene references" }],
     },
     platform: {
       eyebrow: "What it covers",
@@ -964,7 +991,7 @@ window.AVAS_DOCS = {
       title: "How the app is organized",
       lead: "The same workspace logic is used across most modes so you can move between workflows without relearning the interface.",
       zones: [
-        { title: "Top bar", text: "Switch modes, generate, cancel, download, access settings, language, user controls, and documentation." },
+        { title: "Top bar", text: "Switch modes, choose the image model, generate, cancel, download, access settings, language, user controls, and documentation." },
         { title: "Left panel", text: "Mode-specific input and interpretation controls, such as source type, view type, style, prompt, and analysis tools." },
         { title: "Canvas", text: "Primary visual workspace for uploads, generated images, masks, placement pins, polygon boundaries, pan, and zoom." },
         { title: "Right panel", text: "Output and refinement controls, such as references, aspect ratio, resolution, edit tools, and advanced mode settings." },
@@ -1042,7 +1069,7 @@ window.AVAS_DOCS = {
       title: "Documentación de ArchViz AI Studio",
       lead: "Manual operativo completo para generación de imágenes, edición visual, composición de escenas, CAD, vídeo, documentos, validación y exportación.",
       note: "Usa la barra lateral para navegar o pregunta al asistente de documentación.",
-      stats: [{ value: "17", label: "funciones" }, { value: "4", label: "idiomas" }, { value: "4K", label: "salida máxima" }, { value: "20", label: "referencias de escena" }],
+      stats: [{ value: "18", label: "funciones" }, { value: "4", label: "idiomas" }, { value: "4K", label: "salida máxima" }, { value: "20", label: "referencias de escena" }],
     },
     platform: {
       eyebrow: "Qué cubre",
@@ -1151,7 +1178,7 @@ window.AVAS_DOCS = {
       title: "Documentation ArchViz AI Studio",
       lead: "Manuel complet pour génération d'images, édition visuelle, composition de scène, CAD, vidéo, documents, validation et export.",
       note: "Utilisez la barre latérale ou demandez conseil à l'assistant de documentation.",
-      stats: [{ value: "17", label: "fonctions" }, { value: "4", label: "langues" }, { value: "4K", label: "sortie max" }, { value: "20", label: "références scène" }],
+      stats: [{ value: "18", label: "fonctions" }, { value: "4", label: "langues" }, { value: "4K", label: "sortie max" }, { value: "20", label: "références scène" }],
     },
     platform: {
       eyebrow: "Contenu",
@@ -1260,7 +1287,7 @@ window.AVAS_DOCS = {
       title: "ArchViz AI Studio 文档",
       lead: "用于图像生成、视觉编辑、场景合成、CAD 工作流、视频、文档、验证和导出的完整操作手册。",
       note: "使用侧边栏直接导航，或向文档助手询问工作流建议。",
-      stats: [{ value: "17", label: "功能" }, { value: "4", label: "语言" }, { value: "4K", label: "最高图像输出" }, { value: "20", label: "场景参考" }],
+      stats: [{ value: "18", label: "功能" }, { value: "4", label: "语言" }, { value: "4K", label: "最高图像输出" }, { value: "20", label: "场景参考" }],
     },
     platform: {
       eyebrow: "覆盖内容",

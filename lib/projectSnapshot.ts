@@ -1,5 +1,5 @@
 import type { AppState, FeedbackProjectSnapshot } from '../types';
-import { createFeedbackJpegCompressor } from './feedbackImageCompression';
+import { createFeedbackFullResolutionJpegExporter } from './feedbackImageJpeg';
 
 export const FEEDBACK_SNAPSHOT_VERSION = 1;
 
@@ -19,33 +19,29 @@ export interface PreparedFeedbackSnapshot {
   snapshotVersion: number;
 }
 
-const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppState> => {
-  const compressToMediumJpeg = createFeedbackJpegCompressor({
-    quality: 0.68,
-    scale: 1,
-    maxDimension: 1280,
+const prepareStateImagesForFeedbackSnapshot = async (state: AppState): Promise<AppState> => {
+  const exportFullResolutionJpeg = createFeedbackFullResolutionJpegExporter({
     convertRemoteToDataUrl: false,
     timeoutMs: 8000,
   });
 
-  const compressDataImage = async (value: string | null): Promise<string | null> => {
+  const exportDataImage = async (value: string | null): Promise<string | null> => {
     if (!value || !value.startsWith('data:image/')) return value;
-    const compressed = await compressToMediumJpeg(value);
-    if (!compressed) return value;
-    return compressed.length < value.length ? compressed : value;
+    const jpeg = await exportFullResolutionJpeg(value);
+    return jpeg || value;
   };
 
   const [uploadedImage, sourceImage] = await Promise.all([
-    compressDataImage(state.uploadedImage),
-    compressDataImage(state.sourceImage),
+    exportDataImage(state.uploadedImage),
+    exportDataImage(state.sourceImage),
   ]);
 
   const history = await Promise.all(
     state.history.map(async (item) => {
       const [thumbnail, attachments] = await Promise.all([
-        compressDataImage(item.thumbnail),
+        exportDataImage(item.thumbnail),
         item.attachments
-          ? Promise.all(item.attachments.map((attachment) => compressDataImage(attachment)))
+          ? Promise.all(item.attachments.map((attachment) => exportDataImage(attachment)))
           : Promise.resolve(undefined),
       ]);
       return {
@@ -58,12 +54,12 @@ const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppSta
 
   const videoState = state.workflow.videoState;
   const [videoInputImage, startFrame, endFrame, generationHistory] = await Promise.all([
-    compressDataImage(videoState.videoInputImage),
-    compressDataImage(videoState.startFrame),
-    compressDataImage(videoState.endFrame),
+    exportDataImage(videoState.videoInputImage),
+    exportDataImage(videoState.startFrame),
+    exportDataImage(videoState.endFrame),
     Promise.all(
       videoState.generationHistory.map(async (item) => {
-        const thumbnail = await compressDataImage(item.thumbnail);
+        const thumbnail = await exportDataImage(item.thumbnail);
         return { ...item, thumbnail: thumbnail || item.thumbnail };
       })
     ),
@@ -71,12 +67,12 @@ const compressStateForFeedbackSnapshot = async (state: AppState): Promise<AppSta
 
   const headshot = state.workflow.headshot;
   const [leftImage, frontImage, rightImage, generatedItems] = await Promise.all([
-    compressDataImage(headshot.leftImage),
-    compressDataImage(headshot.frontImage),
-    compressDataImage(headshot.rightImage),
+    exportDataImage(headshot.leftImage),
+    exportDataImage(headshot.frontImage),
+    exportDataImage(headshot.rightImage),
     Promise.all(
       headshot.generatedItems.map(async (item) => {
-        const url = await compressDataImage(item.url);
+        const url = await exportDataImage(item.url);
         return { ...item, url: url || item.url };
       })
     ),
@@ -151,8 +147,8 @@ export const prepareFeedbackSnapshot = async (
   reporterEmail: string,
   projectName?: string | null
 ): Promise<PreparedFeedbackSnapshot> => {
-  const compactState = await compressStateForFeedbackSnapshot(state);
-  const snapshot = createFeedbackProjectSnapshot(compactState, reporterEmail, projectName);
+  const feedbackState = await prepareStateImagesForFeedbackSnapshot(state);
+  const snapshot = createFeedbackProjectSnapshot(feedbackState, reporterEmail, projectName);
   const snapshotJson = JSON.stringify(snapshot);
   const snapshotHash = await sha256Hex(snapshotJson);
   const snapshotSizeBytes = new TextEncoder().encode(snapshotJson).length;

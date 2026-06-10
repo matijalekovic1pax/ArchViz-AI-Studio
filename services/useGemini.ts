@@ -17,9 +17,11 @@ import {
   GenerationConfig,
   ImageUtils
 } from './geminiService';
+import { type ImageGenerationModel } from '../types';
 
 export interface UseGeminiOptions {
   model?: string;  // Any valid Gemini/Imagen model ID
+  imageGenerationModel?: ImageGenerationModel;
   onError?: (error: GeminiError) => void;
 }
 
@@ -87,7 +89,10 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
     setError(null);
 
     try {
-      const result = await service.generate(request);
+      const result = await service.generate({
+        ...request,
+        imageGenerationModel: request.imageGenerationModel || options.imageGenerationModel
+      });
       setResponse(result);
       return result;
     } catch (err) {
@@ -129,6 +134,7 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
       const result = await service.generateImages({
         prompt,
         images,
+        imageGenerationModel: options.imageGenerationModel,
         generationConfig: config
       });
       setResponse(result);
@@ -148,7 +154,10 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
     setError(null);
 
     try {
-      const result = await service.generateBatchImages(request);
+      const result = await service.generateBatchImages({
+        ...request,
+        imageGenerationModel: request.imageGenerationModel || options.imageGenerationModel
+      });
       setResponse({ text: result.text, images: result.images });
       return result;
     } catch (err) {
@@ -166,7 +175,10 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
     setError(null);
 
     try {
-      const result = await service.generateBatchImagesParallel(request);
+      const result = await service.generateBatchImagesParallel({
+        ...request,
+        imageGenerationModel: request.imageGenerationModel || options.imageGenerationModel
+      });
       setResponse({ text: result.text, images: result.images });
       return result;
     } catch (err) {
@@ -184,7 +196,10 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
     setError(null);
 
     try {
-      const result = await service.editImage(request);
+      const result = await service.editImage({
+        ...request,
+        imageGenerationModel: request.imageGenerationModel || options.imageGenerationModel
+      });
       setResponse(result);
       return result;
     } catch (err) {
@@ -205,7 +220,10 @@ export function useGemini(options: UseGeminiOptions): UseGeminiReturn {
     try {
       let finalResponse: GeminiResponse = { text: null, images: [] };
 
-      for await (const chunk of service.generateStream(request)) {
+      for await (const chunk of service.generateStream({
+        ...request,
+        imageGenerationModel: request.imageGenerationModel || options.imageGenerationModel
+      })) {
         onChunk(chunk);
         if (chunk.text) finalResponse.text = chunk.text;
         if (chunk.images) finalResponse.images = chunk.images;

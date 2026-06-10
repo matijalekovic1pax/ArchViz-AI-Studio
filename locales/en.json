@@ -53,10 +53,10 @@
     "modelSelector": {
       "title": "Image Model",
       "nano": {
-        "label": "Nanobanana",
-        "shortLabel": "Nanobanana",
-        "description": "Best for stronger visuals, dynamic compositions, and immersive color.",
-        "bestFor": "Use for visual impact"
+        "label": "Regular Nano Banana",
+        "shortLabel": "Nano Banana",
+        "description": "Best for natural prompt following, fast visual exploration, and source-aware edits.",
+        "bestFor": "Use for flexible image work"
       },
       "chatgpt": {
         "label": "ChatGPT Image Generation 2",
@@ -334,6 +334,14 @@
       "es": "Spanish",
       "fr": "French",
       "de": "German",
+      "hu": "Hungarian",
+      "hr": "Croatian",
+      "bs": "Bosnian",
+      "sl": "Slovenian",
+      "mk": "Macedonian",
+      "bg": "Bulgarian",
+      "ro": "Romanian",
+      "sq": "Albanian",
       "it": "Italian",
       "pt": "Portuguese",
       "zh": "Chinese",
@@ -1053,7 +1061,6 @@
       "history": "History",
       "timeline": "Timeline",
       "legend": "Legend",
-      "edit-stack": "Edit Stack",
       "cleanup": "Cleanup"
     },
     "history": {

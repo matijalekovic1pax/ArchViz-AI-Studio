@@ -1,10 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store';
-import type { VisualSelectionShape } from '../../../types';
+import type { VisualSelectionPoint, VisualSelectionShape } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './SharedRightComponents';
-import { ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized, IMAGE_MODEL } from '../../../services/geminiService';
+import { AUTO_SELECTION_MODEL, ImageUtils, getGeminiService, initGeminiService, isGeminiServiceInitialized } from '../../../services/geminiService';
 import { isGatewayAuthenticated } from '../../../services/apiGateway';
 import { nanoid } from 'nanoid';
 import { MATERIAL_CATEGORIES, MATERIAL_SWATCHES, getMaterialById } from '../../../lib/materialCatalog';
@@ -102,6 +102,94 @@ const selectionExamples = [
   'Remove and fill with background',
   'Add people walking',
 ];
+
+const MAX_AUTO_SELECTION_SHAPES = 80;
+
+const autoSelectionTargetHints: Record<string, string> = {
+  Building: 'complete visible building masses and envelopes; exclude sky, ground, unrelated context, and loose foreground objects',
+  Facade: 'visible facade planes, cladding, curtain wall fields, mullion fields, and exterior/interior envelope faces; exclude sky and ground',
+  Windows: 'window panes, curtain-wall glass modules, storefront panes, and window openings; avoid surrounding solid wall unless inseparable',
+  Doors: 'door leaves, entries, portals, gates, and visible door frames that belong to the doorway',
+  Roof: 'roof planes, canopies, soffit edges, skylights attached to the roof, and visible rooftop forms',
+  Walls: 'wall planes and partitions; keep furniture, signage, people, plants, and floor/ceiling outside the intended wall target',
+  Floors: 'walkable floor slabs, concourse floors, paving, platforms, and visible interior ground planes',
+  Ceilings: 'ceiling planes, soffits, exposed ceiling fields, acoustic panels, and overhead finishes',
+  Columns: 'columns, pillars, piers, posts, and vertical structural supports',
+  Structure: 'beams, trusses, braces, frames, slabs, columns, and other structural members',
+  Glass: 'glass surfaces including windows, railings, curtain walls, and transparent panels; avoid solid frames unless integral',
+  Signage: 'signs, wayfinding panels, boards, labels, logos, posters, screens with informational content, and display faces',
+  Lighting: 'light fixtures, linear light strips, lamps, downlights, luminaires, and lit objects; do not select general bright areas',
+  Seating: 'chairs, benches, seat rows, sofas, stools, lounge seating, and built-in seating',
+  Furniture: 'tables, desks, counters, chairs, sofas, shelves, kiosks, loose furniture, and movable interior objects',
+  Counters: 'service counters, check-in desks, bars, reception desks, retail counters, and transaction surfaces',
+  People: 'complete visible human figures, including clothing, hair, carried bags, luggage handles, personal accessories, contact shadows, and reflections when attached',
+  Vehicles: 'cars, vans, trucks, taxis, service vehicles, carts with engines, and visible vehicle reflections or shadows when attached',
+  Aircraft: 'airplanes, helicopters, visible fuselage parts, wings, tails, engines, landing gear, and attached service equipment',
+  Trains: 'train cars, metro cars, tram cars, rail vehicles, and visible train doors/windows',
+  Buses: 'buses, shuttles, coaches, and bus-like transit vehicles',
+  'Jet Bridges': 'boarding bridges, passenger boarding corridors, telescoping bridge parts, and attached bridge supports',
+  'Luggage Carts': 'luggage carts, baggage trolleys, baggage dollies, cart handles, wheels, and stacked luggage carried by the cart',
+  Platforms: 'raised platform slabs, boarding platforms, train platforms, and concourse platform edges',
+  Roads: 'road lanes, driveways, asphalt streets, curbs, taxiways, and vehicle circulation surfaces',
+  Parking: 'parking lots, stalls, painted parking markings, ramps, drive aisles, and parked-car zones',
+  Ground: 'terrain, plaza paving, sidewalks, landscape ground, dirt, grass fields, and exterior ground surfaces',
+  Water: 'pools, ponds, canals, sea, fountains, reflecting water, and water surfaces only',
+  Vegetation: 'trees, shrubs, hedges, planters, grass, vines, leaves, planting beds, and green walls',
+  Sky: 'visible sky only, including clouds and atmospheric gradient; exclude buildings, trees, wires, and horizon objects',
+  Background: 'distant environment behind the main subject, including context buildings, landscape, horizon, and far scenery; exclude the main building or foreground subject unless selected separately',
+};
+
+const autoSelectionIntentRules: Record<string, string> = {
+  select: 'The selection will guide the editable target. Prefer complete visible subjects with a small natural context margin over tiny fragments or razor-tight cutouts.',
+  material: 'The selection will guide material replacement. Prefer continuous surface planes and material regions with enough edge context for blending; do not grab unrelated objects sitting on the surface.',
+  lighting: 'The selection will guide localized lighting changes. Select coherent illuminated regions or fixture objects with enough surrounding falloff context, without scattering across unrelated highlights.',
+  object: 'The selection will guide object placement or replacement. Select complete replaceable object instances with enough surrounding context for scale, grounding, shadows, and occlusion.',
+  remove: 'The selection will guide removal. Select whole removable foreground subjects, including attached accessories, contact shadows, reflections, and a little surrounding reconstruction context.',
+  adjust: 'The selection will guide local color and detail adjustment. Select broad coherent regions with soft context, not isolated texture noise.',
+  extend: 'The selection will guide image extension. Select only the edge or context area that should be continued.',
+  background: 'The selection may protect or separate foreground from background. Keep foreground/background roles clear and avoid mixing them in one polygon.',
+  people: 'The selection will guide people editing. Select each person as a whole visible figure, including clothing, hair, bags, luggage, immediate contact shadow, and modest cleanup context.',
+  sky: 'The selection will guide sky/background work. Select sky or background cleanly, with enough edge context to avoid a visible cut around building silhouettes.',
+};
+
+const getAutoSelectionIntentRule = (activeTool: string) =>
+  autoSelectionIntentRules[activeTool] || autoSelectionIntentRules.select;
+
+const buildAutoSelectionPrompt = (
+  targets: string[],
+  activeTool: string,
+  width: number,
+  height: number,
+  editPrompt: string
+) => {
+  const targetLines = targets
+    .map((target) => `- ${target}: ${autoSelectionTargetHints[target] || 'the visible object or region named by this target'}`)
+    .join('\n');
+  const promptContext = editPrompt.trim()
+    ? `\nUser edit intent for disambiguation only: ${editPrompt.trim().slice(0, 500)}`
+    : '';
+
+  return [
+    'You are an expert segmentation assistant for an architectural visual editor.',
+    `Image dimensions are ${width}x${height}, but all returned coordinates must use the normalized 0 to 1000 coordinate space.`,
+    `Active edit tool: ${activeTool}. ${getAutoSelectionIntentRule(activeTool)}`,
+    'Detect only the requested target categories:',
+    targetLines,
+    promptContext,
+    'Output requirements:',
+    '- Return JSON only. Do not include markdown, code fences, comments, prose, or explanations.',
+    '- Use this exact schema: {"polygons":[{"label":"target label","confidence":0.0,"points":[{"x":0,"y":0}]}]}.',
+    '- Coordinates must be integers from 0 to 1000. x=0 is left, y=0 is top.',
+    '- Return one polygon per distinct visible target instance or one polygon per coherent continuous surface region.',
+    '- Enclose the complete visible target with 8 to 24 points and a modest context margin for natural blending. Avoid razor-precise tracing unless the active tool is protecting a foreground/background boundary.',
+    '- Use rectangles only when the intended target area is genuinely rectangular; otherwise use a simple polygon that reads as guidance, not a cutout stencil.',
+    '- Include occluded visible portions as one polygon if they clearly belong to the same object. Do not invent hidden parts behind other objects.',
+    '- For people, vehicles, aircraft, furniture, luggage carts, and removable objects, capture the complete visible subject including attached accessories and contact shadows/reflections when needed.',
+    '- For surfaces such as walls, floors, ceilings, sky, roads, glass, facade, and background, return coherent regions and avoid unrelated foreground objects.',
+    '- Do not select the entire image unless the requested target genuinely occupies the full frame.',
+    '- If no requested targets are clearly visible, return {"polygons":[]}.',
+  ].join('\n');
+};
 
 type PeopleChipOption = { value: string; label: string };
 
@@ -1512,7 +1600,11 @@ export const VisualEditPanel = () => {
           ? parsed.selections
           : Array.isArray(parsed?.objects)
             ? parsed.objects
-            : [];
+            : Array.isArray(parsed?.instances)
+              ? parsed.instances
+              : parsed?.points || parsed?.polygon || parsed?.bbox || parsed?.box
+                ? [parsed]
+                : [];
 
     if (!rawItems.length) return [];
 
@@ -1522,11 +1614,62 @@ export const VisualEditPanel = () => {
       return NaN;
     };
 
-    const normalizePoints = (points: Array<{ x: number; y: number }> | Array<[number, number]>) => {
+    const parseMaybeArray = (value: unknown) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value !== 'string') return null;
+      try {
+        const parsedArray = JSON.parse(value);
+        return Array.isArray(parsedArray) ? parsedArray : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const getDistance = (a: VisualSelectionPoint, b: VisualSelectionPoint) =>
+      Math.hypot(a.x - b.x, a.y - b.y);
+
+    const getPolygonArea = (points: VisualSelectionPoint[]) => {
+      let sum = 0;
+      points.forEach((point, index) => {
+        const next = points[(index + 1) % points.length];
+        sum += point.x * next.y - next.x * point.y;
+      });
+      return Math.abs(sum / 2);
+    };
+
+    const getBounds = (points: VisualSelectionPoint[]) => {
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      return {
+        x1: Math.min(...xs),
+        y1: Math.min(...ys),
+        x2: Math.max(...xs),
+        y2: Math.max(...ys),
+      };
+    };
+
+    const getBoundsArea = (bounds: ReturnType<typeof getBounds>) =>
+      Math.max(0, bounds.x2 - bounds.x1) * Math.max(0, bounds.y2 - bounds.y1);
+
+    const getBoundsIoU = (a: ReturnType<typeof getBounds>, b: ReturnType<typeof getBounds>) => {
+      const x1 = Math.max(a.x1, b.x1);
+      const y1 = Math.max(a.y1, b.y1);
+      const x2 = Math.min(a.x2, b.x2);
+      const y2 = Math.min(a.y2, b.y2);
+      const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+      if (!intersection) return 0;
+      const union = getBoundsArea(a) + getBoundsArea(b) - intersection;
+      return union > 0 ? intersection / union : 0;
+    };
+
+    const normalizePoints = (points: unknown[]) => {
       const normalizedPoints: Array<{ x: number; y: number }> = points
         .map((point: any) => {
           if (Array.isArray(point)) {
             return { x: toNumber(point[0]), y: toNumber(point[1]) };
+          }
+          if (point?.point && typeof point.point === 'object') {
+            return { x: toNumber(point.point.x), y: toNumber(point.point.y) };
           }
           return { x: toNumber(point.x), y: toNumber(point.y) };
         })
@@ -1549,38 +1692,62 @@ export const VisualEditPanel = () => {
         return { x: vx, y: vy };
       };
 
-      return normalizedPoints.map((point) => {
+      const minDistance = Math.max(2, Math.min(width, height) * 0.0025);
+      const mapped = normalizedPoints.map((point) => {
         const p = toPixel(point.x, point.y);
         return {
-          x: Math.min(Math.max(p.x, 0), width),
-          y: Math.min(Math.max(p.y, 0), height),
+          x: Math.round(Math.min(Math.max(p.x, 0), width)),
+          y: Math.round(Math.min(Math.max(p.y, 0), height)),
         };
       });
+
+      const deduped = mapped.filter((point, index) => {
+        if (index === 0) return true;
+        return getDistance(point, mapped[index - 1]) >= minDistance;
+      });
+
+      if (deduped.length > 2 && getDistance(deduped[0], deduped[deduped.length - 1]) < minDistance) {
+        deduped.pop();
+      }
+
+      if (deduped.length <= 48) return deduped;
+      const step = Math.ceil(deduped.length / 48);
+      return deduped.filter((_, index) => index % step === 0).slice(0, 48);
     };
 
-    const shapes: VisualSelectionShape[] = [];
+    const candidates: Array<{
+      shape: VisualSelectionShape;
+      area: number;
+      bounds: ReturnType<typeof getBounds>;
+      confidence: number;
+    }> = [];
+    const minArea = Math.max(24, width * height * 0.00001);
 
     rawItems.forEach((item) => {
-      let points: Array<{ x: number; y: number }> | Array<[number, number]> | null = null;
+      let points: unknown[] | null = null;
       const pointSource =
+        (Array.isArray(item) ? item : null) ||
         item?.points ||
         item?.polygon ||
         item?.contour ||
-        item?.outline;
+        item?.outline ||
+        item?.vertices;
 
-      if (Array.isArray(pointSource)) {
-        points = pointSource;
-      } else if (item?.bbox || item?.box) {
-        const box = item.bbox || item.box;
+      const pointArray = parseMaybeArray(pointSource);
+      if (pointArray) {
+        points = pointArray;
+      } else if (item?.bbox || item?.box || item?.boundingBox || item?.bounding_box) {
+        const box = item.bbox || item.box || item.boundingBox || item.bounding_box;
+        const boxArray = parseMaybeArray(box);
         let x = 0;
         let y = 0;
         let w = 0;
         let h = 0;
-        if (Array.isArray(box) && box.length >= 4) {
-          const x1 = toNumber(box[0]);
-          const y1 = toNumber(box[1]);
-          const x2 = toNumber(box[2]);
-          const y2 = toNumber(box[3]);
+        if (boxArray && boxArray.length >= 4) {
+          const x1 = toNumber(boxArray[0]);
+          const y1 = toNumber(boxArray[1]);
+          const x2 = toNumber(boxArray[2]);
+          const y2 = toNumber(boxArray[3]);
           if (x2 > x1 && y2 > y1) {
             x = x1;
             y = y1;
@@ -1593,10 +1760,10 @@ export const VisualEditPanel = () => {
             h = y2;
           }
         } else if (box && typeof box === 'object') {
-          x = toNumber(box.x ?? box.x1 ?? 0);
-          y = toNumber(box.y ?? box.y1 ?? 0);
-          const x2 = toNumber(box.x2 ?? NaN);
-          const y2 = toNumber(box.y2 ?? NaN);
+          x = toNumber(box.x ?? box.left ?? box.x1 ?? 0);
+          y = toNumber(box.y ?? box.top ?? box.y1 ?? 0);
+          const x2 = toNumber(box.x2 ?? box.right ?? NaN);
+          const y2 = toNumber(box.y2 ?? box.bottom ?? NaN);
           if (Number.isFinite(x2) && Number.isFinite(y2)) {
             w = x2 - x;
             h = y2 - y;
@@ -1619,14 +1786,39 @@ export const VisualEditPanel = () => {
       if (!points) return;
       const mapped = normalizePoints(points);
       if (mapped.length < 3) return;
-      shapes.push({
-        id: nanoid(),
-        type: 'lasso',
-        points: mapped,
+      const area = getPolygonArea(mapped);
+      if (area < minArea) return;
+      const bounds = getBounds(mapped);
+      if (getBoundsArea(bounds) < minArea) return;
+
+      candidates.push({
+        shape: {
+          id: nanoid(),
+          type: 'lasso',
+          points: mapped,
+        },
+        area,
+        bounds,
+        confidence: toNumber(item?.confidence ?? item?.score ?? 0),
       });
     });
 
-    return shapes;
+    const sorted = candidates.sort((a, b) => {
+      const confidenceDelta = b.confidence - a.confidence;
+      if (Math.abs(confidenceDelta) > 0.001) return confidenceDelta;
+      return b.area - a.area;
+    });
+    const kept: typeof candidates = [];
+
+    sorted.forEach((candidate) => {
+      if (kept.some((existing) => getBoundsIoU(candidate.bounds, existing.bounds) > 0.9)) return;
+      kept.push(candidate);
+    });
+
+    return kept
+      .slice(0, MAX_AUTO_SELECTION_SHAPES)
+      .sort((a, b) => a.bounds.y1 - b.bounds.y1 || a.bounds.x1 - b.bounds.x1)
+      .map((candidate) => candidate.shape);
   }, [extractJsonPayload, repairJson]);
 
   const runAutoSelection = useCallback(async (targets: string[]) => {
@@ -1675,23 +1867,26 @@ export const VisualEditPanel = () => {
         throw new Error('Failed to read image dimensions.');
       }
 
-      const prompt = [
-        'You are a precise object detection and segmentation assistant for architectural visualization renders.',
-        `Detect and outline every instance of: ${targets.join(', ')}.`,
-        'Return ONLY valid JSON with no commentary, markdown, or code fences.',
-        'Schema: { "polygons": [ { "label": string, "points": [ { "x": number, "y": number } ] } ] }',
-        'All x and y coordinates MUST be integers in the 0 to 1000 range, where 0 is the top-left and 1000 is the bottom-right of the image.',
-        'Trace each object tightly with 8-20 polygon points along its visible outline.',
-        'Return one polygon per distinct object instance found.',
-      ].join(' ');
+      const prompt = buildAutoSelectionPrompt(
+        targets,
+        activeTool,
+        imageSize.width,
+        imageSize.height,
+        wf.visualPrompt
+      );
 
-      const response = await getGeminiService().generate({
+      const responseText = await getGeminiService().generateText({
         prompt,
         images: [imageData],
-        model: IMAGE_MODEL,
-        generationConfig: { responseModalities: ['TEXT'] }
+        model: AUTO_SELECTION_MODEL,
+        generationConfig: {
+          temperature: 0.1,
+          topP: 0.2,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingLevel: 'low' }
+        }
       });
-      const responseText = response.text || '';
       if (!responseText.trim()) {
         throw new Error('No text returned from auto-selection request.');
       }
@@ -1741,12 +1936,14 @@ export const VisualEditPanel = () => {
     }
   }, [
     buildSelectionShapes,
+    activeTool,
     dispatch,
     ensureAutoSelectService,
     loadImageSize,
     state.uploadedImage,
     state.workflow.visualSelectionUndoStack,
     state.workflow.visualSelections,
+    wf.visualPrompt,
     updateWf
   ]);
 
@@ -1859,6 +2056,49 @@ export const VisualEditPanel = () => {
       dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
     }
   }, [dispatch, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
+
+  useEffect(() => {
+    const handleAssistantRunAutoSelection = (event: Event) => {
+      const detail = (event as CustomEvent<{ targets?: string[] }>).detail;
+      const requestedTargets = Array.isArray(detail?.targets) ? detail.targets : wf.visualSelection.autoTargets;
+      const validTargets = requestedTargets.filter((target) => selectionTargets.includes(target));
+
+      if (!validTargets.length) {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: nanoid(),
+            tone: 'warning',
+            message: 'Choose at least one AI selection target before running auto selection.',
+          },
+        });
+        return;
+      }
+
+      const shouldUpdateSelection =
+        wf.visualSelection.mode !== 'ai' ||
+        validTargets.length !== wf.visualSelection.autoTargets.length ||
+        validTargets.some((target, index) => target !== wf.visualSelection.autoTargets[index]);
+
+      if (shouldUpdateSelection) {
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload: {
+            visualSelection: {
+              ...wf.visualSelection,
+              mode: 'ai',
+              autoTargets: validTargets,
+            },
+          },
+        });
+      }
+
+      void runAutoSelection(validTargets);
+    };
+
+    window.addEventListener('archviz:assistant-run-visual-ai-selection', handleAssistantRunAutoSelection);
+    return () => window.removeEventListener('archviz:assistant-run-visual-ai-selection', handleAssistantRunAutoSelection);
+  }, [dispatch, runAutoSelection, wf.visualSelection]);
 
   useEffect(() => {
     if (!isMaterialBrowserOpen) return;
@@ -2698,7 +2938,7 @@ export const VisualEditPanel = () => {
       case 'object':
         return (
           <div className="space-y-4 animate-fade-in">
-            <SectionDesc>Place new objects or replace existing ones within the selection.</SectionDesc>
+            <SectionDesc>Place new objects or replace existing ones guided by the selection.</SectionDesc>
             <div className="rounded-lg border border-border bg-surface-sunken/60 p-3">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
                 <span>{objectPlacementMode === 'replace' ? 'Replacement Target' : 'Placement Target'}</span>
@@ -2707,8 +2947,8 @@ export const VisualEditPanel = () => {
               <div className="text-[11px] text-foreground-muted mt-1">
                 {selectionCount > 0
                   ? objectPlacementMode === 'replace'
-                    ? `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will be replaced.`
-                    : `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will constrain placement.`
+                    ? `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will guide replacement.`
+                    : `${selectionCount} selected area${selectionCount === 1 ? '' : 's'} will guide placement.`
                   : objectPlacementMode === 'replace'
                     ? 'Use the Select tool to define the area to replace.'
                     : 'Use the Select tool to define a placement area.'}

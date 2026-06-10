@@ -7,7 +7,6 @@ import { useAuth } from '../auth/AuthGate';
 import { feedbackService } from '../../services/feedbackService';
 import { prepareFeedbackSnapshot } from '../../lib/projectSnapshot';
 import { collectFeedbackImageCandidates } from '../../lib/feedbackImageAnnotations';
-import { createFeedbackJpegCompressor } from '../../lib/feedbackImageCompression';
 import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas';
 import type {
   FeedbackDocumentAttachment,
@@ -145,6 +144,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
   const [activeMarkupId, setActiveMarkupId] = useState<string | null>(null);
   const [markupRedoStacks, setMarkupRedoStacks] = useState<Record<string, FeedbackImageMarkupShape[]>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const featureLabel = useMemo(() => {
     const key = WORKFLOW_LABEL_KEY_BY_MODE[state.mode];
@@ -212,6 +212,7 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     setCategory('bug');
     setPriority('normal');
     setIsSubmitting(false);
+    setSubmitError(null);
     setActiveMarkupId(null);
     setMarkupRedoStacks({});
 
@@ -307,35 +308,17 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
     if (!canSubmit || !user?.email) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
       const snapshotPayload = await prepareFeedbackSnapshot(state, user.email, projectName || null);
 
-      const compactPreview = createFeedbackJpegCompressor({
-        quality: 0.72,
-        scale: 1,
-        maxDimension: 1280,
-        convertRemoteToDataUrl: true,
-        timeoutMs: 8000,
-      });
-
-      const imageFeedback = await Promise.all(
-        imageAnnotations
-          .map(({ previewUrl, ...item }) => ({
-            ...item,
-            note: cleanNote(item.note || ''),
-            _previewUrl: previewUrl,
-          }))
-          .filter((item) => item.markups.length > 0 || !!item.note)
-          .map(async (item) => {
-            const previewDataUrl = await compactPreview(item._previewUrl);
-            const { _previewUrl, ...rest } = item;
-            return {
-              ...rest,
-              previewDataUrl: previewDataUrl || undefined,
-            };
-          })
-      );
+      const imageFeedback = imageAnnotations
+        .map(({ previewUrl, ...item }) => ({
+          ...item,
+          note: cleanNote(item.note || ''),
+        }))
+        .filter((item) => item.markups.length > 0 || !!item.note);
 
       await feedbackService.submit({
         title: title.trim(),
@@ -368,12 +351,14 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
         },
       });
     } catch (error: any) {
+      const message = error?.message || t('feedback.submitError');
+      setSubmitError(message);
       dispatch({
         type: 'SET_APP_ALERT',
         payload: {
           id: nanoid(),
           tone: 'error',
-          message: error?.message || t('feedback.submitError'),
+          message,
         },
       });
     } finally {
@@ -576,6 +561,16 @@ export const FeedbackReportDialog: React.FC<FeedbackReportDialogProps> = ({ open
               <p>{t('feedback.snapshotNoticeBody')}</p>
             </div>
           </div>
+
+          {submitError && (
+            <div
+              role="alert"
+              className="mx-6 mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+            >
+              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-red-600" />
+              <p className="leading-relaxed">{submitError}</p>
+            </div>
+          )}
 
           <div className="px-6 pb-6 flex items-center justify-end gap-3">
             <button

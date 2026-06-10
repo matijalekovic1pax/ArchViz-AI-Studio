@@ -22,12 +22,22 @@ import type {
 
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
+const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
 let _jwt: string | null = null;
 let _jwtExpiresAt: number = 0;
 let _onSessionExpired: (() => void) | null = null;
+
+export interface GatewaySessionDiagnostics {
+  gatewayUrl: string;
+  hasConfiguredGatewayUrl: boolean;
+  hasStoredSession: boolean;
+  authenticated: boolean;
+  expiresAt: number | null;
+  expiresInMs: number | null;
+}
 
 // ─── Token Management ────────────────────────────────────────────────────────
 
@@ -67,6 +77,32 @@ export function clearGatewayToken(): void {
 
 export function isGatewayAuthenticated(): boolean {
   return getGatewayToken() !== null;
+}
+
+export function getGatewaySessionDiagnostics(): GatewaySessionDiagnostics {
+  const token = getGatewayToken();
+  let expiresAt: number | null = null;
+  try {
+    const stored = sessionStorage.getItem(JWT_SESSION_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (typeof parsed.expiresAt === 'number') {
+        expiresAt = parsed.expiresAt;
+      }
+    }
+  } catch {}
+
+  const effectiveExpiresAt = _jwtExpiresAt || expiresAt;
+  const expiresInMs = effectiveExpiresAt ? Math.max(0, effectiveExpiresAt - Date.now()) : null;
+
+  return {
+    gatewayUrl: GATEWAY_URL,
+    hasConfiguredGatewayUrl: Boolean(import.meta.env.VITE_API_GATEWAY_URL),
+    hasStoredSession: Boolean(token),
+    authenticated: Boolean(token),
+    expiresAt: effectiveExpiresAt || null,
+    expiresInMs,
+  };
 }
 
 /** Register a callback invoked when a 401 or token expiry is detected. */
@@ -245,7 +281,7 @@ export async function openAIImageRequest(
     headers,
     body: JSON.stringify(body),
     signal: options?.signal,
-    timeoutMs: 180_000,
+    timeoutMs: OPENAI_IMAGE_TIMEOUT_MS,
   });
   if (!resp.ok) {
     const errText = await resp.text();

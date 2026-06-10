@@ -12,7 +12,10 @@
  *   GEMINI_API_KEY, OPENAI_API_KEY, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_PROJECT_ID,
  *   KLING_PIAPI_API_KEY, KLING_ULAZAI_API_KEY, KLING_WAVESPEEDAI_API_KEY,
  *   CONVERTAPI_SECRET, ILOVEPDF_PUBLIC_KEY,
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_FEEDBACK_BUCKET (optional)
+ *   APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY,
+ *   APPWRITE_DATABASE_ID, APPWRITE_REPORTS_COLLECTION_ID,
+ *   APPWRITE_ACTIVITY_COLLECTION_ID, APPWRITE_ADMINS_COLLECTION_ID,
+ *   APPWRITE_SNAPSHOTS_BUCKET_ID
  */
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -32,6 +35,7 @@ const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
 const OPENAI_IMAGE_LOCK_PASSWORD = '1234';
 const OPENAI_IMAGE_ACCESS_HEADER = 'X-Archviz-OpenAI-Image-Code';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
@@ -57,6 +61,14 @@ const FEEDBACK_ALLOWED_IMAGE_SOURCES = new Set(['source', 'current', 'history'])
 const FEEDBACK_ALLOWED_DOCUMENT_KINDS = new Set(['original', 'translated']);
 const SUPABASE_REQUEST_TIMEOUT_MS = 20_000;
 const SUPABASE_STORAGE_TIMEOUT_MS = 90_000;
+const APPWRITE_REQUEST_TIMEOUT_MS = 20_000;
+const APPWRITE_STORAGE_TIMEOUT_MS = 90_000;
+const APPWRITE_RESPONSE_FORMAT = '1.9.5';
+const DEFAULT_APPWRITE_DATABASE_ID = 'archviz_reports';
+const DEFAULT_APPWRITE_REPORTS_COLLECTION_ID = 'feedback_reports';
+const DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID = 'feedback_activity';
+const DEFAULT_APPWRITE_ADMINS_COLLECTION_ID = 'feedback_admins';
+const DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID = 'feedback_snapshots';
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -456,7 +468,7 @@ function sanitizeFeedbackImageAnnotations(input) {
         note: note || null,
         // The snapshot already contains the source/history images. Keeping
         // data URLs in metadata duplicates large image payloads and can make
-        // the Supabase insert fail for reports that only need pointers.
+        // feedback inserts fail for reports that only need pointers.
         previewDataUrl: null,
         markups,
       };
@@ -491,6 +503,761 @@ function sanitizeFeedbackDocumentAttachments(input) {
       };
     })
     .filter(Boolean);
+}
+
+function compactObject(input) {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== null)
+  );
+}
+
+function parseJsonValue(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function isAppwriteFeedbackConfigured(env) {
+  return Boolean(
+    (env.APPWRITE_ENDPOINT || env.APPWRITE_API_ENDPOINT) &&
+    env.APPWRITE_PROJECT_ID &&
+    env.APPWRITE_API_KEY
+  );
+}
+
+function resolveAppwriteConfig(env) {
+  const endpoint = (env.APPWRITE_ENDPOINT || env.APPWRITE_API_ENDPOINT || '').replace(/\/+$/, '');
+  const projectId = env.APPWRITE_PROJECT_ID || '';
+  const apiKey = env.APPWRITE_API_KEY || '';
+  if (!endpoint) throw new Error('APPWRITE_ENDPOINT is not configured');
+  if (!projectId) throw new Error('APPWRITE_PROJECT_ID is not configured');
+  if (!apiKey) throw new Error('APPWRITE_API_KEY is not configured');
+  return {
+    endpoint,
+    projectId,
+    apiKey,
+    databaseId: env.APPWRITE_DATABASE_ID || DEFAULT_APPWRITE_DATABASE_ID,
+    reportsCollectionId: env.APPWRITE_REPORTS_COLLECTION_ID || DEFAULT_APPWRITE_REPORTS_COLLECTION_ID,
+    activityCollectionId: env.APPWRITE_ACTIVITY_COLLECTION_ID || DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID,
+    adminsCollectionId: env.APPWRITE_ADMINS_COLLECTION_ID || DEFAULT_APPWRITE_ADMINS_COLLECTION_ID,
+    snapshotsBucketId: env.APPWRITE_SNAPSHOTS_BUCKET_ID || DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID,
+  };
+}
+
+async function appwriteFetch(env, path, init = {}) {
+  const config = resolveAppwriteConfig(env);
+  const { timeoutMs = APPWRITE_REQUEST_TIMEOUT_MS, signal: callerSignal, ...fetchInit } = init;
+  const headers = new Headers(fetchInit.headers || {});
+  headers.set('X-Appwrite-Response-Format', APPWRITE_RESPONSE_FORMAT);
+  headers.set('X-Appwrite-Project', config.projectId);
+  headers.set('X-Appwrite-Key', config.apiKey);
+  const isFormDataBody = typeof FormData !== 'undefined' && fetchInit.body instanceof FormData;
+  if (!isFormDataBody && !headers.has('Content-Type') && fetchInit.body && typeof fetchInit.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const onCallerAbort = () => controller.abort();
+  callerSignal?.addEventListener?.('abort', onCallerAbort);
+
+  try {
+    return await fetch(`${config.endpoint}${path}`, {
+      ...fetchInit,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted && !callerSignal?.aborted) {
+      throw new Error(`Appwrite request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    callerSignal?.removeEventListener?.('abort', onCallerAbort);
+  }
+}
+
+async function appwriteJson(env, path, init = {}) {
+  const resp = await appwriteFetch(env, path, init);
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Appwrite request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  if (resp.status === 204) return null;
+  const text = await resp.text();
+  if (!text) return null;
+  return JSON.parse(text);
+}
+
+function appwriteQuery(method, attribute, values = []) {
+  const query = { method };
+  if (attribute) query.attribute = attribute;
+  query.values = Array.isArray(values) ? values : [values];
+  return JSON.stringify(query);
+}
+
+function buildAppwriteQueryString(queries) {
+  const params = new URLSearchParams();
+  queries.filter(Boolean).forEach((query, index) => params.append(`queries[${index}]`, query));
+  return params.toString();
+}
+
+async function appwriteSetupExists(env, path) {
+  const resp = await appwriteFetch(env, path);
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Appwrite setup request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  const text = await resp.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function appwriteSetupWaitForResource(env, path, label) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const resource = await appwriteSetupExists(env, path);
+    const status = resource?.status;
+    if (!status || status === 'available') return resource;
+    if (status === 'failed') throw new Error(`${label} failed: ${resource?.error || 'unknown error'}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${label} did not become available in time.`);
+}
+
+async function appwriteSetupCreateIfMissing(env, logs, label, getPath, createPath, body) {
+  const current = await appwriteSetupExists(env, getPath);
+  if (current) {
+    logs.push(`${label}: exists`);
+    return current;
+  }
+  logs.push(`${label}: creating`);
+  return appwriteJson(env, createPath, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+function appwriteSetupAttributePath(config, collectionId, key) {
+  return `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(collectionId)}/attributes/${encodeURIComponent(key)}`;
+}
+
+async function appwriteSetupCreateAttribute(env, logs, config, collectionId, spec) {
+  const current = await appwriteSetupExists(env, appwriteSetupAttributePath(config, collectionId, spec.key));
+  if (current) {
+    logs.push(`${collectionId}.${spec.key}: attribute exists`);
+    return current;
+  }
+
+  const { type, ...body } = spec;
+  logs.push(`${collectionId}.${spec.key}: creating attribute`);
+  await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(collectionId)}/attributes/${type}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
+  return appwriteSetupWaitForResource(env, appwriteSetupAttributePath(config, collectionId, spec.key), `${collectionId}.${spec.key}`);
+}
+
+async function appwriteSetupCreateIndex(env, logs, config, collectionId, key, attributes, orders = []) {
+  const path = `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(collectionId)}/indexes/${encodeURIComponent(key)}`;
+  const current = await appwriteSetupExists(env, path);
+  if (current) {
+    logs.push(`${collectionId}.${key}: index exists`);
+    return current;
+  }
+
+  logs.push(`${collectionId}.${key}: creating index`);
+  await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(collectionId)}/indexes`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        key,
+        type: 'key',
+        attributes,
+        orders,
+      }),
+    }
+  );
+  return appwriteSetupWaitForResource(env, path, `${collectionId}.${key}`);
+}
+
+function appwriteSetupStringAttr(key, size, required = false) {
+  return { type: 'string', key, size, required, array: false, encrypt: false };
+}
+
+function appwriteSetupTextAttr(key, required = false) {
+  return { type: 'text', key, required, array: false, encrypt: false };
+}
+
+function appwriteSetupDatetimeAttr(key, required = false) {
+  return { type: 'datetime', key, required, array: false };
+}
+
+function appwriteSetupEmailAttr(key, required = false) {
+  return { type: 'email', key, required, array: false };
+}
+
+function appwriteSetupIntAttr(key, required = false) {
+  return { type: 'integer', key, required, array: false };
+}
+
+function appwriteSetupBoolAttr(key, required = false) {
+  return { type: 'boolean', key, required, array: false };
+}
+
+function appwriteSetupEnumAttr(key, elements, required = false) {
+  return { type: 'enum', key, elements, required, array: false };
+}
+
+function appwriteSetupSchemas() {
+  const statusValues = ['new', 'triaged', 'in_progress', 'resolved', 'closed'];
+  const priorityValues = ['low', 'normal', 'high', 'urgent'];
+  const categoryValues = ['bug', 'quality', 'ux', 'performance', 'feature_request', 'other'];
+  const activityKindValues = ['created', 'comment', 'status_changed', 'priority_changed', 'system'];
+
+  return {
+    reportAttributes: [
+      appwriteSetupDatetimeAttr('created_at', true),
+      appwriteSetupDatetimeAttr('updated_at', true),
+      appwriteSetupDatetimeAttr('last_activity_at', true),
+      appwriteSetupEmailAttr('reporter_email', true),
+      appwriteSetupStringAttr('reporter_name', 200),
+      appwriteSetupTextAttr('reporter_picture'),
+      appwriteSetupEnumAttr('status', statusValues, true),
+      appwriteSetupEnumAttr('priority', priorityValues, true),
+      appwriteSetupEnumAttr('category', categoryValues, true),
+      appwriteSetupStringAttr('title', 200, true),
+      appwriteSetupTextAttr('description', true),
+      appwriteSetupTextAttr('reproduction_steps'),
+      appwriteSetupTextAttr('expected_behavior'),
+      appwriteSetupStringAttr('mode', 64),
+      appwriteSetupStringAttr('app_version', 128),
+      appwriteSetupTextAttr('user_agent'),
+      appwriteSetupStringAttr('project_name', 200),
+      appwriteSetupIntAttr('history_count', true),
+      appwriteSetupIntAttr('snapshot_version', true),
+      appwriteSetupStringAttr('snapshot_hash', 128, true),
+      appwriteSetupIntAttr('snapshot_size_bytes', true),
+      appwriteSetupTextAttr('snapshot_json'),
+      appwriteSetupStringAttr('snapshot_storage_path', 240),
+      appwriteSetupDatetimeAttr('resolved_at'),
+      appwriteSetupEmailAttr('resolved_by'),
+      appwriteSetupTextAttr('metadata_json'),
+    ],
+    activityAttributes: [
+      appwriteSetupIntAttr('activity_id', true),
+      appwriteSetupStringAttr('report_id', 36, true),
+      appwriteSetupDatetimeAttr('created_at', true),
+      appwriteSetupEmailAttr('actor_email', true),
+      appwriteSetupStringAttr('actor_name', 200),
+      appwriteSetupEnumAttr('kind', activityKindValues, true),
+      appwriteSetupTextAttr('message', true),
+      appwriteSetupEnumAttr('from_status', statusValues),
+      appwriteSetupEnumAttr('to_status', statusValues),
+      appwriteSetupEnumAttr('from_priority', priorityValues),
+      appwriteSetupEnumAttr('to_priority', priorityValues),
+      appwriteSetupTextAttr('metadata_json'),
+    ],
+    adminAttributes: [
+      appwriteSetupEmailAttr('email', true),
+      appwriteSetupBoolAttr('is_active', true),
+      appwriteSetupDatetimeAttr('created_at', true),
+      appwriteSetupStringAttr('created_by', 120),
+      appwriteSetupTextAttr('notes'),
+    ],
+  };
+}
+
+async function setupAppwriteFeedbackResources(env, requestedPhase = 'all', options = {}) {
+  const config = resolveAppwriteConfig(env);
+  const phases = String(requestedPhase || 'all')
+    .split(',')
+    .map((phase) => phase.trim())
+    .filter(Boolean);
+  const phaseSet = new Set(phases.length > 0 ? phases : ['all']);
+  const shouldRun = (phase) => phaseSet.has('all') || phaseSet.has(phase);
+  const batchStart = Math.max(0, Number.isFinite(Number(options.start)) ? Math.floor(Number(options.start)) : 0);
+  const batchLimit = Number.isFinite(Number(options.limit)) && Number(options.limit) > 0
+    ? Math.max(1, Math.floor(Number(options.limit)))
+    : null;
+  const batchSlice = (items) => batchLimit ? items.slice(batchStart, batchStart + batchLimit) : items;
+  const logs = [];
+  const { reportAttributes, activityAttributes, adminAttributes } = appwriteSetupSchemas();
+
+  if (shouldRun('resources')) {
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'database',
+      `/databases/${encodeURIComponent(config.databaseId)}`,
+      '/databases',
+      {
+        databaseId: config.databaseId,
+        name: 'ArchViz Feedback Reports',
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'reports collection',
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}`,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections`,
+      {
+        collectionId: config.reportsCollectionId,
+        name: 'Feedback Reports',
+        permissions: [],
+        documentSecurity: false,
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'activity collection',
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.activityCollectionId)}`,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections`,
+      {
+        collectionId: config.activityCollectionId,
+        name: 'Feedback Activity',
+        permissions: [],
+        documentSecurity: false,
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'admins collection',
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.adminsCollectionId)}`,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections`,
+      {
+        collectionId: config.adminsCollectionId,
+        name: 'Feedback Admins',
+        permissions: [],
+        documentSecurity: false,
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'snapshot bucket',
+      `/storage/buckets/${encodeURIComponent(config.snapshotsBucketId)}`,
+      '/storage/buckets',
+      {
+        bucketId: config.snapshotsBucketId,
+        name: 'Feedback Snapshots',
+        permissions: [],
+        fileSecurity: false,
+        enabled: true,
+        maximumFileSize: 50_000_000,
+        allowedFileExtensions: ['json'],
+        compression: 'gzip',
+        encryption: true,
+        antivirus: true,
+        transformations: false,
+      }
+    );
+  }
+
+  if (shouldRun('reports')) {
+    for (const spec of batchSlice(reportAttributes)) {
+      await appwriteSetupCreateAttribute(env, logs, config, config.reportsCollectionId, spec);
+    }
+  }
+
+  if (shouldRun('activity')) {
+    for (const spec of batchSlice(activityAttributes)) {
+      await appwriteSetupCreateAttribute(env, logs, config, config.activityCollectionId, spec);
+    }
+  }
+
+  if (shouldRun('admins')) {
+    for (const spec of batchSlice(adminAttributes)) {
+      await appwriteSetupCreateAttribute(env, logs, config, config.adminsCollectionId, spec);
+    }
+  }
+
+  if (shouldRun('indexes')) {
+    const indexes = [
+      [config.reportsCollectionId, 'created_at_desc', ['created_at'], ['DESC']],
+      [config.reportsCollectionId, 'status_idx', ['status']],
+      [config.reportsCollectionId, 'priority_idx', ['priority']],
+      [config.reportsCollectionId, 'category_idx', ['category']],
+      [config.reportsCollectionId, 'mode_idx', ['mode']],
+      [config.reportsCollectionId, 'reporter_email_idx', ['reporter_email']],
+      [config.activityCollectionId, 'report_created_idx', ['report_id', 'created_at'], ['ASC', 'ASC']],
+      [config.adminsCollectionId, 'email_active_idx', ['email', 'is_active'], ['ASC', 'ASC']],
+    ];
+    for (const [collectionId, key, attributes, orders = []] of batchSlice(indexes)) {
+      await appwriteSetupCreateIndex(env, logs, config, collectionId, key, attributes, orders);
+    }
+  }
+
+  if (shouldRun('seed')) {
+    const adminEmail = String(env.APPWRITE_FEEDBACK_ADMIN_EMAIL || 'matija.lekovic@1pax.com').trim().toLowerCase();
+    const query = buildAppwriteQueryString([
+      appwriteQuery('equal', 'email', [adminEmail]),
+      appwriteQuery('limit', null, [1]),
+    ]);
+    const existingAdmins = await appwriteJson(
+      env,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.adminsCollectionId)}/documents?${query}`
+    );
+
+    if (Array.isArray(existingAdmins?.documents) && existingAdmins.documents.length > 0) {
+      logs.push(`admin ${adminEmail}: exists`);
+    } else {
+      const adminHash = await sha256Hex(adminEmail);
+      logs.push(`admin ${adminEmail}: seeding`);
+      const createResp = await appwriteFetch(
+        env,
+        `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.adminsCollectionId)}/documents`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            documentId: `admin_${adminHash.slice(0, 30)}`,
+            data: {
+              email: adminEmail,
+              is_active: true,
+              created_at: new Date().toISOString(),
+              created_by: 'cloudflare-worker-setup',
+              notes: 'Initial feedback admin',
+            },
+          }),
+        }
+      );
+      if (!createResp.ok && createResp.status !== 409) {
+        const errText = await createResp.text();
+        throw new Error(`Appwrite request failed (${createResp.status}): ${errText.slice(0, 600)}`);
+      }
+      if (createResp.status === 409) logs.push(`admin ${adminEmail}: already existed`);
+    }
+  }
+
+  return {
+    phases: [...phaseSet],
+    start: batchStart,
+    limit: batchLimit,
+    logs,
+  };
+}
+
+function appwriteReportToRow(doc) {
+  if (!doc) return null;
+  return {
+    id: doc.$id,
+    created_at: doc.created_at || doc.$createdAt,
+    updated_at: doc.updated_at || doc.$updatedAt,
+    last_activity_at: doc.last_activity_at || doc.updated_at || doc.$updatedAt,
+    reporter_email: doc.reporter_email,
+    reporter_name: doc.reporter_name ?? null,
+    reporter_picture: doc.reporter_picture ?? null,
+    status: doc.status,
+    priority: doc.priority,
+    category: doc.category,
+    title: doc.title,
+    description: doc.description,
+    reproduction_steps: doc.reproduction_steps ?? null,
+    expected_behavior: doc.expected_behavior ?? null,
+    mode: doc.mode ?? null,
+    app_version: doc.app_version ?? null,
+    user_agent: doc.user_agent ?? null,
+    project_name: doc.project_name ?? null,
+    history_count: doc.history_count ?? 0,
+    snapshot_version: doc.snapshot_version ?? 1,
+    snapshot_hash: doc.snapshot_hash,
+    snapshot_size_bytes: doc.snapshot_size_bytes,
+    snapshot_json: parseJsonValue(doc.snapshot_json, null),
+    snapshot_storage_path: doc.snapshot_storage_path ?? null,
+    resolved_at: doc.resolved_at ?? null,
+    resolved_by: doc.resolved_by ?? null,
+    metadata: parseJsonValue(doc.metadata_json, {}),
+  };
+}
+
+function appwriteActivityToRow(doc) {
+  if (!doc) return null;
+  return {
+    id: doc.activity_id ?? (Date.parse(doc.created_at || doc.$createdAt || '') || 0),
+    created_at: doc.created_at || doc.$createdAt,
+    actor_email: doc.actor_email,
+    actor_name: doc.actor_name ?? null,
+    kind: doc.kind,
+    message: doc.message,
+    from_status: doc.from_status ?? null,
+    to_status: doc.to_status ?? null,
+    from_priority: doc.from_priority ?? null,
+    to_priority: doc.to_priority ?? null,
+    metadata: parseJsonValue(doc.metadata_json, {}),
+  };
+}
+
+function appwriteReportDocumentData(reportPayload) {
+  const now = new Date().toISOString();
+  return compactObject({
+    created_at: reportPayload.created_at || now,
+    updated_at: reportPayload.updated_at || now,
+    last_activity_at: reportPayload.last_activity_at || now,
+    reporter_email: reportPayload.reporter_email,
+    reporter_name: reportPayload.reporter_name,
+    reporter_picture: reportPayload.reporter_picture,
+    status: reportPayload.status,
+    priority: reportPayload.priority,
+    category: reportPayload.category,
+    title: reportPayload.title,
+    description: reportPayload.description,
+    reproduction_steps: reportPayload.reproduction_steps,
+    expected_behavior: reportPayload.expected_behavior,
+    mode: reportPayload.mode,
+    app_version: reportPayload.app_version,
+    user_agent: reportPayload.user_agent,
+    project_name: reportPayload.project_name,
+    history_count: reportPayload.history_count,
+    snapshot_version: reportPayload.snapshot_version,
+    snapshot_hash: reportPayload.snapshot_hash,
+    snapshot_size_bytes: reportPayload.snapshot_size_bytes,
+    snapshot_json: reportPayload.snapshot_json ? JSON.stringify(reportPayload.snapshot_json) : undefined,
+    snapshot_storage_path: reportPayload.snapshot_storage_path,
+    resolved_at: reportPayload.resolved_at,
+    resolved_by: reportPayload.resolved_by,
+    metadata_json: JSON.stringify(reportPayload.metadata || {}),
+  });
+}
+
+function appwriteActivityDocumentData(activityPayload) {
+  const now = new Date().toISOString();
+  return compactObject({
+    activity_id: activityPayload.activity_id || Math.floor(Date.now() + Math.random() * 1000),
+    report_id: activityPayload.report_id,
+    created_at: activityPayload.created_at || now,
+    actor_email: activityPayload.actor_email,
+    actor_name: activityPayload.actor_name,
+    kind: activityPayload.kind,
+    message: activityPayload.message,
+    from_status: activityPayload.from_status,
+    to_status: activityPayload.to_status,
+    from_priority: activityPayload.from_priority,
+    to_priority: activityPayload.to_priority,
+    metadata_json: JSON.stringify(activityPayload.metadata || {}),
+  });
+}
+
+async function createAppwriteFeedbackReport(env, reportPayload) {
+  const config = resolveAppwriteConfig(env);
+  const doc = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}/documents`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        documentId: reportPayload.id,
+        data: appwriteReportDocumentData(reportPayload),
+      }),
+    }
+  );
+  return appwriteReportToRow(doc);
+}
+
+async function createAppwriteFeedbackActivity(env, activityPayload) {
+  const config = resolveAppwriteConfig(env);
+  const payloads = Array.isArray(activityPayload) ? activityPayload : [activityPayload];
+  const rows = [];
+  for (const payload of payloads) {
+    const doc = await appwriteJson(
+      env,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.activityCollectionId)}/documents`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          documentId: crypto.randomUUID(),
+          data: appwriteActivityDocumentData(payload),
+        }),
+      }
+    );
+    rows.push(appwriteActivityToRow(doc));
+  }
+  return rows;
+}
+
+async function listAppwriteFeedbackReports(env, filters) {
+  const config = resolveAppwriteConfig(env);
+  const queries = [
+    appwriteQuery('orderDesc', 'created_at'),
+    appwriteQuery('limit', null, [Math.max(1, Math.min(filters.limit || 50, 200))]),
+    appwriteQuery('offset', null, [Math.max(0, filters.offset || 0)]),
+  ];
+  if (filters.status) queries.push(appwriteQuery('equal', 'status', [filters.status]));
+  if (filters.priority) queries.push(appwriteQuery('equal', 'priority', [filters.priority]));
+  if (filters.category) queries.push(appwriteQuery('equal', 'category', [filters.category]));
+  if (filters.mode) queries.push(appwriteQuery('equal', 'mode', [filters.mode]));
+  if (filters.reporterEmail) queries.push(appwriteQuery('equal', 'reporter_email', [filters.reporterEmail]));
+
+  const query = buildAppwriteQueryString(queries);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}/documents?${query}`
+  );
+
+  let reports = Array.isArray(result?.documents) ? result.documents.map(appwriteReportToRow) : [];
+  if (filters.search) {
+    const needle = String(filters.search).toLowerCase();
+    reports = reports.filter((report) =>
+      [report.title, report.description, report.reporter_email]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle))
+    );
+  }
+  return reports;
+}
+
+async function getAppwriteFeedbackReport(env, reportId) {
+  const config = resolveAppwriteConfig(env);
+  const resp = await appwriteFetch(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}/documents/${encodeURIComponent(reportId)}`
+  );
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Appwrite request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  const doc = await resp.json();
+  return appwriteReportToRow(doc);
+}
+
+async function listAppwriteFeedbackActivity(env, reportId) {
+  const config = resolveAppwriteConfig(env);
+  const query = buildAppwriteQueryString([
+    appwriteQuery('equal', 'report_id', [reportId]),
+    appwriteQuery('orderAsc', 'created_at'),
+    appwriteQuery('limit', null, [200]),
+  ]);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.activityCollectionId)}/documents?${query}`
+  );
+  return Array.isArray(result?.documents) ? result.documents.map(appwriteActivityToRow) : [];
+}
+
+async function updateAppwriteFeedbackReport(env, reportId, patchPayload) {
+  const config = resolveAppwriteConfig(env);
+  const doc = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}/documents/${encodeURIComponent(reportId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        data: compactObject({
+          ...patchPayload,
+          updated_at: new Date().toISOString(),
+        }),
+      }),
+    }
+  );
+  return appwriteReportToRow(doc);
+}
+
+async function deleteAppwriteFeedbackReport(env, reportId) {
+  const config = resolveAppwriteConfig(env);
+  await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.reportsCollectionId)}/documents/${encodeURIComponent(reportId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+async function isAppwriteFeedbackAdmin(env, email) {
+  const config = resolveAppwriteConfig(env);
+  const query = buildAppwriteQueryString([
+    appwriteQuery('equal', 'email', [email]),
+    appwriteQuery('equal', 'is_active', [true]),
+    appwriteQuery('limit', null, [1]),
+  ]);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.adminsCollectionId)}/documents?${query}`
+  );
+  return Array.isArray(result?.documents) && result.documents.length > 0;
+}
+
+async function uploadFeedbackSnapshotToAppwrite(env, reportId, snapshotText) {
+  const config = resolveAppwriteConfig(env);
+  const formData = new FormData();
+  formData.append('fileId', reportId);
+  formData.append('file', new Blob([snapshotText], { type: 'application/json' }), 'snapshot.json');
+
+  await appwriteJson(
+    env,
+    `/storage/buckets/${encodeURIComponent(config.snapshotsBucketId)}/files`,
+    {
+      method: 'POST',
+      body: formData,
+      timeoutMs: APPWRITE_STORAGE_TIMEOUT_MS,
+    }
+  );
+
+  return `appwrite://${config.snapshotsBucketId}/${reportId}`;
+}
+
+function parseAppwriteStoragePath(snapshotStoragePath) {
+  if (!snapshotStoragePath || !String(snapshotStoragePath).startsWith('appwrite://')) return null;
+  const withoutScheme = String(snapshotStoragePath).slice('appwrite://'.length);
+  const [bucketId, fileId] = withoutScheme.split('/');
+  if (!bucketId || !fileId) return null;
+  return { bucketId, fileId };
+}
+
+async function downloadFeedbackSnapshotFromAppwrite(env, snapshotStoragePath) {
+  const parsed = parseAppwriteStoragePath(snapshotStoragePath);
+  if (!parsed) throw new Error('Invalid Appwrite snapshot storage path.');
+  const resp = await appwriteFetch(
+    env,
+    `/storage/buckets/${encodeURIComponent(parsed.bucketId)}/files/${encodeURIComponent(parsed.fileId)}/download`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      timeoutMs: APPWRITE_STORAGE_TIMEOUT_MS,
+    }
+  );
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Snapshot download failed (${resp.status}): ${errText.slice(0, 500)}`);
+  }
+  return resp.json();
+}
+
+async function deleteFeedbackSnapshotFromAppwrite(env, snapshotStoragePath) {
+  const parsed = parseAppwriteStoragePath(snapshotStoragePath);
+  if (!parsed) return;
+  const resp = await appwriteFetch(
+    env,
+    `/storage/buckets/${encodeURIComponent(parsed.bucketId)}/files/${encodeURIComponent(parsed.fileId)}`,
+    {
+      method: 'DELETE',
+      timeoutMs: APPWRITE_STORAGE_TIMEOUT_MS,
+    }
+  );
+  if (!resp.ok && resp.status !== 404) {
+    const errText = await resp.text();
+    throw new Error(`Snapshot storage delete failed (${resp.status}): ${errText.slice(0, 500)}`);
+  }
 }
 
 function resolveSupabaseUrl(env) {
@@ -550,6 +1317,15 @@ async function supabaseJson(env, path, init = {}) {
 
 async function isFeedbackAdmin(env, email) {
   if (!email) return false;
+  if (isAppwriteFeedbackConfigured(env)) {
+    try {
+      return await isAppwriteFeedbackAdmin(env, email);
+    } catch (error) {
+      console.error('[feedback] Appwrite admin check failed', error?.message || error);
+      return false;
+    }
+  }
+
   try {
     const rows = await supabaseJson(
       env,
@@ -563,6 +1339,10 @@ async function isFeedbackAdmin(env, email) {
 }
 
 async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
+  if (isAppwriteFeedbackConfigured(env)) {
+    return uploadFeedbackSnapshotToAppwrite(env, reportId, snapshotText);
+  }
+
   const bucket = (env.SUPABASE_FEEDBACK_BUCKET || 'feedback-snapshots').trim();
   const path = `${reportId}/snapshot.json`;
   const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
@@ -590,6 +1370,10 @@ async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
 
 async function deleteFeedbackSnapshotFromStorage(env, snapshotStoragePath) {
   if (!snapshotStoragePath) return;
+  if (String(snapshotStoragePath).startsWith('appwrite://')) {
+    await deleteFeedbackSnapshotFromAppwrite(env, snapshotStoragePath);
+    return;
+  }
 
   const [bucket, ...rest] = String(snapshotStoragePath).split('/');
   const objectPath = rest.join('/');
@@ -605,6 +1389,28 @@ async function deleteFeedbackSnapshotFromStorage(env, snapshotStoragePath) {
     const errText = await resp.text();
     throw new Error(`Snapshot storage delete failed (${resp.status}): ${errText.slice(0, 500)}`);
   }
+}
+
+async function downloadFeedbackSnapshotFromStorage(env, snapshotStoragePath) {
+  if (String(snapshotStoragePath).startsWith('appwrite://')) {
+    return downloadFeedbackSnapshotFromAppwrite(env, snapshotStoragePath);
+  }
+
+  const [bucket, ...rest] = String(snapshotStoragePath).split('/');
+  const objectPath = rest.join('/');
+  const encodedPath = objectPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const storageResp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    timeoutMs: SUPABASE_STORAGE_TIMEOUT_MS,
+  });
+
+  if (!storageResp.ok) {
+    const errText = await storageResp.text();
+    throw new Error(`Snapshot download failed (${storageResp.status}): ${errText.slice(0, 500)}`);
+  }
+
+  return storageResp.json();
 }
 
 // ─── Route: POST /auth/verify ────────────────────────────────────────────────
@@ -749,12 +1555,20 @@ function normalizeOpenAIQuality(imageSize) {
   return 'medium';
 }
 
+function normalizeOpenAIBackground(value) {
+  return value === 'opaque' || value === 'auto'
+    ? value
+    : 'auto';
+}
+
 function getOpenAIImageOptions(generationConfig = {}) {
   const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
+  const background = generationConfig.openAI?.background || imageConfig.background;
   return {
     size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
+    background: normalizeOpenAIBackground(background),
   };
 }
 
@@ -842,7 +1656,7 @@ async function handleOpenAIImages(request, env) {
       OPENAI_IMAGE_MAX_OUTPUTS,
       Math.floor(clampNumber(body.numberOfImages, 1, OPENAI_IMAGE_MAX_OUTPUTS, 1))
     ));
-    const { size, quality, outputFormat } = getOpenAIImageOptions(body.generationConfig);
+    const { size, quality, outputFormat, background } = getOpenAIImageOptions(body.generationConfig);
     const model = body.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL;
 
     let upstreamResp;
@@ -854,6 +1668,9 @@ async function handleOpenAIImages(request, env) {
       form.append('size', size);
       form.append('quality', quality);
       form.append('output_format', outputFormat);
+      if (background !== 'auto') {
+        form.append('background', background);
+      }
 
       images.forEach((image) => {
         form.append('image[]', image.blob, image.filename);
@@ -862,31 +1679,40 @@ async function handleOpenAIImages(request, env) {
         form.append('mask', maskImage.blob, `mask-${maskImage.filename}`);
       }
 
-      upstreamResp = await fetch(`${OPENAI_API_BASE}/images/edits`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-        },
-        body: form,
-      });
-    } else {
-      upstreamResp = await fetch(`${OPENAI_API_BASE}/images/generations`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          prompt,
-          n: numberOfImages,
-          size,
-          quality,
-          output_format: outputFormat,
+      upstreamResp = await fetchWithRetry((signal) =>
+        fetch(`${OPENAI_API_BASE}/images/edits`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: form,
+          signal,
         }),
+        { maxRetries: 0, timeoutMs: OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS, label: 'OpenAI image edit' }
+      );
+    } else {
+      const generationBody = JSON.stringify({
+        model,
+        prompt,
+        n: numberOfImages,
+        size,
+        quality,
+        output_format: outputFormat,
+        ...(background !== 'auto' ? { background } : {}),
       });
+      upstreamResp = await fetchWithRetry((signal) =>
+        fetch(`${OPENAI_API_BASE}/images/generations`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: generationBody,
+          signal,
+        }),
+        { maxRetries: 0, timeoutMs: OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS, label: 'OpenAI image generation' }
+      );
     }
-
     const data = await upstreamResp.json().catch(() => null);
     if (!upstreamResp.ok) {
       const message = extractOpenAIError(data, `OpenAI image API error (${upstreamResp.status})`);
@@ -900,7 +1726,12 @@ async function handleOpenAIImages(request, env) {
 
     return corsResponse(origin, normalized);
   } catch (err) {
-    return corsResponse(origin, { error: err.message || 'OpenAI image generation failed.' }, { status: 500 });
+    const timedOut = err?.name === 'AbortError';
+    return corsResponse(origin, {
+      error: timedOut
+        ? 'OpenAI image generation timed out before an image was returned. Try 1K output or fewer/lower-resolution reference images, then retry.'
+        : err.message || 'OpenAI image generation failed.',
+    }, { status: timedOut ? 504 : 500 });
   }
 }
 
@@ -1912,7 +2743,8 @@ async function handleFeedbackCreate(request, env, user) {
       metadata: reportMetadata,
     };
 
-    let snapshotStoredInline = snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES;
+    const useAppwriteFeedback = isAppwriteFeedbackConfigured(env);
+    let snapshotStoredInline = !useAppwriteFeedback && snapshotSizeBytes <= FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES;
 
     if (snapshotStoredInline) {
       reportPayload.snapshot_json = snapshot;
@@ -1937,6 +2769,27 @@ async function handleFeedbackCreate(request, env, user) {
         reportPayload.snapshot_json = snapshot;
         snapshotStoredInline = true;
       }
+    }
+
+    if (useAppwriteFeedback) {
+      const report = await createAppwriteFeedbackReport(env, reportPayload);
+      await createAppwriteFeedbackActivity(env, {
+        report_id: reportId,
+        actor_email: user.email,
+        actor_name: sanitizeText(user?.name || '', 200),
+        kind: 'created',
+        message: 'Feedback report created.',
+        metadata: {
+          source: 'in_app_report',
+          snapshotSizeBytes,
+        },
+      });
+
+      return corsResponse(origin, {
+        success: true,
+        report,
+        snapshotStoredInline,
+      });
     }
 
     const insertedRows = await supabaseJson(env, '/rest/v1/feedback_reports?select=id,created_at,status,priority,category,title,mode,project_name,snapshot_size_bytes,snapshot_storage_path', {
@@ -1971,6 +2824,9 @@ async function handleFeedbackCreate(request, env, user) {
       snapshotStoredInline,
     });
   } catch (error) {
+    console.error('[feedback] create failed', {
+      message: error?.message || String(error),
+    });
     return corsResponse(origin, { error: error.message || 'Failed to submit feedback report.' }, { status: 500 });
   }
 }
@@ -2008,6 +2864,23 @@ async function handleFeedbackList(request, env, user, isAdmin) {
       params.set('or', `(title.ilike.*${safeSearch}*,description.ilike.*${safeSearch}*,reporter_email.ilike.*${safeSearch}*)`);
     }
 
+    if (isAppwriteFeedbackConfigured(env)) {
+      const reports = await listAppwriteFeedbackReports(env, {
+        limit,
+        offset,
+        status,
+        priority,
+        category,
+        mode,
+        reporterEmail,
+        search,
+      });
+      return corsResponse(origin, {
+        success: true,
+        reports,
+      });
+    }
+
     const data = await supabaseJson(env, `/rest/v1/feedback_reports?${params.toString()}`, {
       headers: { Prefer: 'count=exact' },
     });
@@ -2026,6 +2899,19 @@ async function handleFeedbackDetail(request, env, reportId, isAdmin, user) {
   if (!isAdmin) return forbidden(origin, 'Admin access required.');
 
   try {
+    if (isAppwriteFeedbackConfigured(env)) {
+      const report = await getAppwriteFeedbackReport(env, reportId);
+      if (!report) {
+        return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+      }
+      const activity = await listAppwriteFeedbackActivity(env, reportId);
+      return corsResponse(origin, {
+        success: true,
+        report,
+        activity,
+      });
+    }
+
     const reportRows = await supabaseJson(
       env,
       `/rest/v1/feedback_reports?select=id,created_at,updated_at,last_activity_at,reporter_email,reporter_name,reporter_picture,status,priority,category,title,description,reproduction_steps,expected_behavior,mode,app_version,user_agent,project_name,history_count,snapshot_version,snapshot_hash,snapshot_size_bytes,snapshot_storage_path,resolved_at,resolved_by,metadata&id=eq.${encodeURIComponent(reportId)}&limit=1`
@@ -2055,6 +2941,35 @@ async function handleFeedbackSnapshot(request, env, reportId, isAdmin) {
   if (!isAdmin) return forbidden(origin, 'Admin access required.');
 
   try {
+    if (isAppwriteFeedbackConfigured(env)) {
+      const report = await getAppwriteFeedbackReport(env, reportId);
+      if (!report) {
+        return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+      }
+      if (report.snapshot_json) {
+        return corsResponse(origin, {
+          success: true,
+          source: 'inline',
+          snapshot: report.snapshot_json,
+          snapshotHash: report.snapshot_hash,
+          snapshotSizeBytes: report.snapshot_size_bytes,
+          snapshotVersion: report.snapshot_version,
+        });
+      }
+      if (!report.snapshot_storage_path) {
+        return corsResponse(origin, { error: 'No snapshot found for this report.' }, { status: 404 });
+      }
+      const snapshot = await downloadFeedbackSnapshotFromStorage(env, report.snapshot_storage_path);
+      return corsResponse(origin, {
+        success: true,
+        source: 'storage',
+        snapshot,
+        snapshotHash: report.snapshot_hash,
+        snapshotSizeBytes: report.snapshot_size_bytes,
+        snapshotVersion: report.snapshot_version,
+      });
+    }
+
     const rows = await supabaseJson(
       env,
       `/rest/v1/feedback_reports?select=id,snapshot_json,snapshot_storage_path,snapshot_hash,snapshot_size_bytes,snapshot_version&id=eq.${encodeURIComponent(reportId)}&limit=1`
@@ -2079,21 +2994,7 @@ async function handleFeedbackSnapshot(request, env, reportId, isAdmin) {
       return corsResponse(origin, { error: 'No snapshot found for this report.' }, { status: 404 });
     }
 
-    const [bucket, ...rest] = String(report.snapshot_storage_path).split('/');
-    const objectPath = rest.join('/');
-    const encodedPath = objectPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-    const storageResp = await supabaseFetch(env, `/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      timeoutMs: SUPABASE_STORAGE_TIMEOUT_MS,
-    });
-
-    if (!storageResp.ok) {
-      const errText = await storageResp.text();
-      throw new Error(`Snapshot download failed (${storageResp.status}): ${errText.slice(0, 500)}`);
-    }
-
-    const snapshot = await storageResp.json();
+    const snapshot = await downloadFeedbackSnapshotFromStorage(env, report.snapshot_storage_path);
     return corsResponse(origin, {
       success: true,
       source: 'storage',
@@ -2119,6 +3020,69 @@ async function handleFeedbackUpdate(request, env, reportId, isAdmin, user) {
 
     if (!nextStatus && !nextPriority && !adminNote) {
       return badRequest(origin, 'No update fields provided.');
+    }
+
+    if (isAppwriteFeedbackConfigured(env)) {
+      const current = await getAppwriteFeedbackReport(env, reportId);
+      if (!current) {
+        return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+      }
+      const patchPayload = {
+        last_activity_at: new Date().toISOString(),
+      };
+      if (nextStatus) patchPayload.status = nextStatus;
+      if (nextPriority) patchPayload.priority = nextPriority;
+      if (nextStatus === 'resolved' || nextStatus === 'closed') {
+        patchPayload.resolved_at = new Date().toISOString();
+        patchPayload.resolved_by = user?.email || null;
+      }
+
+      const updated = await updateAppwriteFeedbackReport(env, reportId, patchPayload);
+      const activityInserts = [];
+      const actorEmail = user?.email || 'unknown';
+      const actorName = sanitizeText(user?.name || '', 200);
+      if (nextStatus && nextStatus !== current.status) {
+        activityInserts.push({
+          report_id: reportId,
+          actor_email: actorEmail,
+          actor_name: actorName,
+          kind: 'status_changed',
+          message: `Status changed from ${current.status} to ${nextStatus}.`,
+          from_status: current.status,
+          to_status: nextStatus,
+          metadata: {},
+        });
+      }
+      if (nextPriority && nextPriority !== current.priority) {
+        activityInserts.push({
+          report_id: reportId,
+          actor_email: actorEmail,
+          actor_name: actorName,
+          kind: 'priority_changed',
+          message: `Priority changed from ${current.priority} to ${nextPriority}.`,
+          from_priority: current.priority,
+          to_priority: nextPriority,
+          metadata: {},
+        });
+      }
+      if (adminNote) {
+        activityInserts.push({
+          report_id: reportId,
+          actor_email: actorEmail,
+          actor_name: actorName,
+          kind: 'comment',
+          message: adminNote,
+          metadata: {},
+        });
+      }
+      if (activityInserts.length > 0) {
+        await createAppwriteFeedbackActivity(env, activityInserts);
+      }
+
+      return corsResponse(origin, {
+        success: true,
+        report: updated,
+      });
     }
 
     const currentRows = await supabaseJson(
@@ -2211,6 +3175,34 @@ async function handleFeedbackDelete(request, env, reportId, isAdmin) {
   if (!isAdmin) return forbidden(origin, 'Admin access required.');
 
   try {
+    if (isAppwriteFeedbackConfigured(env)) {
+      const report = await getAppwriteFeedbackReport(env, reportId);
+      if (!report) {
+        return corsResponse(origin, { error: 'Report not found.' }, { status: 404 });
+      }
+
+      await deleteAppwriteFeedbackReport(env, reportId);
+
+      let deletedSnapshotStorage = false;
+      if (report.snapshot_storage_path) {
+        try {
+          await deleteFeedbackSnapshotFromStorage(env, report.snapshot_storage_path);
+          deletedSnapshotStorage = true;
+        } catch (storageError) {
+          console.warn('[feedback] failed to delete snapshot object after report delete', {
+            reportId,
+            error: String(storageError?.message || storageError || '').slice(0, 500),
+          });
+        }
+      }
+
+      return corsResponse(origin, {
+        success: true,
+        reportId,
+        deletedSnapshotStorage,
+      });
+    }
+
     const rows = await supabaseJson(
       env,
       `/rest/v1/feedback_reports?select=id,snapshot_storage_path&id=eq.${encodeURIComponent(reportId)}&limit=1`
@@ -2262,6 +3254,26 @@ async function handleFeedbackActivityCreate(request, env, reportId, isAdmin, use
     const message = sanitizeText(body?.message, 12000);
     if (!message) return badRequest(origin, 'Comment message is required.');
 
+    if (isAppwriteFeedbackConfigured(env)) {
+      const [activity] = await createAppwriteFeedbackActivity(env, {
+        report_id: reportId,
+        actor_email: user?.email || 'unknown',
+        actor_name: sanitizeText(user?.name || '', 200),
+        kind: 'comment',
+        message,
+        metadata: body?.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+      });
+
+      await updateAppwriteFeedbackReport(env, reportId, {
+        last_activity_at: new Date().toISOString(),
+      });
+
+      return corsResponse(origin, {
+        success: true,
+        activity: activity || null,
+      });
+    }
+
     const rows = await supabaseJson(env, '/rest/v1/feedback_activity?select=id,created_at,actor_email,actor_name,kind,message,metadata', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
@@ -2294,6 +3306,51 @@ async function handleFeedbackActivityCreate(request, env, reportId, isAdmin, use
   }
 }
 
+async function handleAppwriteFeedbackSetup(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const setupToken = env.APPWRITE_SETUP_TOKEN;
+  if (!setupToken) {
+    return corsResponse(origin, { error: 'Appwrite setup route is disabled.' }, { status: 404 });
+  }
+
+  const providedToken = request.headers.get('X-Appwrite-Setup-Token') || request.headers.get('X-Setup-Token') || '';
+  if (providedToken !== setupToken) {
+    return forbidden(origin, 'Invalid setup token.');
+  }
+
+  if (!isAppwriteFeedbackConfigured(env)) {
+    return corsResponse(origin, { error: 'Appwrite feedback is not configured.' }, { status: 500 });
+  }
+
+  const startedAt = Date.now();
+  try {
+    const url = new URL(request.url);
+    const phase = url.searchParams.get('phase') || 'all';
+    const start = Number(url.searchParams.get('start') || 0);
+    const limit = Number(url.searchParams.get('limit') || 0);
+    const setupEnv = {
+      ...env,
+      APPWRITE_ENDPOINT: url.searchParams.get('endpoint') || env.APPWRITE_ENDPOINT,
+      APPWRITE_PROJECT_ID: url.searchParams.get('projectId') || env.APPWRITE_PROJECT_ID,
+    };
+    const result = await setupAppwriteFeedbackResources(setupEnv, phase, {
+      start,
+      limit,
+    });
+    return corsResponse(origin, {
+      success: true,
+      phase,
+      durationMs: Date.now() - startedAt,
+      ...result,
+    });
+  } catch (error) {
+    console.error('[feedback] Appwrite setup failed', {
+      message: error?.message || String(error),
+    });
+    return corsResponse(origin, { error: error.message || 'Appwrite setup failed.' }, { status: 500 });
+  }
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
@@ -2321,6 +3378,10 @@ export default {
     // Health check
     if (path === '/health') {
       return corsResponse(origin, { status: 'ok', timestamp: new Date().toISOString() });
+    }
+
+    if (path === '/internal/appwrite/setup' && request.method === 'POST') {
+      return handleAppwriteFeedbackSetup(request, env);
     }
 
     // Vertex AI diagnostics (no auth required for easy testing)

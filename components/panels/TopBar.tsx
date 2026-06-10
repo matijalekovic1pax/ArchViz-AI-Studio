@@ -561,6 +561,41 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   }, [showModelMenu]);
 
   useEffect(() => {
+    const handleOpenFeedbackReport = () => {
+      closeTopBarOverlays();
+      setShowFeedbackDialog(true);
+    };
+    const handleOpenFeedbackAdmin = () => {
+      closeTopBarOverlays();
+      if (isFeedbackAdmin) {
+        setShowAdminDashboard(true);
+        return;
+      }
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          tone: 'warning',
+          message: 'Feedback admin is available only to admin users.',
+        },
+      });
+    };
+    const handleSignOut = () => {
+      closeTopBarOverlays();
+      logout();
+    };
+
+    window.addEventListener('archviz:assistant-open-feedback-report', handleOpenFeedbackReport);
+    window.addEventListener('archviz:assistant-open-feedback-admin', handleOpenFeedbackAdmin);
+    window.addEventListener('archviz:assistant-sign-out', handleSignOut);
+    return () => {
+      window.removeEventListener('archviz:assistant-open-feedback-report', handleOpenFeedbackReport);
+      window.removeEventListener('archviz:assistant-open-feedback-admin', handleOpenFeedbackAdmin);
+      window.removeEventListener('archviz:assistant-sign-out', handleSignOut);
+    };
+  }, [dispatch, isFeedbackAdmin, logout]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (

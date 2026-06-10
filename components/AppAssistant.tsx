@@ -1,5 +1,5 @@
 import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, Image as ImageIcon, Loader2, MessageCircle, RefreshCw, Send, SquareMousePointer, X } from 'lucide-react';
+import { Bot, ChevronDown, FileText, Loader2, MessageCircle, Paperclip, RefreshCw, Send, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { AppState, GenerationMode } from '../types';
@@ -16,9 +16,14 @@ import {
   extractAppAssistantActions,
   normalizeAppAssistantActions,
   type AppAssistantAction,
+  type AppAssistantActionRequest,
+  type AppAssistantChatFile,
   type AppAssistantChatImage,
 } from '../lib/appAssistantActions';
-import { GeminiService, ImageUtils, type ImageData } from '../services/geminiService';
+import { downloadFile, downloadImage, downloadImagesSequentially } from '../lib/download';
+import { downloadMaterialValidationReport } from '../lib/materialValidationExport';
+import { GeminiService, ImageUtils, type AttachmentData, type ImageData } from '../services/geminiService';
+import { getGatewaySessionDiagnostics } from '../services/apiGateway';
 
 type AssistantRole = 'user' | 'assistant';
 
@@ -28,6 +33,7 @@ interface AssistantMessage {
   content: string;
   isLoading?: boolean;
   attachments?: AppAssistantChatImage[];
+  files?: AppAssistantChatFile[];
   actions?: AppAssistantAction[];
   appliedActionIds?: string[];
 }
@@ -38,9 +44,110 @@ interface PendingGenerationRequest {
   prompt?: string;
 }
 
+interface AppAssistantTestHooks {
+  version: 1;
+  getActionContext: () => string;
+  normalizeRequests: (
+    requests: AppAssistantActionRequest[],
+    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+  ) => AppAssistantAction[];
+  applyRequests: (
+    requests: AppAssistantActionRequest[],
+    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+  ) => AppAssistantAction[];
+}
+
+interface AppAssistantTestCommandDetail {
+  id?: string;
+  command?: 'context' | 'normalize' | 'apply';
+  requests?: AppAssistantActionRequest[];
+  options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] };
+}
+
+type AppAssistantSmokePhase =
+  | 'idle'
+  | 'setup-wait'
+  | 'batch-wait'
+  | 'helpers-wait'
+  | 'files-wait'
+  | 'triggers-wait'
+  | 'clear-wait'
+  | 'done';
+
+interface AppAssistantSmokeState {
+  phase: AppAssistantSmokePhase;
+  setupActionTypes: string[];
+  batchActionTypes: string[];
+  helperActionTypes: string[];
+  fileActionTypes: string[];
+  generationActionTypes: string[];
+  downloadActionTypes: string[];
+  clearActionTypes: string[];
+}
+
+type AppAssistantSubmitSmokePhase = 'idle' | 'wait' | 'done';
+
+interface AppAssistantSubmitSmokeState {
+  phase: AppAssistantSubmitSmokePhase;
+}
+
+declare global {
+  interface Window {
+    __ARCHWIZ_ASSISTANT_TEST_HOOKS__?: AppAssistantTestHooks;
+  }
+}
+
 const ASSISTANT_MODEL = 'gemini-3.5-flash';
 const maxAssistantComposerImages = 4;
+const maxAssistantComposerFiles = 8;
 const makeMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const isDownloadAction = (action: AppAssistantAction) => action.type.startsWith('download_');
+
+const isAppAssistantTestBridgeEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  const env = (import.meta as any).env;
+  const bypassAllowed = Boolean(env?.DEV) || env?.VITE_ARCHWIZ_TEST_AUTH_BYPASS === '1';
+  if (!bypassAllowed) return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('archwizTest')) return true;
+  try {
+    return window.localStorage.getItem('archwiz:test') === '1';
+  } catch {
+    return false;
+  }
+};
+
+const isAppAssistantSmokeEnabled = () => {
+  if (!isAppAssistantTestBridgeEnabled()) return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has('archwizAssistantSmoke');
+};
+
+const isAppAssistantSubmitSmokeEnabled = () => {
+  if (!isAppAssistantTestBridgeEnabled()) return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has('archwizAssistantSubmitSmoke');
+};
+
+const writeAssistantSmokeTrigger = (name: string, payload: unknown) => {
+  if (!isAppAssistantSmokeEnabled()) return false;
+  document.documentElement.setAttribute(name, JSON.stringify(payload));
+  return true;
+};
+
+const writeAssistantSubmitSmoke = (name: string, payload: unknown) => {
+  if (!isAppAssistantSubmitSmokeEnabled()) return false;
+  document.documentElement.setAttribute(name, JSON.stringify(payload));
+  return true;
+};
+
+const writeAssistantLiveDiagnostics = () => {
+  if (!isAppAssistantTestBridgeEnabled()) return;
+  document.documentElement.setAttribute(
+    'data-archwiz-assistant-live-diagnostics',
+    JSON.stringify(getGatewaySessionDiagnostics())
+  );
+};
 
 interface InspectRect {
   top: number;
@@ -83,6 +190,197 @@ const getAssistantImages = (state: AppState, chatImages: AppAssistantChatImage[]
       return [];
     }
   });
+};
+
+const dataUrlToAttachmentData = (file: AppAssistantChatFile): AttachmentData | null => {
+  const match = file.url.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return {
+    mimeType: file.mimeType || match[1],
+    base64: match[2],
+    name: file.name,
+  };
+};
+
+const getAssistantFileAttachments = (chatFiles: AppAssistantChatFile[] = []): AttachmentData[] =>
+  chatFiles.flatMap((file) => {
+    const attachment = dataUrlToAttachmentData(file);
+    return attachment ? [attachment] : [];
+  });
+
+const getAssistantServiceErrorMessage = (err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/not authenticated|session expired|please sign in/i.test(message)) {
+    const diagnostics = getGatewaySessionDiagnostics();
+    const gatewayText = diagnostics.hasConfiguredGatewayUrl
+      ? `configured gateway ${diagnostics.gatewayUrl}`
+      : `default gateway ${diagnostics.gatewayUrl}`;
+    const sessionText = diagnostics.authenticated
+      ? 'an active gateway session is present'
+      : 'no active gateway session is present';
+    return `The assistant needs a signed-in gateway session before it can call the model. Current status: ${gatewayText}; ${sessionText}. Please sign in again, then retry this message.`;
+  }
+  return 'I could not reach the assistant right now. Please try again.';
+};
+
+const summarizeAssistantTestValue = (value: unknown): unknown => {
+  if (typeof value === 'string' && value.startsWith('data:')) {
+    const match = value.match(/^data:([^;]+);base64,(.*)$/);
+    return {
+      present: true,
+      mimeType: match?.[1] || null,
+      chars: value.length,
+    };
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => summarizeAssistantTestValue(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        key === 'url' || key === 'dataUrl' ? summarizeAssistantTestValue(item) : summarizeAssistantTestValue(item),
+      ])
+    );
+  }
+  return value;
+};
+
+const summarizeAssistantTestActions = (actions: AppAssistantAction[]) =>
+  actions.map((action) => ({
+    ...action,
+    value: summarizeAssistantTestValue(action.value),
+    file: action.file
+      ? {
+          ...action.file,
+          url: summarizeAssistantTestValue(action.file.url),
+        }
+      : undefined,
+  }));
+
+const getActionStringList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
+  }
+  if (typeof value !== 'string') return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
+    }
+  } catch {
+    // Fall through to comma-separated parsing.
+  }
+  return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+};
+
+const getAssistantSubmitSmokeAnswer = () => [
+  'Submit smoke response applied through the normal assistant parser.',
+  '<assistant_actions>{"actions":[',
+  '{"type":"set_mode","mode":"visual-edit","label":"Switch to Visual Edit"},',
+  '{"type":"set_prompt","value":"Submit smoke prompt","label":"Set submit smoke prompt"},',
+  '{"type":"set_workflow","path":"visualPrompt","value":"Replace the selected floor with warm oak planks from the submit smoke.","label":"Set Visual Edit prompt"},',
+  '{"type":"set_output","path":"format","value":"jpg","label":"Set output format"},',
+  '{"type":"use_chat_image","imageTarget":"canvas","attachmentId":"submit-img","label":"Use submit smoke image"},',
+  '{"type":"use_chat_file","fileTarget":"document-translate-source","attachmentId":"submit-doc","label":"Use submit smoke document"}',
+  ']}</assistant_actions>',
+].join('');
+
+type CurrentImageDownloadFormat = 'png' | 'jpg';
+type CurrentImageDownloadResolution = 'full' | 'medium';
+
+const parseCurrentImageDownloadOptions = (
+  value: unknown
+): { format: CurrentImageDownloadFormat; resolution: CurrentImageDownloadResolution } => {
+  const fallback = { format: 'png' as const, resolution: 'full' as const };
+  const normalize = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+    const options = raw as Record<string, unknown>;
+    const format = options.format === 'jpg' || options.format === 'jpeg'
+      ? 'jpg'
+      : options.format === 'png'
+        ? 'png'
+        : fallback.format;
+    const resolution = options.resolution === 'medium' || options.resolution === '1080p'
+      ? 'medium'
+      : options.resolution === 'full' || options.resolution === 'original' || options.resolution === '2160p' || options.resolution === '4k'
+        ? 'full'
+        : fallback.resolution;
+    return { format, resolution };
+  };
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    try {
+      return normalize(JSON.parse(trimmed));
+    } catch {
+      const lower = trimmed.toLowerCase();
+      return {
+        format: lower.includes('jpg') || lower.includes('jpeg') ? 'jpg' : lower.includes('png') ? 'png' : fallback.format,
+        resolution: lower.includes('medium') || lower.includes('1080') || lower.includes('half') ? 'medium' : fallback.resolution,
+      };
+    }
+  }
+
+  return normalize(value);
+};
+
+const downloadCurrentImageVariant = async (source: string, value: unknown) => {
+  const options = parseCurrentImageDownloadOptions(value);
+  const suffix = options.resolution === 'medium' ? 'medium' : 'full';
+  const filename = `archviz-current-${Date.now()}-${suffix}.${options.format}`;
+
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const width = Math.max(1, Math.round((img.naturalWidth || img.width) * (options.resolution === 'medium' ? 0.5 : 1)));
+          const height = Math.max(1, Math.round((img.naturalHeight || img.height) * (options.resolution === 'medium' ? 0.5 : 1)));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas export unavailable');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL(options.format === 'jpg' ? 'image/jpeg' : 'image/png', options.format === 'jpg' ? 0.9 : undefined));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = source;
+    });
+    await downloadFile(dataUrl, filename);
+  } catch {
+    await downloadFile(source, filename);
+  }
+};
+
+const downloadProjectSnapshot = async (state: AppState) => {
+  const payload = JSON.stringify(state, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = window.URL.createObjectURL(blob);
+  try {
+    await downloadFile(url, `archviz-project-${Date.now()}.json`);
+  } finally {
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+  }
+};
+
+const handoffDocsAuth = () => {
+  try {
+    const gatewayToken = sessionStorage.getItem('archviz_jwt');
+    if (gatewayToken) {
+      localStorage.setItem('archviz_docs_auth_handoff', gatewayToken);
+    }
+  } catch {
+    // Best effort only; docs can still open without a handoff token.
+  }
 };
 
 const getAssistantGenerationReadiness = (
@@ -348,7 +646,7 @@ const BubbleText: React.FC<{ text: string }> = ({ text }) => (
 
 export const AppAssistant: React.FC = () => {
   const { state, dispatch } = useAppStore();
-  const { generate } = useGeneration();
+  const { generate, cancelGeneration } = useGeneration();
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [hintVisible, setHintVisible] = useState(false);
@@ -357,13 +655,27 @@ export const AppAssistant: React.FC = () => {
   const [pendingGeneration, setPendingGeneration] = useState<PendingGenerationRequest | null>(null);
   const [input, setInput] = useState('');
   const [composerImages, setComposerImages] = useState<AppAssistantChatImage[]>([]);
+  const [composerFiles, setComposerFiles] = useState<AppAssistantChatFile[]>([]);
   const [threads, setThreads] = useState<AssistantThreads>({});
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const inspectToolbarRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const assistantSmokeRef = useRef<AppAssistantSmokeState>({
+    phase: 'idle',
+    setupActionTypes: [],
+    batchActionTypes: [],
+    helperActionTypes: [],
+    fileActionTypes: [],
+    generationActionTypes: [],
+    downloadActionTypes: [],
+    clearActionTypes: [],
+  });
+  const assistantSubmitSmokeRef = useRef<AppAssistantSubmitSmokeState>({
+    phase: 'idle',
+  });
   const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
   const feature = getAppAssistantFeature(state.mode);
   const messages = threads[state.mode] || [];
@@ -380,6 +692,10 @@ export const AppAssistant: React.FC = () => {
       [mode]: updater(previous[mode] || []),
     }));
   };
+
+  useEffect(() => {
+    writeAssistantLiveDiagnostics();
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -541,20 +857,24 @@ export const AppAssistant: React.FC = () => {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 144)}px`;
   }, [input, open]);
 
-  const handleAssistantImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAssistantAttachmentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = event.currentTarget.files;
-    const files: File[] = [];
+    const imageFiles: File[] = [];
+    const otherFiles: File[] = [];
     if (fileList) {
       for (let index = 0; index < fileList.length; index += 1) {
         const file = fileList.item(index);
         if (file?.type.startsWith('image/')) {
-          files.push(file);
+          imageFiles.push(file);
+        } else if (file) {
+          otherFiles.push(file);
         }
       }
     }
-    const limitedFiles = files.slice(0, Math.max(0, maxAssistantComposerImages - composerImages.length));
+    const limitedImageFiles = imageFiles.slice(0, Math.max(0, maxAssistantComposerImages - composerImages.length));
+    const limitedOtherFiles = otherFiles.slice(0, Math.max(0, maxAssistantComposerFiles - composerFiles.length));
 
-    limitedFiles.forEach((file) => {
+    limitedImageFiles.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
         const url = typeof reader.result === 'string' ? reader.result : '';
@@ -571,8 +891,27 @@ export const AppAssistant: React.FC = () => {
       reader.readAsDataURL(file);
     });
 
-    if (imageInputRef.current) {
-      imageInputRef.current.value = '';
+    limitedOtherFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = typeof reader.result === 'string' ? reader.result : '';
+        if (!url) return;
+        setComposerFiles((items) => [
+          ...items,
+          {
+            id: `chat-file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            url,
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size,
+          },
+        ].slice(0, maxAssistantComposerFiles));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
     }
   };
 
@@ -580,32 +919,44 @@ export const AppAssistant: React.FC = () => {
     setComposerImages((items) => items.filter((item) => item.id !== id));
   };
 
+  const removeComposerFile = (id: string) => {
+    setComposerFiles((items) => items.filter((item) => item.id !== id));
+  };
+
   const submitQuestion = async (
     rawQuestion: string,
     visibleQuestion = rawQuestion,
-    attachedImages: AppAssistantChatImage[] = []
+    attachedImages: AppAssistantChatImage[] = [],
+    attachedFiles: AppAssistantChatFile[] = []
   ) => {
     const imageQuestion = attachedImages.length
       ? `I attached ${attachedImages.length} image reference${attachedImages.length === 1 ? '' : 's'}. Review them and suggest how they should be used in this workflow.`
       : '';
-    const question = rawQuestion.trim() || imageQuestion;
+    const fileQuestion = attachedFiles.length
+      ? `I attached ${attachedFiles.length} file${attachedFiles.length === 1 ? '' : 's'}. Review them and suggest how they should be used in this workflow.`
+      : '';
+    const question = rawQuestion.trim() || imageQuestion || fileQuestion;
     if (!question || isThinking) return;
 
     const requestMode = state.mode;
     const requestMessages = threads[requestMode] || [];
     const assistantImageSources = getAssistantImageSources(state, attachedImages);
     const assistantImages = getAssistantImages(state, attachedImages);
+    const assistantAttachments = getAssistantFileAttachments(attachedFiles);
     const workspaceSnapshot = [
       buildAppAssistantWorkspaceSnapshot(state),
       `Assistant action mode: ${controlMode ? 'Act mode; validated actions will apply automatically' : 'Suggest mode; actions wait for user confirmation'}`,
       `User-attached images in this message: ${attachedImages.length ? attachedImages.map((image) => `${image.id}${image.name ? ` (${image.name})` : ''}`).join(', ') : 'none'}`,
+      `User-attached files in this message: ${attachedFiles.length ? attachedFiles.map((file) => `${file.id} (${file.name}, ${file.mimeType}, ${file.size} bytes)`).join(', ') : 'none'}`,
       `Visual attachments sent to assistant: ${assistantImageSources.length ? assistantImageSources.map((source, index) => `image ${index + 1}: ${source.label}`).join(', ') : 'none'}`,
+      `File attachments sent to assistant: ${assistantAttachments.length ? assistantAttachments.map((file, index) => `file ${index + 1}: ${file.name || file.mimeType}`).join(', ') : 'none'}`,
     ].join('\n');
     const userMessage: AssistantMessage = {
       id: makeMessageId(),
       role: 'user',
       content: visibleQuestion.trim() || question,
       attachments: attachedImages,
+      files: attachedFiles,
     };
     const loadingMessage: AssistantMessage = {
       id: makeMessageId(),
@@ -619,31 +970,46 @@ export const AppAssistant: React.FC = () => {
     if (attachedImages.length > 0) {
       setComposerImages([]);
     }
+    if (attachedFiles.length > 0) {
+      setComposerFiles([]);
+    }
     setThreadForMode(requestMode, (items) => [...items, userMessage, loadingMessage]);
 
     try {
-      const answer = await service.generateText({
-        model: ASSISTANT_MODEL,
-        prompt: buildAppAssistantPrompt({
-          mode: requestMode,
-          question,
-          language: i18n.language || 'en',
-          messages: [...requestMessages, userMessage],
-          workspaceSnapshot,
-          actionContext: buildAppAssistantActionContext(state, { chatImages: attachedImages }),
-        }),
-        images: assistantImages,
-        generationConfig: {
-          temperature: 0.15,
-          topP: 0.9,
-          maxOutputTokens: 4096,
-          responseModalities: ['TEXT'],
-          thinkingConfig: { thinkingLevel: 'low' },
-        },
+      const assistantPrompt = buildAppAssistantPrompt({
+        mode: requestMode,
+        question,
+        language: i18n.language || 'en',
+        messages: [...requestMessages, userMessage],
+        workspaceSnapshot,
+        actionContext: buildAppAssistantActionContext(state, { chatImages: attachedImages, chatFiles: attachedFiles }),
       });
+      const answer = isAppAssistantSubmitSmokeEnabled()
+        ? (() => {
+            writeAssistantSubmitSmoke('data-archwiz-assistant-submit-service', {
+              model: ASSISTANT_MODEL,
+              promptChars: assistantPrompt.length,
+              imageCount: assistantImages.length,
+              fileCount: assistantAttachments.length,
+            });
+            return getAssistantSubmitSmokeAnswer();
+          })()
+        : await service.generateText({
+          model: ASSISTANT_MODEL,
+          prompt: assistantPrompt,
+          images: assistantImages,
+          attachments: assistantAttachments,
+          generationConfig: {
+            temperature: 0.15,
+            topP: 0.9,
+            maxOutputTokens: 4096,
+            responseModalities: ['TEXT'],
+            thinkingConfig: { thinkingLevel: 'low' },
+          },
+        });
 
       const { content, requests } = extractAppAssistantActions(answer);
-      const actions = normalizeAppAssistantActions(requests, state, { chatImages: attachedImages });
+      const actions = normalizeAppAssistantActions(requests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
 
       setThreadForMode(requestMode, (items) =>
         items.map((message) =>
@@ -666,13 +1032,14 @@ export const AppAssistant: React.FC = () => {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const friendlyMessage = getAssistantServiceErrorMessage(err);
       setError(message);
       setThreadForMode(requestMode, (items) =>
         items.map((item) =>
           item.id === loadingMessage.id
             ? {
                 ...item,
-                content: String(t('assistant.error', { defaultValue: 'I could not reach the assistant right now. Please try again.' })),
+                content: friendlyMessage,
                 isLoading: false,
               }
             : item
@@ -683,13 +1050,14 @@ export const AppAssistant: React.FC = () => {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void submitQuestion(input, input, composerImages);
+    void submitQuestion(input, input, composerImages, composerFiles);
   };
 
   const clearThread = () => {
     setError(null);
     setInspectMode(false);
     setComposerImages([]);
+    setComposerFiles([]);
     setThreadForMode(state.mode, () => []);
   };
 
@@ -704,6 +1072,125 @@ export const AppAssistant: React.FC = () => {
     );
   };
 
+  const runAssistantDownloads = async (actions: AppAssistantAction[]) => {
+    if (!actions.length) return;
+
+    try {
+      if (writeAssistantSmokeTrigger('data-archwiz-assistant-download-trigger', {
+        actionTypes: actions.map((action) => action.type),
+      })) {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: makeMessageId(),
+            tone: 'info',
+            message: actions.length === 1 ? 'Assistant started the download.' : `Assistant started ${actions.length} downloads.`,
+          },
+        });
+        return;
+      }
+
+      for (const action of actions) {
+        switch (action.type) {
+          case 'download_project':
+            await downloadProjectSnapshot(state);
+            break;
+          case 'download_current_image':
+            if (state.uploadedImage) {
+              await downloadCurrentImageVariant(state.uploadedImage, action.value);
+            }
+            break;
+          case 'download_latest_history_image': {
+            const latest = [...state.history].reverse().find((item) => item.thumbnail);
+            if (latest?.thumbnail) {
+              await downloadImage(latest.thumbnail, `archviz-history-${latest.id || Date.now()}.png`);
+            }
+            break;
+          }
+          case 'download_all_history_images': {
+            const items = state.history
+              .filter((item) => item.thumbnail)
+              .map((item, index) => ({
+                source: item.thumbnail,
+                filename: `archviz-history-${index + 1}-${item.id || item.timestamp}.png`,
+              }));
+            if (items.length) await downloadImagesSequentially(items);
+            break;
+          }
+          case 'download_current_video':
+            if (state.workflow.videoState.generatedVideoUrl) {
+              await downloadFile(state.workflow.videoState.generatedVideoUrl, `archviz-video-${Date.now()}.mp4`);
+            }
+            break;
+          case 'download_translated_document':
+            if (state.workflow.documentTranslate.translatedDocumentUrl) {
+              const sourceName = state.workflow.documentTranslate.sourceDocument?.name || 'translated-document';
+              const dotIndex = sourceName.lastIndexOf('.');
+              const baseName = dotIndex > 0 ? sourceName.slice(0, dotIndex) : sourceName;
+              const extension = dotIndex > 0 ? sourceName.slice(dotIndex + 1) : 'docx';
+              await downloadFile(
+                state.workflow.documentTranslate.translatedDocumentUrl,
+                `${baseName}-translated.${extension}`
+              );
+            }
+            break;
+          case 'download_pdf_outputs':
+            for (const output of state.workflow.pdfCompression.outputs) {
+              await downloadFile(output.dataUrl, output.name);
+            }
+            break;
+          case 'download_material_validation_report':
+            await downloadMaterialValidationReport(state.materialValidation);
+            break;
+          case 'download_multi_angle_outputs':
+            await downloadImagesSequentially(
+              state.workflow.multiAngleOutputs.map((output, index) => ({
+                source: output.url,
+                filename: output.name || `multi-angle-${index + 1}.png`,
+              }))
+            );
+            break;
+          case 'download_angle_change_outputs':
+            await downloadImagesSequentially(
+              state.workflow.angleChangeOutputs.map((output, index) => ({
+                source: output.url,
+                filename: output.name || `angle-change-${index + 1}.png`,
+              }))
+            );
+            break;
+          case 'download_headshots':
+            await downloadImagesSequentially(
+              state.workflow.headshot.generatedItems.map((item, index) => ({
+                source: item.url,
+                filename: `headshot-${item.style}-${index + 1}.png`,
+              }))
+            );
+            break;
+          default:
+            break;
+        }
+      }
+
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: makeMessageId(),
+          tone: 'info',
+          message: actions.length === 1 ? 'Assistant started the download.' : `Assistant started ${actions.length} downloads.`,
+        },
+      });
+    } catch (err) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: makeMessageId(),
+          tone: 'error',
+          message: err instanceof Error ? err.message : 'Assistant could not start the download.',
+        },
+      });
+    }
+  };
+
   const applyActions = (
     mode: GenerationMode,
     messageId: string,
@@ -711,23 +1198,141 @@ export const AppAssistant: React.FC = () => {
     automatic = false
   ) => {
     if (!actions.length) return;
+    const setLanguageAction = actions.find((action) => action.type === 'set_language');
+    const openFeedbackReportAction = actions.find((action) => action.type === 'open_feedback_report');
+    const openFeedbackAdminAction = actions.find((action) => action.type === 'open_feedback_admin');
+    const openDocsAction = actions.find((action) => action.type === 'open_docs');
+    const signOutAction = actions.find((action) => action.type === 'sign_out');
     const runGenerationAction = actions.find((action) => action.type === 'run_generation');
+    const cancelGenerationAction = actions.find((action) => action.type === 'cancel_generation');
     const runPreprocessAction = actions.find((action) => action.type === 'run_preprocess');
+    const runImageToCadPreprocessAction = actions.find((action) => action.type === 'run_image_to_cad_preprocess');
+    const runMasterplanZoneDetectionAction = actions.find((action) => action.type === 'run_masterplan_zone_detection');
+    const runExplodedComponentDetectionAction = actions.find((action) => action.type === 'run_exploded_component_detection');
+    const runSectionAreaDetectionAction = actions.find((action) => action.type === 'run_section_area_detection');
+    const runAiSelectionAction = actions.find((action) => action.type === 'run_ai_selection');
     const prepareSelectionAction = actions.find((action) => action.type === 'prepare_image_selection');
+    const downloadActions = actions.filter(isDownloadAction);
+    const helperActions = [
+      runPreprocessAction,
+      runImageToCadPreprocessAction,
+      runMasterplanZoneDetectionAction,
+      runExplodedComponentDetectionAction,
+      runSectionAreaDetectionAction,
+      runAiSelectionAction,
+    ].filter((action): action is AppAssistantAction => Boolean(action));
+    const helperSmokeHandled = helperActions.length > 0 && writeAssistantSmokeTrigger(
+      'data-archwiz-assistant-helper-trigger',
+      {
+        actionTypes: helperActions.map((action) => action.type),
+        targets: runAiSelectionAction ? getActionStringList(runAiSelectionAction.value) : [],
+      }
+    );
     const stateActions = actions.filter(
-      (action) => action.type !== 'run_generation' && action.type !== 'run_preprocess' && action.type !== 'prepare_image_selection'
+      (action) =>
+        action.type !== 'set_language' &&
+        action.type !== 'open_feedback_report' &&
+        action.type !== 'open_feedback_admin' &&
+        action.type !== 'open_docs' &&
+        action.type !== 'sign_out' &&
+        action.type !== 'run_generation' &&
+        action.type !== 'cancel_generation' &&
+        action.type !== 'run_preprocess' &&
+        action.type !== 'run_image_to_cad_preprocess' &&
+        action.type !== 'run_masterplan_zone_detection' &&
+        action.type !== 'run_exploded_component_detection' &&
+        action.type !== 'run_section_area_detection' &&
+        action.type !== 'run_ai_selection' &&
+        action.type !== 'prepare_image_selection' &&
+        !isDownloadAction(action)
     );
 
     if (stateActions.length > 0) {
       applyAppAssistantActions(dispatch, state, stateActions);
     }
 
-    if (runPreprocessAction) {
+    if (setLanguageAction && typeof setLanguageAction.value === 'string') {
+      void i18n.changeLanguage(setLanguageAction.value);
+    }
+
+    if (openFeedbackReportAction) {
+      window.dispatchEvent(new CustomEvent('archviz:assistant-open-feedback-report'));
+    }
+
+    if (openFeedbackAdminAction) {
+      window.dispatchEvent(new CustomEvent('archviz:assistant-open-feedback-admin'));
+    }
+
+    if (signOutAction) {
+      window.dispatchEvent(new CustomEvent('archviz:assistant-sign-out'));
+    }
+
+    if (openDocsAction) {
+      handoffDocsAuth();
+      window.setTimeout(() => {
+        window.location.assign('/docs/');
+      }, 80);
+    }
+
+    if (cancelGenerationAction) {
+      cancelGeneration();
+    }
+
+    if (!helperSmokeHandled && runPreprocessAction) {
       dispatch({ type: 'SET_MODE', payload: 'render-3d' });
       dispatch({ type: 'UPDATE_WORKFLOW', payload: { prioritizationEnabled: true, detectedElements: [] } });
       window.setTimeout(() => {
         window.dispatchEvent(new CustomEvent('archviz:assistant-run-render3d-preprocess'));
       }, 80);
+    }
+
+    if (!helperSmokeHandled && runImageToCadPreprocessAction) {
+      dispatch({ type: 'SET_MODE', payload: 'img-to-cad' });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-image-to-cad-preprocess'));
+      }, 120);
+    }
+
+    if (!helperSmokeHandled && runMasterplanZoneDetectionAction) {
+      dispatch({ type: 'SET_MODE', payload: 'masterplan' });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-masterplan-zone-detection'));
+      }, 120);
+    }
+
+    if (!helperSmokeHandled && runExplodedComponentDetectionAction) {
+      dispatch({ type: 'SET_MODE', payload: 'exploded' });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-exploded-component-detection'));
+      }, 120);
+    }
+
+    if (!helperSmokeHandled && runSectionAreaDetectionAction) {
+      dispatch({ type: 'SET_MODE', payload: 'section' });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-section-area-detection'));
+      }, 120);
+    }
+
+    if (!helperSmokeHandled && runAiSelectionAction) {
+      const targets = getActionStringList(runAiSelectionAction.value);
+      dispatch({ type: 'SET_MODE', payload: 'visual-edit' });
+      if (!state.rightPanelOpen) {
+        dispatch({ type: 'TOGGLE_RIGHT_PANEL' });
+      }
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualSelection: {
+            ...state.workflow.visualSelection,
+            mode: 'ai',
+            autoTargets: targets,
+          },
+        },
+      });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('archviz:assistant-run-visual-ai-selection', { detail: { targets } }));
+      }, 220);
     }
 
     if (prepareSelectionAction) {
@@ -736,7 +1341,16 @@ export const AppAssistant: React.FC = () => {
 
     if (runGenerationAction) {
       const prompt = typeof runGenerationAction.value === 'string' ? runGenerationAction.value : undefined;
-      setPendingGeneration({ id: runGenerationAction.id, prompt });
+      if (!writeAssistantSmokeTrigger('data-archwiz-assistant-generation-trigger', {
+        actionTypes: [runGenerationAction.type],
+        prompt: prompt || null,
+      })) {
+        setPendingGeneration({ id: runGenerationAction.id, prompt });
+      }
+    }
+
+    if (downloadActions.length > 0) {
+      void runAssistantDownloads(downloadActions);
     }
 
     markActionsApplied(mode, messageId, actions.map((action) => action.id));
@@ -745,10 +1359,34 @@ export const AppAssistant: React.FC = () => {
         ? stateActions.length > 0
           ? 'Assistant applied changes and queued generation.'
           : 'Assistant queued generation.'
+        : openDocsAction
+          ? 'Assistant is opening the user manual.'
+        : signOutAction
+          ? 'Assistant is signing you out.'
+        : openFeedbackAdminAction
+          ? 'Assistant opened feedback admin.'
+        : openFeedbackReportAction
+          ? 'Assistant opened feedback reporting.'
+        : setLanguageAction
+          ? 'Assistant switched the app language.'
+        : cancelGenerationAction
+          ? 'Assistant asked the current generation to stop.'
         : runPreprocessAction
           ? stateActions.length > 0
             ? 'Assistant applied setup and started AI pre-processing.'
             : 'Assistant started AI pre-processing.'
+        : runImageToCadPreprocessAction
+          ? 'Assistant started Image to CAD pre-processing.'
+        : runMasterplanZoneDetectionAction
+          ? 'Assistant started Masterplan zone detection.'
+        : runExplodedComponentDetectionAction
+          ? 'Assistant started Exploded View component detection.'
+        : runSectionAreaDetectionAction
+          ? 'Assistant started Section area detection.'
+        : runAiSelectionAction
+          ? 'Assistant started Visual Edit AI selection.'
+        : downloadActions.length > 0
+          ? downloadActions.length === 1 ? 'Assistant started a download.' : `Assistant started ${downloadActions.length} downloads.`
         : automatic
           ? actions.length === 1 ? 'Assistant applied a change.' : `Assistant applied ${actions.length} changes.`
           : actions.length === 1 ? 'Assistant change applied.' : `${actions.length} assistant changes applied.`;
@@ -800,6 +1438,464 @@ export const AppAssistant: React.FC = () => {
       },
     });
   };
+
+  useEffect(() => {
+    if (!isAppAssistantTestBridgeEnabled()) return;
+
+    const writeBridgeResult = (id: string, payload: unknown) => {
+      document.documentElement.setAttribute(
+        'data-archwiz-assistant-test-result',
+        JSON.stringify({ id, payload })
+      );
+    };
+
+    const handleBridgeCommand = (event: Event) => {
+      const detail = (event as CustomEvent<AppAssistantTestCommandDetail>).detail || {};
+      const id = detail.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const requests = Array.isArray(detail.requests) ? detail.requests : [];
+      const options = detail.options || {};
+
+      if (detail.command === 'context') {
+        writeBridgeResult(id, {
+          actionContext: buildAppAssistantActionContext(state),
+          liveDiagnostics: getGatewaySessionDiagnostics(),
+        });
+        return;
+      }
+
+      const actions = normalizeAppAssistantActions(requests, state, options);
+      if (detail.command === 'apply' && actions.length > 0) {
+        applyActions(state.mode, `assistant-test-${id}`, actions, true);
+      }
+
+      writeBridgeResult(id, {
+        actionCount: actions.length,
+        actions: summarizeAssistantTestActions(actions),
+      });
+    };
+
+    const hooks: AppAssistantTestHooks = {
+      version: 1,
+      getActionContext: () => buildAppAssistantActionContext(state),
+      normalizeRequests: (requests, options = {}) =>
+        normalizeAppAssistantActions(requests, state, options),
+      applyRequests: (requests, options = {}) => {
+        const actions = normalizeAppAssistantActions(requests, state, options);
+        if (actions.length > 0) {
+          applyActions(state.mode, `assistant-test-${makeMessageId()}`, actions, true);
+        }
+        return actions;
+      },
+    };
+
+    window.__ARCHWIZ_ASSISTANT_TEST_HOOKS__ = hooks;
+    window.addEventListener('archwiz:test-assistant-command', handleBridgeCommand);
+    return () => {
+      window.removeEventListener('archwiz:test-assistant-command', handleBridgeCommand);
+      if (window.__ARCHWIZ_ASSISTANT_TEST_HOOKS__ === hooks) {
+        delete window.__ARCHWIZ_ASSISTANT_TEST_HOOKS__;
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!isAppAssistantSmokeEnabled()) return;
+
+    const smoke = assistantSmokeRef.current;
+    const writeSmokeResult = (payload: Record<string, unknown>) => {
+      document.documentElement.setAttribute(
+        'data-archwiz-assistant-smoke',
+        JSON.stringify({
+          phase: smoke.phase,
+          setupActionTypes: smoke.setupActionTypes,
+          batchActionTypes: smoke.batchActionTypes,
+          helperActionTypes: smoke.helperActionTypes,
+          fileActionTypes: smoke.fileActionTypes,
+          generationActionTypes: smoke.generationActionTypes,
+          downloadActionTypes: smoke.downloadActionTypes,
+          clearActionTypes: smoke.clearActionTypes,
+          ...payload,
+        })
+      );
+    };
+
+    const imageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const docUrl = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsDBAoAAAAAAAEAAQAAAAAAAAAAAAAABwAAAGRvYy50eHQ=';
+    const pdfUrl = 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCg==';
+    const chatImages: AppAssistantChatImage[] = [
+      { id: 'img1', url: imageUrl, name: 'material.png' },
+      { id: 'img2', url: imageUrl, name: 'chair.png' },
+      { id: 'img3', url: imageUrl, name: 'end-frame.png' },
+      { id: 'img4', url: imageUrl, name: 'portrait.png' },
+    ];
+    const chatFiles: AppAssistantChatFile[] = [
+      {
+        id: 'doc1',
+        url: docUrl,
+        name: 'brief.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 64,
+      },
+      {
+        id: 'pdf1',
+        url: pdfUrl,
+        name: 'drawings.pdf',
+        mimeType: 'application/pdf',
+        size: 32,
+      },
+      {
+        id: 'pdf2',
+        url: pdfUrl,
+        name: 'details.pdf',
+        mimeType: 'application/pdf',
+        size: 32,
+      },
+      {
+        id: 'mat1',
+        url: docUrl,
+        name: 'materials.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 64,
+      },
+      {
+        id: 'mat2',
+        url: docUrl,
+        name: 'boq.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 64,
+      },
+    ];
+
+    const setupReady =
+      state.mode === 'visual-edit' &&
+      state.imageGenerationModel === 'chatgpt-image-generation-2' &&
+      state.prompt === 'Replace the selected flooring with warm oak planks.' &&
+      Boolean(state.uploadedImage) &&
+      Boolean(state.workflow.visualMaterial.referenceImage) &&
+      state.output.resolution === '4k';
+    const batchReady =
+      state.workflow.sceneInsertionReferences.length === 2 &&
+      Boolean(state.workflow.videoState.startFrame) &&
+      Boolean(state.workflow.videoState.endFrame) &&
+      state.workflow.videoState.keyframes.length === 1 &&
+      Boolean(state.workflow.headshot.leftImage) &&
+      Boolean(state.workflow.headshot.frontImage) &&
+      Boolean(state.workflow.headshot.rightImage);
+    const filesReady =
+      state.workflow.documentTranslate.sourceDocument?.name === 'brief.docx' &&
+      state.materialValidation.documents.length === 2 &&
+      state.workflow.pdfCompression.queue.length === 2;
+    const cleared =
+      !state.uploadedImage &&
+      !state.workflow.visualMaterial.referenceImage &&
+      state.workflow.sceneInsertionReferences.length === 0 &&
+      !state.workflow.videoState.startFrame &&
+      !state.workflow.videoState.endFrame &&
+      state.workflow.videoState.keyframes.length === 0 &&
+      !state.workflow.headshot.leftImage &&
+      !state.workflow.headshot.frontImage &&
+      !state.workflow.headshot.rightImage &&
+      !state.workflow.documentTranslate.sourceDocument &&
+      state.materialValidation.documents.length === 0 &&
+      state.workflow.pdfCompression.queue.length === 0;
+    const generationTriggered = (() => {
+      const raw = document.documentElement.getAttribute('data-archwiz-assistant-generation-trigger');
+      if (!raw) return false;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed?.actionTypes) && parsed.actionTypes.includes('run_generation');
+      } catch {
+        return false;
+      }
+    })();
+    const downloadTriggered = (() => {
+      const raw = document.documentElement.getAttribute('data-archwiz-assistant-download-trigger');
+      if (!raw) return false;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed?.actionTypes) && parsed.actionTypes.includes('download_current_image');
+      } catch {
+        return false;
+      }
+    })();
+    const helperTriggered = (() => {
+      const raw = document.documentElement.getAttribute('data-archwiz-assistant-helper-trigger');
+      if (!raw) return false;
+      try {
+        const parsed = JSON.parse(raw);
+        const actionTypes = Array.isArray(parsed?.actionTypes) ? parsed.actionTypes : [];
+        return [
+          'run_preprocess',
+          'run_image_to_cad_preprocess',
+          'run_masterplan_zone_detection',
+          'run_exploded_component_detection',
+          'run_section_area_detection',
+          'run_ai_selection',
+        ].every((type) => actionTypes.includes(type));
+      } catch {
+        return false;
+      }
+    })();
+
+    if (smoke.phase === 'done') {
+      const actionContext = buildAppAssistantActionContext(state);
+      writeSmokeResult({
+        ok: true,
+        setupReady: true,
+        batchReady: true,
+        helperTriggered: true,
+        filesReady: true,
+        generationTriggered: true,
+        downloadTriggered: true,
+        cleared: true,
+        contextHasClear: actionContext.includes('clear_image_target') &&
+          actionContext.includes('clear_file_target'),
+        contextHasRunGeneration: actionContext.includes('run_generation runs the current workflow'),
+      });
+      return;
+    }
+
+    if (smoke.phase === 'idle') {
+      const setupActions = normalizeAppAssistantActions([
+        { type: 'set_mode', mode: 'visual-edit' },
+        { type: 'set_image_generation_model', value: 'chatgpt-image-generation-2' },
+        { type: 'set_prompt', value: 'Replace the selected flooring with warm oak planks.' },
+        { type: 'set_workflow', path: 'activeTool', value: 'material' },
+        { type: 'set_workflow', path: 'visualMaterial.category', value: 'Flooring' },
+        { type: 'set_output', path: 'resolution', value: '4k' },
+        { type: 'use_chat_image', imageTarget: 'canvas', attachmentId: 'img1' },
+        { type: 'use_chat_image', imageTarget: 'visual-material-reference', attachmentId: 'img1' },
+      ], state, { chatImages });
+      smoke.phase = 'setup-wait';
+      smoke.setupActionTypes = setupActions.map((action) => action.type);
+      writeSmokeResult({ ok: false, step: 'setup-started' });
+      applyActions(state.mode, 'assistant-smoke-setup', setupActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'setup-wait' && setupReady) {
+      const batchActions = normalizeAppAssistantActions([
+        { type: 'use_chat_image', imageTarget: 'scene-compose-reference', attachmentId: 'img1', caption: 'lounge chair' },
+        { type: 'use_chat_image', imageTarget: 'scene-compose-reference', attachmentId: 'img2', caption: 'floor lamp' },
+        { type: 'use_chat_image', imageTarget: 'video-start-frame', attachmentId: 'img2' },
+        { type: 'use_chat_image', imageTarget: 'video-end-frame', attachmentId: 'img3' },
+        { type: 'use_chat_image', imageTarget: 'video-keyframe', attachmentId: 'img4' },
+        { type: 'use_chat_image', imageTarget: 'headshot-left', attachmentId: 'img2' },
+        { type: 'use_chat_image', imageTarget: 'headshot-front', attachmentId: 'img3' },
+        { type: 'use_chat_image', imageTarget: 'headshot-right', attachmentId: 'img4' },
+      ], state, { chatImages });
+      smoke.phase = 'batch-wait';
+      smoke.batchActionTypes = batchActions.map((action) => action.type);
+      writeSmokeResult({ ok: false, step: 'batch-started', setupReady: true });
+      applyActions(state.mode, 'assistant-smoke-batch', batchActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'batch-wait' && batchReady) {
+      const helperActions = normalizeAppAssistantActions([
+        { type: 'run_preprocess' },
+        { type: 'run_ai_selection', value: ['Building'] },
+        { type: 'run_image_to_cad_preprocess' },
+        { type: 'run_masterplan_zone_detection' },
+        { type: 'run_exploded_component_detection' },
+        { type: 'run_section_area_detection' },
+      ], state);
+      smoke.phase = 'helpers-wait';
+      smoke.helperActionTypes = helperActions.map((action) => action.type);
+      writeSmokeResult({ ok: false, step: 'helpers-started', setupReady: true, batchReady: true });
+      applyActions(state.mode, 'assistant-smoke-helpers', helperActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'helpers-wait' && helperTriggered) {
+      const fileActions = normalizeAppAssistantActions([
+        { type: 'use_chat_file', fileTarget: 'document-translate-source', attachmentId: 'doc1' },
+        { type: 'use_chat_file', fileTarget: 'material-validation-document', attachmentId: 'mat1' },
+        { type: 'use_chat_file', fileTarget: 'material-validation-document', attachmentId: 'mat2' },
+        { type: 'use_chat_file', fileTarget: 'pdf-compression-queue', attachmentId: 'pdf1' },
+        { type: 'use_chat_file', fileTarget: 'pdf-compression-queue', attachmentId: 'pdf2' },
+      ], state, { chatFiles });
+      smoke.phase = 'files-wait';
+      smoke.fileActionTypes = fileActions.map((action) => action.type);
+      writeSmokeResult({ ok: false, step: 'files-started', setupReady: true, batchReady: true, helperTriggered: true });
+      applyActions(state.mode, 'assistant-smoke-files', fileActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'files-wait' && filesReady) {
+      const generationActions = normalizeAppAssistantActions([
+        { type: 'run_generation', value: 'Replace the selected flooring with warm oak planks.' },
+      ], state);
+      const downloadActions = normalizeAppAssistantActions([
+        { type: 'download_current_image', value: { format: 'png', resolution: 'medium' } },
+      ], state);
+      smoke.phase = 'triggers-wait';
+      smoke.generationActionTypes = generationActions.map((action) => action.type);
+      smoke.downloadActionTypes = downloadActions.map((action) => action.type);
+      writeSmokeResult({
+        ok: false,
+        step: 'triggers-started',
+        setupReady: true,
+        batchReady: true,
+        helperTriggered: true,
+        filesReady: true,
+      });
+      applyActions(state.mode, 'assistant-smoke-generation', generationActions, true);
+      applyActions(state.mode, 'assistant-smoke-download', downloadActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'triggers-wait' && generationTriggered && downloadTriggered) {
+      const clearActions = normalizeAppAssistantActions([
+        { type: 'clear_image_target', imageTarget: 'visual-material-reference' },
+        { type: 'clear_image_target', imageTarget: 'canvas' },
+        { type: 'clear_image_target', imageTarget: 'scene-compose-reference' },
+        { type: 'clear_image_target', imageTarget: 'video-start-frame' },
+        { type: 'clear_image_target', imageTarget: 'video-end-frame' },
+        { type: 'clear_image_target', imageTarget: 'video-keyframe' },
+        { type: 'clear_image_target', imageTarget: 'headshot-left' },
+        { type: 'clear_image_target', imageTarget: 'headshot-front' },
+        { type: 'clear_image_target', imageTarget: 'headshot-right' },
+        { type: 'clear_file_target', fileTarget: 'document-translate-source' },
+        { type: 'clear_file_target', fileTarget: 'material-validation-document' },
+        { type: 'clear_file_target', fileTarget: 'pdf-compression-queue' },
+      ], state);
+      smoke.phase = 'clear-wait';
+      smoke.clearActionTypes = clearActions.map((action) => action.type);
+      writeSmokeResult({
+        ok: false,
+        step: 'clear-started',
+        setupReady: true,
+        batchReady: true,
+        helperTriggered: true,
+        filesReady: true,
+        generationTriggered: true,
+        downloadTriggered: true,
+      });
+      applyActions(state.mode, 'assistant-smoke-clear', clearActions, true);
+      return;
+    }
+
+    if (smoke.phase === 'clear-wait' && cleared) {
+      smoke.phase = 'done';
+      const actionContext = buildAppAssistantActionContext(state);
+      writeSmokeResult({
+        ok: true,
+        setupReady: true,
+        batchReady: true,
+        helperTriggered: true,
+        filesReady: true,
+        generationTriggered: true,
+        downloadTriggered: true,
+        cleared: true,
+        contextHasClear: actionContext.includes('clear_image_target') &&
+          actionContext.includes('clear_file_target'),
+        contextHasRunGeneration: actionContext.includes('run_generation runs the current workflow'),
+      });
+      return;
+    }
+
+    writeSmokeResult({
+      ok: false,
+      setupReady,
+      batchReady,
+      helperTriggered,
+      filesReady,
+      generationTriggered,
+      downloadTriggered,
+      cleared,
+    });
+  });
+
+  useEffect(() => {
+    if (!isAppAssistantSubmitSmokeEnabled()) return;
+
+    const smoke = assistantSubmitSmokeRef.current;
+    const writeSubmitSmokeResult = (payload: Record<string, unknown>) => {
+      document.documentElement.setAttribute(
+        'data-archwiz-assistant-submit-smoke',
+        JSON.stringify({ phase: smoke.phase, ...payload })
+      );
+    };
+    const imageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const docUrl = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsDBAoAAAAAAAEAAQAAAAAAAAAAAAAABwAAAGRvYy50eHQ=';
+    const submitImage: AppAssistantChatImage = {
+      id: 'submit-img',
+      url: imageUrl,
+      name: 'submit-smoke.png',
+    };
+    const submitFile: AppAssistantChatFile = {
+      id: 'submit-doc',
+      url: docUrl,
+      name: 'submit-smoke.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      size: 64,
+    };
+    const serviceRaw = document.documentElement.getAttribute('data-archwiz-assistant-submit-service');
+    const serviceCalled = Boolean(serviceRaw);
+    const allMessages = Object.values(threads).flat();
+    const assistantMessage = allMessages.find((message) =>
+      message.role === 'assistant' &&
+      !message.isLoading &&
+      message.content.includes('Submit smoke response applied through the normal assistant parser.')
+    );
+    const appliedActions = assistantMessage?.appliedActionIds || [];
+    const actions = assistantMessage?.actions || [];
+    const stateReady =
+      state.mode === 'visual-edit' &&
+      state.prompt === 'Submit smoke prompt' &&
+      state.workflow.visualPrompt === 'Replace the selected floor with warm oak planks from the submit smoke.' &&
+      state.output.format === 'jpg' &&
+      Boolean(state.uploadedImage) &&
+      state.workflow.documentTranslate.sourceDocument?.name === 'submit-smoke.docx';
+    const threadReady = Boolean(assistantMessage && actions.length === 6 && appliedActions.length === 6);
+
+    if (smoke.phase === 'done') {
+      writeSubmitSmokeResult({
+        ok: true,
+        serviceCalled: true,
+        threadReady: true,
+        stateReady: true,
+        liveDiagnostics: getGatewaySessionDiagnostics(),
+        actionTypes: actions.map((action) => action.type),
+      });
+      return;
+    }
+
+    if (smoke.phase === 'idle') {
+      smoke.phase = 'wait';
+      writeSubmitSmokeResult({ ok: false, step: 'submit-started' });
+      void submitQuestion(
+        'Set up Visual Edit from this image and document using the submit smoke.',
+        'Set up Visual Edit from this image and document using the submit smoke.',
+        [submitImage],
+        [submitFile]
+      );
+      return;
+    }
+
+    if (smoke.phase === 'wait' && serviceCalled && threadReady && stateReady) {
+      smoke.phase = 'done';
+      writeSubmitSmokeResult({
+        ok: true,
+        serviceCalled,
+        threadReady,
+        stateReady,
+        liveDiagnostics: getGatewaySessionDiagnostics(),
+        actionTypes: actions.map((action) => action.type),
+      });
+      return;
+    }
+
+    writeSubmitSmokeResult({
+      ok: false,
+      serviceCalled,
+      threadReady,
+      stateReady,
+      liveDiagnostics: getGatewaySessionDiagnostics(),
+      actionTypes: actions.map((action) => action.type),
+    });
+  });
 
   return (
     <>
@@ -954,6 +2050,16 @@ export const AppAssistant: React.FC = () => {
                               ))}
                             </div>
                           )}
+                          {message.files && message.files.length > 0 && (
+                            <div className="mb-2 space-y-1.5">
+                              {message.files.map((file) => (
+                                <div key={file.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-2 py-1.5 text-[11px] text-foreground-secondary">
+                                  <FileText size={13} className="shrink-0" />
+                                  <span className="truncate">{file.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           <BubbleText text={message.content} />
                           {message.actions && message.actions.length > 0 && (
                             <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
@@ -1026,12 +2132,12 @@ export const AppAssistant: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="border-t border-border bg-background px-3 py-3">
             <input
-              ref={imageInputRef}
+              ref={attachmentInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf,.docx,.xlsx,.xls,.csv,.pptx,.json,application/pdf,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               multiple
               className="hidden"
-              onChange={handleAssistantImageUpload}
+              onChange={handleAssistantAttachmentUpload}
             />
             {composerImages.length > 0 && (
               <div className="mb-2 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
@@ -1051,21 +2157,40 @@ export const AppAssistant: React.FC = () => {
                 ))}
               </div>
             )}
+            {composerFiles.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {composerFiles.map((file) => (
+                  <div key={file.id} className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-surface-sunken px-2 py-1.5 text-xs text-foreground-secondary">
+                    <FileText size={14} className="shrink-0" />
+                    <span className="max-w-[220px] truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeComposerFile(file.id)}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-foreground-muted hover:bg-surface-elevated hover:text-foreground"
+                      aria-label={String(t('assistant.removeFile', { defaultValue: 'Remove file' }))}
+                      title={String(t('assistant.removeFile', { defaultValue: 'Remove file' }))}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <button
                 type="button"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isThinking || composerImages.length >= maxAssistantComposerImages}
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={isThinking || (composerImages.length >= maxAssistantComposerImages && composerFiles.length >= maxAssistantComposerFiles)}
                 className={cn(
                   'flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl border border-border transition-all',
-                  isThinking || composerImages.length >= maxAssistantComposerImages
+                  isThinking || (composerImages.length >= maxAssistantComposerImages && composerFiles.length >= maxAssistantComposerFiles)
                     ? 'cursor-not-allowed bg-surface-sunken text-foreground-muted'
                     : 'bg-surface-elevated text-foreground-secondary hover:border-border-strong hover:bg-surface-sunken hover:text-foreground'
                 )}
-                aria-label={String(t('assistant.attachImage', { defaultValue: 'Attach image' }))}
-                title={String(t('assistant.attachImage', { defaultValue: 'Attach image' }))}
+                aria-label={String(t('assistant.attachFile', { defaultValue: 'Attach image or file' }))}
+                title={String(t('assistant.attachFile', { defaultValue: 'Attach image or file' }))}
               >
-                <ImageIcon size={17} />
+                <Paperclip size={17} />
               </button>
               <textarea
                 ref={inputRef}
@@ -1074,7 +2199,7 @@ export const AppAssistant: React.FC = () => {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
-                    void submitQuestion(input, input, composerImages);
+                    void submitQuestion(input, input, composerImages, composerFiles);
                   }
                 }}
                 rows={1}
@@ -1084,10 +2209,10 @@ export const AppAssistant: React.FC = () => {
               />
               <button
                 type="submit"
-                disabled={(!input.trim() && composerImages.length === 0) || isThinking}
+                disabled={(!input.trim() && composerImages.length === 0 && composerFiles.length === 0) || isThinking}
                 className={cn(
                   'flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl transition-all',
-                  (!input.trim() && composerImages.length === 0) || isThinking
+                  (!input.trim() && composerImages.length === 0 && composerFiles.length === 0) || isThinking
                     ? 'bg-surface-sunken text-foreground-muted'
                     : 'bg-foreground text-background hover:scale-105 active:scale-95'
                 )}
