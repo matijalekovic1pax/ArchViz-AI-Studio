@@ -39,3 +39,12 @@ APPWRITE_SNAPSHOTS_BUCKET_ID = "feedback_snapshots"
 
 [env.production]
 name = "archviz-api-gateway-prod"
+
+[env.production.vars]
+APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"
+APPWRITE_PROJECT_ID = "6a28198a0007906d225d"
+APPWRITE_DATABASE_ID = "archviz_reports"
+APPWRITE_REPORTS_COLLECTION_ID = "feedback_reports"
+APPWRITE_ACTIVITY_COLLECTION_ID = "feedback_activity"
+APPWRITE_ADMINS_COLLECTION_ID = "feedback_admins"
+APPWRITE_SNAPSHOTS_BUCKET_ID = "feedback_snapshots"
