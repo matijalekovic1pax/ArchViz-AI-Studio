@@ -38,7 +38,6 @@ interface AssistantMessage {
   appliedActionIds?: string[];
 }
 
-type AssistantThreads = Partial<Record<GenerationMode, AssistantMessage[]>>;
 interface PendingGenerationRequest {
   id: string;
   prompt?: string;
@@ -802,7 +801,7 @@ export const AppAssistant: React.FC = () => {
   const [input, setInput] = useState('');
   const [composerImages, setComposerImages] = useState<AppAssistantChatImage[]>([]);
   const [composerFiles, setComposerFiles] = useState<AppAssistantChatFile[]>([]);
-  const [threads, setThreads] = useState<AssistantThreads>({});
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const inspectToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -824,20 +823,9 @@ export const AppAssistant: React.FC = () => {
   });
   const service = useMemo(() => new GeminiService({ model: ASSISTANT_MODEL }), []);
   const feature = getAppAssistantFeature(state.mode);
-  const messages = threads[state.mode] || [];
   const isThinking = messages.some((message) => message.isLoading);
   const controlMode = true;
   const assistantHintKey = 'archviz_assistant_hint_seen';
-
-  const setThreadForMode = (
-    mode: GenerationMode,
-    updater: (messages: AssistantMessage[]) => AssistantMessage[]
-  ) => {
-    setThreads((previous) => ({
-      ...previous,
-      [mode]: updater(previous[mode] || []),
-    }));
-  };
 
   useEffect(() => {
     writeAssistantLiveDiagnostics();
@@ -846,13 +834,13 @@ export const AppAssistant: React.FC = () => {
   useEffect(() => {
     if (!open) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, open, state.mode]);
+  }, [messages.length, open]);
 
   useEffect(() => {
     if (!open) return;
     const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
     return () => window.clearTimeout(timer);
-  }, [open, state.mode]);
+  }, [open]);
 
   useEffect(() => {
     if (!pendingGeneration) return;
@@ -1085,7 +1073,7 @@ export const AppAssistant: React.FC = () => {
     if (!question || isThinking) return;
 
     const requestMode = state.mode;
-    const requestMessages = threads[requestMode] || [];
+    const requestMessages = messages;
     const assistantImageSources = getAssistantImageSources(state, attachedImages);
     const assistantImages = getAssistantImages(state, attachedImages);
     const assistantAttachments = getAssistantFileAttachments(attachedFiles);
@@ -1119,7 +1107,7 @@ export const AppAssistant: React.FC = () => {
     if (attachedFiles.length > 0) {
       setComposerFiles([]);
     }
-    setThreadForMode(requestMode, (items) => [...items, userMessage, loadingMessage]);
+    setMessages((items) => [...items, userMessage, loadingMessage]);
 
     try {
       const assistantPrompt = buildAppAssistantPrompt({
@@ -1158,7 +1146,7 @@ export const AppAssistant: React.FC = () => {
       const actionableRequests = appendVisualEditRoutingFallbackRequests(requests, state, question);
       const actions = normalizeAppAssistantActions(actionableRequests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
 
-      setThreadForMode(requestMode, (items) =>
+      setMessages((items) =>
         items.map((message) =>
           message.id === loadingMessage.id
             ? {
@@ -1174,14 +1162,14 @@ export const AppAssistant: React.FC = () => {
 
       if (controlMode && actions.length > 0) {
         window.setTimeout(() => {
-          applyActions(requestMode, loadingMessage.id, actions, true);
+          applyActions(loadingMessage.id, actions, true);
         }, 0);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const friendlyMessage = getAssistantServiceErrorMessage(err);
       setError(message);
-      setThreadForMode(requestMode, (items) =>
+      setMessages((items) =>
         items.map((item) =>
           item.id === loadingMessage.id
             ? {
@@ -1205,11 +1193,11 @@ export const AppAssistant: React.FC = () => {
     setInspectMode(false);
     setComposerImages([]);
     setComposerFiles([]);
-    setThreadForMode(state.mode, () => []);
+    setMessages([]);
   };
 
-  const markActionsApplied = (mode: GenerationMode, messageId: string, actionIds: string[]) => {
-    setThreadForMode(mode, (items) =>
+  const markActionsApplied = (messageId: string, actionIds: string[]) => {
+    setMessages((items) =>
       items.map((message) => {
         if (message.id !== messageId) return message;
         const applied = new Set(message.appliedActionIds || []);
@@ -1339,7 +1327,6 @@ export const AppAssistant: React.FC = () => {
   };
 
   const applyActions = (
-    mode: GenerationMode,
     messageId: string,
     actions: AppAssistantAction[],
     automatic = false
@@ -1500,7 +1487,7 @@ export const AppAssistant: React.FC = () => {
       void runAssistantDownloads(downloadActions);
     }
 
-    markActionsApplied(mode, messageId, actions.map((action) => action.id));
+    markActionsApplied(messageId, actions.map((action) => action.id));
     if (!prepareSelectionAction) {
       const message = runGenerationAction
         ? stateActions.length > 0
@@ -1615,7 +1602,7 @@ export const AppAssistant: React.FC = () => {
         : requests;
       const actions = normalizeAppAssistantActions(routeRequests, state, options);
       if (detail.command === 'apply' && actions.length > 0) {
-        applyActions(state.mode, `assistant-test-${id}`, actions, true);
+        applyActions(`assistant-test-${id}`, actions, true);
       }
 
       writeBridgeResult(id, {
@@ -1638,7 +1625,7 @@ export const AppAssistant: React.FC = () => {
       applyRequests: (requests, options = {}) => {
         const actions = normalizeAppAssistantActions(requests, state, options);
         if (actions.length > 0) {
-          applyActions(state.mode, `assistant-test-${makeMessageId()}`, actions, true);
+          applyActions(`assistant-test-${makeMessageId()}`, actions, true);
         }
         return actions;
       },
@@ -1825,7 +1812,7 @@ export const AppAssistant: React.FC = () => {
       smoke.phase = 'setup-wait';
       smoke.setupActionTypes = setupActions.map((action) => action.type);
       writeSmokeResult({ ok: false, step: 'setup-started' });
-      applyActions(state.mode, 'assistant-smoke-setup', setupActions, true);
+      applyActions('assistant-smoke-setup', setupActions, true);
       return;
     }
 
@@ -1843,7 +1830,7 @@ export const AppAssistant: React.FC = () => {
       smoke.phase = 'batch-wait';
       smoke.batchActionTypes = batchActions.map((action) => action.type);
       writeSmokeResult({ ok: false, step: 'batch-started', setupReady: true });
-      applyActions(state.mode, 'assistant-smoke-batch', batchActions, true);
+      applyActions('assistant-smoke-batch', batchActions, true);
       return;
     }
 
@@ -1859,7 +1846,7 @@ export const AppAssistant: React.FC = () => {
       smoke.phase = 'helpers-wait';
       smoke.helperActionTypes = helperActions.map((action) => action.type);
       writeSmokeResult({ ok: false, step: 'helpers-started', setupReady: true, batchReady: true });
-      applyActions(state.mode, 'assistant-smoke-helpers', helperActions, true);
+      applyActions('assistant-smoke-helpers', helperActions, true);
       return;
     }
 
@@ -1874,7 +1861,7 @@ export const AppAssistant: React.FC = () => {
       smoke.phase = 'files-wait';
       smoke.fileActionTypes = fileActions.map((action) => action.type);
       writeSmokeResult({ ok: false, step: 'files-started', setupReady: true, batchReady: true, helperTriggered: true });
-      applyActions(state.mode, 'assistant-smoke-files', fileActions, true);
+      applyActions('assistant-smoke-files', fileActions, true);
       return;
     }
 
@@ -1896,8 +1883,8 @@ export const AppAssistant: React.FC = () => {
         helperTriggered: true,
         filesReady: true,
       });
-      applyActions(state.mode, 'assistant-smoke-generation', generationActions, true);
-      applyActions(state.mode, 'assistant-smoke-download', downloadActions, true);
+      applyActions('assistant-smoke-generation', generationActions, true);
+      applyActions('assistant-smoke-download', downloadActions, true);
       return;
     }
 
@@ -1928,7 +1915,7 @@ export const AppAssistant: React.FC = () => {
         generationTriggered: true,
         downloadTriggered: true,
       });
-      applyActions(state.mode, 'assistant-smoke-clear', clearActions, true);
+      applyActions('assistant-smoke-clear', clearActions, true);
       return;
     }
 
@@ -1989,8 +1976,7 @@ export const AppAssistant: React.FC = () => {
     };
     const serviceRaw = document.documentElement.getAttribute('data-archwiz-assistant-submit-service');
     const serviceCalled = Boolean(serviceRaw);
-    const allMessages = Object.values(threads).flat();
-    const assistantMessage = allMessages.find((message) =>
+    const assistantMessage = messages.find((message) =>
       message.role === 'assistant' &&
       !message.isLoading &&
       message.content.includes('Submit smoke response applied through the normal assistant parser.')
@@ -2227,7 +2213,6 @@ export const AppAssistant: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => applyActions(
-                                      state.mode,
                                       message.id,
                                       message.actions!.filter((action) => !(message.appliedActionIds || []).includes(action.id))
                                     )}
@@ -2253,7 +2238,7 @@ export const AppAssistant: React.FC = () => {
                                       </div>
                                       <button
                                         type="button"
-                                        onClick={() => applyActions(state.mode, message.id, [action])}
+                                        onClick={() => applyActions(message.id, [action])}
                                         disabled={applied}
                                         className={cn(
                                           'shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition',

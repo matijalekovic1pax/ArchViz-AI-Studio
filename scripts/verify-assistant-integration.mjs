@@ -318,7 +318,14 @@ const missingAssistantTestHook =
   !storeSource.includes('archwiz:test-store-command') ||
   !storeSource.includes('data-archwiz-test-result') ||
   !assistantSource.includes('normalizeAppAssistantActions(requests, state, options)') ||
-  !assistantSource.includes('applyActions(state.mode, `assistant-test-');
+  !assistantSource.includes('applyActions(`assistant-test-');
+const missingGlobalAssistantThread =
+  assistantSource.includes('AssistantThreads') ||
+  assistantSource.includes('threads[state.mode]') ||
+  assistantSource.includes('setThreadForMode') ||
+  !assistantSource.includes('const [messages, setMessages] = useState<AssistantMessage[]>([]);') ||
+  !assistantSource.includes('const requestMessages = messages') ||
+  !assistantSource.includes('setMessages((items) => [...items, userMessage, loadingMessage])');
 const missingCommandActions = requiredCommandActions.filter((action) => !actionsSource.includes(`| '${action}'`));
 const missingCleanupSupport = requiredCleanupActions.filter((action) => (
   !actionsSource.includes(`| '${action}'`) ||
@@ -452,6 +459,7 @@ const failures = [
   missingFileHandlers.length ? `Missing file target handlers: ${missingFileHandlers.join(', ')}` : null,
   missingProjectImportSupport ? 'Missing project import support for attached JSON files' : null,
   missingAssistantTestHook ? 'Missing gated assistant action execution test hook' : null,
+  missingGlobalAssistantThread ? 'Missing global assistant chat thread support' : null,
   missingDownloadActions.length ? `Missing download actions: ${missingDownloadActions.join(', ')}` : null,
   missingDownloadHandlers.length ? `Missing download handlers: ${missingDownloadHandlers.join(', ')}` : null,
   missingCurrentImageDownloadOptions ? 'Missing current-image download format/resolution support' : null,
