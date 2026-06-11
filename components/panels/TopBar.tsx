@@ -829,9 +829,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-[max-content_auto_minmax(0,1fr)] items-center gap-2 xl:gap-3 w-full">
+        <div className="relative flex items-center justify-between gap-2 xl:gap-3 w-full">
       {/* Left: Branding & Utility */}
-      <div className="flex items-center gap-3 xl:gap-4 2xl:gap-6 min-w-0">
+      <div className="flex items-center gap-2 min-[1120px]:gap-3 xl:gap-4 min-[1800px]:gap-6 min-w-0 max-w-[calc(50%_-_230px)] min-[1120px]:max-w-[calc(50%_-_220px)] min-[1800px]:max-w-[calc(50%_-_226px)]">
         <div className="flex items-center gap-2 select-none shrink-0">
           <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shadow-md shrink-0">
             <span className="text-surface-elevated font-bold text-sm">AV</span>
@@ -844,7 +844,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
         <div className="h-6 w-px bg-border-strong shrink-0" />
 
-          <div className="hidden 2xl:flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
+          <div className="hidden min-[1800px]:flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-subtle shrink-0">
             <button
               onClick={handleUndoSelection}
               disabled={!canUndoSelection}
@@ -974,14 +974,15 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
         </div>
 
         {/* Mobile Controls - Compact Dropdown */}
-        <div className="2xl:hidden relative shrink-0">
+        <div className="min-[1800px]:hidden relative shrink-0">
           <button
             ref={controlsButtonRef}
             onClick={() => setShowControlsMenu(!showControlsMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-surface-sunken rounded-lg border border-border-subtle hover:bg-surface-elevated transition-all"
+            className="flex items-center gap-1.5 min-[1120px]:gap-2 px-2.5 min-[1120px]:px-3 py-1.5 bg-surface-sunken rounded-lg border border-border-subtle hover:bg-surface-elevated transition-all"
+            title={t('topBar.controls')}
           >
             <SlidersHorizontal size={12} className="text-foreground-secondary" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-secondary whitespace-nowrap">
+            <span className="hidden min-[1120px]:inline text-[10px] font-bold uppercase tracking-wider text-foreground-secondary whitespace-nowrap">
               {t('topBar.controls')}
             </span>
             <ChevronDown size={10} className={cn("text-foreground-muted transition-transform", showControlsMenu && "rotate-180")} />
@@ -1126,81 +1127,80 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           )}
         </div>
 
-        {/* Model Selector */}
-        <div className="relative shrink-0">
-          <button
-            ref={modelButtonRef}
-            onClick={() => setShowModelMenu(!showModelMenu)}
-            className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
-            title={t('topBar.modelSelector.title')}
-          >
-            {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
-              <Shield size={12} className="text-foreground-muted" />
-            ) : (
-              <Sparkles size={12} className="text-foreground-muted" />
-            )}
-            <span className="whitespace-nowrap">{activeModelCopy.shortLabel}</span>
-            <ChevronDown size={10} className={cn("transition-transform", showModelMenu && "rotate-180")} />
-          </button>
-
-          {showModelMenu && (
-            <div
-              ref={modelMenuRef}
-              className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated z-50 animate-fade-in origin-top-left"
-            >
-              <div className="px-2 pb-2 pt-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
-                  {t('topBar.modelSelector.title')}
-                </div>
-              </div>
-              <div className="space-y-1">
-                {IMAGE_GENERATION_MODELS.map((model) => {
-                  const copy = getModelCopy(model);
-                  const selected = activeImageGenerationModel === model;
-                  const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
-
-                  return (
-                    <div key={model}>
-                      <button
-                        type="button"
-                        onClick={() => handleModelChange(model)}
-                        className={cn(
-                          "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
-                          selected
-                            ? "bg-foreground text-background"
-                            : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                        )}
-                      >
-                        <Icon size={14} className={cn("mt-0.5 shrink-0", selected ? "text-background" : "text-foreground-muted")} />
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                            <span>{copy.label}</span>
-                          </span>
-                          <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
-                            {copy.description}
-                          </span>
-                          <span className={cn("mt-1 block text-[9px] font-semibold uppercase leading-snug tracking-wide", selected ? "text-background/70" : "text-foreground-muted")}>
-                            {copy.bestFor}
-                          </span>
-                        </span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
       </div>
 
       {/* Center: Generate Button (Hidden in generate-text mode) */}
-      <div className={cn(
-        "flex items-center justify-center shrink-0 transition-all duration-500",
-        showControlsMenu ? "ml-0 xl:ml-1" : "ml-1 xl:ml-2"
-      )}>
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center">
         {state.mode !== 'generate-text' && (
-          <div className="relative flex items-center">
+          <div className="relative pointer-events-auto">
+            {/* Model Selector */}
+            <div className="absolute right-full top-1/2 mr-2 min-[1120px]:mr-3 -translate-y-1/2">
+              <div className="relative shrink-0">
+                <button
+                  ref={modelButtonRef}
+                  onClick={() => setShowModelMenu(!showModelMenu)}
+                  className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
+                  title={t('topBar.modelSelector.title')}
+                >
+                  {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
+                    <Shield size={12} className="text-foreground-muted" />
+                  ) : (
+                    <Sparkles size={12} className="text-foreground-muted" />
+                  )}
+                  <span className="whitespace-nowrap">{activeModelCopy.shortLabel}</span>
+                  <ChevronDown size={10} className={cn("transition-transform", showModelMenu && "rotate-180")} />
+                </button>
+
+                {showModelMenu && (
+                  <div
+                    ref={modelMenuRef}
+                    className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated z-50 animate-fade-in origin-top-left"
+                  >
+                    <div className="px-2 pb-2 pt-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                        {t('topBar.modelSelector.title')}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {IMAGE_GENERATION_MODELS.map((model) => {
+                        const copy = getModelCopy(model);
+                        const selected = activeImageGenerationModel === model;
+                        const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
+
+                        return (
+                          <div key={model}>
+                            <button
+                              type="button"
+                              onClick={() => handleModelChange(model)}
+                              className={cn(
+                                "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
+                                selected
+                                  ? "bg-foreground text-background"
+                                  : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                              )}
+                            >
+                              <Icon size={14} className={cn("mt-0.5 shrink-0", selected ? "text-background" : "text-foreground-muted")} />
+                              <span className="min-w-0">
+                                <span className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                                  <span>{copy.label}</span>
+                                </span>
+                                <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
+                                  {copy.description}
+                                </span>
+                                <span className={cn("mt-1 block text-[9px] font-semibold uppercase leading-snug tracking-wide", selected ? "text-background/70" : "text-foreground-muted")}>
+                                  {copy.bestFor}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="relative">
               <button
                 aria-label="generate-trigger"
@@ -1241,7 +1241,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </div>
 
             {state.isGenerating && (
-              <div className="ml-2 origin-left animate-cancel-emerge">
+              <div className="absolute left-full top-1/2 ml-2 -translate-y-1/2 origin-left animate-cancel-emerge">
                 <button
                   aria-label="cancel-generation"
                   onClick={cancelGeneration}
@@ -1257,7 +1257,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center justify-end gap-1 xl:gap-2 2xl:gap-3 min-w-0 relative">
+      <div className="flex items-center justify-end gap-1 xl:gap-2 2xl:gap-3 min-w-0 max-w-[calc(50%_-_116px)] relative ml-auto">
         {/* Subtle Project Management Tools */}
         <div className="hidden xl:flex items-center gap-1 mr-2 shrink-0">
             <button

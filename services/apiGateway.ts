@@ -25,6 +25,7 @@ const DEFAULT_GATEWAY_URL = import.meta.env.PROD
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
 const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
+const GEMINI_PRO_IMAGE_TIMEOUT_MS = 10 * 60_000;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
@@ -223,11 +224,12 @@ export async function geminiRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
+  const timeoutMs = model === 'gemini-3-pro-image' ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
   const resp = await gatewayFetch(`/api/gemini/models/${model}:${action}`, {
     method: 'POST',
     body: JSON.stringify(body),
     signal: options?.signal,
-    timeoutMs: 120_000,
+    timeoutMs,
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -244,11 +246,12 @@ export async function geminiStreamRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<Response> {
+  const timeoutMs = model === 'gemini-3-pro-image' ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
   const resp = await gatewayFetch(`/api/gemini/models/${model}:streamGenerateContent?alt=sse`, {
     method: 'POST',
     body: JSON.stringify(body),
     signal: options?.signal,
-    timeoutMs: 120_000,
+    timeoutMs,
   });
   if (!resp.ok) {
     const errText = await resp.text();

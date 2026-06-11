@@ -526,6 +526,15 @@ const hasDirectGenerationIntent = (question: string) => {
   return /\b(generate|render|run|start|apply edits?|click generate|go ahead|do it|create|compress|translate|validate|upscale|animate|make the image|make this)\b/.test(normalized);
 };
 
+const isExecutionOnlyGenerationCommand = (text?: string) => {
+  const normalized = normalizeAssistantText(text || '').replace(/[.!?]+$/g, '').trim();
+  if (!normalized) return false;
+  return /^(?:please\s+)?(?:run|start|generate|render|apply(?:\s+edits?)?|click\s+generate|go\s+ahead|do\s+it|proceed|continue|make\s+it)(?:\s+(?:it|this|that|now|please|the\s+current\s+workflow|the\s+workflow|the\s+edit|the\s+edits|the\s+render|the\s+generation|the\s+changes))?$/.test(normalized);
+};
+
+const getFallbackRunGenerationValue = (question: string) =>
+  isExecutionOnlyGenerationCommand(question) ? undefined : question;
+
 const appendAssistantGovernanceFallbackRequests = (
   requests: AppAssistantActionRequest[],
   state: AppState,
@@ -565,7 +574,7 @@ const appendAssistantGovernanceFallbackRequests = (
       ...withModeRequest,
       {
         type: 'run_generation',
-        value: question,
+        value: getFallbackRunGenerationValue(question),
         label: 'Run generation',
         reason: 'The user explicitly asked the assistant to execute the current workflow.',
       },
@@ -678,7 +687,8 @@ const getAssistantGenerationReadiness = (
     return { ready: false, message: 'A generation is already running.' };
   }
 
-  const prompt = (promptOverride || state.prompt || state.workflow.textPrompt || '').trim();
+  const safePromptOverride = isExecutionOnlyGenerationCommand(promptOverride) ? undefined : promptOverride;
+  const prompt = (safePromptOverride || state.prompt || state.workflow.textPrompt || '').trim();
 
   switch (state.mode) {
     case 'generate-text':
@@ -708,7 +718,7 @@ const getAssistantGenerationReadiness = (
       if (shouldRequireManualVisualSelection(state)) {
         return { ready: false, message: 'Select the area manually with Rect, Brush, or Lasso before applying this Visual Edit.' };
       }
-      return { ready: true, prompt: promptOverride || state.workflow.visualPrompt || state.prompt || undefined };
+      return { ready: true, prompt: safePromptOverride || state.workflow.visualPrompt || state.prompt || undefined };
     case 'video': {
       if (!state.workflow.videoState.accessUnlocked) {
         return { ready: false, message: 'Video Studio access is currently locked.' };
@@ -716,16 +726,16 @@ const getAssistantGenerationReadiness = (
       const video = state.workflow.videoState;
       if (video.inputMode === 'image-animate') {
         return video.videoInputImage || state.uploadedImage
-          ? { ready: true, prompt: video.scenario || promptOverride }
+          ? { ready: true, prompt: video.scenario || safePromptOverride }
           : { ready: false, message: 'Add a video input image before generating video.' };
       }
       if (video.inputMode === 'image-morph') {
         return video.startFrame && video.endFrame
-          ? { ready: true, prompt: video.scenario || promptOverride }
+          ? { ready: true, prompt: video.scenario || safePromptOverride }
           : { ready: false, message: 'Add start and end frames before interpolating video.' };
       }
       return video.keyframes.length > 0
-        ? { ready: true, prompt: video.scenario || promptOverride }
+        ? { ready: true, prompt: video.scenario || safePromptOverride }
         : { ready: false, message: 'Add video keyframes before generating.' };
     }
     case 'headshot':
@@ -734,7 +744,7 @@ const getAssistantGenerationReadiness = (
         : { ready: false, message: 'Upload at least one portrait reference before generating headshots.' };
     default:
       return state.uploadedImage
-        ? { ready: true, prompt: promptOverride || state.prompt || undefined }
+        ? { ready: true, prompt: safePromptOverride || state.prompt || undefined }
         : { ready: false, message: 'Upload or select an image before generating this workflow.' };
   }
 };

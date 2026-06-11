@@ -238,7 +238,7 @@ export const LeftRender3DPanel = () => {
             temperature: 0.3,
             maxOutputTokens: 1024,
             responseMimeType: 'application/json',
-            thinkingConfig: { thinkingLevel: 'minimal' },
+            thinkingConfig: { thinkingLevel: 'high' },
             abortSignal: controller.signal
           }
         });

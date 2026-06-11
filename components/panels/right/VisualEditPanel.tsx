@@ -1884,7 +1884,7 @@ export const VisualEditPanel = () => {
           topP: 0.2,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: 'low' }
+          thinkingConfig: { thinkingLevel: 'high' }
         }
       });
       if (!responseText.trim()) {
@@ -2056,49 +2056,6 @@ export const VisualEditPanel = () => {
       dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
     }
   }, [dispatch, wf.visualSelection.autoTargets.length, wf.visualSelection.mode]);
-
-  useEffect(() => {
-    const handleAssistantRunAutoSelection = (event: Event) => {
-      const detail = (event as CustomEvent<{ targets?: string[] }>).detail;
-      const requestedTargets = Array.isArray(detail?.targets) ? detail.targets : wf.visualSelection.autoTargets;
-      const validTargets = requestedTargets.filter((target) => selectionTargets.includes(target));
-
-      if (!validTargets.length) {
-        dispatch({
-          type: 'SET_APP_ALERT',
-          payload: {
-            id: nanoid(),
-            tone: 'warning',
-            message: 'Choose at least one AI selection target before running auto selection.',
-          },
-        });
-        return;
-      }
-
-      const shouldUpdateSelection =
-        wf.visualSelection.mode !== 'ai' ||
-        validTargets.length !== wf.visualSelection.autoTargets.length ||
-        validTargets.some((target, index) => target !== wf.visualSelection.autoTargets[index]);
-
-      if (shouldUpdateSelection) {
-        dispatch({
-          type: 'UPDATE_WORKFLOW',
-          payload: {
-            visualSelection: {
-              ...wf.visualSelection,
-              mode: 'ai',
-              autoTargets: validTargets,
-            },
-          },
-        });
-      }
-
-      void runAutoSelection(validTargets);
-    };
-
-    window.addEventListener('archviz:assistant-run-visual-ai-selection', handleAssistantRunAutoSelection);
-    return () => window.removeEventListener('archviz:assistant-run-visual-ai-selection', handleAssistantRunAutoSelection);
-  }, [dispatch, runAutoSelection, wf.visualSelection]);
 
   useEffect(() => {
     if (!isMaterialBrowserOpen) return;

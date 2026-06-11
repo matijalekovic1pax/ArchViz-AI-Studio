@@ -330,6 +330,9 @@ const missingAssistantGovernanceSupport =
   !assistantSource.includes('appendAssistantGovernanceFallbackRequests') ||
   !assistantSource.includes('hasAssistantControlPromise') ||
   !assistantSource.includes('hasDirectGenerationIntent') ||
+  !assistantSource.includes('isExecutionOnlyGenerationCommand') ||
+  !assistantSource.includes('getFallbackRunGenerationValue') ||
+  !assistantSource.includes('safePromptOverride') ||
   !assistantSource.includes('getAssistantModeAfterControlCue') ||
   !assistantSource.includes('getAssistantModeFromRequest') ||
   !assistantSource.includes("requests.filter((request) => request.type !== 'run_ai_selection')") ||
@@ -345,13 +348,23 @@ const missingManualVisualSelectionPolicy =
   !actionsSource.includes("request.type === 'run_ai_selection'") ||
   !actionsSource.includes('Do not request run_ai_selection') ||
   assistantSource.includes('archviz:assistant-run-visual-ai-selection') ||
+  visualEditSource.includes('archviz:assistant-run-visual-ai-selection') ||
   assistantSource.includes("{ type: 'run_ai_selection'") ||
   assistantSource.includes("mode: 'ai'");
+const weakThinkingConfigPattern = /thinkingConfig:\s*\{[^}]*thinkingLevel:\s*['"](minimal|low)['"]/;
 const missingGeminiThinkingEnforcement =
   !assistantSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
+  !leftRender3dSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
+  !visualEditSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
+  weakThinkingConfigPattern.test(assistantSource) ||
+  weakThinkingConfigPattern.test(leftRender3dSource) ||
+  weakThinkingConfigPattern.test(visualEditSource) ||
   !geminiServiceSource.includes('generationConfig,') ||
   !geminiServiceSource.includes('this.normalizeThinkingConfig(model, {') ||
+  !geminiServiceSource.includes("thinkingConfig.thinkingLevel === 'minimal'") ||
+  !geminiServiceSource.includes("thinkingConfig.thinkingLevel === 'low'") ||
   !geminiServiceSource.includes("thinkingConfig.thinkingLevel = 'medium'") ||
+  !geminiServiceSource.includes('thinkingConfig.thinkingBudget <= 0') ||
   !geminiServiceSource.includes('thinkingConfig.thinkingBudget = -1');
 const missingCommandActions = requiredCommandActions.filter((action) => !actionsSource.includes(`| '${action}'`));
 const missingCleanupSupport = requiredCleanupActions.filter((action) => (

@@ -34,6 +34,7 @@ const MAX_PAYLOAD_BYTES = 95 * 1024 * 1024; // 95 MB
 const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_API_BASE_V1 = 'https://generativelanguage.googleapis.com/v1';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
@@ -1452,7 +1453,10 @@ return corsResponse(origin, { error: 'Authentication failed: ' + err.message }, 
 
 async function handleGeminiProxy(request, env, subpath) {
   const origin = request.headers.get('Origin') || '';
-  const url = `${GEMINI_API_BASE}/${subpath}`;
+  const apiBase = /^models\/(?:gemini-3-pro-image|gemini-3\.1-flash-image):/.test(subpath)
+    ? GEMINI_API_BASE_V1
+    : GEMINI_API_BASE;
+  const url = `${apiBase}/${subpath}`;
 
   const headers = new Headers();
   headers.set('x-goog-api-key', env.GEMINI_API_KEY);

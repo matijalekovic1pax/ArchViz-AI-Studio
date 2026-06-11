@@ -694,6 +694,21 @@ export class GeminiService {
       preparedRequest.generationConfig?.responseModalities || ['TEXT', 'IMAGE'],
       model
     );
+
+    if (wantsImage && this.usesNonStreamingImageGeneration(model)) {
+      const response = await this.executeWithRetry(() =>
+        geminiRequest(model, 'generateContent', {
+          contents,
+          generationConfig,
+        }, { signal: preparedRequest.generationConfig?.abortSignal })
+      );
+      const parsed = this.parseResponse(response);
+      if (parsed.text || parsed.images.length > 0) {
+        yield parsed;
+      }
+      return;
+    }
+
     const response = await geminiStreamRequest(model, {
       contents,
       generationConfig,
@@ -917,13 +932,37 @@ export class GeminiService {
       responseModalities: config?.responseModalities || defaultModalities,
     });
 
-    const { abortSignal, responseFormat, openAI, ...rest } = normalizedConfig;
+    const { abortSignal, responseFormat, openAI, imageConfig, ...rest } = normalizedConfig;
     const result: Record<string, any> = {
       ...rest,
       responseModalities: normalizedConfig.responseModalities || defaultModalities,
     };
+    const responseImageConfig = responseFormat?.image || imageConfig;
+    if (responseImageConfig) {
+      if (this.usesResponseFormatImageConfig(model)) {
+        result.responseFormat = {
+          ...(responseFormat || {}),
+          image: responseImageConfig,
+        };
+      } else {
+        result.imageConfig = responseImageConfig;
+      }
+    }
 
     return result;
+  }
+
+  private usesNonStreamingImageGeneration(model: string): boolean {
+    return this.usesGemini3ImageApiShape(model);
+  }
+
+  private usesResponseFormatImageConfig(model: string): boolean {
+    return this.usesGemini3ImageApiShape(model);
+  }
+
+  private usesGemini3ImageApiShape(model: string): boolean {
+    const modelId = model.toLowerCase();
+    return modelId === 'gemini-3-pro-image' || modelId === 'gemini-3.1-flash-image';
   }
 
   private normalizeThinkingConfig(model: string, config: GenerationConfig): GenerationConfig {
@@ -940,12 +979,21 @@ export class GeminiService {
       if ('thinkingBudget' in thinkingConfig) {
         delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
       }
-      if (!thinkingConfig.thinkingLevel) thinkingConfig.thinkingLevel = 'medium';
+      if (
+        !thinkingConfig.thinkingLevel ||
+        thinkingConfig.thinkingLevel === 'minimal' ||
+        thinkingConfig.thinkingLevel === 'low'
+      ) {
+        thinkingConfig.thinkingLevel = 'medium';
+      }
     } else {
       if ('thinkingLevel' in thinkingConfig) {
         delete (thinkingConfig as { thinkingLevel?: string }).thinkingLevel;
       }
-      if (typeof thinkingConfig.thinkingBudget !== 'number' || thinkingConfig.thinkingBudget === 0) {
+      if (
+        typeof thinkingConfig.thinkingBudget !== 'number' ||
+        (thinkingConfig.thinkingBudget <= 0 && thinkingConfig.thinkingBudget !== -1)
+      ) {
         thinkingConfig.thinkingBudget = -1;
       }
     }

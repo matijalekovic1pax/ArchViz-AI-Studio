@@ -1206,7 +1206,7 @@ export function useGeneration(): UseGenerationReturn {
 
       const DEFAULT_MAX_RETRIES = 3;
       const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
-      const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60 * 1000;
+      const IMAGE_GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
       const runWithRetry = async <T>(
         label: string,
@@ -1250,9 +1250,10 @@ export function useGeneration(): UseGenerationReturn {
 
         throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
       };
-      const openAIImageRetryOptions = state.imageGenerationModel === 'chatgpt-image-generation-2'
-        ? { timeoutMs: OPENAI_IMAGE_TIMEOUT_MS, maxRetries: 0 }
-        : undefined;
+      const imageGenerationRetryOptions = {
+        timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
+        maxRetries: 0
+      };
 
       const runStreamedImageGeneration = async (request: {
         prompt: string;
@@ -1682,7 +1683,7 @@ export function useGeneration(): UseGenerationReturn {
             imageGenerationModel: state.imageGenerationModel,
             generationConfig: gridGenerationConfig
           }),
-          openAIImageRetryOptions
+          imageGenerationRetryOptions
         );
 
         const gridImage = pickFinalImage(gridResult.images);
@@ -2042,7 +2043,7 @@ export function useGeneration(): UseGenerationReturn {
                 imageGenerationModel: state.imageGenerationModel,
                 generationConfig: generationConfigWithAbort
               }),
-              openAIImageRetryOptions
+              imageGenerationRetryOptions
             );
           }
         } else if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
@@ -2068,7 +2069,7 @@ export function useGeneration(): UseGenerationReturn {
               imageGenerationModel: state.imageGenerationModel,
               generationConfig: generationConfigWithAbort
             }),
-            openAIImageRetryOptions
+            imageGenerationRetryOptions
           );
         }
 
@@ -2235,7 +2236,7 @@ export function useGeneration(): UseGenerationReturn {
             imageGenerationModel: state.imageGenerationModel,
             abortSignal
           }),
-          openAIImageRetryOptions
+          imageGenerationRetryOptions
         );
         result = { text: batchResult.text, images: batchResult.images };
       } else {
@@ -2247,7 +2248,7 @@ export function useGeneration(): UseGenerationReturn {
             images: images.length > 0 ? images : undefined,
             generationConfig: generationConfigWithAbort
           }),
-          openAIImageRetryOptions
+          imageGenerationRetryOptions
         );
       }
       updateProgress(95);
