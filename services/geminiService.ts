@@ -933,26 +933,18 @@ export class GeminiService {
       responseModalities: requestedModalities,
     });
 
-    const { abortSignal, responseFormat, openAI, imageConfig, responseModalities, ...rest } = normalizedConfig;
-    const modalities = responseModalities || requestedModalities;
-    const wantsImage = modalities.includes('IMAGE');
+    const {
+      abortSignal,
+      responseFormat,
+      openAI,
+      imageConfig,
+      responseModalities,
+      thinkingConfig,
+      ...rest
+    } = normalizedConfig;
     const result: Record<string, any> = {
       ...rest,
     };
-    const responseImageConfig = responseFormat?.image || imageConfig;
-    if (wantsImage) {
-      result.responseModalities = modalities;
-    }
-    if (wantsImage && responseImageConfig) {
-      if (this.usesResponseFormatImageConfig(model)) {
-        result.responseFormat = {
-          ...(responseFormat || {}),
-          image: responseImageConfig,
-        };
-      } else {
-        result.imageConfig = responseImageConfig;
-      }
-    }
 
     return result;
   }
