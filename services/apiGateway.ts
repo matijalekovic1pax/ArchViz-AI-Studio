@@ -6,7 +6,6 @@
  */
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
-import { CHATGPT_IMAGE_MODEL_ACCESS_HEADER, getChatGPTImageModelAccessCode } from '../lib/imageModelAccess';
 import type {
   FeedbackActivityItem,
   FeedbackDocumentAttachment,
@@ -20,7 +19,10 @@ import type {
   GenerationMode,
 } from '../types';
 
-const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8787';
+const DEFAULT_GATEWAY_URL = import.meta.env.PROD
+  ? 'https://archviz-api-gateway.matija-lekovic.workers.dev'
+  : 'http://localhost:8787';
+const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
 const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
 
@@ -270,15 +272,8 @@ export async function openAIImageRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
-  const headers: Record<string, string> = {};
-  const accessCode = getChatGPTImageModelAccessCode();
-  if (accessCode) {
-    headers[CHATGPT_IMAGE_MODEL_ACCESS_HEADER] = accessCode;
-  }
-
   const resp = await gatewayFetch('/api/openai/images', {
     method: 'POST',
-    headers,
     body: JSON.stringify(body),
     signal: options?.signal,
     timeoutMs: OPENAI_IMAGE_TIMEOUT_MS,

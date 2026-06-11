@@ -22,6 +22,7 @@
 
 const ALLOWED_ORIGINS = [
   'https://arch-viz-ai-studio.vercel.app',
+  'https://archviz-ai-studio.matija-lekovic.workers.dev',
   'http://localhost:3000',
   'http://localhost:5173',
 ];
@@ -36,8 +37,6 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
-const OPENAI_IMAGE_LOCK_PASSWORD = '1234';
-const OPENAI_IMAGE_ACCESS_HEADER = 'X-Archviz-OpenAI-Image-Code';
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
 const CONVERTAPI_BASE = 'https://v2.convertapi.com';
 const ILOVEPDF_BASE   = 'https://api.ilovepdf.com/v1';
@@ -230,7 +229,7 @@ function getCorsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': `Content-Type, Authorization, ${OPENAI_IMAGE_ACCESS_HEADER}`,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -1630,15 +1629,6 @@ function normalizeOpenAIImageResponse(data) {
 
 async function handleOpenAIImages(request, env) {
   const origin = request.headers.get('Origin') || '';
-  const requiredAccessCode = String(env.OPENAI_IMAGE_LOCK_PASSWORD || OPENAI_IMAGE_LOCK_PASSWORD).trim();
-  const providedAccessCode = String(request.headers.get(OPENAI_IMAGE_ACCESS_HEADER) || '').trim();
-
-  if (requiredAccessCode && providedAccessCode !== requiredAccessCode) {
-    return corsResponse(origin, {
-      error: 'ChatGPT Image Generation 2 is locked while trial credits are limited. Enter the test password in the model selector to unlock it.',
-    }, { status: 403 });
-  }
-
   if (!env.OPENAI_API_KEY) {
     return corsResponse(origin, {
       error: 'OPENAI_API_KEY is not configured. Add it with `wrangler secret put OPENAI_API_KEY` after enabling OpenAI billing.',

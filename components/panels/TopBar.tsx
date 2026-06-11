@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield, Lock } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -13,7 +13,6 @@ import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
-import { hasChatGPTImageModelAccess, unlockChatGPTImageModel } from '../../lib/imageModelAccess';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'generate-text': 'workflows.generateText',
@@ -60,16 +59,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
-  const [showChatGptUnlock, setShowChatGptUnlock] = useState(false);
-  const [chatGptUnlockInput, setChatGptUnlockInput] = useState('');
-  const [chatGptUnlockError, setChatGptUnlockError] = useState(false);
-  const [chatGptModelUnlocked, setChatGptModelUnlocked] = useState(() => hasChatGPTImageModelAccess());
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const modelButtonRef = useRef<HTMLButtonElement>(null);
-  const chatGptUnlockInputRef = useRef<HTMLInputElement>(null);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const projectButtonRef = useRef<HTMLButtonElement>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -428,32 +422,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleModelChange = (model: ImageGenerationModel) => {
-    if (model === 'chatgpt-image-generation-2' && !chatGptModelUnlocked) {
-      setShowChatGptUnlock(true);
-      setChatGptUnlockInput('');
-      setChatGptUnlockError(false);
-      setShowModelMenu(true);
-      window.setTimeout(() => chatGptUnlockInputRef.current?.focus(), 0);
-      return;
-    }
     dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: model });
-    setShowModelMenu(false);
-    setShowChatGptUnlock(false);
-    setChatGptUnlockError(false);
-  };
-
-  const handleChatGptUnlockSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!unlockChatGPTImageModel(chatGptUnlockInput)) {
-      setChatGptUnlockError(true);
-      return;
-    }
-
-    setChatGptModelUnlocked(true);
-    setChatGptUnlockInput('');
-    setChatGptUnlockError(false);
-    setShowChatGptUnlock(false);
-    dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: 'chatgpt-image-generation-2' });
     setShowModelMenu(false);
   };
 
@@ -466,8 +435,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowClearConfirm(false);
     setShowLanguageMenu(false);
     setShowModelMenu(false);
-    setShowChatGptUnlock(false);
-    setChatGptUnlockError(false);
     setShowProjectMenu(false);
   };
 
@@ -518,8 +485,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowDownloadMenu(false);
     setShowLanguageMenu(false);
     setShowModelMenu(false);
-    setShowChatGptUnlock(false);
-    setChatGptUnlockError(false);
     setShowProjectMenu(false);
   }, [isMobile]);
 
@@ -529,8 +494,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     setShowDownloadMenu(false);
     setShowLanguageMenu(false);
     setShowModelMenu(false);
-    setShowChatGptUnlock(false);
-    setChatGptUnlockError(false);
     setShowProjectMenu(false);
   }, [state.isGenerating]);
 
@@ -553,8 +516,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       if (modelMenuRef.current?.contains(target)) return;
       if (modelButtonRef.current?.contains(target)) return;
       setShowModelMenu(false);
-      setShowChatGptUnlock(false);
-      setChatGptUnlockError(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -1208,9 +1169,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
             title={t('topBar.modelSelector.title')}
           >
-            {activeImageGenerationModel === 'chatgpt-image-generation-2' && !chatGptModelUnlocked ? (
-              <Lock size={12} className="text-foreground-muted" />
-            ) : activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
+            {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
               <Shield size={12} className="text-foreground-muted" />
             ) : (
               <Sparkles size={12} className="text-foreground-muted" />
@@ -1233,12 +1192,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                 {IMAGE_GENERATION_MODELS.map((model) => {
                   const copy = getModelCopy(model);
                   const selected = activeImageGenerationModel === model;
-                  const locked = model === 'chatgpt-image-generation-2' && !chatGptModelUnlocked;
-                  const Icon = model === 'chatgpt-image-generation-2'
-                    ? locked
-                      ? Lock
-                      : Shield
-                    : Sparkles;
+                  const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
 
                   return (
                     <div key={model}>
@@ -1256,14 +1210,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 text-xs font-bold leading-tight">
                             <span>{copy.label}</span>
-                            {locked && (
-                              <span className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide",
-                                selected ? "bg-background/15 text-background/80" : "bg-surface-sunken text-foreground-muted"
-                              )}>
-                                {t('topBar.modelSelector.lockedBadge')}
-                              </span>
-                            )}
                           </span>
                           <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
                             {copy.description}
@@ -1273,47 +1219,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                           </span>
                         </span>
                       </button>
-
-                      {locked && showChatGptUnlock && (
-                        <form
-                          onSubmit={handleChatGptUnlockSubmit}
-                          className="mt-1 rounded-lg border border-border-subtle bg-surface-sunken p-2"
-                        >
-                          <div className="text-[10px] font-bold text-foreground">
-                            {t('topBar.modelSelector.unlockTitle')}
-                          </div>
-                          <div className="mt-0.5 text-[10px] leading-snug text-foreground-muted">
-                            {t('topBar.modelSelector.unlockDescription')}
-                          </div>
-                          <div className="mt-2 flex gap-1.5">
-                            <input
-                              ref={chatGptUnlockInputRef}
-                              type="password"
-                              value={chatGptUnlockInput}
-                              onChange={(event) => {
-                                setChatGptUnlockInput(event.target.value);
-                                setChatGptUnlockError(false);
-                              }}
-                              placeholder={t('topBar.modelSelector.unlockPlaceholder')}
-                              className={cn(
-                                "min-w-0 flex-1 rounded-md border bg-surface-elevated px-2 py-1.5 text-xs text-foreground outline-none transition-colors placeholder:text-foreground-muted focus:border-foreground",
-                                chatGptUnlockError ? "border-red-400" : "border-border"
-                              )}
-                            />
-                            <button
-                              type="submit"
-                              className="shrink-0 rounded-md bg-foreground px-2.5 py-1.5 text-[10px] font-bold text-background transition-colors hover:bg-foreground-secondary"
-                            >
-                              {t('topBar.modelSelector.unlockAction')}
-                            </button>
-                          </div>
-                          {chatGptUnlockError && (
-                            <div className="mt-1.5 text-[10px] font-semibold text-red-500">
-                              {t('topBar.modelSelector.unlockError')}
-                            </div>
-                          )}
-                        </form>
-                      )}
                     </div>
                   );
                 })}

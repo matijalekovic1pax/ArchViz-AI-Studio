@@ -55,21 +55,15 @@
       "nano": {
         "label": "Regular Nano Banana",
         "shortLabel": "Nano Banana",
-        "description": "Best for natural prompt following, fast visual exploration, and source-aware edits.",
-        "bestFor": "Use for flexible image work"
+        "description": "Best for photoreal renderings, color, HDR tone, lighting, and atmosphere.",
+        "bestFor": "Use for render polish"
       },
       "chatgpt": {
         "label": "ChatGPT Image Generation 2",
         "shortLabel": "GPT Img 2",
-        "description": "Best for precision, preservation, and text-heavy images.",
-        "bestFor": "Use for control and text"
-      },
-      "lockedBadge": "Locked",
-      "unlockTitle": "Trial access",
-      "unlockDescription": "Enter the test password before using ChatGPT credits.",
-      "unlockPlaceholder": "Password",
-      "unlockAction": "Unlock",
-      "unlockError": "Incorrect password"
+        "description": "Best for precise edits to existing renders, preservation, masks, and text.",
+        "bestFor": "Use for targeted edits"
+      }
     }
   },
   "generation": {

@@ -55,21 +55,15 @@
       "nano": {
         "label": "普通 Nano Banana",
         "shortLabel": "Nano Banana",
-        "description": "适合自然语言提示、快速视觉探索，以及基于源图的编辑。",
-        "bestFor": "用于灵活图像工作"
+        "description": "适合照片级渲染、色彩、HDR 色调、光照和氛围。",
+        "bestFor": "用于渲染润色"
       },
       "chatgpt": {
         "label": "ChatGPT Image Generation 2",
         "shortLabel": "GPT Img 2",
-        "description": "更适合精确控制、保留原貌和文字较多的图像。",
-        "bestFor": "用于控制和文字"
-      },
-      "lockedBadge": "已锁定",
-      "unlockTitle": "试用访问",
-      "unlockDescription": "使用 ChatGPT 点数前请输入测试密码。",
-      "unlockPlaceholder": "密码",
-      "unlockAction": "解锁",
-      "unlockError": "密码不正确"
+        "description": "适合精确编辑已有渲染图、保留原貌、蒙版和文字。",
+        "bestFor": "用于局部编辑"
+      }
     }
   },
   "generation": {

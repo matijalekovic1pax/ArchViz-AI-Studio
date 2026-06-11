@@ -43,7 +43,6 @@ Add only the services you plan to use:
 
 ```bash
 wrangler secret put OPENAI_API_KEY
-wrangler secret put OPENAI_IMAGE_LOCK_PASSWORD
 wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY
 wrangler secret put GOOGLE_PROJECT_ID
 wrangler secret put KLING_PIAPI_API_KEY
@@ -61,7 +60,7 @@ wrangler secret put APPWRITE_ADMINS_COLLECTION_ID
 wrangler secret put APPWRITE_SNAPSHOTS_BUCKET_ID
 ```
 
-`OPENAI_API_KEY` enables the ChatGPT Image Generation 2 option. `OPENAI_IMAGE_LOCK_PASSWORD` controls the temporary trial unlock code and defaults to `1234` when omitted. The Worker requires the `X-Archviz-OpenAI-Image-Code` header for OpenAI image requests while the lock is active.
+`OPENAI_API_KEY` enables the ChatGPT Image Generation 2 option.
 
 ## Appwrite feedback backend
 
