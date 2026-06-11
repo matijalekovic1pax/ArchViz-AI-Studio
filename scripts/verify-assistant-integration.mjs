@@ -326,6 +326,15 @@ const missingGlobalAssistantThread =
   !assistantSource.includes('const [messages, setMessages] = useState<AssistantMessage[]>([]);') ||
   !assistantSource.includes('const requestMessages = messages') ||
   !assistantSource.includes('setMessages((items) => [...items, userMessage, loadingMessage])');
+const missingAssistantGovernanceSupport =
+  !assistantSource.includes('appendAssistantGovernanceFallbackRequests') ||
+  !assistantSource.includes('hasAssistantControlPromise') ||
+  !assistantSource.includes('getAssistantModeAfterControlCue') ||
+  !assistantSource.includes('getAssistantModeFromRequest') ||
+  !assistantSource.includes('return [...fallbackRequests, ...requests]') ||
+  !assistantSource.includes("dispatch({ type: 'SET_MODE', payload: setModeAction.mode })") ||
+  !actionsSource.includes('normalizeGenerationModeValue(request.mode || request.value)') ||
+  !actionsSource.includes("'visual editor': 'visual-edit'");
 const missingCommandActions = requiredCommandActions.filter((action) => !actionsSource.includes(`| '${action}'`));
 const missingCleanupSupport = requiredCleanupActions.filter((action) => (
   !actionsSource.includes(`| '${action}'`) ||
@@ -460,6 +469,7 @@ const failures = [
   missingProjectImportSupport ? 'Missing project import support for attached JSON files' : null,
   missingAssistantTestHook ? 'Missing gated assistant action execution test hook' : null,
   missingGlobalAssistantThread ? 'Missing global assistant chat thread support' : null,
+  missingAssistantGovernanceSupport ? 'Missing assistant app-control governance support' : null,
   missingDownloadActions.length ? `Missing download actions: ${missingDownloadActions.join(', ')}` : null,
   missingDownloadHandlers.length ? `Missing download handlers: ${missingDownloadHandlers.join(', ')}` : null,
   missingCurrentImageDownloadOptions ? 'Missing current-image download format/resolution support' : null,

@@ -198,6 +198,60 @@ const GENERATION_MODES: readonly GenerationMode[] = [
   'headshot',
 ] as const;
 
+const GENERATION_MODE_ALIASES: Record<string, GenerationMode> = {
+  generate: 'generate-text',
+  'generate text': 'generate-text',
+  'generate from text': 'generate-text',
+  'text generation': 'generate-text',
+  'text to image': 'generate-text',
+  '3d render': 'render-3d',
+  '3d rendering': 'render-3d',
+  '3d to render': 'render-3d',
+  render3d: 'render-3d',
+  'scene compose': 'scene-compose',
+  'scene composition': 'scene-compose',
+  'cad render': 'render-cad',
+  'cad to render': 'render-cad',
+  masterplans: 'masterplan',
+  'visual edit': 'visual-edit',
+  'visual editor': 'visual-edit',
+  'image editor': 'visual-edit',
+  'angle change': 'angle-change',
+  'change angle': 'angle-change',
+  'exploded view': 'exploded',
+  'render sketch': 'render-sketch',
+  'sketch render': 'render-sketch',
+  'sketch to render': 'render-sketch',
+  'multi angle': 'multi-angle',
+  'multi-angle': 'multi-angle',
+  upscaler: 'upscale',
+  'image to cad': 'img-to-cad',
+  'img to cad': 'img-to-cad',
+  'video studio': 'video',
+  'material validation': 'material-validation',
+  'doc translator': 'document-translate',
+  'document translator': 'document-translate',
+  'document translate': 'document-translate',
+  'pdf compressor': 'pdf-compression',
+  'pdf compression': 'pdf-compression',
+  headshots: 'headshot',
+};
+
+const normalizeGenerationModeValue = (value: unknown): GenerationMode | null => {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  if (GENERATION_MODES.includes(raw as GenerationMode)) return raw as GenerationMode;
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const hyphenated = normalized.replace(/\s+/g, '-');
+  if (GENERATION_MODES.includes(hyphenated as GenerationMode)) return hyphenated as GenerationMode;
+  return GENERATION_MODE_ALIASES[normalized] || null;
+};
+
 const getImageGenerationModelLabel = (model: ImageGenerationModel) =>
   model === 'chatgpt-image-generation-2'
     ? 'ChatGPT Image Generation 2'
@@ -1894,12 +1948,13 @@ export const normalizeAppAssistantActions = (
     if (!request.type) return [];
 
     if (request.type === 'set_mode') {
-      if (!request.mode || !GENERATION_MODES.includes(request.mode)) return [];
+      const mode = normalizeGenerationModeValue(request.mode || request.value);
+      if (!mode) return [];
       return [{
-        id: `${index}-set-mode-${request.mode}`,
+        id: `${index}-set-mode-${mode}`,
         type: 'set_mode',
-        mode: request.mode,
-        label: request.label || `Switch to ${request.mode.replace(/-/g, ' ')}`,
+        mode,
+        label: request.label || `Switch to ${mode.replace(/-/g, ' ')}`,
         reason: request.reason,
       }];
     }

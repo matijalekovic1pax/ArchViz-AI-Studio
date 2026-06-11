@@ -49,16 +49,22 @@ interface AppAssistantTestHooks {
   routeFallbackRequests: (
     question: string,
     requests?: AppAssistantActionRequest[],
-    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+    options?: AppAssistantTestOptions
   ) => AppAssistantAction[];
   normalizeRequests: (
     requests: AppAssistantActionRequest[],
-    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+    options?: AppAssistantTestOptions
   ) => AppAssistantAction[];
   applyRequests: (
     requests: AppAssistantActionRequest[],
-    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+    options?: AppAssistantTestOptions
   ) => AppAssistantAction[];
+}
+
+interface AppAssistantTestOptions {
+  chatImages?: AppAssistantChatImage[];
+  chatFiles?: AppAssistantChatFile[];
+  answerContent?: string;
 }
 
 interface AppAssistantTestCommandDetail {
@@ -66,7 +72,8 @@ interface AppAssistantTestCommandDetail {
   command?: 'context' | 'normalize' | 'apply' | 'route-fallback';
   question?: string;
   requests?: AppAssistantActionRequest[];
-  options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] };
+  options?: AppAssistantTestOptions;
+  answerContent?: string;
 }
 
 type AppAssistantSmokePhase =
@@ -293,19 +300,74 @@ const getAssistantSubmitSmokeAnswer = () => [
   ']}</assistant_actions>',
 ].join('');
 
-const ROUTE_TO_VISUAL_EDIT_MODES = new Set<GenerationMode>([
-  'generate-text',
-  'render-3d',
-  'render-cad',
-  'render-sketch',
-  'scene-compose',
-  'masterplan',
-  'exploded',
-  'section',
-  'multi-angle',
-  'angle-change',
-  'upscale',
-]);
+const ASSISTANT_MODE_ROUTES: Array<{ mode: GenerationMode; label: string; aliases: string[] }> = [
+  { mode: 'generate-text', label: 'Generate from Text', aliases: ['generate', 'generate text', 'generate from text', 'text to image'] },
+  { mode: 'render-3d', label: '3D to Render', aliases: ['3d render', '3d rendering', '3d to render', 'render 3d'] },
+  { mode: 'scene-compose', label: 'Scene Compose', aliases: ['scene compose', 'scene composition'] },
+  { mode: 'render-cad', label: 'CAD to Render', aliases: ['cad render', 'cad to render', 'render cad'] },
+  { mode: 'masterplan', label: 'Masterplans', aliases: ['masterplan', 'masterplans'] },
+  { mode: 'visual-edit', label: 'Visual Edit', aliases: ['visual edit', 'visual editor', 'image editor'] },
+  { mode: 'angle-change', label: 'Angle Change', aliases: ['angle change', 'change angle'] },
+  { mode: 'exploded', label: 'Exploded Views', aliases: ['exploded', 'exploded view', 'exploded views'] },
+  { mode: 'section', label: 'Render to Section', aliases: ['section', 'render to section', 'section render'] },
+  { mode: 'render-sketch', label: 'Sketch to Render', aliases: ['sketch render', 'sketch to render', 'render sketch'] },
+  { mode: 'multi-angle', label: 'Multi Angle', aliases: ['multi angle', 'multi-angle', 'multi angle render'] },
+  { mode: 'upscale', label: 'Upscale', aliases: ['upscale', 'upscaler'] },
+  { mode: 'img-to-cad', label: 'Image to CAD', aliases: ['image to cad', 'img to cad'] },
+  { mode: 'video', label: 'Video Studio', aliases: ['video', 'video studio'] },
+  { mode: 'material-validation', label: 'Material Validation', aliases: ['material validation'] },
+  { mode: 'document-translate', label: 'Doc Translator', aliases: ['document translate', 'document translator', 'doc translator'] },
+  { mode: 'pdf-compression', label: 'PDF Compressor', aliases: ['pdf compressor', 'pdf compression'] },
+  { mode: 'headshot', label: 'AI Headshots', aliases: ['headshot', 'headshots', 'ai headshots'] },
+];
+
+const normalizeAssistantText = (text: string) =>
+  text.toLowerCase().replace(/[_/-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+const getAssistantModeRoute = (mode: GenerationMode) =>
+  ASSISTANT_MODE_ROUTES.find((route) => route.mode === mode);
+
+const getAssistantModeFromRequest = (request: AppAssistantActionRequest): GenerationMode | null => {
+  const value = request.mode || (typeof request.value === 'string' ? request.value : undefined);
+  if (!value) return null;
+  const normalized = normalizeAssistantText(value);
+  return ASSISTANT_MODE_ROUTES.find((route) =>
+    route.mode === value ||
+    route.mode.replace(/-/g, ' ') === normalized ||
+    route.aliases.some((alias) => normalizeAssistantText(alias) === normalized)
+  )?.mode || null;
+};
+
+const getAssistantModeFromText = (text: string): GenerationMode | null => {
+  const normalized = ` ${normalizeAssistantText(text)} `;
+  return ASSISTANT_MODE_ROUTES.find((route) =>
+    route.aliases.some((alias) => normalized.includes(` ${normalizeAssistantText(alias)} `)) ||
+    normalized.includes(` ${route.mode.replace(/-/g, ' ')} `)
+  )?.mode || null;
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getAssistantModeAfterControlCue = (text: string): GenerationMode | null => {
+  for (const route of ASSISTANT_MODE_ROUTES) {
+    const names = [route.label, route.mode.replace(/-/g, ' '), ...route.aliases];
+    for (const name of names) {
+      const pattern = escapeRegExp(normalizeAssistantText(name)).replace(/\s+/g, '\\s+');
+      if (new RegExp(`\\b(?:to|into|onto|open|launch|select|switch\\s+to|route\\s+to|move\\s+to|go\\s+to)\\s+(?:the\\s+)?${pattern}\\b`, 'i').test(text)) {
+        return route.mode;
+      }
+    }
+  }
+  return null;
+};
+
+const hasDirectModeSwitchIntent = (text: string) =>
+  /\b(switch|change|go|open|move|route|navigate|take|bring|set|select)\b/i.test(text) &&
+  /\b(feature|mode|tool|tab|workspace|panel|section|visual edit|visual editor|3d|cad|generate|scene compose|upscale|video|masterplan|pdf|doc|headshot)\b/i.test(text);
+
+const hasAssistantControlPromise = (text: string) =>
+  /\b(i\s*(?:will|'ll|am going to)|let me|i can|i'm going to|i’ll|i will)\b/i.test(text) &&
+  /\b(switch|change|open|move|route|set|select|use|trigger|start|prepare)\b/i.test(text);
 
 const visualEditTargetPatterns: Array<{ pattern: RegExp; target: string; label: string }> = [
   { pattern: /\b(chairs?|seats?|seating|benches?)\b/i, target: 'Seating', label: 'seating' },
@@ -360,68 +422,91 @@ const appendVisualEditRoutingFallbackRequests = (
   state: AppState,
   question: string
 ): AppAssistantActionRequest[] => {
-  if (state.mode === 'visual-edit' || !ROUTE_TO_VISUAL_EDIT_MODES.has(state.mode)) return requests;
   if (!isTargetedExistingImageEditRequest(question)) return requests;
-
-  const hasVisualEditRoute = requests.some((request) =>
-    (request.type === 'set_mode' && request.mode === 'visual-edit') ||
-    request.type === 'run_ai_selection' ||
-    request.type === 'prepare_image_selection'
-  );
-  if (hasVisualEditRoute) return requests;
 
   const targets = getVisualEditFallbackTargets(question);
   if (!targets.length) return requests;
 
-  const fallbackRequests: AppAssistantActionRequest[] = [
-    {
+  const hasModeRequest = requests.some((request) =>
+    request.type === 'set_mode' && getAssistantModeFromRequest(request) === 'visual-edit'
+  );
+  const hasImageModelRequest = requests.some((request) =>
+    request.type === 'set_image_generation_model' && request.value === 'chatgpt-image-generation-2'
+  );
+  const hasWorkflowPath = (path: string) => requests.some((request) =>
+    request.type === 'set_workflow' && request.path === path
+  );
+  const hasOpenRightPanel = requests.some((request) => request.type === 'open_right_panel');
+  const hasRunAiSelection = requests.some((request) => request.type === 'run_ai_selection');
+  const fallbackRequests: AppAssistantActionRequest[] = [];
+
+  if (state.mode !== 'visual-edit' && !hasModeRequest) {
+    fallbackRequests.push({
       type: 'set_mode',
       mode: 'visual-edit',
       label: 'Switch to Visual Edit',
       reason: 'Targeted color/material changes belong in Visual Edit, not the current full-generation workflow.',
-    },
-    {
+    });
+  }
+
+  if (!hasImageModelRequest) {
+    fallbackRequests.push({
       type: 'set_image_generation_model',
       value: 'chatgpt-image-generation-2',
       label: 'Use ChatGPT Image Generation 2',
       reason: 'Precise local edits to an existing render need stronger preservation.',
-    },
-    {
+    });
+  }
+
+  if (!hasWorkflowPath('activeTool')) {
+    fallbackRequests.push({
       type: 'set_workflow',
       path: 'activeTool',
       value: getVisualEditFallbackTool(question),
       label: 'Choose the Visual Edit tool',
       reason: 'This prepares the edit as a targeted local change.',
-    },
-    {
+    });
+  }
+
+  if (!hasWorkflowPath('visualSelection.mode')) {
+    fallbackRequests.push({
       type: 'set_workflow',
       path: 'visualSelection.mode',
       value: 'ai',
       label: 'Use AI selection',
       reason: `The assistant can detect ${targets.join(', ')} before editing.`,
-    },
-    {
+    });
+  }
+
+  if (!hasWorkflowPath('visualSelection.autoTargets')) {
+    fallbackRequests.push({
       type: 'set_workflow',
       path: 'visualSelection.autoTargets',
       value: targets,
       label: `Target ${targets.join(', ')}`,
       reason: 'These are the visible regions requested in the edit.',
-    },
-    {
+    });
+  }
+
+  if (!hasWorkflowPath('visualPrompt')) {
+    fallbackRequests.push({
       type: 'set_workflow',
       path: 'visualPrompt',
       value: buildVisualEditFallbackPrompt(question, targets),
       label: 'Set Visual Edit prompt',
       reason: 'The prompt locks the edit to the requested objects while preserving the rest of the render.',
-    },
-    {
+    });
+  }
+
+  if (!hasOpenRightPanel) {
+    fallbackRequests.push({
       type: 'open_right_panel',
       label: 'Open Visual Edit controls',
       reason: 'The selection and edit controls live in the Visual Edit panel.',
-    },
-  ];
+    });
+  }
 
-  if (state.uploadedImage && !state.workflow.visualAutoSelecting) {
+  if (state.uploadedImage && !state.workflow.visualAutoSelecting && !hasRunAiSelection) {
     fallbackRequests.push({
       type: 'run_ai_selection',
       value: targets,
@@ -430,7 +515,38 @@ const appendVisualEditRoutingFallbackRequests = (
     });
   }
 
-  return [...requests, ...fallbackRequests];
+  return [...fallbackRequests, ...requests];
+};
+
+const appendAssistantGovernanceFallbackRequests = (
+  requests: AppAssistantActionRequest[],
+  state: AppState,
+  question: string,
+  answerContent: string
+): AppAssistantActionRequest[] => {
+  const visualEditRequests = appendVisualEditRoutingFallbackRequests(requests, state, question);
+  const requestedMode = hasDirectModeSwitchIntent(question)
+    ? getAssistantModeAfterControlCue(question) || getAssistantModeFromText(question)
+    : hasAssistantControlPromise(answerContent)
+      ? getAssistantModeAfterControlCue(answerContent) || getAssistantModeFromText(answerContent)
+      : null;
+
+  if (!requestedMode || requestedMode === state.mode) return visualEditRequests;
+  const hasModeRequest = visualEditRequests.some((request) =>
+    request.type === 'set_mode' && getAssistantModeFromRequest(request) === requestedMode
+  );
+  if (hasModeRequest) return visualEditRequests;
+
+  const route = getAssistantModeRoute(requestedMode);
+  return [
+    {
+      type: 'set_mode',
+      mode: requestedMode,
+      label: `Switch to ${route?.label || requestedMode.replace(/-/g, ' ')}`,
+      reason: 'The assistant promised to move the workspace to this feature.',
+    },
+    ...visualEditRequests,
+  ];
 };
 
 type CurrentImageDownloadFormat = 'png' | 'jpg';
@@ -1143,7 +1259,7 @@ export const AppAssistant: React.FC = () => {
         });
 
       const { content, requests } = extractAppAssistantActions(answer);
-      const actionableRequests = appendVisualEditRoutingFallbackRequests(requests, state, question);
+      const actionableRequests = appendAssistantGovernanceFallbackRequests(requests, state, question, content);
       const actions = normalizeAppAssistantActions(actionableRequests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
 
       setMessages((items) =>
@@ -1332,6 +1448,7 @@ export const AppAssistant: React.FC = () => {
     automatic = false
   ) => {
     if (!actions.length) return;
+    const setModeAction = actions.find((action) => action.type === 'set_mode');
     const setLanguageAction = actions.find((action) => action.type === 'set_language');
     const openFeedbackReportAction = actions.find((action) => action.type === 'open_feedback_report');
     const openFeedbackAdminAction = actions.find((action) => action.type === 'open_feedback_admin');
@@ -1364,6 +1481,7 @@ export const AppAssistant: React.FC = () => {
     );
     const stateActions = actions.filter(
       (action) =>
+        action.type !== 'set_mode' &&
         action.type !== 'set_language' &&
         action.type !== 'open_feedback_report' &&
         action.type !== 'open_feedback_admin' &&
@@ -1380,6 +1498,10 @@ export const AppAssistant: React.FC = () => {
         action.type !== 'prepare_image_selection' &&
         !isDownloadAction(action)
     );
+
+    if (setModeAction?.mode) {
+      dispatch({ type: 'SET_MODE', payload: setModeAction.mode });
+    }
 
     if (stateActions.length > 0) {
       applyAppAssistantActions(dispatch, state, stateActions);
@@ -1503,6 +1625,8 @@ export const AppAssistant: React.FC = () => {
           ? 'Assistant opened feedback reporting.'
         : setLanguageAction
           ? 'Assistant switched the app language.'
+        : setModeAction
+          ? `Assistant switched to ${getAssistantModeRoute(setModeAction.mode || state.mode)?.label || 'the requested feature'}.`
         : cancelGenerationAction
           ? 'Assistant asked the current generation to stop.'
         : runPreprocessAction
@@ -1598,7 +1722,12 @@ export const AppAssistant: React.FC = () => {
       }
 
       const routeRequests = detail.command === 'route-fallback'
-        ? appendVisualEditRoutingFallbackRequests(requests, state, detail.question || '')
+        ? appendAssistantGovernanceFallbackRequests(
+            requests,
+            state,
+            detail.question || '',
+            detail.answerContent || options.answerContent || ''
+          )
         : requests;
       const actions = normalizeAppAssistantActions(routeRequests, state, options);
       if (detail.command === 'apply' && actions.length > 0) {
@@ -1616,7 +1745,7 @@ export const AppAssistant: React.FC = () => {
       getActionContext: () => buildAppAssistantActionContext(state),
       routeFallbackRequests: (question, requests = [], options = {}) =>
         normalizeAppAssistantActions(
-          appendVisualEditRoutingFallbackRequests(requests, state, question),
+          appendAssistantGovernanceFallbackRequests(requests, state, question, options.answerContent || ''),
           state,
           options
         ),
