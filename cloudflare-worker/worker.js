@@ -1453,7 +1453,7 @@ return corsResponse(origin, { error: 'Authentication failed: ' + err.message }, 
 
 async function handleGeminiProxy(request, env, subpath) {
   const origin = request.headers.get('Origin') || '';
-  const apiBase = /^models\/(?:gemini-3-pro-image|gemini-3\.1-flash-image):/.test(subpath)
+  const apiBase = /^models\/gemini-3[^/:?]*image[^/:?]*:/.test(subpath)
     ? GEMINI_API_BASE_V1
     : GEMINI_API_BASE;
   const url = `${apiBase}/${subpath}`;

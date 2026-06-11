@@ -927,18 +927,23 @@ export class GeminiService {
     defaultModalities: Array<'TEXT' | 'IMAGE'>,
     model = this.model
   ): Record<string, any> {
+    const requestedModalities = config?.responseModalities || defaultModalities;
     const normalizedConfig = this.normalizeThinkingConfig(model, {
       ...(config || {}),
-      responseModalities: config?.responseModalities || defaultModalities,
+      responseModalities: requestedModalities,
     });
 
-    const { abortSignal, responseFormat, openAI, imageConfig, ...rest } = normalizedConfig;
+    const { abortSignal, responseFormat, openAI, imageConfig, responseModalities, ...rest } = normalizedConfig;
+    const modalities = responseModalities || requestedModalities;
+    const wantsImage = modalities.includes('IMAGE');
     const result: Record<string, any> = {
       ...rest,
-      responseModalities: normalizedConfig.responseModalities || defaultModalities,
     };
     const responseImageConfig = responseFormat?.image || imageConfig;
-    if (responseImageConfig) {
+    if (wantsImage) {
+      result.responseModalities = modalities;
+    }
+    if (wantsImage && responseImageConfig) {
       if (this.usesResponseFormatImageConfig(model)) {
         result.responseFormat = {
           ...(responseFormat || {}),
