@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -40,6 +40,7 @@ const APP_LANGUAGES = [
   { code: 'es', label: 'ES', title: 'Spanish' },
   { code: 'fr', label: 'FR', title: 'French' },
   { code: 'zh', label: 'ZH', title: 'Chinese' },
+  { code: 'sr', label: 'SR', title: 'Srpski' },
 ] as const;
 
 type AppLanguage = (typeof APP_LANGUAGES)[number]['code'];
@@ -828,9 +829,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between w-full">
+        <div className="grid grid-cols-[max-content_auto_minmax(0,1fr)] items-center gap-2 xl:gap-3 w-full">
       {/* Left: Branding & Utility */}
-      <div className="flex items-center gap-6 flex-1 min-w-0">
+      <div className="flex items-center gap-3 xl:gap-4 2xl:gap-6 min-w-0">
         <div className="flex items-center gap-2 select-none shrink-0">
           <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shadow-md shrink-0">
             <span className="text-surface-elevated font-bold text-sm">AV</span>
@@ -1125,42 +1126,6 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           )}
         </div>
 
-        {/* Language Selector */}
-        <div className="relative shrink-0">
-          <button
-            ref={languageButtonRef}
-            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
-            title={t('topBar.language')}
-          >
-            <span>{getLanguageLabel()}</span>
-            <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
-          </button>
-
-          {showLanguageMenu && (
-            <div
-              ref={languageMenuRef}
-              className="absolute left-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-left"
-            >
-              {APP_LANGUAGES.map((language) => (
-                <button
-                  key={language.code}
-                  onClick={() => handleLanguageChange(language.code)}
-                  className={cn(
-                    "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
-                    activeLanguage === language.code
-                      ? "bg-foreground text-background"
-                      : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                  )}
-                  title={language.title}
-                >
-                  {language.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Model Selector */}
         <div className="relative shrink-0">
           <button
@@ -1226,12 +1191,13 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </div>
           )}
         </div>
+
       </div>
 
       {/* Center: Generate Button (Hidden in generate-text mode) */}
       <div className={cn(
         "flex items-center justify-center shrink-0 transition-all duration-500",
-        showControlsMenu ? "mx-2" : "mx-4"
+        showControlsMenu ? "ml-0 xl:ml-1" : "ml-1 xl:ml-2"
       )}>
         {state.mode !== 'generate-text' && (
           <div className="relative flex items-center">
@@ -1291,9 +1257,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center justify-end gap-3 flex-1 min-w-0 relative">
+      <div className="flex items-center justify-end gap-1 xl:gap-2 2xl:gap-3 min-w-0 relative">
         {/* Subtle Project Management Tools */}
-        <div className="flex items-center gap-1 mr-2 shrink-0">
+        <div className="hidden xl:flex items-center gap-1 mr-2 shrink-0">
             <button
               onClick={handleReset}
               className="p-2 text-foreground-muted hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -1314,15 +1280,14 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             {/* Save Project Button */}
             <button
               onClick={handleExportProject}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-colors"
+              className="h-9 w-9 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors flex items-center justify-center"
               title={t('topBar.saveProject')}
             >
-              <FileJson size={14} />
-              <span className="hidden lg:inline">{t('topBar.saveProject')}</span>
+              <Save size={16} />
             </button>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="hidden xl:flex items-center gap-1 shrink-0">
           <button
             onClick={() => setShowFeedbackDialog(true)}
             aria-label={t('feedback.reportButton')}
@@ -1360,7 +1325,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               title={!state.uploadedImage ? t('generation.generateOutputFirst') : state.isGenerating ? t('generation.generating') : t('topBar.download')}
             >
               {isVideoMode ? <Video size={14} /> : <Download size={14} />}
-              <span className="hidden sm:inline">{t('topBar.download')}</span>
+              <span className="hidden xl:inline">{t('topBar.download')}</span>
             </button>
             <div className={cn("my-1.5 w-px shrink-0", canUseDownloadControls ? "bg-foreground/20" : "bg-border/50")} />
             <button
@@ -1530,6 +1495,40 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
               className="w-7 h-7 rounded-full object-cover border border-border"
             />
           )}
+          <div className="relative shrink-0">
+            <button
+              ref={languageButtonRef}
+              onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+              className="flex h-7 min-w-9 items-center justify-center gap-1.5 rounded-full border border-border-subtle bg-surface-elevated px-2 py-1 text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
+              title={t('topBar.language')}
+            >
+              <span>{getLanguageLabel()}</span>
+              <ChevronDown size={10} className={cn("transition-transform", showLanguageMenu && "rotate-180")} />
+            </button>
+
+            {showLanguageMenu && (
+              <div
+                ref={languageMenuRef}
+                className="absolute right-0 top-full mt-1 w-16 bg-surface-elevated rounded-lg shadow-elevated border border-border p-1 z-50 animate-fade-in origin-top-right"
+              >
+                {APP_LANGUAGES.map((language) => (
+                  <button
+                    key={language.code}
+                    onClick={() => handleLanguageChange(language.code)}
+                    className={cn(
+                      "w-full text-center px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors",
+                      activeLanguage === language.code
+                        ? "bg-foreground text-background"
+                        : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                    )}
+                    title={language.title}
+                  >
+                    {language.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <a
             href="/docs/"
             onClick={handleDocsNavigation}

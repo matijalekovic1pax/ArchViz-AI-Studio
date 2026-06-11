@@ -255,13 +255,14 @@ const normalizeGenerationModeValue = (value: unknown): GenerationMode | null => 
 const getImageGenerationModelLabel = (model: ImageGenerationModel) =>
   model === 'chatgpt-image-generation-2'
     ? 'ChatGPT Image Generation 2'
-    : 'Regular Nano Banana';
+    : 'Nano Banana Pro';
 
 const APP_LANGUAGE_OPTIONS = [
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Spanish' },
   { code: 'fr', label: 'French' },
   { code: 'zh', label: 'Chinese' },
+  { code: 'sr', label: 'Serbian' },
 ] as const;
 
 const MAX_ASSISTANT_ACTIONS_PER_RESPONSE = 16;
@@ -2120,20 +2121,7 @@ export const normalizeAppAssistantActions = (
     }
 
     if (request.type === 'run_ai_selection') {
-      if (!state.uploadedImage || state.workflow.visualAutoSelecting) return [];
-      const requestedTargets = coerceStringList(request.value);
-      const fallbackTargets = state.workflow.visualSelection.autoTargets || [];
-      const targetCandidates = requestedTargets?.length ? requestedTargets : fallbackTargets;
-      const allowedTargets = new Set(VISUAL_AI_SELECTION_TARGETS);
-      const targets = Array.from(new Set(targetCandidates)).filter((target) => allowedTargets.has(target as (typeof VISUAL_AI_SELECTION_TARGETS)[number]));
-      if (!targets.length) return [];
-      return [{
-        id: `${index}-run-ai-selection`,
-        type: 'run_ai_selection',
-        value: targets,
-        label: request.label || `AI-select ${targets.join(', ')}`,
-        reason: request.reason,
-      }];
+      return [];
     }
 
     if (request.type === 'reset_project') {
@@ -3206,7 +3194,7 @@ export const buildAppAssistantActionContext = (
     'Only use the exact action types and paths listed below.',
     `set_mode can switch to: ${GENERATION_MODES.join(', ')}`,
     `set_language can switch the app language. Allowed values: ${APP_LANGUAGE_OPTIONS.map((language) => `${language.code} (${getAppLanguageLabel(language.code)})`).join(', ')}.`,
-    `set_image_generation_model can switch the top-bar Image Model. Current: ${state.imageGenerationModel}. Allowed values: ${IMAGE_GENERATION_MODELS.join(', ')}. Regular Nano Banana is the primary choice for new photorealistic architectural renderings, 3D/CAD/sketch-to-render transformations, color, HDR feel, tone, lighting, atmosphere, and render polish. ChatGPT Image Generation 2 is best for specific edits to existing or already rendered images, precision, preservation, masks/selections, object or material changes, and text-heavy images when the gateway has an OPENAI_API_KEY configured.`,
+    `set_image_generation_model can switch the top-bar Image Model. Current: ${state.imageGenerationModel}. Allowed values: ${IMAGE_GENERATION_MODELS.join(', ')}. Nano Banana Pro is the primary choice for new photorealistic architectural renderings, 3D/CAD/sketch-to-render transformations, color, HDR feel, tone, lighting, atmosphere, and render polish. ChatGPT Image Generation 2 is best for specific edits to existing or already rendered images, precision, preservation, masks/selections, object or material changes, and text-heavy images when the gateway has an OPENAI_API_KEY configured.`,
     'add_custom_style creates and selects a custom style preset. Use value as an object with name, description, and optional arrays: architectureVocabulary, materials, secondaryMaterials, avoidMaterials, lighting, avoidLighting, camera, framing, quality, atmosphere, detail, plus optional previewUrl.',
     `set_style can choose an existing style id. Current: ${state.activeStyleId}. Available styles: ${styleOptions}`,
     'set_masterplan_zones replaces the Masterplan zone list. Use value as an array of objects with name, type, color, selected, and optional areaHa.',
@@ -3238,9 +3226,9 @@ export const buildAppAssistantActionContext = (
     'run_masterplan_zone_detection runs Masterplan zone auto-detection when a masterplan/source image is available.',
     'run_exploded_component_detection runs Exploded View component auto-detection when a source image is available.',
     'run_section_area_detection runs Section area auto-detection when a source image is available.',
-    `run_ai_selection triggers Visual Edit AI auto-selection on the current image. Provide value as one or more targets from: ${VISUAL_AI_SELECTION_TARGETS.join(', ')}. Use it when the user asks you to auto-select, detect, mask, or find visible regions before a Visual Edit.`,
-    'Wrong-feature routing: if the user is in 3D Rendering, Generate from Text, Upscale, or Scene Compose but asks to change one existing object/material/color/region in a finished render or photo, explain that this is a Visual Edit task and request set_mode visual-edit. For chair color or seating material edits, also request set_image_generation_model chatgpt-image-generation-2, set_workflow activeTool material or adjust, set_workflow visualSelection.mode ai, set_workflow visualSelection.autoTargets ["Seating"] or ["Furniture"], set_workflow visualPrompt with the exact edit, and run_ai_selection when a canvas image is available. Do not add run_generation until the user confirms the final edit.',
-    'When you say "I will switch", "I will set", "I will trigger", or similar, you must include the matching hidden assistant_actions block in the same response. For the common request "change the color of the chairs, carpet, and plants" from a non-Visual-Edit mode, include actions for set_mode visual-edit, set_image_generation_model chatgpt-image-generation-2, set_workflow activeTool material, set_workflow visualSelection.mode ai, set_workflow visualSelection.autoTargets ["Seating","Floors","Vegetation"], set_workflow visualPrompt, open_right_panel, and run_ai_selection if a canvas image is present.',
+    'Do not request run_ai_selection. The assistant must not trigger Visual Edit auto-selection. When selection is needed, route to Visual Edit, set manual selection mode, and tell the user to mark the area themselves with Rect, Brush, or Lasso.',
+    'Wrong-feature routing: if the user is in 3D Rendering, Generate from Text, Upscale, or Scene Compose but asks to change one existing object/material/color/region in a finished render or photo, explain that this is a Visual Edit task and request set_mode visual-edit. For chair color or seating material edits, also request set_image_generation_model chatgpt-image-generation-2, set_workflow activeTool select if no selection exists, set_workflow visualSelection.mode lasso, set_workflow visualPrompt with the exact edit, and open_right_panel. Do not add run_generation until the user manually selects the target area and confirms the final edit.',
+    'When you say "I will switch", "I will set", "I will trigger", or similar, you must include the matching hidden assistant_actions block in the same response. For the common request "change the color of the chairs, carpet, and plants" from a non-Visual-Edit mode, include actions for set_mode visual-edit, set_image_generation_model chatgpt-image-generation-2, set_workflow activeTool select, set_workflow visualSelection.mode lasso, set_workflow visualPrompt, and open_right_panel. Then tell the user to select the chairs, carpet, and plants manually.',
     `Download actions currently available: ${availableDownloads.length ? availableDownloads.map((type) => `${type} (${getDownloadActionLabel(type)})`).join(', ') : 'none'}. Use a download action when the user asks to download/export the current project JSON or an existing generated output.`,
     'For download_current_image, optional value may be {"format":"png"|"jpg","resolution":"full"|"medium"} to match the top-bar image download format and resolution controls.',
     'For broad creative requests in any feature, treat the request as setup intent, not final permission. Apply safe setup actions, use available analysis/preprocessing when useful, ask for missing style/reference/output details, and wait for confirmation before run_generation.',

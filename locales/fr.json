@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "ArchViz Studio",
+    "title": "ArchViz AI Studio",
     "subtitle": "Session Sans État"
   },
   "topBar": {
@@ -53,9 +53,9 @@
     "modelSelector": {
       "title": "Modèle d'Image",
       "nano": {
-        "label": "Nano Banana standard",
-        "shortLabel": "Nano Banana",
-        "description": "Idéal pour rendus photoréalistes, couleur, ton HDR, lumière et atmosphère.",
+        "label": "Nano Banana Pro",
+        "shortLabel": "Nano Pro",
+        "description": "Idéal pour rendus photoréalistes professionnels, couleur, ton HDR, lumière et atmosphère.",
         "bestFor": "Pour polir les rendus"
       },
       "chatgpt": {

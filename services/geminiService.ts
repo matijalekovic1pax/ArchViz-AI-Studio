@@ -12,12 +12,12 @@ import { adaptPromptForImageGenerationModel } from '../engine/promptEngine';
 // Types & Interfaces
 // ============================================================================
 
-export const DEFAULT_MODEL = 'gemini-2.5-flash-image';
-export const IMAGE_MODEL = 'gemini-2.5-flash-image';
+export const DEFAULT_MODEL = 'gemini-3-pro-image';
+export const IMAGE_MODEL = 'gemini-3-pro-image';
 export const TEXT_MODEL = 'gemini-3.5-flash';
 export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
-const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:regular Nano Banana|ChatGPT Image Generation 2)\b/i;
+const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -306,7 +306,7 @@ export class GeminiService {
     }
 
     const contents = this.buildContents(preparedRequest);
-    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE']);
+    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE'], this.model);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(this.model, 'generateContent', {
@@ -324,7 +324,7 @@ export class GeminiService {
     const { imageConfig: _ic, ...configWithoutImage } = request.generationConfig || {};
     const baseConfig = { ...configWithoutImage, responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'> };
     const normalized = this.normalizeThinkingConfig(model, baseConfig);
-    const generationConfig = this.buildGenerationConfig(normalized, ['TEXT']);
+    const generationConfig = this.buildGenerationConfig(normalized, ['TEXT'], model);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(model, 'generateContent', {
@@ -352,7 +352,7 @@ export class GeminiService {
       : `Generate an image: ${preparedRequest.prompt}`;
 
     const contents = this.buildContents({ ...preparedRequest, prompt: imagePrompt });
-    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE']);
+    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE'], IMAGE_MODEL);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(IMAGE_MODEL, 'generateContent', {
@@ -430,7 +430,7 @@ export class GeminiService {
       return { role: msg.role, parts };
     });
 
-    const config = this.buildGenerationConfig(generationConfig, generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
+    const config = this.buildGenerationConfig(generationConfig, generationConfig?.responseModalities || ['TEXT', 'IMAGE'], this.model);
 
     const response = await this.executeWithRetry(() =>
       geminiRequest(this.model, 'generateContent', {
@@ -614,7 +614,7 @@ export class GeminiService {
         ...configWithoutImage,
         responseModalities: ['TEXT'] as Array<'TEXT' | 'IMAGE'>
       });
-      const config = this.buildGenerationConfig(normalized, ['TEXT']);
+      const config = this.buildGenerationConfig(normalized, ['TEXT'], TEXT_MODEL);
       return { contents, config };
     });
 
@@ -688,9 +688,12 @@ export class GeminiService {
     }
 
     const contents = this.buildContents(preparedRequest);
-    const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, preparedRequest.generationConfig?.responseModalities || ['TEXT', 'IMAGE']);
-
     const model = preparedRequest.model || this.model;
+    const generationConfig = this.buildGenerationConfig(
+      preparedRequest.generationConfig,
+      preparedRequest.generationConfig?.responseModalities || ['TEXT', 'IMAGE'],
+      model
+    );
     const response = await geminiStreamRequest(model, {
       contents,
       generationConfig,
@@ -906,14 +909,18 @@ export class GeminiService {
   /** Build REST API generationConfig from our GenerationConfig type */
   private buildGenerationConfig(
     config: GenerationConfig | undefined,
-    defaultModalities: Array<'TEXT' | 'IMAGE'>
+    defaultModalities: Array<'TEXT' | 'IMAGE'>,
+    model = this.model
   ): Record<string, any> {
-    if (!config) return { responseModalities: defaultModalities };
+    const normalizedConfig = this.normalizeThinkingConfig(model, {
+      ...(config || {}),
+      responseModalities: config?.responseModalities || defaultModalities,
+    });
 
-    const { abortSignal, responseFormat, openAI, ...rest } = config;
+    const { abortSignal, responseFormat, openAI, ...rest } = normalizedConfig;
     const result: Record<string, any> = {
       ...rest,
-      responseModalities: config.responseModalities || defaultModalities,
+      responseModalities: normalizedConfig.responseModalities || defaultModalities,
     };
 
     return result;
@@ -933,13 +940,13 @@ export class GeminiService {
       if ('thinkingBudget' in thinkingConfig) {
         delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
       }
-      if (!thinkingConfig.thinkingLevel) thinkingConfig.thinkingLevel = 'low';
+      if (!thinkingConfig.thinkingLevel) thinkingConfig.thinkingLevel = 'medium';
     } else {
       if ('thinkingLevel' in thinkingConfig) {
         delete (thinkingConfig as { thinkingLevel?: string }).thinkingLevel;
       }
-      if (typeof thinkingConfig.thinkingBudget !== 'number' || thinkingConfig.thinkingBudget <= 0) {
-        thinkingConfig.thinkingBudget = 256;
+      if (typeof thinkingConfig.thinkingBudget !== 'number' || thinkingConfig.thinkingBudget === 0) {
+        thinkingConfig.thinkingBudget = -1;
       }
     }
 

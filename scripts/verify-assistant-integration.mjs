@@ -15,6 +15,7 @@ const parseTsx = (source) =>
 const storeSource = read('store.tsx');
 const actionsSource = read('lib/appAssistantActions.ts');
 const assistantSource = read('components/AppAssistant.tsx');
+const geminiServiceSource = read('services/geminiService.ts');
 const apiGatewaySource = read('services/apiGateway.ts');
 const topBarSource = read('components/panels/TopBar.tsx');
 const visualEditSource = read('components/panels/right/VisualEditPanel.tsx');
@@ -186,7 +187,6 @@ const requiredCommandActions = [
   'redo_selection_change',
   'run_exploded_component_detection',
   'run_image_to_cad_preprocess',
-  'run_ai_selection',
   'run_masterplan_zone_detection',
   'run_preprocess',
   'run_section_area_detection',
@@ -329,12 +329,30 @@ const missingGlobalAssistantThread =
 const missingAssistantGovernanceSupport =
   !assistantSource.includes('appendAssistantGovernanceFallbackRequests') ||
   !assistantSource.includes('hasAssistantControlPromise') ||
+  !assistantSource.includes('hasDirectGenerationIntent') ||
   !assistantSource.includes('getAssistantModeAfterControlCue') ||
   !assistantSource.includes('getAssistantModeFromRequest') ||
-  !assistantSource.includes('return [...fallbackRequests, ...requests]') ||
+  !assistantSource.includes("requests.filter((request) => request.type !== 'run_ai_selection')") ||
   !assistantSource.includes("dispatch({ type: 'SET_MODE', payload: setModeAction.mode })") ||
+  !assistantSource.includes('targetMode?: GenerationMode') ||
+  !assistantSource.includes('pendingGeneration.targetMode && state.mode !== pendingGeneration.targetMode') ||
   !actionsSource.includes('normalizeGenerationModeValue(request.mode || request.value)') ||
   !actionsSource.includes("'visual editor': 'visual-edit'");
+const missingManualVisualSelectionPolicy =
+  !assistantSource.includes('I will not run auto-selection') ||
+  !assistantSource.includes("value: 'lasso'") ||
+  !assistantSource.includes('Select the area manually with Rect, Brush, or Lasso') ||
+  !actionsSource.includes("request.type === 'run_ai_selection'") ||
+  !actionsSource.includes('Do not request run_ai_selection') ||
+  assistantSource.includes('archviz:assistant-run-visual-ai-selection') ||
+  assistantSource.includes("{ type: 'run_ai_selection'") ||
+  assistantSource.includes("mode: 'ai'");
+const missingGeminiThinkingEnforcement =
+  !assistantSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
+  !geminiServiceSource.includes('generationConfig,') ||
+  !geminiServiceSource.includes('this.normalizeThinkingConfig(model, {') ||
+  !geminiServiceSource.includes("thinkingConfig.thinkingLevel = 'medium'") ||
+  !geminiServiceSource.includes('thinkingConfig.thinkingBudget = -1');
 const missingCommandActions = requiredCommandActions.filter((action) => !actionsSource.includes(`| '${action}'`));
 const missingCleanupSupport = requiredCleanupActions.filter((action) => (
   !actionsSource.includes(`| '${action}'`) ||
@@ -366,14 +384,6 @@ const missingGatewayDiagnostics =
 const missingCommandHandlers = requiredCommandActions.filter((action) => {
   if (action === 'cancel_generation') {
     return !assistantSource.includes("action.type === 'cancel_generation'") || !assistantSource.includes('cancelGeneration()');
-  }
-  if (action === 'run_ai_selection') {
-    return (
-      !assistantSource.includes("action.type === 'run_ai_selection'") ||
-      !assistantSource.includes('archviz:assistant-run-visual-ai-selection') ||
-      !visualEditSource.includes('archviz:assistant-run-visual-ai-selection') ||
-      !visualEditSource.includes('runAutoSelection(validTargets)')
-    );
   }
   if (action === 'run_preprocess') {
     return (
@@ -470,6 +480,8 @@ const failures = [
   missingAssistantTestHook ? 'Missing gated assistant action execution test hook' : null,
   missingGlobalAssistantThread ? 'Missing global assistant chat thread support' : null,
   missingAssistantGovernanceSupport ? 'Missing assistant app-control governance support' : null,
+  missingManualVisualSelectionPolicy ? 'Missing manual Visual Edit selection policy' : null,
+  missingGeminiThinkingEnforcement ? 'Missing enforced Gemini thinking configuration' : null,
   missingDownloadActions.length ? `Missing download actions: ${missingDownloadActions.join(', ')}` : null,
   missingDownloadHandlers.length ? `Missing download handlers: ${missingDownloadHandlers.join(', ')}` : null,
   missingCurrentImageDownloadOptions ? 'Missing current-image download format/resolution support' : null,

@@ -1046,7 +1046,7 @@ export function adaptPromptForImageGenerationModel(
   }
 
   return [
-    'Model: regular Nano Banana / Gemini 2.5 Flash Image.',
+    'Model: Nano Banana Pro / Gemini 3 Pro Image.',
     instructionLabel,
     'Use this as a short natural-language creative brief, not a keyword stack.',
     `Task: ${intent.task}`,

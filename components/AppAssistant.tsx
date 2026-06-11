@@ -41,6 +41,7 @@ interface AssistantMessage {
 interface PendingGenerationRequest {
   id: string;
   prompt?: string;
+  targetMode?: GenerationMode;
 }
 
 interface AppAssistantTestHooks {
@@ -270,24 +271,6 @@ const summarizeAssistantTestActions = (actions: AppAssistantAction[]) =>
       : undefined,
   }));
 
-const getActionStringList = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
-  }
-  if (typeof value !== 'string') return [];
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
-    }
-  } catch {
-    // Fall through to comma-separated parsing.
-  }
-  return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
-};
-
 const getAssistantSubmitSmokeAnswer = () => [
   'Submit smoke response applied through the normal assistant parser.',
   '<assistant_actions>{"actions":[',
@@ -390,6 +373,29 @@ const isTargetedExistingImageEditRequest = (question: string) => {
   return hasEditIntent && hasTarget && hasLocalEditLanguage;
 };
 
+const VISUAL_EDIT_SELECTION_TOOLS = new Set([
+  'material',
+  'lighting',
+  'object',
+  'sky',
+  'remove',
+  'replace',
+  'people',
+]);
+
+const getManualSelectionGuidance = (question: string, state: AppState, targets: string[]) => {
+  if (!isTargetedExistingImageEditRequest(question)) return null;
+  if (state.workflow.visualSelections.length > 0 || state.workflow.visualSelectionMask) return null;
+  const targetText = targets.length ? targets.join(', ') : 'the area you want to edit';
+  return `I will not run auto-selection. Please use Visual Edit's Rect, Brush, or Lasso selection to mark ${targetText} yourself, then tell me to apply the edit.`;
+};
+
+const shouldRequireManualVisualSelection = (state: AppState) =>
+  state.mode === 'visual-edit' &&
+  VISUAL_EDIT_SELECTION_TOOLS.has(state.workflow.activeTool) &&
+  !state.workflow.visualSelectionMask &&
+  state.workflow.visualSelections.length === 0;
+
 const getVisualEditFallbackTargets = (question: string) => {
   const targets = visualEditTargetPatterns
     .filter((item) => item.pattern.test(question))
@@ -426,6 +432,7 @@ const appendVisualEditRoutingFallbackRequests = (
 
   const targets = getVisualEditFallbackTargets(question);
   if (!targets.length) return requests;
+  const manualSelectionNeeded = state.workflow.visualSelections.length === 0 && !state.workflow.visualSelectionMask;
 
   const hasModeRequest = requests.some((request) =>
     request.type === 'set_mode' && getAssistantModeFromRequest(request) === 'visual-edit'
@@ -437,7 +444,6 @@ const appendVisualEditRoutingFallbackRequests = (
     request.type === 'set_workflow' && request.path === path
   );
   const hasOpenRightPanel = requests.some((request) => request.type === 'open_right_panel');
-  const hasRunAiSelection = requests.some((request) => request.type === 'run_ai_selection');
   const fallbackRequests: AppAssistantActionRequest[] = [];
 
   if (state.mode !== 'visual-edit' && !hasModeRequest) {
@@ -462,9 +468,11 @@ const appendVisualEditRoutingFallbackRequests = (
     fallbackRequests.push({
       type: 'set_workflow',
       path: 'activeTool',
-      value: getVisualEditFallbackTool(question),
-      label: 'Choose the Visual Edit tool',
-      reason: 'This prepares the edit as a targeted local change.',
+      value: manualSelectionNeeded ? 'select' : getVisualEditFallbackTool(question),
+      label: manualSelectionNeeded ? 'Open manual selection' : 'Choose the Visual Edit tool',
+      reason: manualSelectionNeeded
+        ? 'The user needs to mark the editable area before the assistant runs the edit.'
+        : 'This prepares the edit as a targeted local change.',
     });
   }
 
@@ -472,9 +480,9 @@ const appendVisualEditRoutingFallbackRequests = (
     fallbackRequests.push({
       type: 'set_workflow',
       path: 'visualSelection.mode',
-      value: 'ai',
-      label: 'Use AI selection',
-      reason: `The assistant can detect ${targets.join(', ')} before editing.`,
+      value: 'lasso',
+      label: 'Use manual selection',
+      reason: 'The user should mark the editable area manually instead of assistant-triggered auto-selection.',
     });
   }
 
@@ -506,16 +514,16 @@ const appendVisualEditRoutingFallbackRequests = (
     });
   }
 
-  if (state.uploadedImage && !state.workflow.visualAutoSelecting && !hasRunAiSelection) {
-    fallbackRequests.push({
-      type: 'run_ai_selection',
-      value: targets,
-      label: `AI-select ${targets.join(', ')}`,
-      reason: 'This moves the workspace into Visual Edit and starts detecting the requested areas.',
-    });
-  }
+  return [...fallbackRequests, ...requests.filter((request) => request.type !== 'run_ai_selection')];
+};
 
-  return [...fallbackRequests, ...requests];
+const hasDirectGenerationIntent = (question: string) => {
+  const normalized = normalizeAssistantText(question);
+  if (!normalized) return false;
+  if (/\b(should|could|can|how|what|why|when|where|which|recommend|suggest|explain)\b/.test(normalized)) {
+    return false;
+  }
+  return /\b(generate|render|run|start|apply edits?|click generate|go ahead|do it|create|compress|translate|validate|upscale|animate|make the image|make this)\b/.test(normalized);
 };
 
 const appendAssistantGovernanceFallbackRequests = (
@@ -524,29 +532,47 @@ const appendAssistantGovernanceFallbackRequests = (
   question: string,
   answerContent: string
 ): AppAssistantActionRequest[] => {
-  const visualEditRequests = appendVisualEditRoutingFallbackRequests(requests, state, question);
+  const safeRequests = requests.filter((request) => request.type !== 'run_ai_selection');
+  const visualEditRequests = appendVisualEditRoutingFallbackRequests(safeRequests, state, question);
   const requestedMode = hasDirectModeSwitchIntent(question)
     ? getAssistantModeAfterControlCue(question) || getAssistantModeFromText(question)
     : hasAssistantControlPromise(answerContent)
       ? getAssistantModeAfterControlCue(answerContent) || getAssistantModeFromText(answerContent)
       : null;
+  const withModeRequest = (() => {
+    if (!requestedMode || requestedMode === state.mode) return visualEditRequests;
+    const hasModeRequest = visualEditRequests.some((request) =>
+      request.type === 'set_mode' && getAssistantModeFromRequest(request) === requestedMode
+    );
+    if (hasModeRequest) return visualEditRequests;
 
-  if (!requestedMode || requestedMode === state.mode) return visualEditRequests;
-  const hasModeRequest = visualEditRequests.some((request) =>
-    request.type === 'set_mode' && getAssistantModeFromRequest(request) === requestedMode
-  );
-  if (hasModeRequest) return visualEditRequests;
+    const route = getAssistantModeRoute(requestedMode);
+    return [
+      {
+        type: 'set_mode',
+        mode: requestedMode,
+        label: `Switch to ${route?.label || requestedMode.replace(/-/g, ' ')}`,
+        reason: 'The assistant promised to move the workspace to this feature.',
+      },
+      ...visualEditRequests,
+    ];
+  })();
 
-  const route = getAssistantModeRoute(requestedMode);
-  return [
-    {
-      type: 'set_mode',
-      mode: requestedMode,
-      label: `Switch to ${route?.label || requestedMode.replace(/-/g, ' ')}`,
-      reason: 'The assistant promised to move the workspace to this feature.',
-    },
-    ...visualEditRequests,
-  ];
+  const hasRunGeneration = withModeRequest.some((request) => request.type === 'run_generation');
+  const isInitialManualSelectionHandoff = isTargetedExistingImageEditRequest(question) && state.mode !== 'visual-edit';
+  if (!hasRunGeneration && hasDirectGenerationIntent(question) && !isInitialManualSelectionHandoff) {
+    return [
+      ...withModeRequest,
+      {
+        type: 'run_generation',
+        value: question,
+        label: 'Run generation',
+        reason: 'The user explicitly asked the assistant to execute the current workflow.',
+      },
+    ];
+  }
+
+  return withModeRequest;
 };
 
 type CurrentImageDownloadFormat = 'png' | 'jpg';
@@ -675,6 +701,14 @@ const getAssistantGenerationReadiness = (
       return state.workflow.upscaleBatch.length > 0
         ? { ready: true }
         : { ready: false, message: 'Add an image to the upscale batch before running upscale.' };
+    case 'visual-edit':
+      if (!state.uploadedImage) {
+        return { ready: false, message: 'Upload or select an image before running Visual Edit.' };
+      }
+      if (shouldRequireManualVisualSelection(state)) {
+        return { ready: false, message: 'Select the area manually with Rect, Brush, or Lasso before applying this Visual Edit.' };
+      }
+      return { ready: true, prompt: promptOverride || state.workflow.visualPrompt || state.prompt || undefined };
     case 'video': {
       if (!state.workflow.videoState.accessUnlocked) {
         return { ready: false, message: 'Video Studio access is currently locked.' };
@@ -960,6 +994,7 @@ export const AppAssistant: React.FC = () => {
 
   useEffect(() => {
     if (!pendingGeneration) return;
+    if (pendingGeneration.targetMode && state.mode !== pendingGeneration.targetMode) return;
 
     const readiness = getAssistantGenerationReadiness(state, pendingGeneration.prompt);
     if (!readiness.ready) {
@@ -1254,20 +1289,29 @@ export const AppAssistant: React.FC = () => {
             topP: 0.9,
             maxOutputTokens: 4096,
             responseModalities: ['TEXT'],
-            thinkingConfig: { thinkingLevel: 'low' },
+            thinkingConfig: { thinkingLevel: 'high' },
           },
         });
 
       const { content, requests } = extractAppAssistantActions(answer);
       const actionableRequests = appendAssistantGovernanceFallbackRequests(requests, state, question, content);
       const actions = normalizeAppAssistantActions(actionableRequests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
+      const manualSelectionGuidance = getManualSelectionGuidance(question, state, getVisualEditFallbackTargets(question));
+      const answerContent = [
+        content
+          .trim()
+          .replace(/\b(?:trigger|start|run)\s+(?:the\s+)?AI\s+(?:auto-)?selection[^.]*\./gi, '')
+          .replace(/\b(?:auto-select|automatically\s+detect)\s+[^.]*\./gi, '')
+          .trim(),
+        manualSelectionGuidance || '',
+      ].filter(Boolean).join('\n\n') || String(t('assistant.empty', { defaultValue: 'I could not produce an answer. Try asking again with a little more detail.' }));
 
       setMessages((items) =>
         items.map((message) =>
           message.id === loadingMessage.id
             ? {
                 ...message,
-                content: content.trim() || String(t('assistant.empty', { defaultValue: 'I could not produce an answer. Try asking again with a little more detail.' })),
+                content: answerContent,
                 isLoading: false,
                 actions,
                 appliedActionIds: [],
@@ -1461,7 +1505,6 @@ export const AppAssistant: React.FC = () => {
     const runMasterplanZoneDetectionAction = actions.find((action) => action.type === 'run_masterplan_zone_detection');
     const runExplodedComponentDetectionAction = actions.find((action) => action.type === 'run_exploded_component_detection');
     const runSectionAreaDetectionAction = actions.find((action) => action.type === 'run_section_area_detection');
-    const runAiSelectionAction = actions.find((action) => action.type === 'run_ai_selection');
     const prepareSelectionAction = actions.find((action) => action.type === 'prepare_image_selection');
     const downloadActions = actions.filter(isDownloadAction);
     const helperActions = [
@@ -1470,13 +1513,12 @@ export const AppAssistant: React.FC = () => {
       runMasterplanZoneDetectionAction,
       runExplodedComponentDetectionAction,
       runSectionAreaDetectionAction,
-      runAiSelectionAction,
     ].filter((action): action is AppAssistantAction => Boolean(action));
     const helperSmokeHandled = helperActions.length > 0 && writeAssistantSmokeTrigger(
       'data-archwiz-assistant-helper-trigger',
       {
         actionTypes: helperActions.map((action) => action.type),
-        targets: runAiSelectionAction ? getActionStringList(runAiSelectionAction.value) : [],
+        targets: [],
       }
     );
     const stateActions = actions.filter(
@@ -1494,7 +1536,6 @@ export const AppAssistant: React.FC = () => {
         action.type !== 'run_masterplan_zone_detection' &&
         action.type !== 'run_exploded_component_detection' &&
         action.type !== 'run_section_area_detection' &&
-        action.type !== 'run_ai_selection' &&
         action.type !== 'prepare_image_selection' &&
         !isDownloadAction(action)
     );
@@ -1570,27 +1611,6 @@ export const AppAssistant: React.FC = () => {
       }, 120);
     }
 
-    if (!helperSmokeHandled && runAiSelectionAction) {
-      const targets = getActionStringList(runAiSelectionAction.value);
-      dispatch({ type: 'SET_MODE', payload: 'visual-edit' });
-      if (!state.rightPanelOpen) {
-        dispatch({ type: 'TOGGLE_RIGHT_PANEL' });
-      }
-      dispatch({
-        type: 'UPDATE_WORKFLOW',
-        payload: {
-          visualSelection: {
-            ...state.workflow.visualSelection,
-            mode: 'ai',
-            autoTargets: targets,
-          },
-        },
-      });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('archviz:assistant-run-visual-ai-selection', { detail: { targets } }));
-      }, 220);
-    }
-
     if (prepareSelectionAction) {
       startImageSelectionHandoff();
     }
@@ -1601,7 +1621,10 @@ export const AppAssistant: React.FC = () => {
         actionTypes: [runGenerationAction.type],
         prompt: prompt || null,
       })) {
-        setPendingGeneration({ id: runGenerationAction.id, prompt });
+        const targetMode = setModeAction?.mode || state.mode;
+        window.setTimeout(() => {
+          setPendingGeneration({ id: runGenerationAction.id, prompt, targetMode });
+        }, 0);
       }
     }
 
@@ -1641,8 +1664,6 @@ export const AppAssistant: React.FC = () => {
           ? 'Assistant started Exploded View component detection.'
         : runSectionAreaDetectionAction
           ? 'Assistant started Section area detection.'
-        : runAiSelectionAction
-          ? 'Assistant started Visual Edit AI selection.'
         : downloadActions.length > 0
           ? downloadActions.length === 1 ? 'Assistant started a download.' : `Assistant started ${downloadActions.length} downloads.`
         : automatic
@@ -1902,7 +1923,6 @@ export const AppAssistant: React.FC = () => {
           'run_masterplan_zone_detection',
           'run_exploded_component_detection',
           'run_section_area_detection',
-          'run_ai_selection',
         ].every((type) => actionTypes.includes(type));
       } catch {
         return false;
@@ -1966,7 +1986,6 @@ export const AppAssistant: React.FC = () => {
     if (smoke.phase === 'batch-wait' && batchReady) {
       const helperActions = normalizeAppAssistantActions([
         { type: 'run_preprocess' },
-        { type: 'run_ai_selection', value: ['Building'] },
         { type: 'run_image_to_cad_preprocess' },
         { type: 'run_masterplan_zone_detection' },
         { type: 'run_exploded_component_detection' },

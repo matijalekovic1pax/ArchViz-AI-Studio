@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "ArchViz Studio",
+    "title": "ArchViz AI Studio",
     "subtitle": "无状态会话"
   },
   "topBar": {
@@ -53,9 +53,9 @@
     "modelSelector": {
       "title": "图像模型",
       "nano": {
-        "label": "普通 Nano Banana",
-        "shortLabel": "Nano Banana",
-        "description": "适合照片级渲染、色彩、HDR 色调、光照和氛围。",
+        "label": "Nano Banana Pro",
+        "shortLabel": "Nano Pro",
+        "description": "适合专业照片级渲染、色彩、HDR 色调、光照和氛围。",
         "bestFor": "用于渲染润色"
       },
       "chatgpt": {

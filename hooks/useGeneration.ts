@@ -2482,7 +2482,7 @@ export function useGeneration(): UseGenerationReturn {
       if (isImageMode && isServiceUnavailable) {
         const providerName = state.imageGenerationModel === 'chatgpt-image-generation-2'
           ? 'ChatGPT Image Generation 2'
-          : 'regular Nano Banana';
+          : 'Nano Banana Pro';
         dispatch({
           type: 'SET_APP_ALERT',
           payload: {

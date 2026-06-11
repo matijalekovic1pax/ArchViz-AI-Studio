@@ -5,7 +5,7 @@ This Cloudflare Worker is the server-side gateway for ArchViz AI Studio. It keep
 ## What it handles
 
 - Google ID token verification and app JWT issuance
-- Gemini text/image requests, including the Regular Nano Banana image model path
+- Gemini text/image requests, including the Nano Banana Pro image model path
 - ChatGPT Image Generation 2 through OpenAI `gpt-image-2`
 - Vertex AI Veo and Kling video generation/status endpoints
 - ConvertAPI document conversion for PDF translation
