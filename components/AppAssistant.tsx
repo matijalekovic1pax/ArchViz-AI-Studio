@@ -47,6 +47,11 @@ interface PendingGenerationRequest {
 interface AppAssistantTestHooks {
   version: 1;
   getActionContext: () => string;
+  routeFallbackRequests: (
+    question: string,
+    requests?: AppAssistantActionRequest[],
+    options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
+  ) => AppAssistantAction[];
   normalizeRequests: (
     requests: AppAssistantActionRequest[],
     options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] }
@@ -59,7 +64,8 @@ interface AppAssistantTestHooks {
 
 interface AppAssistantTestCommandDetail {
   id?: string;
-  command?: 'context' | 'normalize' | 'apply';
+  command?: 'context' | 'normalize' | 'apply' | 'route-fallback';
+  question?: string;
   requests?: AppAssistantActionRequest[];
   options?: { chatImages?: AppAssistantChatImage[]; chatFiles?: AppAssistantChatFile[] };
 }
@@ -287,6 +293,146 @@ const getAssistantSubmitSmokeAnswer = () => [
   '{"type":"use_chat_file","fileTarget":"document-translate-source","attachmentId":"submit-doc","label":"Use submit smoke document"}',
   ']}</assistant_actions>',
 ].join('');
+
+const ROUTE_TO_VISUAL_EDIT_MODES = new Set<GenerationMode>([
+  'generate-text',
+  'render-3d',
+  'render-cad',
+  'render-sketch',
+  'scene-compose',
+  'masterplan',
+  'exploded',
+  'section',
+  'multi-angle',
+  'angle-change',
+  'upscale',
+]);
+
+const visualEditTargetPatterns: Array<{ pattern: RegExp; target: string; label: string }> = [
+  { pattern: /\b(chairs?|seats?|seating|benches?)\b/i, target: 'Seating', label: 'seating' },
+  { pattern: /\b(carpet|carpets|rug|rugs|floor|floors|flooring|ground)\b/i, target: 'Floors', label: 'flooring' },
+  { pattern: /\b(plants?|trees?|vegetation|landscap(?:e|ing)|greenery)\b/i, target: 'Vegetation', label: 'vegetation' },
+  { pattern: /\b(furniture|sofas?|tables?|desks?|counters?)\b/i, target: 'Furniture', label: 'furniture' },
+  { pattern: /\b(walls?|paint|facade|fa[cç]ade|ceilings?)\b/i, target: 'Walls', label: 'walls' },
+  { pattern: /\b(glass|windows?|glazing)\b/i, target: 'Glass', label: 'glass' },
+  { pattern: /\b(signs?|signage|wayfinding|labels?|text)\b/i, target: 'Signage', label: 'signage' },
+  { pattern: /\b(sky|clouds?|background)\b/i, target: 'Sky', label: 'sky' },
+  { pattern: /\b(lights?|lighting|lamps?|fixtures?)\b/i, target: 'Lighting', label: 'lighting' },
+  { pattern: /\b(people|persons?|passengers?|crowd)\b/i, target: 'People', label: 'people' },
+];
+
+const isTargetedExistingImageEditRequest = (question: string) => {
+  const text = question.toLowerCase();
+  const hasEditIntent = /\b(change|alter|edit|modify|adjust|recolor|recolour|color|colour|paint|replace|swap|retouch|fix|make|turn)\b/.test(text);
+  const hasTarget = visualEditTargetPatterns.some((item) => item.pattern.test(question));
+  const hasLocalEditLanguage = /\b(color|colour|material|texture|finish|selected|only|area|region|object|chairs?|carpet|plants?)\b/.test(text);
+  return hasEditIntent && hasTarget && hasLocalEditLanguage;
+};
+
+const getVisualEditFallbackTargets = (question: string) => {
+  const targets = visualEditTargetPatterns
+    .filter((item) => item.pattern.test(question))
+    .map((item) => item.target);
+  return Array.from(new Set(targets)).slice(0, 6);
+};
+
+const getVisualEditFallbackTool = (question: string) => {
+  const text = question.toLowerCase();
+  if (/\b(remove|erase|delete|clean up|cleanup)\b/.test(text)) return 'remove';
+  if (/\b(sky|clouds?)\b/.test(text)) return 'sky';
+  if (/\b(light|lighting|relight|shadow|shadows)\b/.test(text)) return 'lighting';
+  if (/\b(replace|swap)\b/.test(text) && !/\b(color|colour|material|texture|finish|paint)\b/.test(text)) return 'replace';
+  return 'material';
+};
+
+const buildVisualEditFallbackPrompt = (question: string, targets: string[]) => {
+  const cleanQuestion = question.replace(/\s+/g, ' ').trim();
+  const targetText = targets.length
+    ? targets.map((target) => target.toLowerCase()).join(', ')
+    : 'selected target areas';
+  return [
+    cleanQuestion || `Apply the requested edit to the selected ${targetText}.`,
+    `Edit only the selected ${targetText}. Preserve all unselected architecture, people, camera angle, lighting direction, signage, object positions, floor plan, and scene layout.`,
+  ].join(' ');
+};
+
+const appendVisualEditRoutingFallbackRequests = (
+  requests: AppAssistantActionRequest[],
+  state: AppState,
+  question: string
+): AppAssistantActionRequest[] => {
+  if (state.mode === 'visual-edit' || !ROUTE_TO_VISUAL_EDIT_MODES.has(state.mode)) return requests;
+  if (!isTargetedExistingImageEditRequest(question)) return requests;
+
+  const hasVisualEditRoute = requests.some((request) =>
+    (request.type === 'set_mode' && request.mode === 'visual-edit') ||
+    request.type === 'run_ai_selection' ||
+    request.type === 'prepare_image_selection'
+  );
+  if (hasVisualEditRoute) return requests;
+
+  const targets = getVisualEditFallbackTargets(question);
+  if (!targets.length) return requests;
+
+  const fallbackRequests: AppAssistantActionRequest[] = [
+    {
+      type: 'set_mode',
+      mode: 'visual-edit',
+      label: 'Switch to Visual Edit',
+      reason: 'Targeted color/material changes belong in Visual Edit, not the current full-generation workflow.',
+    },
+    {
+      type: 'set_image_generation_model',
+      value: 'chatgpt-image-generation-2',
+      label: 'Use ChatGPT Image Generation 2',
+      reason: 'Precise local edits to an existing render need stronger preservation.',
+    },
+    {
+      type: 'set_workflow',
+      path: 'activeTool',
+      value: getVisualEditFallbackTool(question),
+      label: 'Choose the Visual Edit tool',
+      reason: 'This prepares the edit as a targeted local change.',
+    },
+    {
+      type: 'set_workflow',
+      path: 'visualSelection.mode',
+      value: 'ai',
+      label: 'Use AI selection',
+      reason: `The assistant can detect ${targets.join(', ')} before editing.`,
+    },
+    {
+      type: 'set_workflow',
+      path: 'visualSelection.autoTargets',
+      value: targets,
+      label: `Target ${targets.join(', ')}`,
+      reason: 'These are the visible regions requested in the edit.',
+    },
+    {
+      type: 'set_workflow',
+      path: 'visualPrompt',
+      value: buildVisualEditFallbackPrompt(question, targets),
+      label: 'Set Visual Edit prompt',
+      reason: 'The prompt locks the edit to the requested objects while preserving the rest of the render.',
+    },
+    {
+      type: 'open_right_panel',
+      label: 'Open Visual Edit controls',
+      reason: 'The selection and edit controls live in the Visual Edit panel.',
+    },
+  ];
+
+  if (state.uploadedImage && !state.workflow.visualAutoSelecting) {
+    fallbackRequests.push({
+      type: 'run_ai_selection',
+      value: targets,
+      label: `AI-select ${targets.join(', ')}`,
+      reason: 'This moves the workspace into Visual Edit and starts detecting the requested areas.',
+    });
+  }
+
+  return [...requests, ...fallbackRequests];
+};
 
 type CurrentImageDownloadFormat = 'png' | 'jpg';
 type CurrentImageDownloadResolution = 'full' | 'medium';
@@ -1009,7 +1155,8 @@ export const AppAssistant: React.FC = () => {
         });
 
       const { content, requests } = extractAppAssistantActions(answer);
-      const actions = normalizeAppAssistantActions(requests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
+      const actionableRequests = appendVisualEditRoutingFallbackRequests(requests, state, question);
+      const actions = normalizeAppAssistantActions(actionableRequests, state, { chatImages: attachedImages, chatFiles: attachedFiles });
 
       setThreadForMode(requestMode, (items) =>
         items.map((message) =>
@@ -1463,7 +1610,10 @@ export const AppAssistant: React.FC = () => {
         return;
       }
 
-      const actions = normalizeAppAssistantActions(requests, state, options);
+      const routeRequests = detail.command === 'route-fallback'
+        ? appendVisualEditRoutingFallbackRequests(requests, state, detail.question || '')
+        : requests;
+      const actions = normalizeAppAssistantActions(routeRequests, state, options);
       if (detail.command === 'apply' && actions.length > 0) {
         applyActions(state.mode, `assistant-test-${id}`, actions, true);
       }
@@ -1477,6 +1627,12 @@ export const AppAssistant: React.FC = () => {
     const hooks: AppAssistantTestHooks = {
       version: 1,
       getActionContext: () => buildAppAssistantActionContext(state),
+      routeFallbackRequests: (question, requests = [], options = {}) =>
+        normalizeAppAssistantActions(
+          appendVisualEditRoutingFallbackRequests(requests, state, question),
+          state,
+          options
+        ),
       normalizeRequests: (requests, options = {}) =>
         normalizeAppAssistantActions(requests, state, options),
       applyRequests: (requests, options = {}) => {
