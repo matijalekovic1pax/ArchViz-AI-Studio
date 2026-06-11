@@ -147,6 +147,33 @@ export const LeftRender3DPanel = () => {
       });
   }, []);
 
+  const buildDefaultProblemAreas = useCallback(() => ([
+    {
+      id: nanoid(),
+      name: 'Fine edges',
+      type: 'structural' as const,
+      detail: 'Preserve thin edges, mullions, frames, railings, and small profile changes without melting or simplifying them.',
+      confidence: 0.72,
+      selected: true
+    },
+    {
+      id: nanoid(),
+      name: 'Material transitions',
+      type: 'envelope' as const,
+      detail: 'Keep material boundaries, joints, panels, openings, and surface direction clear so the render does not blur adjacent finishes together.',
+      confidence: 0.66,
+      selected: true
+    },
+    {
+      id: nanoid(),
+      name: 'Lighting context',
+      type: 'interior' as const,
+      detail: 'Maintain readable shadows, reflections, glazing, bright highlights, and depth cues while improving realism.',
+      confidence: 0.6,
+      selected: true
+    }
+  ]), []);
+
   const analyzeProblemAreas = useCallback(async () => {
     if (analyzingRef.current) return;
     const sourceImage = state.sourceImage || state.uploadedImage;
@@ -245,10 +272,26 @@ export const LeftRender3DPanel = () => {
       } finally {
         window.clearTimeout(timeoutId);
       }
-      const parsed = parseProblemAreas(text);
+      let parsed = parseProblemAreas(text);
+      if (!parsed.length) {
+        const retryText = await service.generateText({
+          prompt: 'Return only a JSON array of 3 architectural render risk areas for this image. Each item must have name, detail, type, and confidence.',
+          images: [imageData],
+          model: PREPROCESS_MODEL,
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 900,
+            responseMimeType: 'application/json'
+          }
+        }).catch(() => '');
+        parsed = parseProblemAreas(retryText);
+      }
+      if (!parsed.length) {
+        parsed = buildDefaultProblemAreas();
+      }
       updateWf({ detectedElements: parsed });
     } catch (error) {
-      updateWf({ detectedElements: [] });
+      updateWf({ detectedElements: buildDefaultProblemAreas() });
     } finally {
       setIsAnalyzing(false);
       analyzingRef.current = false;
@@ -261,6 +304,7 @@ export const LeftRender3DPanel = () => {
     activeStyleRawName,
     hasStyleReferenceImage,
     ensureServiceInitialized,
+    buildDefaultProblemAreas,
     parseProblemAreas,
     updateWf
   ]);

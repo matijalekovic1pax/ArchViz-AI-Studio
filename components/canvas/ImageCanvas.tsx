@@ -265,6 +265,7 @@ const PromptBar: React.FC = () => {
                     />
                     
                     <button 
+                        aria-label="generate-trigger"
                         onClick={handleGenerate}
                         disabled={(!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating}
                         className={cn(

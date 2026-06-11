@@ -17,7 +17,7 @@ export const IMAGE_MODEL = 'gemini-3-pro-image';
 export const TEXT_MODEL = 'gemini-3.5-flash';
 export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
-const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
+const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -942,9 +942,14 @@ export class GeminiService {
       thinkingConfig,
       ...rest
     } = normalizedConfig;
+    const wantsImage = (responseModalities || requestedModalities).includes('IMAGE');
+    const responseImageConfig = responseFormat?.image || imageConfig;
     const result: Record<string, any> = {
       ...rest,
     };
+    if (wantsImage && responseImageConfig) {
+      result.imageConfig = responseImageConfig;
+    }
 
     return result;
   }
@@ -959,7 +964,7 @@ export class GeminiService {
 
   private usesGemini3ImageApiShape(model: string): boolean {
     const modelId = model.toLowerCase();
-    return modelId === 'gemini-3-pro-image' || modelId === 'gemini-3.1-flash-image';
+    return modelId.startsWith('gemini-3') && modelId.includes('image');
   }
 
   private normalizeThinkingConfig(model: string, config: GenerationConfig): GenerationConfig {

@@ -224,7 +224,7 @@ export async function geminiRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
-  const timeoutMs = model === 'gemini-3-pro-image' ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
+  const timeoutMs = model.includes('image') ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
   const resp = await gatewayFetch(`/api/gemini/models/${model}:${action}`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -246,7 +246,7 @@ export async function geminiStreamRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<Response> {
-  const timeoutMs = model === 'gemini-3-pro-image' ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
+  const timeoutMs = model.includes('image') ? GEMINI_PRO_IMAGE_TIMEOUT_MS : 120_000;
   const resp = await gatewayFetch(`/api/gemini/models/${model}:streamGenerateContent?alt=sse`, {
     method: 'POST',
     body: JSON.stringify(body),

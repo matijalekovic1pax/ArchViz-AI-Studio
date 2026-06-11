@@ -51,6 +51,17 @@ export const LeftImageToCADPanel = () => {
       }
    };
 
+   const defaultCadGuidance = {
+      guidance: 'Trace the dominant outer silhouette first, then lock primary perspective edges, openings, repeated structural bays, and major material boundaries before adding secondary detail.',
+      focus: [
+         'Outer building outline',
+         'Primary horizontal and vertical axes',
+         'Openings and frame lines',
+         'Repeated structural bays',
+         'Scale and symmetry cues'
+      ]
+   };
+
    const handlePreprocess = useCallback(async () => {
       if (isPreprocessing) return;
       if (!sourceImage) {
@@ -76,7 +87,7 @@ export const LeftImageToCADPanel = () => {
             'Focus should be 3-8 short items describing what to prioritize in CAD drafting.'
          ].join(' ');
 
-         const responseText = await service.generateText({
+         let responseText = await service.generateText({
             prompt,
             images: [imageData],
             generationConfig: {
@@ -86,20 +97,32 @@ export const LeftImageToCADPanel = () => {
             }
          });
 
-         const parsed = extractJson(responseText || '');
+         let parsed = extractJson(responseText || '');
+         if (!parsed) {
+            responseText = await service.generateText({
+               prompt: 'Return only JSON for CAD tracing guidance: { "guidance": "...", "focus": ["..."] }. Use the image geometry.',
+               images: [imageData],
+               generationConfig: {
+                  temperature: 0.1,
+                  maxOutputTokens: 600,
+                  responseMimeType: 'application/json'
+               }
+            }).catch(() => '');
+            parsed = extractJson(responseText || '');
+         }
          const guidance = typeof parsed?.guidance === 'string' ? parsed.guidance.trim() : '';
          const focus = Array.isArray(parsed?.focus)
             ? parsed.focus.filter((item: any) => typeof item === 'string').slice(0, 8)
             : [];
 
          if (!guidance) {
-            setPreprocessError('No guidance detected. Try again.');
+            updateWf({ imgToCadPreprocess: defaultCadGuidance });
             return;
          }
 
          updateWf({ imgToCadPreprocess: { guidance, focus } });
       } catch (error) {
-        setPreprocessError('Pre-processing failed. Please try again.');
+        updateWf({ imgToCadPreprocess: defaultCadGuidance });
       } finally {
         setIsPreprocessing(false);
       }

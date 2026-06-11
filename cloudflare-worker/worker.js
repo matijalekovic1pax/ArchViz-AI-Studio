@@ -1451,9 +1451,53 @@ return corsResponse(origin, { error: 'Authentication failed: ' + err.message }, 
 
 // ─── Route: /api/gemini/* (passthrough proxy) ────────────────────────────────
 
+function sanitizeGeminiGenerationConfig(config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return config;
+  }
+
+  const next = { ...config };
+  const responseImageConfig = next.responseFormat?.image || next.imageConfig;
+  const wantsImage = Array.isArray(next.responseModalities)
+    ? next.responseModalities.includes('IMAGE')
+    : Boolean(responseImageConfig);
+
+  delete next.thinkingConfig;
+  delete next.responseModalities;
+  delete next.responseFormat;
+
+  if (wantsImage && responseImageConfig) {
+    next.imageConfig = responseImageConfig;
+  }
+
+  return next;
+}
+
+async function getGeminiProxyBody(request) {
+  if (request.method === 'GET') return undefined;
+
+  const contentType = request.headers.get('Content-Type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return request.body;
+  }
+
+  const rawBody = await request.text();
+  if (!rawBody) return rawBody;
+
+  try {
+    const body = JSON.parse(rawBody);
+    if (body && typeof body === 'object' && !Array.isArray(body) && 'generationConfig' in body) {
+      body.generationConfig = sanitizeGeminiGenerationConfig(body.generationConfig);
+    }
+    return JSON.stringify(body);
+  } catch {
+    return rawBody;
+  }
+}
+
 async function handleGeminiProxy(request, env, subpath) {
   const origin = request.headers.get('Origin') || '';
-  const apiBase = /^models\/gemini-3[^/:?]*image[^/:?]*:/.test(subpath)
+  const apiBase = /^models\/(?:gemini-3\.1-[^/:?]*image[^/:?]*):/.test(subpath)
     ? GEMINI_API_BASE_V1
     : GEMINI_API_BASE;
   const url = `${apiBase}/${subpath}`;
@@ -1468,7 +1512,7 @@ async function handleGeminiProxy(request, env, subpath) {
   const upstreamResp = await fetch(url, {
     method: request.method,
     headers,
-    body: request.method !== 'GET' ? request.body : undefined,
+    body: await getGeminiProxyBody(request),
   });
 
   // Stream the response back with CORS headers
