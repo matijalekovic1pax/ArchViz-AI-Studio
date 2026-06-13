@@ -28,6 +28,7 @@ export const LeftRender3DPanel = () => {
   const wf = state.workflow;
   const PREPROCESS_MODEL = 'gemini-3.5-flash';
   const PREPROCESS_TIMEOUT_MS = 60000;
+  const isEnhanceMode = wf.renderMode === 'enhance';
 
   const availableStyles = useMemo(
     () => [...BUILT_IN_STYLES, ...state.customStyles],
@@ -225,7 +226,7 @@ export const LeftRender3DPanel = () => {
         mode: state.mode,
         viewType: wf.viewType,
         sourceType: wf.sourceType,
-        renderMode: DEFAULT_RENDER_GENERATION_MODE,
+        renderMode: isEnhanceMode ? 'enhance' : DEFAULT_RENDER_GENERATION_MODE,
         activeStyle: {
           id: state.activeStyleId,
           name: activeStyleRawName,
@@ -315,6 +316,7 @@ export const LeftRender3DPanel = () => {
     wf.viewType,
     wf.sourceType,
     wf.renderMode,
+    isEnhanceMode,
     activeStyleRawName,
     hasStyleReferenceImage,
     ensureServiceInitialized,
@@ -346,6 +348,10 @@ export const LeftRender3DPanel = () => {
     : problemAreas.length > 0
       ? t('render3d.problemAreas.rerun')
       : t('render3d.problemAreas.run');
+
+  if (isEnhanceMode) {
+    return <div className="space-y-6" />;
+  }
 
   return (
     <div className="space-y-6">

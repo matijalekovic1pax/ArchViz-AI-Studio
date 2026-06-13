@@ -600,6 +600,9 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('viewType', '3D view type', 'string', ['render-3d'], {
     values: ['exterior', 'interior', 'aerial', 'detail'],
   }),
+  workflow('renderMode', '3D generation mode', 'string', ['render-3d'], {
+    values: ['strict-realism', 'enhance'],
+  }),
   workflow('renderMode', 'Generation mode', 'string', ['render-cad', 'masterplan', 'render-sketch', 'exploded', 'section'], {
     values: ['strict-realism', 'enhance', 'concept-push'],
   }),

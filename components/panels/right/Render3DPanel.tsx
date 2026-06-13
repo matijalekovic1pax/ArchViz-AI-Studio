@@ -9,6 +9,11 @@ import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightCom
 import { cn } from '../../../lib/utils';
 import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, Render3DSettings, RenderGenerationMode } from '../../../types';
 
+const RENDER_3D_GENERATION_MODES: readonly RenderGenerationMode[] = [
+  DEFAULT_RENDER_GENERATION_MODE,
+  'enhance',
+] as const;
+
 interface Render3DPanelProps {
   showGenerationMode?: boolean;
   accordionValue?: string | null;
@@ -28,10 +33,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   const settings = wf.render3d;
   const updateWf = (p: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: p });
   const isRender3DWorkflow = state.mode === 'render-3d';
+  const isEnhanceOnlyMode = isRender3DWorkflow && wf.renderMode === 'enhance';
   const hideManualLightingIntensityAndShadows = isRender3DWorkflow;
 
   React.useEffect(() => {
-    if (isRender3DWorkflow && wf.renderMode !== DEFAULT_RENDER_GENERATION_MODE) {
+    if (isRender3DWorkflow && !RENDER_3D_GENERATION_MODES.includes(wf.renderMode)) {
       dispatch({ type: 'UPDATE_WORKFLOW', payload: { renderMode: DEFAULT_RENDER_GENERATION_MODE } });
     }
   }, [dispatch, isRender3DWorkflow, wf.renderMode]);
@@ -50,7 +56,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
 
   const sectionId = (id: string) => (accordionIdPrefix ? `${accordionIdPrefix}${id}` : id);
   const generationModes = isRender3DWorkflow
-    ? [DEFAULT_RENDER_GENERATION_MODE]
+    ? RENDER_3D_GENERATION_MODES
     : RENDER_GENERATION_MODES;
   const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
     'strict-realism': {
@@ -80,14 +86,15 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                 key={mode}
                 label={generationModeCopy[mode].label}
                 description={generationModeCopy[mode].desc}
-                selected={isRender3DWorkflow ? mode === DEFAULT_RENDER_GENERATION_MODE : wf.renderMode === mode}
-                onClick={() => updateWf({ renderMode: isRender3DWorkflow ? DEFAULT_RENDER_GENERATION_MODE : mode })}
+                selected={wf.renderMode === mode}
+                onClick={() => updateWf({ renderMode: mode })}
               />
             ))}
           </div>
         </div>
       )}
 
+      {!isEnhanceOnlyMode && (
       <Accordion
         items={[
           {
@@ -488,6 +495,7 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
         value={accordionValue}
         onValueChange={onAccordionChange}
       />
+      )}
     </div>
   );
 };

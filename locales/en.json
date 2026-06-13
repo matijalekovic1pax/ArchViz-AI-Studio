@@ -1112,7 +1112,7 @@
         },
         "enhance": {
           "label": "Enhance",
-          "desc": "Refines realistic renders: style, lighting, mood, clarity."
+          "desc": "Re-renders standard CGI renders into photorealistic images."
         },
         "conceptPush": {
           "label": "Concept Push",

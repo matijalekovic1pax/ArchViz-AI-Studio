@@ -1099,7 +1099,7 @@
         },
         "enhance": {
           "label": "Ameliorer",
-          "desc": "Affine les rendus realistes: style, eclairage, ambiance et clarte."
+          "desc": "Re-rend les rendus CGI standards en images photorealistes."
         },
         "conceptPush": {
           "label": "Pousse conceptuelle",

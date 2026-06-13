@@ -700,9 +700,14 @@ export function useGeneration(): UseGenerationReturn {
    * Build generation config based on current mode and state
    */
   const buildGenerationConfig = useCallback((state: AppState, aspectRatioOverride?: ImageConfig['aspectRatio']) => {
-    const usesRenderFormat = RENDER_FORMAT_MODES.includes(state.mode);
+    const usesRender3DEnhance = state.mode === 'render-3d' && state.workflow.renderMode === 'enhance';
+    const usesRenderFormat = RENDER_FORMAT_MODES.includes(state.mode) && !usesRender3DEnhance;
     const aspectRatioSource = usesRenderFormat ? state.workflow.render3d.render.aspectRatio : state.output.aspectRatio;
-    const resolutionSource = usesRenderFormat ? state.workflow.render3d.render.resolution : state.output.resolution;
+    const resolutionSource = usesRender3DEnhance
+      ? '1080p'
+      : usesRenderFormat
+        ? state.workflow.render3d.render.resolution
+        : state.output.resolution;
 
     // Map output settings to image config
     const aspectRatioMap: Record<string, ImageConfig['aspectRatio']> = {
@@ -740,6 +745,9 @@ export function useGeneration(): UseGenerationReturn {
    */
   const getModePromptPrefix = useCallback((mode: GenerationMode, renderMode = state.workflow.renderMode): string => {
     if (mode === 'render-3d') {
+      if (renderMode === 'enhance') {
+        return 'Enhance this existing architectural render into a hyper-realistic architectural photograph: ';
+      }
       return 'Convert this 3D, Revit, BIM, or viewport screenshot into a hyper-realistic architectural render: ';
     }
 
@@ -915,7 +923,8 @@ export function useGeneration(): UseGenerationReturn {
       const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'
         ? state.workflow.visualAdjust.aspectRatio
         : 'same';
-      const usesRenderFormatAspectRatio = RENDER_FORMAT_MODES.includes(state.mode);
+      const usesRender3DEnhanceRatio = state.mode === 'render-3d' && state.workflow.renderMode === 'enhance';
+      const usesRenderFormatAspectRatio = RENDER_FORMAT_MODES.includes(state.mode) && !usesRender3DEnhanceRatio;
       const aspectRatioOverride = adjustAspectRatio && adjustAspectRatio !== 'same'
         ? adjustAspectRatio
         : usesRenderFormatAspectRatio

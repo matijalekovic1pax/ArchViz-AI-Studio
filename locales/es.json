@@ -1109,7 +1109,7 @@
         },
         "enhance": {
           "label": "Mejorar",
-          "desc": "Refina renders realistas: estilo, iluminacion, atmosfera y claridad."
+          "desc": "Re-renderiza renders CGI estandar como imagenes fotorrealistas."
         },
         "conceptPush": {
           "label": "Impulso conceptual",

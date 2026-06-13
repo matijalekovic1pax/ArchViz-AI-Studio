@@ -233,9 +233,19 @@ const summarizeChangedChannels = (
 const summarizeRenderSettings = (state: AppState): string[] => {
   const { workflow } = state;
   const render = workflow.render3d;
-  const renderMode = state.mode === 'render-3d' || state.mode === 'render-cad'
-    ? DEFAULT_RENDER_GENERATION_MODE
-    : workflow.renderMode;
+  const renderMode = state.mode === 'render-3d'
+    ? (workflow.renderMode === 'enhance' ? 'enhance' : DEFAULT_RENDER_GENERATION_MODE)
+    : state.mode === 'render-cad'
+      ? DEFAULT_RENDER_GENERATION_MODE
+      : workflow.renderMode;
+
+  if (state.mode === 'render-3d' && renderMode === 'enhance') {
+    return compactItems([
+      'render mode enhance',
+      'one-click photorealistic re-render of the existing image'
+    ]);
+  }
+
   const lightingSummary = state.mode === 'render-3d'
     ? `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? ', direct sun' : ', no direct sun'}`
     : `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? `, ${describeSettingStrength(render.lighting.sun.intensity, 'soft', 'balanced', 'strong')} sun` : ', no direct sun'}${render.lighting.shadows.enabled ? `, ${describeSettingStrength(render.lighting.shadows.intensity, 'light', 'natural', 'strong')} shadows` : ', soft/no shadows'}`;
@@ -2215,9 +2225,10 @@ const describeRenderMode = (mode: string): string => {
     ].join(' '),
     'enhance': [
       'Render mode: enhance.',
-      'Keep the existing render, architecture, camera, composition, materials, object layout, and spatial relationships intact.',
-      'Improve only lighting, atmosphere, color grade, clarity, material finish, shadow quality, and reflections.',
-      'Do not remodel the project, change the design language, replace major elements, or invent new architecture.'
+      'Re-render the existing standard or CGI architectural render as a hyper-realistic architectural photograph.',
+      'Preserve the exact camera, crop, perspective, architecture, geometry, material identity, signage/text positions, furniture, people, object layout, and spatial relationships.',
+      'Replace the synthetic render look with photographic lighting, realistic material response, natural shadows, believable reflections, lens behavior, texture clarity, and clean detail.',
+      'Do not remodel the project, change the design language, replace major elements, alter text/signage, add new objects, remove existing objects, or invent new architecture.'
     ].join(' '),
     'concept-push': [
       'Render mode: concept push.',
@@ -2242,8 +2253,8 @@ const describeRenderModeClosing = (mode: string, resolution: string): string => 
 
   if (normalizedMode === 'enhance') {
     return isHighResolution
-      ? 'Keep the same completed render, only cleaner, better lit, clearer, and more polished.'
-      : 'Keep the same render while improving light, mood, clarity, color grade, and material finish.';
+      ? 'Finish as the same completed render, but re-rendered as a clean hyper-realistic architectural photograph with no obvious CGI or viewport artifacts.'
+      : 'Finish as the same image, but more photorealistic, cleaner, better lit, sharper, and materially believable.';
   }
 
   return isHighResolution
@@ -2308,6 +2319,10 @@ function generate3DRenderPrompt(state: AppState): string {
   const r3d = workflow.render3d;
   const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
   const hasStyleReference = Boolean(workflow.styleReferenceEnabled && workflow.styleReferenceImage);
+  const renderMode: RenderGenerationMode = workflow.renderMode === 'enhance'
+    ? 'enhance'
+    : DEFAULT_RENDER_GENERATION_MODE;
+  const isEnhanceMode = renderMode === 'enhance';
 
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
@@ -2316,6 +2331,22 @@ function generate3DRenderPrompt(state: AppState): string {
   const parts: string[] = [];
 
   // 1. SUBJECT & SOURCE
+  if (isEnhanceMode) {
+    parts.push('Enhance the existing rendered architectural image into a hyper-realistic architectural photograph.');
+    if (hasSourceImage) {
+      parts.push(buildSourceImageRelationship(
+        'existing rendered image',
+        'Treat the source as a completed standard or CGI render that must be re-rendered more realistically. Preserve the exact composition, crop, camera, architecture, geometry, materials, signage/text positions, people, furniture, objects, and spatial relationships.'
+      ));
+    } else {
+      parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+    }
+    parts.push(describeRenderMode(renderMode));
+    parts.push('Use only the source image to infer the intended lighting, materials, color, entourage, and scene context. Ignore any hidden style, lighting, atmosphere, scenery, source-type, view-type, or render-format controls as change requests.');
+    parts.push(describeRenderModeClosing(renderMode, '1080p'));
+    return parts.filter(p => p.trim()).join(' ');
+  }
+
   const sourceDescriptions: Record<string, string> = {
     'rhino': 'a Rhino 3D model',
     'revit': 'a Revit BIM model',
@@ -2358,7 +2389,7 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   // 3. GENERATION MODE
-  parts.push(describeRenderMode(DEFAULT_RENDER_GENERATION_MODE));
+  parts.push(describeRenderMode(renderMode));
 
   if (workflow.prioritizationEnabled) {
     const problemAreas = [...workflow.detectedElements]
@@ -2445,7 +2476,7 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
   // 11. TECHNICAL QUALITY
-  parts.push(describeRenderModeClosing(DEFAULT_RENDER_GENERATION_MODE, rend.resolution));
+  parts.push(describeRenderModeClosing(renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
