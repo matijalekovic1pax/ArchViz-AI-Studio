@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { Toggle } from '../../ui/Toggle';
@@ -9,7 +9,6 @@ import { Slider } from '../../ui/Slider';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
 import { VerticalCard } from './SharedRightComponents';
-import { RENDER_GENERATION_MODES, RenderGenerationMode } from '../../../types';
 
 export const CadToRenderPanel = () => {
   const { state, dispatch } = useAppStore();
@@ -20,20 +19,12 @@ export const CadToRenderPanel = () => {
   const cadFurnishing = wf.cadFurnishing;
   const cadContext = wf.cadContext;
   const [openSection, setOpenSection] = useState<string | null>(null);
-  const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
-    'strict-realism': {
-      label: t('render3dSettings.generationMode.options.strictRealism.label'),
-      desc: t('render3dSettings.generationMode.options.strictRealism.desc'),
-    },
-    'enhance': {
-      label: t('render3dSettings.generationMode.options.enhance.label'),
-      desc: t('render3dSettings.generationMode.options.enhance.desc'),
-    },
-    'concept-push': {
-      label: t('render3dSettings.generationMode.options.conceptPush.label'),
-      desc: t('render3dSettings.generationMode.options.conceptPush.desc'),
-    },
-  };
+
+  useEffect(() => {
+    if (wf.renderMode !== 'strict-realism') {
+      updateWf({ renderMode: 'strict-realism' });
+    }
+  }, [wf.renderMode]);
 
   const directionOptions = [
     { value: 'n', label: 'N' },
@@ -61,15 +52,12 @@ export const CadToRenderPanel = () => {
           {t('render3dSettings.generationMode.title')}
         </label>
         <div className="space-y-1">
-          {RENDER_GENERATION_MODES.map((mode) => (
-            <VerticalCard
-              key={mode}
-              label={generationModeCopy[mode].label}
-              description={generationModeCopy[mode].desc}
-              selected={wf.renderMode === mode}
-              onClick={() => updateWf({ renderMode: mode })}
-            />
-          ))}
+          <VerticalCard
+            label={t('render3dSettings.generationMode.options.strictRealism.label')}
+            description={t('render3dSettings.generationMode.options.strictRealism.desc')}
+            selected
+            onClick={() => updateWf({ renderMode: 'strict-realism' })}
+          />
         </div>
       </div>
       <Accordion

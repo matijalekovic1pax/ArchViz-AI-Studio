@@ -7,7 +7,7 @@ import { Accordion } from '../../ui/Accordion';
 import { Sun, User, Wind, Sparkle, Car, Trees } from 'lucide-react';
 import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
 import { cn } from '../../../lib/utils';
-import { RENDER_GENERATION_MODES, Render3DSettings, RenderGenerationMode } from '../../../types';
+import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, Render3DSettings, RenderGenerationMode } from '../../../types';
 
 interface Render3DPanelProps {
   showGenerationMode?: boolean;
@@ -27,6 +27,14 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   const wf = state.workflow;
   const settings = wf.render3d;
   const updateWf = (p: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload: p });
+  const isRender3DWorkflow = state.mode === 'render-3d';
+  const hideManualLightingIntensityAndShadows = isRender3DWorkflow;
+
+  React.useEffect(() => {
+    if (isRender3DWorkflow && wf.renderMode !== DEFAULT_RENDER_GENERATION_MODE) {
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { renderMode: DEFAULT_RENDER_GENERATION_MODE } });
+    }
+  }, [dispatch, isRender3DWorkflow, wf.renderMode]);
 
   const updateSection = (section: keyof Render3DSettings, updates: any) => {
     dispatch({
@@ -41,6 +49,9 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   };
 
   const sectionId = (id: string) => (accordionIdPrefix ? `${accordionIdPrefix}${id}` : id);
+  const generationModes = isRender3DWorkflow
+    ? [DEFAULT_RENDER_GENERATION_MODE]
+    : RENDER_GENERATION_MODES;
   const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
     'strict-realism': {
       label: t('render3dSettings.generationMode.options.strictRealism.label'),
@@ -64,13 +75,13 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
             {t('render3dSettings.generationMode.title')}
           </label>
           <div className="space-y-1">
-            {RENDER_GENERATION_MODES.map((mode) => (
+            {generationModes.map((mode) => (
               <VerticalCard
                 key={mode}
                 label={generationModeCopy[mode].label}
                 description={generationModeCopy[mode].desc}
-                selected={wf.renderMode === mode}
-                onClick={() => updateWf({ renderMode: mode })}
+                selected={isRender3DWorkflow ? mode === DEFAULT_RENDER_GENERATION_MODE : wf.renderMode === mode}
+                onClick={() => updateWf({ renderMode: isRender3DWorkflow ? DEFAULT_RENDER_GENERATION_MODE : mode })}
               />
             ))}
           </div>
@@ -107,15 +118,17 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                       onChange={(az, el) => updateSection('lighting', { sun: { ...settings.lighting.sun, azimuth: az, elevation: el } })}
                     />
 
-                    <SliderControl
-                      label={t('render3dSettings.sections.lighting.intensity')}
-                      value={settings.lighting.sun.intensity}
-                      min={0}
-                      max={200}
-                      step={1}
-                      unit="%"
-                      onChange={(v) => updateSection('lighting', { sun: { ...settings.lighting.sun, intensity: v } })}
-                    />
+                    {!hideManualLightingIntensityAndShadows && (
+                      <SliderControl
+                        label={t('render3dSettings.sections.lighting.intensity')}
+                        value={settings.lighting.sun.intensity}
+                        min={0}
+                        max={200}
+                        step={1}
+                        unit="%"
+                        onChange={(v) => updateSection('lighting', { sun: { ...settings.lighting.sun, intensity: v } })}
+                      />
+                    )}
 
                     <div className="mb-4">
                       <div className="flex justify-between items-baseline mb-2">
@@ -144,31 +157,33 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                   </div>
                 )}
 
-                <div className="border-t border-border-subtle pt-3 mt-3">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
-                      {t('render3dSettings.sections.lighting.shadows.title')}
-                    </span>
-                    <Toggle
-                      label=""
-                      checked={settings.lighting.shadows.enabled}
-                      onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, enabled: v } })}
-                    />
-                  </div>
-                  {settings.lighting.shadows.enabled && (
-                    <div className="space-y-3">
-                      <SliderControl
-                        label={t('render3dSettings.sections.lighting.shadows.opacity')}
-                        value={settings.lighting.shadows.intensity}
-                        min={0}
-                        max={100}
-                        step={1}
-                        unit="%"
-                        onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, intensity: v } })}
+                {!hideManualLightingIntensityAndShadows && (
+                  <div className="border-t border-border-subtle pt-3 mt-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-foreground-secondary inline-flex items-center">
+                        {t('render3dSettings.sections.lighting.shadows.title')}
+                      </span>
+                      <Toggle
+                        label=""
+                        checked={settings.lighting.shadows.enabled}
+                        onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, enabled: v } })}
                       />
                     </div>
-                  )}
-                </div>
+                    {settings.lighting.shadows.enabled && (
+                      <div className="space-y-3">
+                        <SliderControl
+                          label={t('render3dSettings.sections.lighting.shadows.opacity')}
+                          value={settings.lighting.shadows.intensity}
+                          min={0}
+                          max={100}
+                          step={1}
+                          unit="%"
+                          onChange={(v) => updateSection('lighting', { shadows: { ...settings.lighting.shadows, intensity: v } })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-4">
                   <label className="text-xs font-medium text-foreground mb-1.5 block">

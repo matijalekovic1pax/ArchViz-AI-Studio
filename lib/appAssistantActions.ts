@@ -348,7 +348,6 @@ const WORKFLOW_DYNAMIC_SKIP_PREFIXES = [
   'visualAutoSelecting',
   'visualMaterial.referenceImage',
   'visualObject.selectionIds',
-  'visualRemove.sourcePoint',
   'visualBackground.referenceImage',
   'explodedComponents',
   'sectionAreas',
@@ -601,7 +600,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('viewType', '3D view type', 'string', ['render-3d'], {
     values: ['exterior', 'interior', 'aerial', 'detail'],
   }),
-  workflow('renderMode', 'Generation mode', 'string', ['render-3d', 'render-cad', 'masterplan', 'render-sketch', 'exploded', 'section'], {
+  workflow('renderMode', 'Generation mode', 'string', ['render-cad', 'masterplan', 'render-sketch', 'exploded', 'section'], {
     values: ['strict-realism', 'enhance', 'concept-push'],
   }),
   workflow('styleReferenceEnabled', 'Style reference enabled', 'boolean', ['render-3d', 'render-cad']),
@@ -609,10 +608,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('render3d.lighting.sun.enabled', 'Light Source enabled', 'boolean', ['render-3d']),
   workflow('render3d.lighting.sun.azimuth', 'Light Source left/right position', 'number', ['render-3d'], { min: 0, max: 360 }),
   workflow('render3d.lighting.sun.elevation', 'Light Source front/back position', 'number', ['render-3d'], { min: 0, max: 90 }),
-  workflow('render3d.lighting.sun.intensity', 'Light Source intensity', 'number', ['render-3d'], { min: 0, max: 200 }),
   workflow('render3d.lighting.sun.colorTemp', 'Light Source color temperature', 'number', ['render-3d'], { min: 2000, max: 12000 }),
-  workflow('render3d.lighting.shadows.enabled', 'Shadows enabled', 'boolean', ['render-3d']),
-  workflow('render3d.lighting.shadows.intensity', 'Shadow opacity', 'number', ['render-3d'], { min: 0, max: 100 }),
   workflow('render3d.lighting.preset', 'Lighting preset', 'string', ['render-3d']),
   workflow('render3d.atmosphere.mood', 'Atmosphere mood', 'string', ['render-3d']),
   workflow('render3d.atmosphere.fog.enabled', 'Fog enabled', 'boolean', ['render-3d']),
@@ -684,18 +680,13 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualSelection.autoTargets', 'AI selection targets', 'string[]', ['visual-edit'], {
     values: VISUAL_AI_SELECTION_TARGETS,
   }),
-  workflow('visualMaterial.surfaceType', 'Material surface type', 'string', ['visual-edit'], { values: ['auto', 'manual'] }),
   workflow('visualMaterial.category', 'Material category', 'string', ['visual-edit'], {
     values: ['Flooring', 'Wall', 'Facade', 'Roof', 'Metal', 'Glass', 'Stone', 'Fabric'],
   }),
   workflow('visualMaterial.materialId', 'Material swatch id', 'string', ['visual-edit']),
   workflow('visualMaterial.referenceEnabled', 'Material reference', 'boolean', ['visual-edit']),
-  workflow('visualMaterial.scale', 'Material scale', 'number', ['visual-edit'], { min: 1, max: 200 }),
-  workflow('visualMaterial.rotation', 'Material rotation', 'number', ['visual-edit'], { min: 0, max: 360 }),
   workflow('visualMaterial.roughness', 'Material roughness', 'number', ['visual-edit'], { min: 0, max: 100 }),
   workflow('visualMaterial.colorTint', 'Material color tint', 'string', ['visual-edit']),
-  workflow('visualMaterial.matchLighting', 'Material match lighting', 'boolean', ['visual-edit']),
-  workflow('visualMaterial.preserveReflections', 'Material preserve reflections', 'boolean', ['visual-edit']),
   workflow('visualLighting.mode', 'Lighting mode', 'string', ['visual-edit'], { values: ['sun', 'hdri', 'artificial'] }),
   workflow('visualLighting.sun.azimuth', 'Visual Edit Light Source left/right position', 'number', ['visual-edit'], { min: 0, max: 360 }),
   workflow('visualLighting.sun.elevation', 'Visual Edit Light Source front/back position', 'number', ['visual-edit'], { min: 0, max: 90 }),
@@ -741,10 +732,8 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualObject.depth', 'Object depth', 'string', ['visual-edit'], {
     values: ['foreground', 'midground', 'background'],
   }),
-  workflow('visualRemove.mode', 'Remove mode', 'string', ['visual-edit'], { values: ['fill', 'aware', 'clone'] }),
   workflow('visualRemove.brushSize', 'Remove brush size', 'number', ['visual-edit'], { min: 4, max: 180 }),
   workflow('visualRemove.hardness', 'Remove brush hardness', 'number', ['visual-edit'], { min: 0, max: 100 }),
-  workflow('visualRemove.cloneAligned', 'Clone aligned', 'boolean', ['visual-edit']),
   workflow('visualRemove.quickRemove', 'Quick remove targets', 'string[]', ['visual-edit'], {
     values: VISUAL_REMOVE_QUICK_OPTIONS,
   }),
@@ -832,7 +821,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualAdjust.transformDistortion', 'Transform distortion', 'number', ['visual-edit'], { min: -100, max: 100 }),
   workflow('visualAdjust.transformPerspective', 'Transform perspective', 'number', ['visual-edit'], { min: -100, max: 100 }),
   workflow('visualAdjust.styleStrength', 'Adjustment style strength', 'number', ['visual-edit'], { min: -100, max: 100 }),
-  workflow('visualPeople.mode', 'People edit mode', 'string', ['visual-edit'], { values: ['enhance', 'repopulate', 'cleanup'] }),
+  workflow('visualPeople.mode', 'People edit mode', 'string', ['visual-edit'], { values: ['enhance', 'repopulate'] }),
   workflow('visualPeople.airportZone', 'People airport zone', 'string', ['visual-edit'], {
     values: ['terminal-general', 'check-in', 'security', 'departure-gate', 'arrival-hall', 'baggage-claim', 'retail-area', 'food-court', 'lounge', 'transit-corridor'],
   }),

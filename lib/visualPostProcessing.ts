@@ -261,10 +261,9 @@ const createMaterialTexture = async (
   width: number,
   height: number,
   material: MaterialSwatch,
-  settings: VisualMaterialSettings,
 ) => {
   const textureImage = await loadImage(material.previewUrl);
-  const tileSize = Math.max(24, Math.min(1024, Math.round(180 * (settings.scale / 100))));
+  const tileSize = 180;
   const tile = document.createElement('canvas');
   tile.width = tileSize;
   tile.height = tileSize;
@@ -286,7 +285,6 @@ const createMaterialTexture = async (
 
   textureCtx.save();
   textureCtx.translate(width / 2, height / 2);
-  textureCtx.rotate((settings.rotation * Math.PI) / 180);
   textureCtx.fillStyle = pattern;
   const extent = Math.hypot(width, height);
   textureCtx.fillRect(-extent, -extent, extent * 2, extent * 2);
@@ -548,7 +546,7 @@ export async function applyMaskedMaterialReplacement(
   const output = new Uint8ClampedArray(imageData.data);
   const [maskValues, texture] = await Promise.all([
     makeMask(maskDataUrl, width, height),
-    createMaterialTexture(width, height, material, settings),
+    createMaterialTexture(width, height, material),
   ]);
 
   if (!maskValues || !texture) return parseDataUrl(sourceDataUrl);
@@ -557,11 +555,9 @@ export async function applyMaskedMaterialReplacement(
     ? parseHexColor(settings.colorTint)
     : null;
   const roughness = settings.roughness / 100;
-  const reflectionStrength = settings.preserveReflections
-    ? 0.2 + (1 - roughness) * 0.5
-    : 0.08;
+  const reflectionStrength = 0.2 + (1 - roughness) * 0.5;
   const textureContrast = 0.58 + roughness * 0.36;
-  const lightingStrength = settings.matchLighting ? 1 : 0.55;
+  const lightingStrength = 1;
 
   for (let i = 0, pixel = 0; i < output.length; i += 4, pixel += 1) {
     const mask = maskValues[pixel];

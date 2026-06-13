@@ -11,7 +11,14 @@ import { MATERIAL_CATEGORIES, MATERIAL_SWATCHES, getMaterialById } from '../../.
 import {
   Image as ImageIcon,
   Palette,
-  Move,
+  ArrowDown,
+  ArrowDownLeft,
+  ArrowDownRight,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
   Wrench,
   Search,
   X,
@@ -2496,14 +2503,6 @@ export const VisualEditPanel = () => {
         return (
           <div className="space-y-4 animate-fade-in">
             <SectionDesc>Replace surface materials and tune texture details.</SectionDesc>
-            <SegmentedControl
-              value={wf.visualMaterial.surfaceType}
-              options={[
-                { label: 'Auto', value: 'auto' },
-                { label: 'Manual', value: 'manual' },
-              ]}
-              onChange={(value) => updateMaterial({ surfaceType: value })}
-            />
 
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -2668,24 +2667,6 @@ export const VisualEditPanel = () => {
 
             <div className="space-y-3 pt-2 border-t border-border-subtle">
               <SliderControl
-                label="Scale"
-                value={wf.visualMaterial.scale}
-                min={10}
-                max={500}
-                step={5}
-                unit="%"
-                onChange={(value) => updateMaterial({ scale: value })}
-              />
-              <SliderControl
-                label="Rotation"
-                value={wf.visualMaterial.rotation}
-                min={0}
-                max={360}
-                step={1}
-                unit="deg"
-                onChange={(value) => updateMaterial({ rotation: value })}
-              />
-              <SliderControl
                 label="Roughness"
                 value={wf.visualMaterial.roughness}
                 min={0}
@@ -2699,19 +2680,6 @@ export const VisualEditPanel = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Color Tint</span>
               <ColorPicker color={wf.visualMaterial.colorTint} onChange={(value) => updateMaterial({ colorTint: value })} />
-            </div>
-
-            <div className="pt-2 border-t border-border-subtle space-y-2">
-              <Toggle
-                label="Match Existing Lighting"
-                checked={wf.visualMaterial.matchLighting}
-                onChange={(value) => updateMaterial({ matchLighting: value })}
-              />
-              <Toggle
-                label="Preserve Reflections"
-                checked={wf.visualMaterial.preserveReflections}
-                onChange={(value) => updateMaterial({ preserveReflections: value })}
-              />
             </div>
           </div>
         );
@@ -2884,11 +2852,6 @@ export const VisualEditPanel = () => {
                 unit="%"
                 onChange={(value) => updateLighting({ ambient: value })}
               />
-              <Toggle
-                label="Preserve Original Shadows"
-                checked={wf.visualLighting.preserveShadows}
-                onChange={(value) => updateLighting({ preserveShadows: value })}
-              />
             </div>
           </div>
         );
@@ -2961,49 +2924,44 @@ export const VisualEditPanel = () => {
         );
       case 'people': {
         const people = wf.visualPeople;
+        const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
 
         return (
           <div className="space-y-2 animate-fade-in">
-            <SectionDesc>Edit and refine 3D people in airport renderings — adjust demographics, wardrobe, luggage, and behavior.</SectionDesc>
+            <SectionDesc>
+              {peopleMode === 'enhance'
+                ? 'Re-render existing 3D people more realistically while preserving their scene placement.'
+                : 'Edit and refine people in airport renderings — adjust demographics, wardrobe, luggage, and behavior.'}
+            </SectionDesc>
 
-            {/* Target Scope */}
-            <div className="rounded-md border border-border bg-surface-sunken/60 px-2.5 py-2">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
-                <span>Scope</span>
-                <span className={selectionCount > 0 ? 'text-foreground' : ''}>
-                  {selectionCount > 0 ? `${selectionCount} area${selectionCount === 1 ? '' : 's'}` : 'Full frame'}
-                </span>
+            {peopleMode !== 'enhance' && (
+              <div className="rounded-md border border-border bg-surface-sunken/60 px-2.5 py-2">
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-foreground-muted">
+                  <span>Scope</span>
+                  <span className={selectionCount > 0 ? 'text-foreground' : ''}>
+                    {selectionCount > 0 ? `${selectionCount} area${selectionCount === 1 ? '' : 's'}` : 'Full frame'}
+                  </span>
+                </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-foreground mb-2 block">People Instruction</label>
-              <textarea
-                value={wf.visualPrompt}
-                onChange={(event) => updateWf({ visualPrompt: event.target.value })}
-                placeholder="Replace the selected people with an East Asian father and daughter..."
-                className="w-full min-h-[76px] resize-none bg-surface-elevated border border-border rounded text-xs p-2 leading-relaxed focus:outline-none focus:border-accent"
-              />
-            </div>
+            )}
 
             {/* Operation Mode */}
             <SegmentedControl
-              value={people.mode}
+              value={peopleMode}
               options={[
                 { label: 'Enhance', value: 'enhance' },
                 { label: 'Repopulate', value: 'repopulate' },
-                { label: 'Cleanup', value: 'cleanup' },
               ]}
               onChange={(value) => updatePeople({ mode: value })}
             />
             <div className="text-[10px] text-foreground-muted -mt-0.5">
-              {people.mode === 'enhance'
-                ? 'Refine existing people — improve realism, fix artifacts, adjust appearance.'
-                : people.mode === 'repopulate'
-                  ? 'Replace or add people to match desired look and density.'
-                  : 'Remove problematic figures, fix distortions and silhouettes.'}
+              {peopleMode === 'enhance'
+                ? 'Re-render existing 3D people as realistic humans while preserving pose, placement, scale, and scene integration.'
+                : 'Replace or add people to match desired look and density.'}
             </div>
 
+            {peopleMode !== 'enhance' && (
+              <>
             {/* Airport Zone */}
             <PeopleSection title="Airport Zone">
               <SingleChipGrid2
@@ -3213,6 +3171,8 @@ export const VisualEditPanel = () => {
               <Toggle label="Ground Contact" checked={people.groundContact} onChange={(value) => updatePeople({ groundContact: value })} />
               <Toggle label="Remove Artifacts" checked={people.removeArtifacts} onChange={(value) => updatePeople({ removeArtifacts: value })} />
             </PeopleSection>
+              </>
+            )}
           </div>
         );
       }
@@ -3302,14 +3262,9 @@ export const VisualEditPanel = () => {
         return (
           <div className="space-y-4 animate-fade-in">
             <SectionDesc>Remove the main subject centered in each selection and rebuild the background.</SectionDesc>
-            <SegmentedControl
-              value={wf.visualRemove.mode}
-              options={[
-                { label: 'Generative Fill', value: 'fill' },
-                { label: 'Content-Aware', value: 'aware' },
-              ]}
-              onChange={(value) => updateRemove({ mode: value })}
-            />
+            <div className="rounded-md border border-border bg-surface-sunken/60 px-3 py-2.5 text-xs leading-relaxed text-foreground-muted">
+              Click Apply Edits to remove the content inside your selection. You can also choose targets from the Quick Remove list to auto-remove them.
+            </div>
 
             <div className="space-y-2 pt-2 border-t border-border-subtle">
               <label className="text-xs font-medium text-foreground">Quick Remove</label>
@@ -3935,18 +3890,18 @@ export const VisualEditPanel = () => {
                 <label className="text-xs font-medium text-foreground mb-2 block">Direction</label>
                 <div className="grid grid-cols-3 gap-2 w-32 mx-auto">
                   {[
-                    { key: 'top-left', rotate: 135 },
-                    { key: 'top', rotate: 90 },
-                    { key: 'top-right', rotate: 45 },
-                    { key: 'left', rotate: 180 },
+                    { key: 'top-left', icon: ArrowUpLeft },
+                    { key: 'top', icon: ArrowUp },
+                    { key: 'top-right', icon: ArrowUpRight },
+                    { key: 'left', icon: ArrowLeft },
                     { key: 'none', label: '○' },
-                    { key: 'right', rotate: 0 },
-                    { key: 'bottom-left', rotate: 225 },
-                    { key: 'bottom', rotate: 270 },
-                    { key: 'bottom-right', rotate: 315 },
+                    { key: 'right', icon: ArrowRight },
+                    { key: 'bottom-left', icon: ArrowDownLeft },
+                    { key: 'bottom', icon: ArrowDown },
+                    { key: 'bottom-right', icon: ArrowDownRight },
                   ].map((item) => {
                     const active = wf.visualExtend.direction === item.key;
-                    if (item.label) {
+                    if ('label' in item) {
                       return (
                         <button
                           key={item.key}
@@ -3964,6 +3919,8 @@ export const VisualEditPanel = () => {
                       );
                     }
 
+                    const DirectionIcon = item.icon;
+
                     return (
                       <button
                         key={item.key}
@@ -3973,7 +3930,7 @@ export const VisualEditPanel = () => {
                         )}
                         onClick={() => updateExtend({ direction: item.key as any })}
                       >
-                        <Move size={14} style={{ transform: `rotate(${item.rotate}deg)` }} />
+                        <DirectionIcon size={14} strokeWidth={2.3} />
                       </button>
                     );
                   })}

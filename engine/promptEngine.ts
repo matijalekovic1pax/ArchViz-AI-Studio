@@ -233,6 +233,12 @@ const summarizeChangedChannels = (
 const summarizeRenderSettings = (state: AppState): string[] => {
   const { workflow } = state;
   const render = workflow.render3d;
+  const renderMode = state.mode === 'render-3d' || state.mode === 'render-cad'
+    ? DEFAULT_RENDER_GENERATION_MODE
+    : workflow.renderMode;
+  const lightingSummary = state.mode === 'render-3d'
+    ? `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? ', direct sun' : ', no direct sun'}`
+    : `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? `, ${describeSettingStrength(render.lighting.sun.intensity, 'soft', 'balanced', 'strong')} sun` : ', no direct sun'}${render.lighting.shadows.enabled ? `, ${describeSettingStrength(render.lighting.shadows.intensity, 'light', 'natural', 'strong')} shadows` : ', soft/no shadows'}`;
   const activeEntourage = compactItems([
     render.scenery.people.enabled ? `people ${describeSettingStrength(render.scenery.people.count, 'sparse', 'balanced', 'busy')}` : null,
     render.scenery.trees.enabled ? `vegetation ${describeSettingStrength(render.scenery.trees.count, 'light', 'moderate', 'lush')}` : null,
@@ -240,9 +246,9 @@ const summarizeRenderSettings = (state: AppState): string[] => {
   ]);
 
   return compactItems([
-    `render mode ${workflow.renderMode}`,
+    `render mode ${renderMode}`,
     `view ${workflow.viewType}, source ${workflow.sourceType}`,
-    `lighting ${render.lighting.preset}${render.lighting.sun.enabled ? `, ${describeSettingStrength(render.lighting.sun.intensity, 'soft', 'balanced', 'strong')} sun` : ', no direct sun'}${render.lighting.shadows.enabled ? `, ${describeSettingStrength(render.lighting.shadows.intensity, 'light', 'natural', 'strong')} shadows` : ', soft/no shadows'}`,
+    lightingSummary,
     `ambient ${describeSettingStrength(render.lighting.ambient.intensity, 'low', 'balanced', 'bright')}, occlusion ${describeSettingStrength(render.lighting.ambient.occlusion, 'subtle', 'natural', 'deep')}`,
     `atmosphere ${render.atmosphere.mood}${render.atmosphere.fog.enabled ? `, ${describeSettingStrength(render.atmosphere.fog.density, 'light haze', 'moderate haze', 'dense haze')}` : ''}${render.atmosphere.bloom.enabled ? `, ${describeSettingStrength(render.atmosphere.bloom.intensity, 'subtle bloom', 'balanced bloom', 'strong bloom')}` : ''}`,
     activeEntourage.length ? `context ${render.scenery.preset}; ${activeEntourage.join(', ')}` : `context ${render.scenery.preset}`,
@@ -271,12 +277,8 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
       selectionSummary,
       ...selectionControls,
       workflow.visualMaterial.referenceEnabled ? 'material from reference image' : `material ${material?.label || workflow.visualMaterial.materialId}`,
-      `surface ${workflow.visualMaterial.surfaceType}, scale ${describeSettingStrength(workflow.visualMaterial.scale, 'fine', 'balanced', 'large')}`,
-      workflow.visualMaterial.rotation ? `rotation ${workflow.visualMaterial.rotation} degrees` : null,
       `roughness ${describeSettingStrength(workflow.visualMaterial.roughness, 'polished', 'natural', 'matte')}`,
-      workflow.visualMaterial.colorTint && workflow.visualMaterial.colorTint !== '#ffffff' ? `tint ${workflow.visualMaterial.colorTint}` : null,
-      workflow.visualMaterial.matchLighting ? 'match existing lighting' : 'material lighting can shift subtly',
-      workflow.visualMaterial.preserveReflections ? 'preserve reflections' : null
+      workflow.visualMaterial.colorTint && workflow.visualMaterial.colorTint !== '#ffffff' ? `tint ${workflow.visualMaterial.colorTint}` : null
     ]);
   }
 
@@ -345,10 +347,8 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
     return compactItems([
       selectionSummary,
       ...selectionControls,
-      `remove mode ${remove.mode}`,
       remove.quickRemove.length ? `targets ${remove.quickRemove.join(', ')}` : null,
       `brush ${describeSettingStrength(remove.brushSize, 'small', 'medium', 'large')}, edge ${describeSettingStrength(remove.hardness, 'soft', 'balanced', 'hard')}`,
-      remove.mode === 'clone' ? `clone aligned ${formatToggle(remove.cloneAligned)}${remove.sourcePoint ? `, source ${describeCanvasPosition(remove.sourcePoint)}` : ''}` : null,
       remove.autoDetectEdges ? 'detect object edges' : null,
       remove.preserveStructure ? 'preserve architecture while reconstructing background' : null
     ]);
@@ -432,6 +432,17 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
+    const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
+    if (peopleMode === 'enhance') {
+      return compactItems([
+        selectionSummary,
+        ...selectionControls,
+        'people mode enhance',
+        're-render existing 3D people as realistic humans',
+        'preserve existing pose, placement, scale, count, lighting, perspective, ground contact, and immediate accessories',
+        'fix low-poly faces, hands, silhouettes, clothing, and render artifacts'
+      ]);
+    }
     const staffTypes = compactItems([
       people.includeAirportStaff ? 'airport staff' : null,
       people.includeSecurityPersonnel ? 'security' : null,
@@ -442,7 +453,7 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
     return compactItems([
       selectionSummary,
       ...selectionControls,
-      `people mode ${people.mode}, airport zone ${people.airportZone}`,
+      `people mode ${peopleMode}, airport zone ${people.airportZone}`,
       `demographics ${people.ageDistribution}, ${people.genderBalance}, regions ${people.regionMix.slice(0, 4).join(', ') || 'mixed'}`,
       `diversity children ${describeSettingStrength(people.childrenPresence, 'few', 'some', 'many')}, body variety ${describeSettingStrength(people.bodyTypeVariety, 'low', 'moderate', 'high')}`,
       `density ${describeSettingStrength(people.density, 'sparse', 'balanced', 'crowded')}, flow ${people.flowPattern}`,
@@ -2347,7 +2358,7 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   // 3. GENERATION MODE
-  parts.push(describeRenderMode(workflow.renderMode));
+  parts.push(describeRenderMode(DEFAULT_RENDER_GENERATION_MODE));
 
   if (workflow.prioritizationEnabled) {
     const problemAreas = [...workflow.detectedElements]
@@ -2378,12 +2389,7 @@ function generate3DRenderPrompt(state: AppState): string {
 
   if (light.sun.enabled) {
     lightParts.push(`. ${describeLightSourcePosition(light.sun.azimuth, light.sun.elevation)}`);
-    lightParts.push(`, with ${describeSunIntensity(light.sun.intensity)}`);
-    lightParts.push(` and ${describeColorTemperature(light.sun.colorTemp)}`);
-  }
-
-  if (light.shadows.enabled) {
-    lightParts.push(`. The lighting creates ${describeShadows(light.shadows.intensity)}`);
+    lightParts.push(` with ${describeColorTemperature(light.sun.colorTemp)}`);
   }
 
   parts.push(`${lightParts.join('')}.`);
@@ -2439,7 +2445,7 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
   // 11. TECHNICAL QUALITY
-  parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
+  parts.push(describeRenderModeClosing(DEFAULT_RENDER_GENERATION_MODE, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
@@ -2686,12 +2692,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
     if (hasAuthoritativeSelection) {
       parts.push('The selection indicates the intended material target. Use it to identify the surface or object to refinish, not as the exact visible edge of the material change.');
       parts.push('Treat the edit as a surface finish replacement on the existing target geometry. Continue the finish naturally over the connected visible target where needed, while preserving real object edges, seams, joints, perspective, reflections, and shadow structure.');
-    } else if (workflow.visualMaterial.surfaceType === 'auto') {
+    } else {
       parts.push('No mask is provided, so infer the target only from the user instruction and modify only existing objects or surfaces that clearly match that target.');
       parts.push('For object-specific requests such as machines, counters, kiosks, appliances, panels, doors, or fixtures, change only the visible finish of those existing target objects. Do not edit surrounding queues, posts, belts, floors, walls, ceilings, signage, luggage, furniture, people, or reflections except for physically consistent reflections on the target object itself.');
       parts.push('If the target object is ambiguous, make the smallest conservative material-only change to the clearly matching area and leave all uncertain areas unchanged.');
-    } else {
-      parts.push('Apply the new material to the intended selected target and blend naturally instead of following the selection boundary as a visible edge.');
     }
 
     // Describe material in natural language
@@ -2709,14 +2713,6 @@ const generateVisualEditPrompt = (state: AppState): string => {
       materialDesc.push(`Apply a ${material.category} material`);
     }
 
-    const scaleDesc = material.scale < 80 ? 'with a finer, more detailed pattern' :
-      material.scale > 120 ? 'with a larger, bolder pattern' : 'at a natural scale';
-    materialDesc.push(scaleDesc);
-
-    if (material.rotation !== 0) {
-      materialDesc.push(`rotated to a ${material.rotation} degree angle`);
-    }
-
     const roughnessDesc = material.roughness < 30 ? 'with a polished, reflective finish' :
       material.roughness < 60 ? 'with a natural surface texture' : 'with a matte, textured appearance';
     materialDesc.push(roughnessDesc);
@@ -2726,13 +2722,6 @@ const generateVisualEditPrompt = (state: AppState): string => {
     }
 
     parts.push(`${materialDesc.join(', ')}.`);
-
-    if (material.matchLighting) {
-      parts.push('Ensure the new material responds correctly to the existing scene lighting.');
-    }
-    if (material.preserveReflections) {
-      parts.push('Maintain realistic reflections that match the environment.');
-    }
 
     parts.push('Material lock: change only the target surface finish. Preserve geometry, edges, joints, seams, UV direction, adjacent materials, objects, positions, camera, and image clarity.');
     return parts.filter(Boolean).join(' ');
@@ -2855,16 +2844,13 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
+    const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
     const describeRange = (value: number, low: string, mid: string, high: string) =>
       value > 65 ? high : value > 30 ? mid : low;
     const joinIf = (items: Array<string | false | null | undefined>) => compactItems(items).join(', ');
 
     parts.push('People-only architectural edit. Modify human figures and immediate personal accessories only; keep architecture, materials, landscaping, vehicles, signage, camera, and composition unchanged.');
     parts.push(...selectionParts);
-    parts.push(describeUserIntent(userPrompt));
-    if (userPrompt) {
-      parts.push('User instruction is primary; People panel settings are supporting constraints unless they conflict.');
-    }
 
     if (selectionCount === 0) {
       parts.push('No selection is provided: detect people across the frame and target people only.');
@@ -2888,8 +2874,17 @@ const generateVisualEditPrompt = (state: AppState): string => {
     const operationDesc: Record<string, string> = {
       enhance: 'enhance existing people while preserving count and placement unless a small correction is needed',
       repopulate: 'replace or repopulate people to match requested density and flow',
-      cleanup: 'clean up people artifacts, distorted bodies, unrealistic silhouettes, and bad hands or faces',
     };
+
+    if (peopleMode === 'enhance') {
+      parts.push('Operation: re-render existing 3D, low-poly, clay, placeholder, or unrealistic archviz people as believable realistic humans.');
+      parts.push('Preserve each existing person count, pose, location, body orientation, scale, ground contact, occlusion, and camera perspective. Do not add new people, remove people, change crowd density, alter demographics, redesign clothing categories, or move figures unless a tiny correction is required to repair an artifact.');
+      parts.push('Improve faces, hands, hair, clothing folds, body proportions, silhouettes, edge blending, and render quality. Match the scene lighting, shadow direction, color temperature, lens behavior, depth of field, and resolution.');
+      parts.push('Keep immediate personal accessories attached to the same people when present, including luggage, bags, phones, carts, and contact shadows.');
+      parts.push('Constraints: modify only existing people and their attached artifacts/accessories. Do not change building, landscape, vehicles, sky, signage, materials, camera, perspective, composition, or nearby non-human content. Do not add captions, labels, UI, handwriting, or prompt text.');
+      return parts.filter(Boolean).join(' ');
+    }
+
     const ageDescriptions: Record<string, string> = {
       'young-adults': 'mostly young adults',
       'adults': 'mostly adults',
@@ -2953,7 +2948,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       people.includeServiceStaff ? 'service staff' : null
     ]);
 
-    parts.push(`Operation: ${operationDesc[people.mode] || people.mode}. Airport zone: ${zoneDescriptions[people.airportZone] || people.airportZone}.`);
+    parts.push(`Operation: ${operationDesc[peopleMode] || peopleMode}. Airport zone: ${zoneDescriptions[people.airportZone] || people.airportZone}.`);
     parts.push(`Crowd: ${describeRange(people.density, 'sparse', 'balanced', 'dense')} density; ${groupingDescriptions[people.grouping] || people.grouping}; ${flowDescriptions[people.flowPattern] || people.flowPattern}; ${directionDescriptions[people.movementDirection] || people.movementDirection}; ${paceDescriptions[people.paceOfMovement] || people.paceOfMovement}; ${describeRange(people.clusteringTendency, 'evenly distributed', 'some natural clustering', 'clustered near amenities')}.`);
     parts.push(`Demographics: ${selectedRegions}; ${ageDescriptions[people.ageDistribution] || people.ageDistribution}; ${genderDesc[people.genderBalance] || people.genderBalance}; children ${describeRange(people.childrenPresence, 'minimal', 'some', 'prominent')}; body variety ${describeRange(people.bodyTypeVariety, 'low', 'moderate', 'high')}.`);
     parts.push(`Wardrobe: ${wardrobeMap[people.wardrobeStyle] || people.wardrobeStyle}; ${seasonDescriptions[people.seasonalClothing] || people.seasonalClothing}; formality ${describeRange(people.formalityLevel, 'casual', 'smart-casual', 'formal')}; cultural attire ${describeRange(people.culturalAttire, 'occasional', 'some', 'significant')}.`);
@@ -3037,12 +3032,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     parts.push(describeUserIntent(userPrompt));
 
     const remove = workflow.visualRemove;
-    const modeDesc: Record<string, string> = {
-      fill: 'the targeted subject using generative inpainting and natural reconstruction',
-      aware: 'the targeted subject using content-aware cleanup based on surrounding pixels',
-      clone: 'the targeted subject using clone-style cleanup from the selected source context',
-    };
-    parts.push(`Remove ${modeDesc[remove.mode] || 'the selected content'}.`);
+    parts.push('Remove the selected content and reconstruct the revealed background naturally.');
 
     if (remove.quickRemove.length > 0) {
       parts.push(`Automatically detect and remove all instances of: ${remove.quickRemove.join(', ')} throughout the image.`);
@@ -3396,11 +3386,7 @@ function generateCadRenderPrompt(state: AppState): string {
     parts.push(`Preserve the drawing orientation at ${Math.round(workflow.cadOrientation)} degrees; do not rotate or normalize it unless the camera settings require a rendered viewpoint.`);
   }
 
-  parts.push(describeRenderMode(workflow.renderMode));
-
-  if (normalizeRenderGenerationMode(workflow.renderMode) === 'concept-push') {
-    parts.push(describeSourceFidelityForRenderMode(workflow.renderMode));
-  }
+  parts.push(describeRenderMode(DEFAULT_RENDER_GENERATION_MODE));
 
   if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
     const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
@@ -3564,7 +3550,7 @@ function generateCadRenderPrompt(state: AppState): string {
   parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}.`);
 
   // Closing
-  parts.push(describeRenderModeClosing(workflow.renderMode, rend.resolution));
+  parts.push(describeRenderModeClosing(DEFAULT_RENDER_GENERATION_MODE, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }

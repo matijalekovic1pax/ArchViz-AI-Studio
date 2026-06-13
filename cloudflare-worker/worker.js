@@ -1467,7 +1467,8 @@ function sanitizeGeminiGenerationConfig(config) {
   delete next.responseFormat;
 
   if (wantsImage && responseImageConfig) {
-    next.imageConfig = responseImageConfig;
+    delete next.imageConfig;
+    next.responseFormat = { image: responseImageConfig };
   }
 
   return next;

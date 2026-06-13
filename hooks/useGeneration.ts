@@ -54,7 +54,7 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
   'img-to-cad'
 ];
 const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
-const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
+const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-sketch'];
 
 const SOURCE_FIDELITY_CONTRACT = [
   'Source fidelity contract: the first input image is the locked source reference.',
@@ -740,23 +740,11 @@ export function useGeneration(): UseGenerationReturn {
    */
   const getModePromptPrefix = useCallback((mode: GenerationMode, renderMode = state.workflow.renderMode): string => {
     if (mode === 'render-3d') {
-      if (renderMode === 'strict-realism') {
-        return 'Convert this 3D, Revit, BIM, or viewport screenshot into a hyper-realistic architectural render: ';
-      }
-      if (renderMode === 'enhance') {
-        return 'Enhance this existing realistic architectural render without redesigning it: ';
-      }
-      return 'Create an intentionally artificial architectural concept render from this 3D source: ';
+      return 'Convert this 3D, Revit, BIM, or viewport screenshot into a hyper-realistic architectural render: ';
     }
 
     if (mode === 'render-cad') {
-      if (renderMode === 'strict-realism') {
-        return 'Convert this CAD, Revit, BIM, or drawing source into a hyper-realistic architectural visualization: ';
-      }
-      if (renderMode === 'enhance') {
-        return 'Enhance this existing realistic architectural/CAD-derived render without redesigning it: ';
-      }
-      return 'Create an intentionally artificial architectural concept render from this CAD source: ';
+      return 'Convert this CAD, Revit, BIM, or drawing source into a hyper-realistic architectural visualization: ';
     }
 
     if (mode === 'render-sketch') {

@@ -213,7 +213,7 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'Prefer ChatGPT Image Generation 2 for Visual Edit when precision, preservation, clean masks, text, or exact material/color changes matter.',
       'Use rectangle, brush, lasso, erase, or adjust tools to define the editable region. Brush mode includes a live brush-size preview on the canvas. The assistant should ask the user to make this selection manually.',
       'Material references are for matching material appearance in the selected area.',
-      'People edits are a dedicated Visual Edit tool for airport and public-space figures. They control enhance/repopulate/cleanup mode, airport zone, region mix, age/gender balance, children/body variety, crowd density, grouping, flow, movement, wardrobe, activities, luggage, staff roles, realism, scale accuracy, ground contact, and artifact cleanup.',
+      'People edits are a dedicated Visual Edit tool for airport and public-space figures. They control enhance/repopulate mode, airport zone, region mix, age/gender balance, children/body variety, crowd density, grouping, flow, movement, wardrobe, activities, luggage, staff roles, realism, scale accuracy, ground contact, and artifact repair.',
       'When relighting with Sun mode, describe the Light Source grid as Front, Back, Left, and Right rather than exposing numeric coordinate values.',
       'If the user wants to add many separately referenced objects with placement control, redirect to Scene Compose.',
     ],
@@ -673,7 +673,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Visual relight source: ${describeLightSource(wf.visualLighting.sun.azimuth, wf.visualLighting.sun.elevation)}, intensity ${wf.visualLighting.sun.intensity}, color temperature ${wf.visualLighting.sun.colorTemp}K`,
         `Visual prompt: ${wf.visualPrompt.trim() ? wf.visualPrompt.trim().slice(0, 500) : 'empty'}`,
         `Material reference: ${wf.visualMaterial.referenceEnabled && wf.visualMaterial.referenceImage ? 'yes' : 'no'}`,
-        `People edit settings: mode ${wf.visualPeople.mode}, zone ${wf.visualPeople.airportZone}, density ${wf.visualPeople.density}, region mix ${wf.visualPeople.regionMix.length ? wf.visualPeople.regionMix.join(', ') : 'none'}, staff ${wf.visualPeople.includeAirportStaff ? 'on' : 'off'}, luggage ${wf.visualPeople.luggageAmount}`,
+        `People edit settings: mode ${wf.visualPeople.mode === 'repopulate' ? 'repopulate' : 'enhance'}, zone ${wf.visualPeople.airportZone}, density ${wf.visualPeople.density}, region mix ${wf.visualPeople.regionMix.length ? wf.visualPeople.regionMix.join(', ') : 'none'}, staff ${wf.visualPeople.includeAirportStaff ? 'on' : 'off'}, luggage ${wf.visualPeople.luggageAmount}`,
         `Background prompt/reference: ${wf.visualBackground.mode}, ${wf.visualBackground.mode === 'prompt' ? (wf.visualBackground.prompt || 'empty') : wf.visualBackground.referenceImage ? 'reference image present' : 'no reference image'}`
       );
       break;

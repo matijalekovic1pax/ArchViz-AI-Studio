@@ -44,25 +44,6 @@ export const LeftSceneComposePanel: React.FC = () => {
           )}
 
           <div>
-            <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.sourceType')}</label>
-            <select
-              className="w-full h-8 bg-surface-elevated border border-border rounded text-xs px-2 text-foreground focus:outline-none focus:border-accent"
-              value={wf.sourceType}
-              onChange={(event) => updateWf({ sourceType: event.target.value as any })}
-            >
-              <option value="rhino">{t('render3d.sourceAnalysis.sourceOptions.rhino')}</option>
-              <option value="revit">{t('render3d.sourceAnalysis.sourceOptions.revit')}</option>
-              <option value="sketchup">{t('render3d.sourceAnalysis.sourceOptions.sketchup')}</option>
-              <option value="blender">{t('render3d.sourceAnalysis.sourceOptions.blender')}</option>
-              <option value="3dsmax">{t('render3d.sourceAnalysis.sourceOptions.3dsmax')}</option>
-              <option value="archicad">{t('render3d.sourceAnalysis.sourceOptions.archicad')}</option>
-              <option value="cinema4d">{t('render3d.sourceAnalysis.sourceOptions.cinema4d')}</option>
-              <option value="clay">{t('render3d.sourceAnalysis.sourceOptions.clay')}</option>
-              <option value="other">{t('render3d.sourceAnalysis.sourceOptions.other')}</option>
-            </select>
-          </div>
-
-          <div>
             <label className="text-xs text-foreground-muted mb-1 block">{t('render3d.sourceAnalysis.viewType')}</label>
             <SegmentedControl
               value={wf.viewType}

@@ -644,6 +644,78 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     };
   };
   const activeModelCopy = getModelCopy(activeImageGenerationModel);
+  const renderModelSelector = (menuPositionClassName = 'left-0 origin-top-left') => (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        ref={modelButtonRef}
+        onClick={() => setShowModelMenu(!showModelMenu)}
+        className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
+        title={t('topBar.modelSelector.title')}
+        aria-label={t('topBar.modelSelector.title')}
+        aria-expanded={showModelMenu}
+      >
+        {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
+          <Shield size={12} className="text-foreground-muted" />
+        ) : (
+          <Sparkles size={12} className="text-foreground-muted" />
+        )}
+        <span className="whitespace-nowrap">{activeModelCopy.shortLabel}</span>
+        <ChevronDown size={10} className={cn("transition-transform", showModelMenu && "rotate-180")} />
+      </button>
+
+      {showModelMenu && (
+        <div
+          ref={modelMenuRef}
+          className={cn(
+            "absolute top-full mt-2 w-72 rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated z-50 animate-fade-in",
+            menuPositionClassName
+          )}
+        >
+          <div className="px-2 pb-2 pt-1">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+              {t('topBar.modelSelector.title')}
+            </div>
+          </div>
+          <div className="space-y-1">
+            {IMAGE_GENERATION_MODELS.map((model) => {
+              const copy = getModelCopy(model);
+              const selected = activeImageGenerationModel === model;
+              const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
+
+              return (
+                <div key={model}>
+                  <button
+                    type="button"
+                    onClick={() => handleModelChange(model)}
+                    className={cn(
+                      "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
+                      selected
+                        ? "bg-foreground text-background"
+                        : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
+                    )}
+                  >
+                    <Icon size={14} className={cn("mt-0.5 shrink-0", selected ? "text-background" : "text-foreground-muted")} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                        <span>{copy.label}</span>
+                      </span>
+                      <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
+                        {copy.description}
+                      </span>
+                      <span className={cn("mt-1 block text-[9px] font-semibold uppercase leading-snug tracking-wide", selected ? "text-background/70" : "text-foreground-muted")}>
+                        {copy.bestFor}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const getGenerateLabel = () => {
     switch (state.mode) {
@@ -1129,76 +1201,17 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
       </div>
 
-      {/* Center: Generate Button (Hidden in generate-text mode) */}
+      {/* Center: Generate Button and Model Selector */}
       <div className="pointer-events-none absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-        {state.mode !== 'generate-text' && (
+        {state.mode === 'generate-text' ? (
+          <div className="pointer-events-auto">
+            {renderModelSelector('left-1/2 -translate-x-1/2 origin-top')}
+          </div>
+        ) : (
           <div className="relative pointer-events-auto">
             {/* Model Selector */}
             <div className="absolute right-full top-1/2 mr-2 min-[1120px]:mr-3 -translate-y-1/2">
-              <div className="relative shrink-0">
-                <button
-                  ref={modelButtonRef}
-                  onClick={() => setShowModelMenu(!showModelMenu)}
-                  className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
-                  title={t('topBar.modelSelector.title')}
-                >
-                  {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
-                    <Shield size={12} className="text-foreground-muted" />
-                  ) : (
-                    <Sparkles size={12} className="text-foreground-muted" />
-                  )}
-                  <span className="whitespace-nowrap">{activeModelCopy.shortLabel}</span>
-                  <ChevronDown size={10} className={cn("transition-transform", showModelMenu && "rotate-180")} />
-                </button>
-
-                {showModelMenu && (
-                  <div
-                    ref={modelMenuRef}
-                    className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-border bg-surface-elevated p-2 shadow-elevated z-50 animate-fade-in origin-top-left"
-                  >
-                    <div className="px-2 pb-2 pt-1">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
-                        {t('topBar.modelSelector.title')}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {IMAGE_GENERATION_MODELS.map((model) => {
-                        const copy = getModelCopy(model);
-                        const selected = activeImageGenerationModel === model;
-                        const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
-
-                        return (
-                          <div key={model}>
-                            <button
-                              type="button"
-                              onClick={() => handleModelChange(model)}
-                              className={cn(
-                                "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
-                                selected
-                                  ? "bg-foreground text-background"
-                                  : "text-foreground-secondary hover:bg-surface-sunken hover:text-foreground"
-                              )}
-                            >
-                              <Icon size={14} className={cn("mt-0.5 shrink-0", selected ? "text-background" : "text-foreground-muted")} />
-                              <span className="min-w-0">
-                                <span className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                                  <span>{copy.label}</span>
-                                </span>
-                                <span className={cn("mt-1 block text-[10px] leading-snug", selected ? "text-background/75" : "text-foreground-muted")}>
-                                  {copy.description}
-                                </span>
-                                <span className={cn("mt-1 block text-[9px] font-semibold uppercase leading-snug tracking-wide", selected ? "text-background/70" : "text-foreground-muted")}>
-                                  {copy.bestFor}
-                                </span>
-                              </span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {renderModelSelector()}
             </div>
 
             <div className="relative">

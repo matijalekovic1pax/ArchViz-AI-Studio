@@ -948,7 +948,11 @@ export class GeminiService {
       ...rest,
     };
     if (wantsImage && responseImageConfig) {
-      result.imageConfig = responseImageConfig;
+      if (this.usesResponseFormatImageConfig(model)) {
+        result.responseFormat = { image: responseImageConfig };
+      } else {
+        result.imageConfig = responseImageConfig;
+      }
     }
 
     return result;

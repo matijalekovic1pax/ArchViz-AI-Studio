@@ -15,6 +15,7 @@ import {
   ImageUtils
 } from '../../../services/geminiService';
 import { isGatewayAuthenticated } from '../../../services/apiGateway';
+import { DEFAULT_RENDER_GENERATION_MODE } from '../../../types';
 
 
 export const LeftRender3DPanel = () => {
@@ -207,17 +208,30 @@ export const LeftRender3DPanel = () => {
           prioritizationEnabled: false
         }
       });
+      const render3dContext = {
+        ...wf.render3d,
+        lighting: {
+          preset: wf.render3d.lighting.preset,
+          ambient: wf.render3d.lighting.ambient,
+          sun: {
+            enabled: wf.render3d.lighting.sun.enabled,
+            azimuth: wf.render3d.lighting.sun.azimuth,
+            elevation: wf.render3d.lighting.sun.elevation,
+            colorTemp: wf.render3d.lighting.sun.colorTemp
+          }
+        }
+      };
       const settingsContext = {
         mode: state.mode,
         viewType: wf.viewType,
         sourceType: wf.sourceType,
-        renderMode: wf.renderMode,
+        renderMode: DEFAULT_RENDER_GENERATION_MODE,
         activeStyle: {
           id: state.activeStyleId,
           name: activeStyleRawName,
           referenceImageEnabled: hasStyleReferenceImage
         },
-        render3d: wf.render3d,
+        render3d: render3dContext,
         lighting: state.lighting,
         context: state.context,
         output: state.output

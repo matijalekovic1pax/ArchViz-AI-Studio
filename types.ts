@@ -324,17 +324,12 @@ export interface WorkflowSettings {
   visualSelectionCompositeSize: { width: number; height: number } | null;
   visualAutoSelecting: boolean;
   visualMaterial: {
-    surfaceType: 'auto' | 'manual';
     category: 'Flooring' | 'Wall' | 'Facade' | 'Roof' | 'Metal' | 'Glass' | 'Stone' | 'Fabric';
     materialId: string;
     referenceEnabled: boolean;
     referenceImage: string | null;
-    scale: number;
-    rotation: number;
     roughness: number;
     colorTint: string;
-    matchLighting: boolean;
-    preserveReflections: boolean;
   };
   visualLighting: {
     mode: 'sun' | 'hdri' | 'artificial';
@@ -369,11 +364,8 @@ export interface WorkflowSettings {
     depth: 'foreground' | 'midground' | 'background';
   };
   visualRemove: {
-    mode: 'fill' | 'aware' | 'clone';
     brushSize: number;
     hardness: number;
-    cloneAligned: boolean;
-    sourcePoint: { x: number; y: number } | null;
     quickRemove: string[];
     autoDetectEdges: boolean;
     preserveStructure: boolean;
@@ -462,7 +454,7 @@ export interface WorkflowSettings {
   };
   visualPeople: {
     // Operation mode
-    mode: 'enhance' | 'repopulate' | 'cleanup';
+    mode: 'enhance' | 'repopulate';
 
     // Airport zone context
     airportZone: 'terminal-general' | 'check-in' | 'security' | 'departure-gate' | 'arrival-hall' | 'baggage-claim' | 'retail-area' | 'food-court' | 'lounge' | 'transit-corridor';
