@@ -248,8 +248,10 @@ export const RightPanel: React.FC = () => {
           )}
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
-         {panelContent}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-5" style={{ scrollbarGutter: 'stable' }}>
+         <div className="min-w-0">
+           {panelContent}
+         </div>
       </div>
     </div>
   );

@@ -388,9 +388,10 @@ interface ObjectAsset {
   icon: ObjectIconKey;
 }
 
-const fallbackMaterialPreview = MATERIAL_SWATCHES[0]?.previewUrl || '';
+const fallbackMaterialPreview = MATERIAL_SWATCHES[0]?.fallbackPreviewUrl || MATERIAL_SWATCHES[0]?.previewUrl || '';
 const materialSwatches = MATERIAL_SWATCHES;
 const materialCategories = MATERIAL_CATEGORIES;
+const MATERIAL_BROWSER_BATCH_SIZE = 48;
 
 const hdriPresets = ['Studio', 'Outdoor', 'Overcast', 'Interior', 'Night'];
 const skyPresets = [
@@ -1493,6 +1494,7 @@ export const VisualEditPanel = () => {
   const [assetQuery, setAssetQuery] = useState('');
   const [isMaterialBrowserOpen, setIsMaterialBrowserOpen] = useState(false);
   const [materialFilterCategory, setMaterialFilterCategory] = useState('All');
+  const [visibleMaterialCount, setVisibleMaterialCount] = useState(MATERIAL_BROWSER_BATCH_SIZE);
   const [extendBaseSize, setExtendBaseSize] = useState<{ width: number; height: number } | null>(null);
   const [autoSelectStatus, setAutoSelectStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [autoSelectMessage, setAutoSelectMessage] = useState('');
@@ -2066,12 +2068,17 @@ export const VisualEditPanel = () => {
 
   useEffect(() => {
     if (!isMaterialBrowserOpen) return;
-    materialSwatches.forEach((material) => {
+    materialSwatches.slice(0, 12).forEach((material) => {
       const img = new Image();
-      img.decoding = 'sync';
+      img.decoding = 'async';
       img.src = material.previewUrl;
     });
   }, [isMaterialBrowserOpen]);
+
+  useEffect(() => {
+    if (!isMaterialBrowserOpen) return;
+    setVisibleMaterialCount(MATERIAL_BROWSER_BATCH_SIZE);
+  }, [isMaterialBrowserOpen, materialFilterCategory, materialQuery]);
 
   const selectedMaterial = useMemo(
     () => getMaterialById(wf.visualMaterial.materialId),
@@ -2096,6 +2103,25 @@ export const VisualEditPanel = () => {
       return matchesCategory && matchesQuery;
     });
   }, [materialFilterCategory, materialQuery]);
+
+  const visibleMaterials = useMemo(
+    () => filteredMaterials.slice(0, visibleMaterialCount),
+    [filteredMaterials, visibleMaterialCount]
+  );
+  const hasMoreMaterials = visibleMaterials.length < filteredMaterials.length;
+
+  const showMoreMaterials = useCallback(() => {
+    setVisibleMaterialCount((count) => Math.min(count + MATERIAL_BROWSER_BATCH_SIZE, filteredMaterials.length));
+  }, [filteredMaterials.length]);
+
+  const handleMaterialGridScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMoreMaterials) return;
+    const target = event.currentTarget;
+    const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (remaining < 240) {
+      showMoreMaterials();
+    }
+  }, [hasMoreMaterials, showMoreMaterials]);
 
   const objectSubcategories = useMemo(() => {
     const set = new Set<string>();
@@ -2604,7 +2630,7 @@ export const VisualEditPanel = () => {
                           type="button"
                           onClick={() => updateMaterial({ materialId: material.id, category: material.category, referenceEnabled: false })}
                           className={cn(
-                            'relative h-14 rounded-md overflow-hidden border transition-all duration-200 text-left flex items-center group',
+                            'relative h-16 rounded-md overflow-hidden border transition-all duration-200 text-left flex items-center group',
                             active
                               ? 'border-foreground ring-2 ring-foreground shadow-md opacity-100 z-10 scale-[1.02]'
                               : 'border-border opacity-90 hover:opacity-100 hover:border-foreground-muted hover:scale-[1.01]'
@@ -2612,10 +2638,11 @@ export const VisualEditPanel = () => {
                         >
                           <img
                             src={material.previewUrl}
-                            decoding="sync"
+                            loading="lazy"
+                            decoding="async"
                             draggable={false}
                             onError={(event) => {
-                              event.currentTarget.src = fallbackMaterialPreview;
+                              event.currentTarget.src = material.fallbackPreviewUrl || fallbackMaterialPreview;
                             }}
                             className="absolute inset-0 z-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             alt={material.label}
@@ -2623,7 +2650,7 @@ export const VisualEditPanel = () => {
                           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent z-0" />
                           <div className="relative z-10 px-2 py-1 w-full min-w-0">
                             <p className="text-white text-[10px] font-bold leading-tight truncate w-full">{material.label}</p>
-                            <p className="text-white/75 text-[8px] truncate font-medium">{material.category}</p>
+                            <p className="text-white/75 text-[8px] truncate font-medium">{material.sourceLabel || material.category}</p>
                           </div>
                           {active && (
                             <div className="absolute top-1 right-1 w-4 h-4 bg-foreground text-background rounded-full flex items-center justify-center z-20 shadow-sm">
@@ -2647,9 +2674,10 @@ export const VisualEditPanel = () => {
                       <div className="h-8 w-8 rounded-md border border-border overflow-hidden bg-surface-elevated shrink-0">
                         <img
                           src={selectedMaterial.previewUrl || fallbackMaterialPreview}
-                          decoding="sync"
+                          loading="lazy"
+                          decoding="async"
                           onError={(event) => {
-                            event.currentTarget.src = fallbackMaterialPreview;
+                            event.currentTarget.src = selectedMaterial.fallbackPreviewUrl || fallbackMaterialPreview;
                           }}
                           className="w-full h-full object-cover"
                           alt={selectedMaterial.label}
@@ -2658,6 +2686,7 @@ export const VisualEditPanel = () => {
                       <div className="min-w-0">
                         <div className="text-[9px] uppercase tracking-wider text-foreground-muted">Selected Material</div>
                         <div className="text-xs font-semibold text-foreground truncate">{selectedMaterial.label}</div>
+                        <div className="text-[9px] text-foreground-muted truncate">{selectedMaterial.sourceLabel}</div>
                       </div>
                     </div>
                   )}
@@ -4185,7 +4214,7 @@ export const VisualEditPanel = () => {
           onClick={() => setIsMaterialBrowserOpen(false)}
         >
           <div
-            className="w-[560px] max-w-[94vw] h-[360px] bg-background flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-border animate-scale-in"
+            className="w-[760px] max-w-[94vw] h-[560px] max-h-[86vh] bg-background flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-border animate-scale-in"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="h-9 border-b border-border flex items-center justify-between px-4 bg-surface-elevated shrink-0">
@@ -4239,8 +4268,11 @@ export const VisualEditPanel = () => {
                 })}
               </div>
 
-              <div className="grid grid-cols-5 gap-1.5 overflow-y-auto custom-scrollbar p-1 flex-1">
-                {filteredMaterials.map((material) => {
+              <div
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 overflow-y-auto custom-scrollbar p-1 flex-1 auto-rows-max"
+                onScroll={handleMaterialGridScroll}
+              >
+                {visibleMaterials.map((material) => {
                   const active = wf.visualMaterial.materialId === material.id;
                   return (
                     <button
@@ -4251,41 +4283,59 @@ export const VisualEditPanel = () => {
                         setIsMaterialBrowserOpen(false);
                       }}
                       className={cn(
-                        'aspect-square rounded border overflow-hidden relative text-[9px] font-semibold transition-colors bg-surface-sunken',
+                        'aspect-[4/3] min-h-[112px] rounded-md border overflow-hidden relative text-[9px] font-semibold transition-all bg-surface-sunken group text-left',
                         active
-                          ? 'border-foreground ring-1 ring-foreground'
-                          : 'border-border hover:border-foreground-muted'
+                          ? 'border-foreground ring-1 ring-foreground shadow-sm'
+                          : 'border-border hover:border-foreground-muted hover:shadow-sm'
                       )}
                     >
                       <img
                         src={material.previewUrl}
-                        loading="eager"
-                        decoding="sync"
+                        loading="lazy"
+                        decoding="async"
                         draggable={false}
                         onError={(event) => {
-                          event.currentTarget.src = fallbackMaterialPreview;
+                          event.currentTarget.src = material.fallbackPreviewUrl || fallbackMaterialPreview;
                         }}
-                        className="absolute inset-0 w-full h-full object-cover"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         alt={material.label}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/12 to-transparent" />
                       {active && (
                         <div className="absolute top-1 right-1 w-4 h-4 bg-foreground text-background rounded-full flex items-center justify-center shadow-md">
                           <Check size={10} strokeWidth={3} />
                         </div>
                       )}
-                      <span className="absolute bottom-1 left-1 right-1 text-white text-[9px] font-semibold leading-tight truncate">
-                        {material.label}
-                      </span>
+                      <div className="absolute bottom-1.5 left-1.5 right-1.5 text-white min-w-0">
+                        <div className="text-[10px] font-semibold leading-tight truncate">{material.label}</div>
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-[8px] text-white/75">
+                          <span className="truncate">{material.category}</span>
+                          <span className="shrink-0">{material.sourceLabel}</span>
+                        </div>
+                      </div>
                     </button>
                   );
                 })}
+                {filteredMaterials.length === 0 && (
+                  <div className="col-span-full h-28 rounded-md border border-dashed border-border flex items-center justify-center text-[10px] text-foreground-muted">
+                    No materials found
+                  </div>
+                )}
+                {hasMoreMaterials && (
+                  <button
+                    type="button"
+                    onClick={showMoreMaterials}
+                    className="col-span-full h-9 rounded-md border border-border bg-surface-sunken text-[10px] font-medium text-foreground-muted hover:text-foreground hover:border-foreground-muted transition-colors"
+                  >
+                    Load more materials
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="h-7 bg-surface-sunken border-t border-border flex items-center justify-between px-3 text-[9px] text-foreground-muted shrink-0">
-              <span>{filteredMaterials.length} materials</span>
-              <span>Click a tile to apply.</span>
+              <span>{Math.min(visibleMaterials.length, filteredMaterials.length)} of {filteredMaterials.length} materials</span>
+              <span>photo texture references</span>
             </div>
           </div>
         </div>

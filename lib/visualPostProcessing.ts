@@ -24,6 +24,18 @@ const loadImage = (src: string): Promise<HTMLImageElement> =>
     img.src = src;
   });
 
+const loadMaterialImage = async (material: MaterialSwatch): Promise<HTMLImageElement> => {
+  const preferredUrl = material.referenceUrl || material.previewUrl;
+  try {
+    return await loadImage(preferredUrl);
+  } catch {
+    if (material.fallbackPreviewUrl && material.fallbackPreviewUrl !== preferredUrl) {
+      return loadImage(material.fallbackPreviewUrl);
+    }
+    throw new Error('Failed to load material texture.');
+  }
+};
+
 const parseDataUrl = (dataUrl: string): GeneratedImage => {
   const match = dataUrl.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,(.+)$/);
   return {
@@ -262,7 +274,7 @@ const createMaterialTexture = async (
   height: number,
   material: MaterialSwatch,
 ) => {
-  const textureImage = await loadImage(material.previewUrl);
+  const textureImage = await loadMaterialImage(material);
   const tileSize = 180;
   const tile = document.createElement('canvas');
   tile.width = tileSize;

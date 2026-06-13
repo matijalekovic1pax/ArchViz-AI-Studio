@@ -53,10 +53,24 @@ interface MaterialSeed {
     accent?: string;
     accent2?: string;
   };
+  source?: MaterialSource;
+}
+
+interface MaterialSource {
+  label: string;
+  assetId?: string;
+  previewUrl: string;
+  referenceUrl?: string;
+  sourceUrl: string;
 }
 
 export interface MaterialSwatch extends MaterialSeed {
   previewUrl: string;
+  referenceUrl: string;
+  fallbackPreviewUrl: string;
+  sourceLabel: string;
+  sourceAssetId: string | null;
+  sourceUrl: string | null;
   modelPrompt: string;
 }
 
@@ -371,12 +385,462 @@ const materialSeeds: MaterialSeed[] = [
   { id: 'fabric-acoustic', label: 'Acoustic Fabric', category: 'Fabric', description: 'Acoustic fabric with tight woven texture, muted charcoal tone, subtle thread variation, and sound-panel matte finish.', tags: ['acoustic', 'fabric', 'woven', 'panel'], texture: 'fabric', colors: { base: '#4f5658', mid: '#363d3f', dark: '#202527', light: '#7a8487', accent: '#616b6e' } },
 ];
 
-export const MATERIAL_SWATCHES: MaterialSwatch[] = materialSeeds.map((material) => ({
-  ...material,
-  previewUrl: baseFrame(material, renderTexture(material)),
-  modelPrompt: `${material.description} Use this as the exact target for color, pattern, roughness, reflectivity, grain direction, seams, and architectural scale.`,
-}));
+const AMBIENT_CG_CDN_BASE = 'https://acg-media.struffelproductions.com/file/ambientCG-Web/media';
+const POLY_HAVEN_THUMB_BASE = 'https://cdn.polyhaven.com/asset_img/thumbs';
+const TARGET_MATERIAL_COUNT = 270;
+
+const ambientCgAssetIds: Record<string, string> = {
+  'floor-oak': 'Wood049',
+  'floor-walnut': 'Wood051',
+  'floor-maple': 'Wood095',
+  'floor-terrazzo': 'Terrazzo013',
+  'floor-polished-concrete': 'Concrete048',
+  'floor-bamboo': 'Bamboo001B',
+  'floor-cork': 'Cork002',
+  'floor-chevron': 'WoodFloor034',
+  'wall-plaster': 'Plaster001',
+  'wall-venetian': 'Plaster002',
+  'wall-gypsum': 'PaintedPlaster017',
+  'wall-limewash': 'Plaster003',
+  'wall-microcement': 'Concrete034',
+  'wall-wood-slat': 'Wood092',
+  'wall-ceramic-tile': 'Tiles133A',
+  'wall-acoustic': 'AcousticFoam003',
+  'facade-brick-red': 'Bricks051',
+  'facade-brick-white': 'Bricks060',
+  'facade-brick-dark': 'Bricks089',
+  'facade-corten': 'Metal063',
+  'facade-aluminum': 'Metal050A',
+  'facade-fiber-cement': 'Concrete046',
+  'facade-concrete-board': 'Concrete047A',
+  'facade-stone-clad': 'Rock051',
+  'roof-standing-seam': 'CorrugatedSteel009',
+  'roof-clay-tile': 'RoofingTiles013A',
+  'roof-slate': 'RoofingTiles003',
+  'roof-gravel': 'Gravel043',
+  'roof-green': 'Grass005',
+  'roof-epdm': 'Rubber004',
+  'roof-copper': 'Metal057A',
+  'metal-brushed-steel': 'Metal049A',
+  'metal-black': 'Metal046A',
+  'metal-anodized': 'Metal050A',
+  'metal-brass': 'Metal034',
+  'metal-copper-patina': 'Metal058C',
+  'metal-zinc': 'Metal032',
+  'metal-perforated': 'SheetMetal001',
+  'stone-marble': 'Marble012',
+  'stone-travertine': 'Travertine009',
+  'stone-limestone': 'Travertine001',
+  'stone-granite': 'Granite002A',
+  'stone-sandstone': 'Bricks084',
+  'stone-basalt': 'Rock035',
+  'stone-quartzite': 'Marble021',
+  'fabric-linen': 'Fabric019',
+  'fabric-wool': 'Carpet016',
+  'fabric-leather': 'Leather038',
+  'fabric-velvet': 'Fabric081A',
+  'fabric-canvas': 'Fabric036',
+  'fabric-sheer': 'Fabric081C',
+  'fabric-acoustic': 'Fabric082A',
+};
+
+const getAmbientCgPreviewUrl = (assetId: string) =>
+  `${AMBIENT_CG_CDN_BASE}/thumbnail/256-WEBP/${assetId}.webp`;
+
+const getAmbientCgTextureUrl = (assetId: string) =>
+  `${AMBIENT_CG_CDN_BASE}/surface-preview/${assetId}/${assetId}_SQ_Color.jpg`;
+
+const getAmbientCgSourceUrl = (assetId: string) =>
+  `https://ambientcg.com/a/${assetId}`;
+
+const getAmbientCgSource = (assetId: string): MaterialSource => ({
+  label: 'ambientCG',
+  assetId,
+  previewUrl: getAmbientCgPreviewUrl(assetId),
+  referenceUrl: getAmbientCgTextureUrl(assetId),
+  sourceUrl: getAmbientCgSourceUrl(assetId),
+});
+
+const getPolyHavenPreviewUrl = (slug: string, size = 256) =>
+  `${POLY_HAVEN_THUMB_BASE}/${slug}.png?width=${size}&height=${size}`;
+
+const getPolyHavenSourceUrl = (slug: string) =>
+  `https://polyhaven.com/a/${slug}`;
+
+const getPolyHavenSource = (slug: string): MaterialSource => ({
+  label: 'Poly Haven',
+  assetId: slug,
+  previewUrl: getPolyHavenPreviewUrl(slug, 256),
+  referenceUrl: getPolyHavenPreviewUrl(slug, 512),
+  sourceUrl: getPolyHavenSourceUrl(slug),
+});
+
+const materialSourceOverrides: Record<string, MaterialSource> = {
+  'wall-plaster': getPolyHavenSource('white_plaster_02'),
+  'wall-venetian': getPolyHavenSource('painted_plaster_wall'),
+  'wall-limewash': getPolyHavenSource('white_rough_plaster'),
+  'wall-microcement': getPolyHavenSource('brushed_concrete'),
+};
+
+const polyHavenSlugsByCategory: Record<MaterialCategory, string[]> = {
+  Flooring: [
+    'plywood',
+    'laminate_floor_02',
+    'concrete_floor_worn_001',
+    'asphalt_02',
+    'metal_plate',
+    'wood_floor',
+    'kitchen_wood',
+    'floor_tiles_06',
+    'wood_floor_deck',
+    'aerial_asphalt_01',
+    'granite_tile',
+    'laminate_floor_03',
+    'wood_planks',
+    'large_floor_tiles_02',
+    'large_square_pattern_01',
+    'large_grey_tiles',
+    'wood_floor_worn',
+    'wooden_planks',
+    'laminate_floor',
+    'rubber_tiles',
+    'gravel_embedded_concrete',
+    'rocky_trail_02',
+    'concrete_floor_01',
+    'dry_riverbed_rock',
+    'floor_tiles_08',
+    'gravel_concrete_03',
+    'dark_wooden_planks',
+    'granular_concrete',
+    'rock_tile_floor',
+    'herringbone_parquet',
+    'worn_planks',
+    'gravel_concrete',
+    'painted_concrete',
+    'brushed_concrete',
+    'asphalt_01',
+    'cobblestone_floor_04',
+    'asphalt_pit_lane',
+    'pavement_02',
+    'brick_moss_001',
+    'pavement_03',
+    'slab_tiles',
+    'plank_flooring_04',
+    't_brick_floor_002',
+    'hexagonal_concrete_paving',
+  ],
+  Wall: [
+    'beige_wall_001',
+    'painted_plaster_wall',
+    'white_plaster_rough_01',
+    'worn_cracked_plaster',
+    'red_brick',
+    'brown_planks_03',
+    'planks_brown_10',
+    'wood_planks_dirt',
+    'synthetic_wood',
+    'red_brick_03',
+    'medieval_blocks_03',
+    'brick_4',
+    'castle_brick_02_red',
+    'concrete_layers_02',
+    'cracked_concrete_wall',
+    'rustic_stone_wall_02',
+    'plaster_grey_04',
+    'brick_wall_001',
+    'brown_planks_05',
+    'stone_brick_wall_001',
+    'factory_wall',
+    'stone_wall',
+    'concrete_wall_003',
+    'red_bricks_04',
+    'wood_peeling_paint_weathered',
+    'sandstone_blocks_05',
+    'castle_wall_slates',
+    'broken_wall',
+    'concrete',
+    'rough_block_wall',
+    'brick_wall_006',
+    'white_rough_plaster',
+    'beige_wall_002',
+    'raw_plank_wall',
+    'concrete_wall_007',
+    'plastered_wall',
+    'plastered_stone_wall',
+    'concrete_wall_008',
+    'factory_brick',
+    'green_rough_planks',
+    'large_red_bricks',
+    'plastered_wall_04',
+    'castle_brick_07',
+    'concrete_wall_001',
+  ],
+  Facade: [
+    'oak_veneer_01',
+    'rough_wood',
+    'fine_grained_wood',
+    'rosewood_veneer1',
+    'rusty_metal_04',
+    'corrugated_iron',
+    'rusty_metal_sheet',
+    'blue_metal_plate',
+    'corrugated_iron_02',
+    'metal_plate_02',
+    'medieval_red_brick',
+    'blue_painted_planks',
+    'rough_concrete',
+    'rusty_metal_03',
+    'plastered_wall_03',
+    'red_plaster_weathered',
+    'brick_wall_005',
+    'plaster_brick_pattern',
+    'white_sandstone_blocks_02',
+    'white_plaster_rough_02',
+    'concrete_wall_004',
+    'painted_metal_shutter',
+    'rusty_metal',
+    'wall_bricks_plaster',
+    'brick_wall_02',
+    'rock_wall_10',
+    'rock_wall_13',
+    'church_bricks_02',
+    'metal_grate_rusty',
+    'white_sandstone_bricks_03',
+    'box_profile_metal_sheet',
+    'plastered_wall_05',
+    'castle_wall_varriation',
+    'damaged_plaster',
+    'plaster_brick_01',
+    'rock_wall_11',
+    'concrete_layers',
+    'concrete_wall_006',
+    'rough_plaster_broken',
+    'brick_wall_09',
+    'rock_wall_04',
+    'rock_wall_08',
+    'broken_brick_wall',
+  ],
+  Roof: [
+    'roof_09',
+    'roof_slates_03',
+    'grey_roof_01',
+    'ceramic_roof_01',
+    'grey_roof_tiles_02',
+    'roof_tiles_14',
+    'clay_roof_tiles_02',
+    'roof_slates_02',
+    'thatch_roof_angled',
+    'grey_roof_tiles',
+    'roof_07',
+    'reed_roof_04',
+    'riet_01',
+    'roof_3',
+    'red_slate_roof_tiles_01',
+    'worn_corrugated_iron',
+    'reed_roof_03',
+    'clay_roof_tiles_03',
+    'roof_tiles',
+    'clay_roof_tiles',
+  ],
+  Metal: [
+    'green_metal_rust',
+    'rusty_metal_grid',
+    'rusty_metal_05',
+    'worn_shutter',
+    'rusted_shutter',
+    'corrugated_iron_03',
+    'rusty_painted_metal',
+    'rusty_corrugated_iron',
+  ],
+  Glass: [],
+  Stone: [
+    'rock_boulder_dry',
+    'rock_01',
+    'gray_rocks',
+    'ganges_river_pebbles',
+    'mossy_rock',
+    'rock_05',
+    'rock_08',
+    'rock_04',
+    'rock_06',
+    'rock_pitted_mossy',
+    'lichen_rock',
+    'rock_boulder_cracked',
+    'worn_rock_natural_01',
+    'terrain_red_01',
+    'clean_pebbles',
+    'cliff_side',
+    'seaside_rock',
+    'rock_surface',
+    'gravel_stones',
+    'rock_2',
+    'rock_3',
+    'rock_face',
+    'grey_stone_path',
+    'concrete_pavement_02',
+    'coast_sand_04',
+    'tiger_rock',
+    'wood_stone_pathway',
+    'grass_concrete_pavement',
+    'marble_rock_01',
+    'marble_rock_02',
+  ],
+  Fabric: [
+    'fabric_pattern_07',
+    'leather_red_02',
+    'quatrefoil_jacquard_fabric',
+    'brown_leather',
+    'leather_white',
+    'denmin_fabric_02',
+    'fabric_pattern_05',
+    'leather_red_03',
+    'fabric_leather_02',
+    'denim_fabric',
+    'fabric_leather_01',
+    'dirty_carpet',
+    'velour_velvet',
+    'hessian_230',
+    'crepe_satin',
+    'cotton_jersey',
+    'rough_linen',
+    'curly_teddy_natural',
+    'curly_teddy_checkered',
+    'poly_wool_herringbone',
+    'hessian_380',
+    'denim_fabric_06',
+  ],
+};
+
+const categoryFallbackStyles: Record<MaterialCategory, Pick<MaterialSeed, 'texture' | 'colors'>> = {
+  Flooring: { texture: 'concrete', colors: { base: '#9d988e', mid: '#726d66', dark: '#4a4540', light: '#c9c1b5', accent: '#aaa197' } },
+  Wall: { texture: 'plaster', colors: { base: '#cbc5b9', mid: '#a69d90', dark: '#746d63', light: '#eee8dc', accent: '#b9b0a3' } },
+  Facade: { texture: 'cladding-panel', colors: { base: '#8f887d', mid: '#686158', dark: '#403a35', light: '#bdb4a7', accent: '#9c9184' } },
+  Roof: { texture: 'roof-tile', colors: { base: '#875847', mid: '#5d3c32', dark: '#30211e', light: '#bd8066', accent: '#9b604b' } },
+  Metal: { texture: 'metal', colors: { base: '#8e9495', mid: '#666e71', dark: '#373f42', light: '#c3c9ca', accent: '#a5acad' } },
+  Glass: { texture: 'glass', colors: { base: '#aac5cc', mid: '#6f929c', dark: '#3d6470', light: '#effcff', accent: '#d6eef3' } },
+  Stone: { texture: 'stone', colors: { base: '#8d867a', mid: '#666057', dark: '#403b35', light: '#bbb3a6', accent: '#a59b8d' } },
+  Fabric: { texture: 'fabric', colors: { base: '#827a71', mid: '#5d564f', dark: '#39332f', light: '#b4aaa0', accent: '#968b82' } },
+};
+
+const titleCaseMaterialSlug = (slug: string) =>
+  slug
+    .split('_')
+    .filter(Boolean)
+    .map((part) => {
+      const normalized = part === 'denmin' ? 'denim' : part === 'riet' ? 'reed' : part;
+      return /^[0-9]+$/.test(normalized)
+        ? normalized
+        : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    })
+    .join(' ');
+
+const tagsFromSlug = (slug: string) =>
+  slug.split('_').filter((part) => part && !/^[0-9]+$/.test(part));
+
+const includesAny = (value: string, terms: string[]) =>
+  terms.some((term) => value.includes(term));
+
+const inferPolyHavenStyle = (slug: string, category: MaterialCategory): Pick<MaterialSeed, 'texture' | 'colors'> => {
+  const normalized = slug.replace(/-/g, '_');
+
+  if (includesAny(normalized, ['herringbone', 'parquet'])) {
+    return { texture: 'herringbone', colors: { base: '#a66f3c', mid: '#794720', dark: '#3e2110', light: '#d0a16a', accent: '#b87c46' } };
+  }
+  if (includesAny(normalized, ['wood', 'plank', 'plywood', 'veneer', 'laminate'])) {
+    return { texture: 'wood-plank', colors: { base: '#9a693f', mid: '#6f4528', dark: '#392316', light: '#c79660', accent: '#b27b4c' } };
+  }
+  if (includesAny(normalized, ['brick'])) {
+    return { texture: 'brick', colors: { base: '#9b4c3a', mid: '#6b3026', dark: '#381916', light: '#ca7a62', accent: '#ad5946' } };
+  }
+  if (includesAny(normalized, ['tile', 'paver', 'paving', 'slab', 'square'])) {
+    return { texture: 'tile', colors: { base: '#a7a197', mid: '#7b756c', dark: '#504b45', light: '#d0c9bd', accent: '#b6ada1' } };
+  }
+  if (includesAny(normalized, ['roof', 'clay', 'ceramic'])) {
+    return { texture: 'roof-tile', colors: { base: '#a65a3b', mid: '#7b3d29', dark: '#432116', light: '#d38761', accent: '#ba6745' } };
+  }
+  if (includesAny(normalized, ['slate'])) {
+    return { texture: 'slate', colors: { base: '#536068', mid: '#374349', dark: '#20282d', light: '#7d8990', accent: '#657178' } };
+  }
+  if (includesAny(normalized, ['metal', 'iron', 'shutter', 'container', 'corrugated'])) {
+    return includesAny(normalized, ['rust'])
+      ? { texture: 'corten', colors: { base: '#93512d', mid: '#66321f', dark: '#331811', light: '#c4774d', accent: '#ad6036' } }
+      : { texture: 'metal', colors: { base: '#8c9395', mid: '#656d70', dark: '#343c3f', light: '#c0c7c9', accent: '#a2aaad' } };
+  }
+  if (includesAny(normalized, ['plaster', 'concrete', 'asphalt', 'pavement'])) {
+    return { texture: includesAny(normalized, ['plaster']) ? 'plaster' : 'concrete', colors: { base: '#aaa59c', mid: '#817c74', dark: '#59544e', light: '#d3cdc3', accent: '#99938a' } };
+  }
+  if (includesAny(normalized, ['marble'])) {
+    return { texture: 'marble', colors: { base: '#d8d4cc', mid: '#b7b2a8', dark: '#706d67', light: '#f6f3ea', accent: '#a99170' } };
+  }
+  if (includesAny(normalized, ['stone', 'rock', 'pebble', 'gravel', 'cliff'])) {
+    return { texture: 'stone', colors: { base: '#8e887c', mid: '#666157', dark: '#403c35', light: '#bbb4a8', accent: '#a59b8c' } };
+  }
+  if (includesAny(normalized, ['leather'])) {
+    return { texture: 'leather', colors: { base: '#825034', mid: '#5b321f', dark: '#2f170f', light: '#b77a50', accent: '#98613e' } };
+  }
+  if (includesAny(normalized, ['velvet', 'velour'])) {
+    return { texture: 'velvet', colors: { base: '#5b3a55', mid: '#3d2639', dark: '#211420', light: '#8e6a84', accent: '#744d6b' } };
+  }
+  if (category === 'Fabric') {
+    return { texture: 'fabric', colors: { base: '#8d8176', mid: '#675c53', dark: '#3d352f', light: '#beb2a6', accent: '#a19386' } };
+  }
+
+  return categoryFallbackStyles[category];
+};
+
+const createPolyHavenSeed = (slug: string, category: MaterialCategory): MaterialSeed => {
+  const style = inferPolyHavenStyle(slug, category);
+  const label = titleCaseMaterialSlug(slug);
+  const tags = tagsFromSlug(slug);
+
+  return {
+    id: `ph-${slug}`,
+    label,
+    category,
+    description: `${label} ${category.toLowerCase()} material with photographed surface detail, natural variation, realistic roughness, and archviz-friendly scale.`,
+    tags: [...tags, category.toLowerCase(), 'poly haven', 'photo texture'],
+    texture: style.texture,
+    colors: style.colors,
+    source: getPolyHavenSource(slug),
+  };
+};
+
+const polyHavenMaterialSeeds: MaterialSeed[] = Object.entries(polyHavenSlugsByCategory)
+  .flatMap(([category, slugs]) =>
+    slugs.map((slug) => createPolyHavenSeed(slug, category as MaterialCategory))
+  );
+
+const allMaterialSeeds = [
+  ...materialSeeds,
+  ...polyHavenMaterialSeeds.slice(0, Math.max(0, TARGET_MATERIAL_COUNT - materialSeeds.length)),
+];
+
+export const MATERIAL_SWATCHES: MaterialSwatch[] = allMaterialSeeds.map((material) => {
+  const sourceAssetId = ambientCgAssetIds[material.id] || null;
+  const source = material.source || materialSourceOverrides[material.id] || (sourceAssetId ? getAmbientCgSource(sourceAssetId) : null);
+  const fallbackPreviewUrl = baseFrame(material, renderTexture(material));
+  const previewUrl = source?.previewUrl || fallbackPreviewUrl;
+  const referenceUrl = source?.referenceUrl || previewUrl;
+  const sourceLabel = source?.label || (sourceAssetId ? 'ambientCG' : 'Generated fallback');
+  const sourceId = source?.assetId || sourceAssetId || null;
+
+  return {
+    ...material,
+    previewUrl,
+    referenceUrl,
+    fallbackPreviewUrl,
+    sourceLabel,
+    sourceAssetId: sourceId,
+    sourceUrl: source?.sourceUrl || (sourceAssetId ? getAmbientCgSourceUrl(sourceAssetId) : null),
+    modelPrompt: [
+      material.description,
+      source
+        ? `Use the attached ${sourceLabel}${sourceId ? ` ${sourceId}` : ''} material photo texture as the exact visual reference.`
+        : 'Use the attached generated material swatch as the target visual reference.',
+      'Match color, pattern, roughness, reflectivity, grain direction, seams, wear, and architectural scale.'
+    ].join(' '),
+  };
+});
 
 export const getMaterialById = (id?: string | null) =>
   MATERIAL_SWATCHES.find((material) => material.id === id) || null;
-

@@ -234,9 +234,15 @@ const getVisualMaskMode = (
   return editOutsideSelection ? 'strict' : 'guided';
 };
 
-const materialPreviewToImageData = async (previewUrl: string): Promise<ImageData | null> => {
+const materialPreviewToImageData = async (previewUrl: string, fallbackUrl?: string): Promise<ImageData | null> => {
   try {
-    const preview = await loadCanvasImage(previewUrl);
+    let preview: HTMLImageElement;
+    try {
+      preview = await loadCanvasImage(previewUrl);
+    } catch {
+      if (!fallbackUrl || fallbackUrl === previewUrl) return null;
+      preview = await loadCanvasImage(fallbackUrl);
+    }
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
@@ -1993,7 +1999,10 @@ export function useGeneration(): UseGenerationReturn {
         const materialReferenceImage = isMaterialReferenceMode && visualMaterial.referenceImage
           ? dataUrlToImageData(visualMaterial.referenceImage)
           : materialReference && !hasLocalMaskedMaterialEdit
-            ? await materialPreviewToImageData(materialReference.previewUrl)
+            ? await materialPreviewToImageData(
+                materialReference.referenceUrl || materialReference.previewUrl,
+                materialReference.fallbackPreviewUrl
+              )
             : null;
 
         const adjust = state.workflow.visualAdjust;
