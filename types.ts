@@ -47,15 +47,6 @@ export interface ChatMessage {
   isLoading?: boolean;
 }
 
-export interface DetectedElement {
-  id: string;
-  name: string;
-  confidence: number;
-  type: 'structural' | 'envelope' | 'interior' | 'site';
-  detail?: string;
-  selected: boolean;
-}
-
 export interface SceneInsertionReference {
   id: string;
   image: string;
@@ -64,14 +55,6 @@ export interface SceneInsertionReference {
     x: number; // normalized 0-1 (from left)
     y: number; // normalized 0-1 (from top)
   } | null;
-}
-
-export interface DetectedLayer {
-  id: string;
-  name: string;
-  color: string;
-  type: 'wall' | 'window' | 'door' | 'stairs' | 'dims' | 'text';
-  visible: boolean;
 }
 
 export interface ZoneItem {
@@ -138,6 +121,15 @@ export const RENDER_GENERATION_MODES: readonly RenderGenerationMode[] = [
   'concept-push',
 ] as const;
 
+export type Render3DSourceMode = 'rerender' | 'alter-rendering';
+
+export const DEFAULT_RENDER3D_SOURCE_MODE: Render3DSourceMode = 'rerender';
+
+export const RENDER3D_SOURCE_MODES: readonly Render3DSourceMode[] = [
+  'rerender',
+  'alter-rendering',
+] as const;
+
 export interface Render3DSettings {
   lighting: Render3DLighting;
   atmosphere: Render3DAtmosphere;
@@ -152,8 +144,7 @@ export interface WorkflowSettings {
   // 1. 3D to Render
   sourceType: 'revit' | 'rhino' | 'sketchup' | 'blender' | '3dsmax' | 'archicad' | 'cinema4d' | 'clay' | 'other';
   viewType: 'exterior' | 'interior' | 'aerial' | 'detail';
-  prioritizationEnabled: boolean;
-  detectedElements: DetectedElement[];
+  render3dSourceMode: Render3DSourceMode;
   renderMode: RenderGenerationMode;
   canvasSync: boolean; // Used for Split View toggle
   compareMode: boolean;
@@ -171,8 +162,6 @@ export interface WorkflowSettings {
   cadDrawingType: 'plan' | 'section' | 'elevation' | 'site';
   cadScale: string;
   cadOrientation: number;
-  cadLayerDetectionEnabled: boolean;
-  cadLayers: DetectedLayer[];
   cadCamera: {
     height: number;
     angle: 'horizontal' | 'down' | 'up';
@@ -679,6 +668,7 @@ export interface WorkflowSettings {
   sketchMoodPreset: string;
 
   // 8. Upscale
+  upscaleMode: 'resolution' | 'ai-slop';
   upscaleFactor: '2x' | '4x' | '8x';
   upscaleSharpness: number;
   upscaleClarity: number;
@@ -716,7 +706,6 @@ export interface WorkflowSettings {
   imgToCadLine: { sensitivity: number; simplify: number; connect: boolean };
   imgToCadLayers: { walls: boolean; windows: boolean; details: boolean; hidden: boolean };
   imgToCadFormat: 'dxf' | 'dwg' | 'svg' | 'pdf';
-  imgToCadPreprocess: { guidance: string; focus: string[] };
 
   // 12. Video Studio
   videoState: VideoState;
@@ -1359,6 +1348,7 @@ export interface HistoryItem {
   timestamp: number;
   thumbnail: string; // Base64
   prompt: string;
+  modelPrompt?: string;
   attachments?: string[];
   mode: GenerationMode;
   settings?: any;
@@ -1370,6 +1360,14 @@ export interface AppAlert {
   tone: 'info' | 'warning' | 'error';
 }
 
+export type GenerationProgressStage =
+  | 'preparing'
+  | 'aiLayer'
+  | 'generation'
+  | 'transfer'
+  | 'finalizing'
+  | 'complete';
+
 export interface AppState {
   mode: GenerationMode;
   imageGenerationModel: ImageGenerationModel;
@@ -1378,6 +1376,7 @@ export interface AppState {
   sourceImage: string | null;
   isGenerating: boolean;
   progress: number;
+  generationStage: GenerationProgressStage | null;
   prompt: string;
   
   workflow: WorkflowSettings;
@@ -1419,6 +1418,7 @@ export type Action =
   | { type: 'CLEAR_CANVAS' }
   | { type: 'SET_GENERATING'; payload: boolean }
   | { type: 'SET_PROGRESS'; payload: number }
+  | { type: 'SET_GENERATION_STAGE'; payload: GenerationProgressStage | null }
   | { type: 'UPDATE_WORKFLOW'; payload: Partial<WorkflowSettings> }
   | { type: 'UPDATE_VIDEO_STATE'; payload: Partial<VideoState> }
   | { type: 'UPDATE_VIDEO_CAMERA'; payload: Partial<VideoState['camera']> }

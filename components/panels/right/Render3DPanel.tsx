@@ -7,7 +7,7 @@ import { Accordion } from '../../ui/Accordion';
 import { Sun, User, Wind, Sparkle, Car, Trees } from 'lucide-react';
 import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
 import { cn } from '../../../lib/utils';
-import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, Render3DSettings, RenderGenerationMode } from '../../../types';
+import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, RENDER3D_SOURCE_MODES, Render3DSettings, Render3DSourceMode, RenderGenerationMode } from '../../../types';
 
 const RENDER_3D_GENERATION_MODES: readonly RenderGenerationMode[] = [
   DEFAULT_RENDER_GENERATION_MODE,
@@ -58,6 +58,16 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   const generationModes = isRender3DWorkflow
     ? RENDER_3D_GENERATION_MODES
     : RENDER_GENERATION_MODES;
+  const sourceModeCopy: Record<Render3DSourceMode, { label: string; desc: string }> = {
+    'rerender': {
+      label: t('render3dSettings.sourceMode.options.rerender.label', { defaultValue: 'Rerender' }),
+      desc: t('render3dSettings.sourceMode.options.rerender.desc', { defaultValue: 'Use the original 3D/model screenshot and create a fresh render variation.' }),
+    },
+    'alter-rendering': {
+      label: t('render3dSettings.sourceMode.options.alterRendering.label', { defaultValue: 'Alter rendering' }),
+      desc: t('render3dSettings.sourceMode.options.alterRendering.desc', { defaultValue: 'Use the latest render and apply lighter style or lighting adjustments.' }),
+    },
+  };
   const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
     'strict-realism': {
       label: t('render3dSettings.generationMode.options.strictRealism.label'),
@@ -75,6 +85,25 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
 
   return (
     <div className="space-y-6">
+      {isRender3DWorkflow && (
+        <div>
+          <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+            {t('render3dSettings.sourceMode.title', { defaultValue: 'Render Flow' })}
+          </label>
+          <div className="space-y-1">
+            {RENDER3D_SOURCE_MODES.map((mode) => (
+              <VerticalCard
+                key={mode}
+                label={sourceModeCopy[mode].label}
+                description={sourceModeCopy[mode].desc}
+                selected={wf.render3dSourceMode === mode}
+                onClick={() => updateWf({ render3dSourceMode: mode })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {showGenerationMode && (
         <div>
           <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">

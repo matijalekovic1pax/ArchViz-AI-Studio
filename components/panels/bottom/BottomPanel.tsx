@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import { generatePrompt } from '../../../engine/promptEngine';
-import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw } from 'lucide-react';
+import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw, FileText } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
 import { Slider } from '../../ui/Slider';
@@ -17,6 +17,7 @@ export const BottomPanel: React.FC = () => {
   const prompt = generatePrompt(state);
   const [historySelectMode, setHistorySelectMode] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(() => new Set());
+  const [expandedPromptHistoryId, setExpandedPromptHistoryId] = useState<string | null>(null);
   const [editablePrompt, setEditablePrompt] = useState(prompt);
   const [isPromptEdited, setIsPromptEdited] = useState(false);
 
@@ -41,6 +42,7 @@ export const BottomPanel: React.FC = () => {
     if (resolvedBottomTab !== 'history') {
       setHistorySelectMode(false);
       setSelectedHistoryIds(new Set());
+      setExpandedPromptHistoryId(null);
     }
   }, [resolvedBottomTab]);
 
@@ -65,6 +67,16 @@ export const BottomPanel: React.FC = () => {
       }
       return next;
     });
+  }, []);
+
+  const toggleModelPrompt = useCallback((id: string) => {
+    setExpandedPromptHistoryId((current) => current === id ? null : id);
+  }, []);
+
+  const copyModelPrompt = useCallback(async (promptText: string) => {
+    const trimmed = promptText.trim();
+    if (!trimmed) return;
+    await navigator.clipboard.writeText(trimmed);
   }, []);
 
   const downloadHistoryItems = useCallback(async (items: HistoryItem[]) => {
@@ -292,7 +304,7 @@ export const BottomPanel: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-x-auto flex items-center gap-4 custom-scrollbar">
+            <div className="flex-1 overflow-x-auto overflow-y-visible flex items-start gap-4 custom-scrollbar py-1">
               {historyItems.length === 0 ? (
                  <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
                     <Clock size={24} className="opacity-20" />
@@ -301,29 +313,35 @@ export const BottomPanel: React.FC = () => {
               ) : (
                  historyItems.map((item) => {
                    const isSelected = selectedHistoryIds.has(item.id);
+                   const modelPrompt = item.modelPrompt?.trim() || '';
+                   const hasModelPrompt = modelPrompt.length > 0;
+                   const isPromptExpanded = expandedPromptHistoryId === item.id;
                    return (
-                     <button 
+                     <div
                         key={item.id}
-                        type="button"
-                        onClick={() => {
-                          if (historySelectMode) {
-                            toggleHistorySelection(item.id);
-                            return;
-                          }
-                          dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
-                          if (item.settings?.kind === 'source') {
-                            dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
-                          }
-                          dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
-                          dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
-                        }}
-                        className={cn(
-                          "min-w-[140px] aspect-video rounded-lg border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group relative overflow-hidden",
-                          isSelected ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-foreground"
-                        )}
+                        className="relative min-w-[148px] max-w-[148px] flex flex-col gap-1.5"
                      >
+                       <button
+                          type="button"
+                          onClick={() => {
+                            if (historySelectMode) {
+                              toggleHistorySelection(item.id);
+                              return;
+                            }
+                            dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
+                            if (item.settings?.kind === 'source') {
+                              dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
+                            }
+                            dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
+                            dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+                          }}
+                          className={cn(
+                            "w-full aspect-video rounded-lg border bg-surface-elevated flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group relative overflow-hidden",
+                            isSelected ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-foreground"
+                          )}
+                       >
                         <div className="absolute inset-0 bg-surface-sunken">
-                           <img src={item.thumbnail} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                           <img src={item.thumbnail} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                         </div>
                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                            <div className="text-[10px] font-medium truncate">{new Date(item.timestamp).toLocaleTimeString()}</div>
@@ -337,7 +355,46 @@ export const BottomPanel: React.FC = () => {
                             {isSelected ? <Check size={12} /> : null}
                           </div>
                         )}
-                     </button>
+                       </button>
+
+                       {hasModelPrompt && (
+                         <button
+                            type="button"
+                            onClick={() => toggleModelPrompt(item.id)}
+                            title={isPromptExpanded ? 'Hide model prompt' : 'Show model prompt'}
+                            className={cn(
+                              "h-6 w-full inline-flex items-center justify-center gap-1.5 rounded border px-2 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                              isPromptExpanded
+                                ? "border-accent text-accent bg-accent/10"
+                                : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
+                            )}
+                         >
+                            <FileText size={11} />
+                            Prompt
+                         </button>
+                       )}
+
+                       {hasModelPrompt && isPromptExpanded && (
+                         <div className="absolute left-0 bottom-7 z-30 w-[260px] rounded-md border border-border bg-surface-elevated shadow-lg">
+                            <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-2 py-1.5">
+                              <div className="min-w-0 text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">
+                                Model prompt
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyModelPrompt(modelPrompt)}
+                                title="Copy model prompt"
+                                className="shrink-0 rounded p-1 text-foreground-muted hover:bg-surface-sunken hover:text-foreground"
+                              >
+                                <Copy size={11} />
+                              </button>
+                            </div>
+                            <div className="max-h-20 overflow-y-auto p-2 text-[10px] leading-relaxed text-foreground-secondary custom-scrollbar whitespace-pre-wrap">
+                              {modelPrompt}
+                            </div>
+                         </div>
+                       )}
+                     </div>
                    );
                  })
               )}

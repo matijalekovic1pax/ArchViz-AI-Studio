@@ -19,8 +19,6 @@ const geminiServiceSource = read('services/geminiService.ts');
 const apiGatewaySource = read('services/apiGateway.ts');
 const topBarSource = read('components/panels/TopBar.tsx');
 const visualEditSource = read('components/panels/right/VisualEditPanel.tsx');
-const leftRender3dSource = read('components/panels/left/LeftRender3DPanel.tsx');
-const leftImageToCadSource = read('components/panels/left/LeftImageToCADPanel.tsx');
 const leftMasterplanSource = read('components/panels/left/LeftMasterplanPanel.tsx');
 const leftExplodedSource = read('components/panels/left/LeftExplodedPanel.tsx');
 const leftSectionSource = read('components/panels/left/LeftSectionPanel.tsx');
@@ -186,9 +184,7 @@ const requiredCommandActions = [
   'open_feedback_report',
   'redo_selection_change',
   'run_exploded_component_detection',
-  'run_image_to_cad_preprocess',
   'run_masterplan_zone_detection',
-  'run_preprocess',
   'run_section_area_detection',
   'reset_project',
   'set_language',
@@ -311,7 +307,6 @@ const missingAssistantTestHook =
   !assistantSource.includes("fileTarget: 'pdf-compression-queue', attachmentId: 'pdf2'") ||
   !assistantSource.includes('state.workflow.sceneInsertionReferences.length === 2') ||
   !assistantSource.includes('state.workflow.pdfCompression.queue.length === 2') ||
-  !assistantSource.includes("{ type: 'run_preprocess'") ||
   !assistantSource.includes("{ type: 'run_masterplan_zone_detection'") ||
   !assistantSource.includes("{ type: 'run_exploded_component_detection'") ||
   !assistantSource.includes("{ type: 'run_section_area_detection'") ||
@@ -354,10 +349,8 @@ const missingManualVisualSelectionPolicy =
 const weakThinkingConfigPattern = /thinkingConfig:\s*\{[^}]*thinkingLevel:\s*['"](minimal|low)['"]/;
 const missingGeminiThinkingEnforcement =
   !assistantSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
-  !leftRender3dSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
   !visualEditSource.includes("thinkingConfig: { thinkingLevel: 'high' }") ||
   weakThinkingConfigPattern.test(assistantSource) ||
-  weakThinkingConfigPattern.test(leftRender3dSource) ||
   weakThinkingConfigPattern.test(visualEditSource) ||
   !geminiServiceSource.includes('generationConfig,') ||
   !geminiServiceSource.includes('this.normalizeThinkingConfig(model, {') ||
@@ -397,22 +390,6 @@ const missingGatewayDiagnostics =
 const missingCommandHandlers = requiredCommandActions.filter((action) => {
   if (action === 'cancel_generation') {
     return !assistantSource.includes("action.type === 'cancel_generation'") || !assistantSource.includes('cancelGeneration()');
-  }
-  if (action === 'run_preprocess') {
-    return (
-      !assistantSource.includes('runPreprocessAction') ||
-      !assistantSource.includes('archviz:assistant-run-render3d-preprocess') ||
-      !leftRender3dSource.includes('archviz:assistant-run-render3d-preprocess') ||
-      !leftRender3dSource.includes('handleProblemAreaAnalysis()')
-    );
-  }
-  if (action === 'run_image_to_cad_preprocess') {
-    return (
-      !assistantSource.includes("action.type === 'run_image_to_cad_preprocess'") ||
-      !assistantSource.includes('archviz:assistant-run-image-to-cad-preprocess') ||
-      !leftImageToCadSource.includes('archviz:assistant-run-image-to-cad-preprocess') ||
-      !leftImageToCadSource.includes('handlePreprocess')
-    );
   }
   if (action === 'run_masterplan_zone_detection') {
     return (

@@ -22,6 +22,9 @@ const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana 
 const PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES = 420;
 const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
 const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
+const OUTPUT_VERIFICATION_MAX_PROMPT_CHARS = 10000;
+const OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS = 900;
+export const OUTPUT_VERIFICATION_MIN_SCORE = 85;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -58,6 +61,15 @@ interface InternalGeminiRequest extends GeminiRequest {
 }
 
 type ImagePromptKind = 'generation' | 'batch' | 'edit' | 'grid';
+export type ImageGenerationProgressPhase = 'ai-middle-layer' | 'generation' | 'image-transfer' | 'verification' | 'complete';
+
+export interface ImageGenerationProgress {
+  phase: ImageGenerationProgressPhase;
+  progress: number;
+  message?: string;
+}
+
+export type ImageGenerationProgressCallback = (progress: ImageGenerationProgress) => void;
 
 interface PromptOptimizationContext {
   promptKind: ImagePromptKind;
@@ -91,12 +103,17 @@ export interface GenerationConfig {
   openAI?: {
     background?: 'opaque' | 'auto';
   };
+  onProgress?: ImageGenerationProgressCallback;
 }
 
 export interface GeminiResponse {
   text: string | null;
   images: GeneratedImage[];
   finishReason?: string;
+  optimizedPrompt?: string;
+  outputVerification?: ImageOutputVerificationResult;
+  outputVerifications?: ImageOutputVerificationResult[];
+  outputVerificationAttempts?: number;
 }
 
 export interface GeneratedImage {
@@ -113,11 +130,33 @@ export interface BatchImageRequest {
   openAI?: GenerationConfig['openAI'];
   abortSignal?: AbortSignal;
   imageGenerationModel?: ImageGenerationModel;
+  onProgress?: ImageGenerationProgressCallback;
+  promptAlreadyOptimized?: boolean;
 }
 
 export interface BatchImageResponse {
   images: GeneratedImage[];
   text: string | null;
+  optimizedPrompt?: string;
+  outputVerifications?: ImageOutputVerificationResult[];
+  outputVerificationAttempts?: number;
+}
+
+export interface ImageOutputVerificationRequest {
+  prompt: string;
+  generatedImage: ImageData;
+  referenceImages?: ImageData[];
+  originalPrompt?: string;
+  threshold?: number;
+  generationConfig?: GenerationConfig;
+}
+
+export interface ImageOutputVerificationResult {
+  score: number;
+  passed: boolean;
+  summary: string;
+  issues: string[];
+  revisedPrompt?: string;
 }
 
 export interface BatchTextResult {
@@ -322,20 +361,25 @@ export class GeminiService {
       : request;
 
     if (this.isOpenAIImageRequest(preparedRequest)) {
-      return this.generateOpenAIImages(preparedRequest);
+      return this.withOptimizedPrompt(await this.generateOpenAIImages(preparedRequest), preparedRequest);
     }
 
     const contents = this.buildContents(preparedRequest);
     const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE'], this.model);
 
+    this.emitProgress(preparedRequest.generationConfig, 'generation', 5, 'Starting image model request...');
     const response = await this.executeWithRetry(() =>
       geminiRequest(this.model, 'generateContent', {
         contents,
         generationConfig,
       }, { signal: preparedRequest.generationConfig?.abortSignal })
     );
+    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 35, 'Receiving generated image...');
 
-    return this.parseResponse(response);
+    const parsed = this.parseResponse(response);
+    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 100, 'Image transfer complete.');
+    this.emitProgress(preparedRequest.generationConfig, 'complete', 100);
+    return this.withOptimizedPrompt(parsed, preparedRequest);
   }
 
   async generateText(request: GeminiRequest): Promise<string> {
@@ -361,7 +405,7 @@ export class GeminiService {
     const preparedRequest = await this.prepareImageRequest(request, 'generation');
 
     if (this.isOpenAIImageRequest(preparedRequest)) {
-      return this.generateOpenAIImages(preparedRequest);
+      return this.withOptimizedPrompt(await this.generateOpenAIImages(preparedRequest), preparedRequest);
     }
 
     const imagePrompt = /\b(generate|create|edit|convert|transform|model:|task:|output artifact:)\b/i.test(preparedRequest.prompt)
@@ -371,14 +415,19 @@ export class GeminiService {
     const contents = this.buildContents({ ...preparedRequest, prompt: imagePrompt });
     const generationConfig = this.buildGenerationConfig(preparedRequest.generationConfig, ['TEXT', 'IMAGE'], IMAGE_MODEL);
 
+    this.emitProgress(preparedRequest.generationConfig, 'generation', 5, 'Starting image model request...');
     const response = await this.executeWithRetry(() =>
       geminiRequest(IMAGE_MODEL, 'generateContent', {
         contents,
         generationConfig,
       }, { signal: preparedRequest.generationConfig?.abortSignal })
     );
+    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 35, 'Receiving generated image...');
 
-    return this.parseResponse(response);
+    const parsed = this.parseResponse(response);
+    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 100, 'Image transfer complete.');
+    this.emitProgress(preparedRequest.generationConfig, 'complete', 100);
+    return this.withOptimizedPrompt(parsed, preparedRequest);
   }
 
   // --------------------------------------------------------------------------
@@ -395,8 +444,11 @@ export class GeminiService {
       generationConfig: {
         imageConfig: request.imageConfig,
         openAI: request.openAI,
-        abortSignal: request.abortSignal
-      }
+        abortSignal: request.abortSignal,
+        onProgress: request.onProgress
+      },
+      promptOptimized: request.promptAlreadyOptimized,
+      skipPromptOptimization: request.promptAlreadyOptimized
     }, 'batch');
 
     for (let i = 0; i < numberOfImages; i++) {
@@ -414,7 +466,8 @@ export class GeminiService {
           generationConfig: {
             imageConfig: request.imageConfig,
             openAI: request.openAI,
-            abortSignal: request.abortSignal
+            abortSignal: request.abortSignal,
+            onProgress: request.onProgress
           }
         } as InternalGeminiRequest)
       );
@@ -435,7 +488,8 @@ export class GeminiService {
 
     return {
       images: allImages,
-      text: combinedText.trim() || null
+      text: combinedText.trim() || null,
+      optimizedPrompt: this.getOptimizedPromptForResponse(preparedBaseRequest)
     };
   }
 
@@ -584,6 +638,7 @@ export class GeminiService {
       replace: 'object',
       people: 'people'
     };
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 8, 'Preparing image edit prompt...');
     const adaptedEditPrompt = adaptPromptForImageGenerationModel(
       editPrompt,
       request.imageGenerationModel || 'nano-banana',
@@ -595,6 +650,8 @@ export class GeminiService {
         promptKind: 'edit'
       }
     );
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 35, 'Image edit prompt prepared.');
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 55, 'Optimizing prompt for image model...');
     const optimizedEditPrompt = await this.optimizePromptForImageGeneration(
       adaptedEditPrompt,
       images,
@@ -607,6 +664,7 @@ export class GeminiService {
         originalUserPrompt: request.prompt
       }
     );
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
 
     if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
@@ -616,20 +674,23 @@ export class GeminiService {
       if (request.maskImage && maskMode === 'guided') openAIImages.push(request.maskImage);
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
 
-      return this.generateOpenAIImages({
+      const result = await this.generateOpenAIImages({
         prompt: optimizedEditPrompt,
         images: openAIImages,
         maskImage: maskMode === 'strict' ? request.maskImage : undefined,
         imageGenerationModel: request.imageGenerationModel,
         generationConfig: request.generationConfig,
       });
+      return optimizedEditPrompt !== adaptedEditPrompt
+        ? { ...result, optimizedPrompt: optimizedEditPrompt }
+        : result;
     }
 
     return this.generate({
       prompt: optimizedEditPrompt,
       images,
       imageGenerationModel: request.imageGenerationModel,
-      promptOptimized: true,
+      promptOptimized: optimizedEditPrompt !== adaptedEditPrompt,
       skipPromptOptimization: true,
       generationConfig: request.generationConfig
     } as InternalGeminiRequest);
@@ -637,6 +698,30 @@ export class GeminiService {
 
   async generateBatchImagesParallel(request: BatchImageRequest): Promise<BatchImageResponse> {
     return this.generateBatchImages(request);
+  }
+
+  async verifyImageOutput(request: ImageOutputVerificationRequest): Promise<ImageOutputVerificationResult> {
+    const threshold = request.threshold ?? OUTPUT_VERIFICATION_MIN_SCORE;
+    const referenceImages = request.referenceImages || [];
+    const images = [...referenceImages, request.generatedImage];
+
+    this.emitProgress(request.generationConfig, 'verification', 8, 'Checking generated image...');
+    const raw = await this.generateText({
+      model: PROMPT_OPTIMIZER_MODEL,
+      prompt: this.buildOutputVerificationPrompt(request, referenceImages.length, threshold),
+      images,
+      generationConfig: {
+        temperature: 0.05,
+        topP: 0.8,
+        maxOutputTokens: OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS,
+        responseModalities: ['TEXT'],
+        thinkingConfig: { thinkingLevel: 'high' },
+        abortSignal: request.generationConfig?.abortSignal
+      }
+    });
+    this.emitProgress(request.generationConfig, 'verification', 100, 'Output verification complete.');
+
+    return this.parseOutputVerificationResult(raw, request.prompt, threshold);
   }
 
   // --------------------------------------------------------------------------
@@ -726,7 +811,7 @@ export class GeminiService {
       : request;
 
     if (wantsImage && this.isOpenAIImageRequest(preparedRequest)) {
-      yield await this.generateOpenAIImages(preparedRequest);
+      yield this.withOptimizedPrompt(await this.generateOpenAIImages(preparedRequest), preparedRequest);
       return;
     }
 
@@ -739,30 +824,36 @@ export class GeminiService {
     );
 
     if (wantsImage && this.usesNonStreamingImageGeneration(model)) {
+      this.emitProgress(preparedRequest.generationConfig, 'generation', 5, 'Starting image model request...');
       const response = await this.executeWithRetry(() =>
         geminiRequest(model, 'generateContent', {
           contents,
           generationConfig,
         }, { signal: preparedRequest.generationConfig?.abortSignal })
       );
+      this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 35, 'Receiving generated image...');
       const parsed = this.parseResponse(response);
+      this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 100, 'Image transfer complete.');
+      this.emitProgress(preparedRequest.generationConfig, 'complete', 100);
       if (parsed.text || parsed.images.length > 0) {
-        yield parsed;
+        yield this.withOptimizedPrompt(parsed, preparedRequest);
       }
       return;
     }
 
+    this.emitProgress(preparedRequest.generationConfig, 'generation', 5, 'Starting image stream...');
     const response = await geminiStreamRequest(model, {
       contents,
       generationConfig,
     }, { signal: preparedRequest.generationConfig?.abortSignal });
+    this.emitProgress(preparedRequest.generationConfig, 'generation', 25, 'Image stream connected.');
 
     const contentType = response.headers.get('content-type') || '';
     if (!response.body || contentType.includes('application/json')) {
       const json = await response.json();
       const parsed = this.parseResponse(json);
       if (parsed.text || parsed.images.length > 0) {
-        yield parsed;
+        yield this.withOptimizedPrompt(parsed, preparedRequest);
       }
       return;
     }
@@ -776,6 +867,8 @@ export class GeminiService {
     let buffer = '';
     const STREAM_READ_TIMEOUT_MS = 30_000;
 
+    let streamChunkCount = 0;
+
     while (true) {
       const { done, value } = await Promise.race([
         reader.read(),
@@ -787,6 +880,15 @@ export class GeminiService {
         ),
       ]);
       if (done) break;
+      streamChunkCount += 1;
+      if (accumulatedImages.length === 0) {
+        this.emitProgress(
+          preparedRequest.generationConfig,
+          'generation',
+          Math.min(82, 30 + streamChunkCount * 6),
+          'Generating image...'
+        );
+      }
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -820,6 +922,7 @@ export class GeminiService {
                     lastThoughtImage = generatedImage;
                   } else {
                     accumulatedImages.push(generatedImage);
+                    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 85, 'Receiving generated image...');
                   }
                 }
               }
@@ -832,7 +935,8 @@ export class GeminiService {
                 : [];
             yield {
               text: accumulatedText || null,
-              images: visibleImages
+              images: visibleImages,
+              optimizedPrompt: this.getOptimizedPromptForResponse(preparedRequest)
             };
           } catch {
             // Skip malformed SSE chunks
@@ -868,6 +972,7 @@ export class GeminiService {
                   lastThoughtImage = generatedImage;
                 } else {
                   accumulatedImages.push(generatedImage);
+                  this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 85, 'Receiving generated image...');
                 }
               }
             }
@@ -879,34 +984,73 @@ export class GeminiService {
               : [];
           yield {
             text: accumulatedText || null,
-            images: visibleImages
+            images: visibleImages,
+            optimizedPrompt: this.getOptimizedPromptForResponse(preparedRequest)
           };
         } catch {
           // Skip malformed final chunk
         }
       }
     }
+    this.emitProgress(preparedRequest.generationConfig, 'image-transfer', 100, 'Image transfer complete.');
+    this.emitProgress(preparedRequest.generationConfig, 'complete', 100);
   }
 
   // --------------------------------------------------------------------------
   // Private Helper Methods
   // --------------------------------------------------------------------------
 
+  private emitProgress(
+    generationConfig: GenerationConfig | undefined,
+    phase: ImageGenerationProgressPhase,
+    progress: number,
+    message?: string
+  ): void {
+    generationConfig?.onProgress?.({
+      phase,
+      progress: Math.min(100, Math.max(0, progress)),
+      message
+    });
+  }
+
+  private getOptimizedPromptForResponse(request: GeminiRequest | InternalGeminiRequest): string | undefined {
+    const prompt = request.prompt?.trim();
+    return (request as InternalGeminiRequest).promptOptimized && prompt ? prompt : undefined;
+  }
+
+  private withOptimizedPrompt<T extends GeminiResponse>(
+    response: T,
+    request: GeminiRequest | InternalGeminiRequest
+  ): T {
+    const optimizedPrompt = this.getOptimizedPromptForResponse(request);
+    return optimizedPrompt ? { ...response, optimizedPrompt } : response;
+  }
+
   private async prepareImageRequest(
     request: InternalGeminiRequest,
     promptKind: ImagePromptKind = 'generation'
   ): Promise<InternalGeminiRequest> {
     if (request.promptOptimized) {
+      this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'Prompt already prepared.');
       return request;
     }
 
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 8, 'Preparing image prompt...');
     const prompt = this.prepareImagePrompt(request, promptKind);
     const preparedRequest: InternalGeminiRequest = { ...request, prompt };
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 35, 'Image prompt prepared.');
 
     if (request.skipPromptOptimization) {
+      this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
       return preparedRequest;
     }
 
+    if (!this.shouldOptimizePromptForImageGeneration(prompt, request.images)) {
+      this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
+      return preparedRequest;
+    }
+
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 55, 'Optimizing prompt for image model...');
     const optimizedPrompt = await this.optimizePromptForImageGeneration(
       prompt,
       request.images,
@@ -918,6 +1062,7 @@ export class GeminiService {
         hasReferenceImages: Boolean(request.images && request.images.length > 1)
       }
     );
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
 
     return {
       ...preparedRequest,
@@ -1016,6 +1161,41 @@ export class GeminiService {
     ].filter(Boolean).join('\n');
   }
 
+  private buildOutputVerificationPrompt(
+    request: ImageOutputVerificationRequest,
+    referenceImageCount: number,
+    threshold: number
+  ): string {
+    const imageRelationship = referenceImageCount === 0
+      ? 'Attached image 1 is the generated output to evaluate.'
+      : `Attached images 1-${referenceImageCount} are the source/reference inputs. Attached image ${referenceImageCount + 1} is the generated output to evaluate.`;
+    const originalPromptLine = request.originalPrompt?.trim()
+      ? `Original user/app prompt before middle-layer tuning:\n${this.truncatePromptForOptimizer(request.originalPrompt.trim(), 2000)}`
+      : '';
+
+    return [
+      'You are the output verification layer inside an architectural image generation app.',
+      'Evaluate whether the generated output image satisfies the prompt and respects the attached source/reference images.',
+      imageRelationship,
+      '',
+      'Score the generated output from 0 to 100.',
+      `A score of ${threshold} or higher means the image is precise and effective enough to show to the user.`,
+      'Score strictly but practically: preserve-source failures, wrong camera/composition, missing requested style/lighting, architectural drift, broken geometry, unwanted text changes, and obvious artifacts should reduce the score.',
+      'Do not penalize harmless variation when the prompt asks for a render variation.',
+      '',
+      'If the score is below the threshold, write a revised prompt that can be sent directly to the image model with the same reference images. The revised prompt should be natural, concise, and focused on correcting the observed issues while preserving the original intent.',
+      'If the score is at or above the threshold, revisedPrompt must be an empty string.',
+      '',
+      originalPromptLine,
+      '',
+      'Prompt used for the generated output:',
+      this.truncatePromptForOptimizer(request.prompt, OUTPUT_VERIFICATION_MAX_PROMPT_CHARS),
+      '',
+      'Return only valid JSON with this exact shape:',
+      '{"score": number, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string"}'
+    ].filter(Boolean).join('\n');
+  }
+
   private truncatePromptForOptimizer(prompt: string, maxChars: number): string {
     if (prompt.length <= maxChars) return prompt;
     const headLength = Math.floor(maxChars * 0.68);
@@ -1040,6 +1220,58 @@ export class GeminiService {
     }
 
     return normalized;
+  }
+
+  private parseOutputVerificationResult(
+    raw: string,
+    fallbackPrompt: string,
+    threshold: number
+  ): ImageOutputVerificationResult {
+    const normalized = raw
+      .replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1')
+      .trim();
+    const jsonText = normalized.match(/\{[\s\S]*\}/)?.[0] || normalized;
+
+    try {
+      const parsed = JSON.parse(jsonText) as {
+        score?: unknown;
+        summary?: unknown;
+        issues?: unknown;
+        revisedPrompt?: unknown;
+      };
+      const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score))));
+      const validScore = Number.isFinite(score) ? score : 0;
+      const issues = Array.isArray(parsed.issues)
+        ? parsed.issues
+            .map((issue) => typeof issue === 'string' ? issue.trim() : '')
+            .filter(Boolean)
+            .slice(0, 6)
+        : [];
+      const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
+        ? parsed.summary.trim()
+        : validScore >= threshold
+          ? 'The generated image satisfies the prompt.'
+          : 'The generated image does not satisfy the prompt closely enough.';
+      const revisedPrompt = typeof parsed.revisedPrompt === 'string'
+        ? this.cleanOptimizedPrompt(parsed.revisedPrompt, fallbackPrompt)
+        : fallbackPrompt;
+
+      return {
+        score: validScore,
+        passed: validScore >= threshold,
+        summary,
+        issues,
+        revisedPrompt: validScore >= threshold ? undefined : revisedPrompt
+      };
+    } catch {
+      return {
+        score: 0,
+        passed: false,
+        summary: 'Output verification returned an unreadable response.',
+        issues: ['The verifier could not produce a valid score for the generated image.'],
+        revisedPrompt: fallbackPrompt
+      };
+    }
   }
 
   private isOpenAIImageRequest(request: GeminiRequest): boolean {
@@ -1068,6 +1300,7 @@ export class GeminiService {
   private async generateOpenAIImages(
     request: GeminiRequest & { numberOfImages?: number; maskImage?: ImageData }
   ): Promise<GeminiResponse> {
+    this.emitProgress(request.generationConfig, 'generation', 5, 'Starting image model request...');
     const response = await this.executeWithRetry(() =>
       openAIImageRequest({
         model: OPENAI_IMAGE_MODEL,
@@ -1078,8 +1311,12 @@ export class GeminiService {
         generationConfig: request.generationConfig,
       }, { signal: request.generationConfig?.abortSignal })
     );
+    this.emitProgress(request.generationConfig, 'image-transfer', 35, 'Receiving generated image...');
 
-    return this.parseOpenAIResponse(response);
+    const parsed = this.parseOpenAIResponse(response);
+    this.emitProgress(request.generationConfig, 'image-transfer', 100, 'Image transfer complete.');
+    this.emitProgress(request.generationConfig, 'complete', 100);
+    return parsed;
   }
 
   private buildContents(request: GeminiRequest): Array<{ role: 'user'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
@@ -1133,6 +1370,7 @@ export class GeminiService {
       imageConfig,
       responseModalities,
       thinkingConfig,
+      onProgress,
       ...rest
     } = normalizedConfig;
     const wantsImage = (responseModalities || requestedModalities).includes('IMAGE');

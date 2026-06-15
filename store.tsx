@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -112,6 +112,7 @@ const createTestSnapshot = (state: AppState) => ({
   prompt: state.prompt,
   isGenerating: state.isGenerating,
   progress: state.progress,
+  generationStage: state.generationStage,
   uploadedImage: summarizeDataUrl(state.uploadedImage),
   sourceImage: summarizeDataUrl(state.sourceImage),
   canvas: state.canvas,
@@ -145,6 +146,12 @@ const normalizeRenderMode = (mode: unknown): RenderGenerationMode => {
     : DEFAULT_RENDER_GENERATION_MODE;
 };
 
+const normalizeRender3DSourceMode = (mode: unknown): Render3DSourceMode => {
+  return RENDER3D_SOURCE_MODES.includes(mode as Render3DSourceMode)
+    ? mode as Render3DSourceMode
+    : DEFAULT_RENDER3D_SOURCE_MODE;
+};
+
 const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => {
   return IMAGE_GENERATION_MODELS.includes(model as ImageGenerationModel)
     ? model as ImageGenerationModel
@@ -153,7 +160,9 @@ const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => 
 
 const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
   ...workflow,
+  render3dSourceMode: normalizeRender3DSourceMode(workflow.render3dSourceMode),
   renderMode: normalizeRenderMode(workflow.renderMode),
+  upscaleMode: workflow.upscaleMode === 'ai-slop' ? 'ai-slop' : 'resolution',
 });
 
 const updateWorkflow = (
@@ -287,8 +296,7 @@ const initialWorkflow: WorkflowSettings = {
   // 1. 3D to Render
   sourceType: 'rhino',
   viewType: 'exterior',
-  prioritizationEnabled: false,
-  detectedElements: [],
+  render3dSourceMode: DEFAULT_RENDER3D_SOURCE_MODE,
   renderMode: DEFAULT_RENDER_GENERATION_MODE,
   canvasSync: false,
   compareMode: false,
@@ -306,8 +314,6 @@ const initialWorkflow: WorkflowSettings = {
   cadDrawingType: 'plan',
   cadScale: '1:100',
   cadOrientation: 0,
-  cadLayerDetectionEnabled: false,
-  cadLayers: [],
   cadCamera: {
     height: 1.6,
     angle: 'horizontal',
@@ -780,6 +786,7 @@ const initialWorkflow: WorkflowSettings = {
   sketchMoodPreset: 'soft-daylight',
 
   // 8. Upscale
+  upscaleMode: 'resolution',
   upscaleFactor: '8x',
   upscaleSharpness: 50,
   upscaleClarity: 40,
@@ -810,7 +817,6 @@ const initialWorkflow: WorkflowSettings = {
   imgToCadLine: { sensitivity: 50, simplify: 20, connect: true },
   imgToCadLayers: { walls: true, windows: true, details: true, hidden: false },
   imgToCadFormat: 'dxf',
-  imgToCadPreprocess: { guidance: '', focus: [] },
 
   // 12. Video Studio
   videoState: initialVideoState,
@@ -991,6 +997,7 @@ const initialState: AppState = {
   sourceImage: null,
   isGenerating: false,
   progress: 0,
+  generationStage: null,
   prompt: '',
   workflow: initialWorkflow,
   materialValidation: initialMaterialValidation,
@@ -1035,6 +1042,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'CLEAR_CANVAS': return { ...state, uploadedImage: null, sourceImage: null };
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
+    case 'SET_GENERATION_STAGE': return { ...state, generationStage: action.payload };
     case 'UPDATE_WORKFLOW': return { ...state, workflow: updateWorkflow(state.workflow, action.payload) };
     
     // Video State Reducers

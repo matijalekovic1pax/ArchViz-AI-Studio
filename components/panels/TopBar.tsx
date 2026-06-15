@@ -13,6 +13,7 @@ import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
 import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
+import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'generate-text': 'workflows.generateText',
@@ -735,6 +736,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       default: return t('generation.generateRender');
     }
   };
+  const generationProgress = getGenerationProgressPercent(state.progress);
+  const generationStageLabel = state.generationStage
+    ? t(GENERATION_STAGE_LABEL_KEYS[state.generationStage])
+    : t('generation.generating');
 
   return (
     <>
@@ -1220,12 +1225,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                 onClick={handleGenerate}
                 disabled={isDisabled || state.isGenerating}
                 className={cn(
-                  "relative group flex items-center gap-3 px-8 py-2.5 rounded-full transition-all duration-300 border border-transparent overflow-hidden",
+                  "relative group flex min-w-[176px] items-center justify-center gap-3 px-8 py-2.5 rounded-full transition-all duration-300 border border-transparent overflow-hidden",
                   isDisabled 
                     ? "bg-surface-sunken text-foreground-muted cursor-not-allowed" 
                     : "bg-foreground text-background shadow-lg hover:scale-105 active:scale-95 hover:shadow-xl hover:border-accent/50"
                 )}
               >
+                {state.isGenerating && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-0 bg-accent/25 transition-[width] duration-500 ease-out"
+                    style={{ width: `${generationProgress}%` }}
+                  />
+                )}
                 {/* Animated Background Gradient for Active State */}
                 {!isDisabled && !state.isGenerating && (
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
@@ -1233,20 +1245,20 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
                 {state.isGenerating ? (
                   <>
-                    <Loader2 className="animate-spin" size={18} />
-                    <div className="flex flex-col items-start leading-none">
-                      <span className="font-bold text-xs">{t('generation.generating')}</span>
-                      <span className="text-[9px] opacity-80 font-mono">{Math.round(state.progress)}%</span>
+                    <Loader2 className="relative z-10 shrink-0 animate-spin" size={18} />
+                    <div className="relative z-10 flex min-w-0 flex-col items-start leading-none">
+                      <span className="max-w-[116px] truncate text-xs font-bold">{generationStageLabel}</span>
+                      <span className="text-[9px] opacity-80 font-mono tabular-nums">{generationProgress}%</span>
                     </div>
                   </>
                 ) : (
                   <>
                     {state.mode === 'document-translate' ? (
-                      <Languages size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                      <Languages size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     ) : (
-                      <Sparkles size={18} className={cn(!isDisabled && "group-hover:text-accent transition-colors")} />
+                      <Sparkles size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     )}
-                    <span className="font-bold text-sm tracking-wide">{getGenerateLabel()}</span>
+                    <span className="relative z-10 font-bold text-sm tracking-wide">{getGenerateLabel()}</span>
                   </>
                 )}
               </button>

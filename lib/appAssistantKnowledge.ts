@@ -35,9 +35,9 @@ export const APP_ASSISTANT_GLOBAL_RULES = [
   'Infer obvious inputs from current images, selections, documents, history, and attached references when reasonably clear, but state the inference briefly and ask if uncertainty would change the result.',
   'Before running a final output, check that the feature has its essential input: prompt, source image, selection, reference image, drawing/document, placement, batch image, video frame, headshot photo, or PDF queue as appropriate.',
   'When a reference photo, style image, material sample, product photo, or background image would improve the result, ask the user to attach it in the assistant instead of pretending you can see a missing image.',
-  'Use available analysis or preprocessing actions during setup when they can reduce risk before the final run. For Visual Edit selections, guide the user to select manually instead of triggering auto-selection.',
+  'Use available detection helpers during setup when they can reduce risk before the final run. For Visual Edit selections, guide the user to select manually instead of triggering auto-selection.',
   'When settings are applied or a direction is settled, ask whether the user is ready for the assistant to render/generate now.',
-  'The assistant can request validated app actions: switch modes, switch the app language, set the top-bar image model, update current feature settings, create and select custom style presets, replace structured feature lists such as Masterplan zones, Exploded View components, Section areas, and manual Multi-Angle points, place attached images into supported image slots, place attached documents/PDFs into supported document workflows, clear or remove uploaded references, workflow documents, and queue items, import attached project JSON when explicitly requested, open panels/tabs, open feedback/admin/documentation surfaces, clear/reset the canvas, trigger AI helpers for 3D analysis, Image to CAD guidance, Masterplan zone detection, Exploded View component detection, and Section area detection, undo/redo selection and custom boundary changes, cancel active generation, reset the project when explicitly requested, sign out when explicitly requested, trigger generation/preprocessing, export the current project JSON, export Material Validation reports, download the current image as PNG or JPG at full or medium resolution, and download existing outputs.',
+  'The assistant can request validated app actions: switch modes, switch the app language, set the top-bar image model, update current feature settings, create and select custom style presets, replace structured feature lists such as Masterplan zones, Exploded View components, Section areas, and manual Multi-Angle points, place attached images into supported image slots, place attached documents/PDFs into supported document workflows, clear or remove uploaded references, workflow documents, and queue items, import attached project JSON when explicitly requested, open panels/tabs, open feedback/admin/documentation surfaces, clear/reset the canvas, trigger AI helpers for Masterplan zone detection, Exploded View component detection, and Section area detection, undo/redo selection and custom boundary changes, cancel active generation, reset the project when explicitly requested, sign out when explicitly requested, trigger generation, export the current project JSON, export Material Validation reports, download the current image as PNG or JPG at full or medium resolution, and download existing outputs.',
   'Use download actions only for files or generated outputs that already exist in the workspace; do not claim a missing output was downloaded.',
   'Only trigger final workflow execution after the user explicitly confirms after setup or gives a complete operational command with all required inputs already present.',
   'Never expose implementation-only field names in user prose. For lighting, use only the visible UI terms: Light Source, Front, Back, Left, Right, intensity, color temperature, shadows, and time of day.',
@@ -112,14 +112,13 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'In Strict Realism, set source type/view type, style or reference, Light Source, time of day, atmosphere, scenery, aspect ratio, and resolution as needed.',
       'In Enhance, do not expose additional settings; the user should only need to run Generate after selecting the mode.',
     ],
-    controls: ['Strict Realism/Enhance', 'source type', 'view type', 'style reference', 'background reference', 'AI problem analysis', 'Light Source grid', 'color temperature', 'time of day', 'atmosphere', 'scenery', 'resolution'],
+    controls: ['Strict Realism/Enhance', 'source type', 'view type', 'style reference', 'background reference', 'Light Source grid', 'color temperature', 'time of day', 'atmosphere', 'scenery', 'resolution'],
     specificGuidance: [
       'A style preset is a built-in style selected in the left panel Presets tab. It applies a known visual style bundle without requiring an uploaded reference image.',
       'A style reference image is uploaded in the left panel Image tab. It is for visual language only: rendering medium, color grading, contrast curve, material finish, lighting character, atmosphere, camera polish, grain, and mood.',
       'A style reference image must not be treated as content to copy. Do not tell users it copies geometry, subject, composition, background, furniture, people, signage, logos, or scene layout.',
       'A background reference is a separate left-panel control for the surrounding environment/background context. It is not the same as a style reference.',
       'For a visible canvas/source image, infer source type and view type from the image when reasonably clear. For commercial interior model screenshots from BIM/Revit-like spaces, set source type to Revit and view type to Interior.',
-      'Run AI pre-processing during Strict Realism setup when the source contains skylights, ceiling frames, columns, trusses, glass, signage, stairs, or other details likely to need preservation.',
       'The 3D-to-render generation modes are Strict Realism and Enhance. If the user calls them styles, clarify that they are generation modes, not style presets.',
       'Strict Realism is for preserving source geometry, camera, composition, walls, openings, and spatial relationships as closely as possible while turning the model screenshot into a realistic render.',
       'Enhance is for an already rendered but synthetic-looking CGI/standard render; it re-renders the same image more photorealistically while preserving geometry, camera, layout, signage, people, furniture, and object placement.',
@@ -161,13 +160,11 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Upload a clean high-contrast PNG or JPG export.',
       'Set drawing type, scale, orientation, output view, and room or project type.',
-      'Use AI layer detection when the drawing has readable walls, openings, and circulation.',
       'Tune camera, furnishing, people, context, lighting, atmosphere, style, and output resolution in the right panel.',
     ],
-    controls: ['drawing type', 'scale', 'orientation', 'layer detection', 'room type', 'camera', 'furnishing', 'context', 'style reference'],
+    controls: ['drawing type', 'scale', 'orientation', 'room type', 'camera', 'furnishing', 'context', 'style reference'],
     specificGuidance: [
       'CAD to Render uses flat CAD exports as visual guidance for a render; it does not create measured CAD geometry.',
-      'Layer detection helps identify readable walls, openings, stairs, dimensions, text, and circulation from the uploaded drawing.',
       'Drawing type should match the input: plan, section, elevation, or site.',
       'If the user wants line extraction or DXF/DWG/SVG/PDF output, redirect to Image to CAD.',
     ],
@@ -343,10 +340,9 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     steps: [
       'Upload a clear photo, render, plan image, or facade image.',
       'Choose photo or render input type and elevation, plan, or detail output.',
-      'Run Generate CAD Guidance when the source is complex.',
       'Tune line sensitivity, simplify, connect gaps, layer toggles, and export format.',
     ],
-    controls: ['input type', 'output intent', 'CAD guidance', 'line sensitivity', 'simplify', 'connect gaps', 'layers', 'DXF/DWG/SVG/PDF format'],
+    controls: ['input type', 'output intent', 'line sensitivity', 'simplify', 'connect gaps', 'layers', 'DXF/DWG/SVG/PDF format'],
     specificGuidance: [
       'Image to CAD extracts 2D CAD-like linework from an image; it does not generate a 3D mesh or model.',
       'Line sensitivity controls how much line detail is detected, simplify reduces noise, and connect gaps helps broken lines become continuous.',
@@ -525,7 +521,7 @@ export function buildAppAssistantPrompt({
     '- If the user gives a broad goal, treat it as setup intent. Ask one focused question or offer 2-3 concrete directions before changing many settings or running the workflow.',
     '- If the user gives enough intent, infer safe obvious settings, request useful app actions, and explain what those actions prepare.',
     '- You can set curated controls and additional current-state feature settings through validated action paths. Prefer precise paths from ASSISTANT CONTROL CAPABILITY over prose-only instructions.',
-    '- Use available preprocessing/analysis actions before final execution when the source is complex or the feature benefits from diagnosis.',
+    '- Use available detection helpers before final execution when the source is complex and the feature has a relevant detector.',
     '- If the user asks to download/export the current project or an existing output, request the matching download action instead of explaining where the button is.',
     '- Before final execution, ask for missing style/reference/output choices when they would meaningfully change the result.',
     '- If the user sounds unsure, guide them through a decision path instead of only listing settings.',
@@ -621,7 +617,6 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Generation mode: ${wf.renderMode}`,
         `Style reference enabled: ${wf.styleReferenceEnabled ? 'yes' : 'no'}`,
         `Background reference enabled: ${wf.backgroundReferenceEnabled ? 'yes' : 'no'}`,
-        `Detected problem areas: ${wf.detectedElements.length}`,
         `Light Source: ${renderLight.sun.enabled ? renderLightSource : 'off'}, intensity ${renderLight.sun.intensity}, color temperature ${renderLight.sun.colorTemp}K, shadows ${renderLight.shadows.enabled ? `${renderLight.shadows.intensity}%` : 'off'}, time of day ${renderLight.preset}`,
         `Atmosphere: ${wf.render3d.atmosphere.mood}, fog ${wf.render3d.atmosphere.fog.enabled ? wf.render3d.atmosphere.fog.density : 'off'}, bloom ${wf.render3d.atmosphere.bloom.enabled ? wf.render3d.atmosphere.bloom.intensity : 'off'}`,
         `Scenery: people ${wf.render3d.scenery.people.enabled ? wf.render3d.scenery.people.count : 'off'}, vegetation ${wf.render3d.scenery.trees.enabled ? wf.render3d.scenery.trees.count : 'off'}, vehicles ${wf.render3d.scenery.cars.enabled ? wf.render3d.scenery.cars.count : 'off'}, preset ${wf.render3d.scenery.preset}`,
@@ -640,8 +635,6 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       lines.push(
         `Drawing type: ${wf.cadDrawingType}`,
         `Scale: ${wf.cadScale}`,
-        `Layer detection: ${wf.cadLayerDetectionEnabled ? 'enabled' : 'disabled'}`,
-        `Detected layers: ${wf.cadLayers.length}`,
         `Room type: ${wf.cadSpace.roomType}`,
         `Camera: ${wf.cadCamera.height}m, ${wf.cadCamera.focalLength}mm, look ${wf.cadCamera.lookAt}`,
         `Furnishing: ${wf.cadFurnishing.auto ? 'auto' : 'manual'}, ${wf.cadFurnishing.occupancy}`
@@ -739,8 +732,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Format: ${wf.imgToCadFormat}`,
         `Line sensitivity: ${wf.imgToCadLine.sensitivity}`,
         `Simplify: ${wf.imgToCadLine.simplify}`,
-        `Connect gaps: ${wf.imgToCadLine.connect ? 'yes' : 'no'}`,
-        `CAD guidance: ${wf.imgToCadPreprocess.guidance ? 'present' : 'empty'}`
+        `Connect gaps: ${wf.imgToCadLine.connect ? 'yes' : 'no'}`
       );
       break;
     case 'video':

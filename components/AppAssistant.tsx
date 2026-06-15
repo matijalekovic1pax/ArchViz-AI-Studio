@@ -1510,16 +1510,12 @@ export const AppAssistant: React.FC = () => {
     const signOutAction = actions.find((action) => action.type === 'sign_out');
     const runGenerationAction = actions.find((action) => action.type === 'run_generation');
     const cancelGenerationAction = actions.find((action) => action.type === 'cancel_generation');
-    const runPreprocessAction = actions.find((action) => action.type === 'run_preprocess');
-    const runImageToCadPreprocessAction = actions.find((action) => action.type === 'run_image_to_cad_preprocess');
     const runMasterplanZoneDetectionAction = actions.find((action) => action.type === 'run_masterplan_zone_detection');
     const runExplodedComponentDetectionAction = actions.find((action) => action.type === 'run_exploded_component_detection');
     const runSectionAreaDetectionAction = actions.find((action) => action.type === 'run_section_area_detection');
     const prepareSelectionAction = actions.find((action) => action.type === 'prepare_image_selection');
     const downloadActions = actions.filter(isDownloadAction);
     const helperActions = [
-      runPreprocessAction,
-      runImageToCadPreprocessAction,
       runMasterplanZoneDetectionAction,
       runExplodedComponentDetectionAction,
       runSectionAreaDetectionAction,
@@ -1541,8 +1537,6 @@ export const AppAssistant: React.FC = () => {
         action.type !== 'sign_out' &&
         action.type !== 'run_generation' &&
         action.type !== 'cancel_generation' &&
-        action.type !== 'run_preprocess' &&
-        action.type !== 'run_image_to_cad_preprocess' &&
         action.type !== 'run_masterplan_zone_detection' &&
         action.type !== 'run_exploded_component_detection' &&
         action.type !== 'run_section_area_detection' &&
@@ -1583,21 +1577,6 @@ export const AppAssistant: React.FC = () => {
 
     if (cancelGenerationAction) {
       cancelGeneration();
-    }
-
-    if (!helperSmokeHandled && runPreprocessAction) {
-      dispatch({ type: 'SET_MODE', payload: 'render-3d' });
-      dispatch({ type: 'UPDATE_WORKFLOW', payload: { prioritizationEnabled: true, detectedElements: [] } });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('archviz:assistant-run-render3d-preprocess'));
-      }, 80);
-    }
-
-    if (!helperSmokeHandled && runImageToCadPreprocessAction) {
-      dispatch({ type: 'SET_MODE', payload: 'img-to-cad' });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('archviz:assistant-run-image-to-cad-preprocess'));
-      }, 120);
     }
 
     if (!helperSmokeHandled && runMasterplanZoneDetectionAction) {
@@ -1662,12 +1641,6 @@ export const AppAssistant: React.FC = () => {
           ? `Assistant switched to ${getAssistantModeRoute(setModeAction.mode || state.mode)?.label || 'the requested feature'}.`
         : cancelGenerationAction
           ? 'Assistant asked the current generation to stop.'
-        : runPreprocessAction
-          ? stateActions.length > 0
-            ? 'Assistant applied setup and started AI pre-processing.'
-            : 'Assistant started AI pre-processing.'
-        : runImageToCadPreprocessAction
-          ? 'Assistant started Image to CAD pre-processing.'
         : runMasterplanZoneDetectionAction
           ? 'Assistant started Masterplan zone detection.'
         : runExplodedComponentDetectionAction
@@ -1928,8 +1901,6 @@ export const AppAssistant: React.FC = () => {
         const parsed = JSON.parse(raw);
         const actionTypes = Array.isArray(parsed?.actionTypes) ? parsed.actionTypes : [];
         return [
-          'run_preprocess',
-          'run_image_to_cad_preprocess',
           'run_masterplan_zone_detection',
           'run_exploded_component_detection',
           'run_section_area_detection',
@@ -1995,8 +1966,6 @@ export const AppAssistant: React.FC = () => {
 
     if (smoke.phase === 'batch-wait' && batchReady) {
       const helperActions = normalizeAppAssistantActions([
-        { type: 'run_preprocess' },
-        { type: 'run_image_to_cad_preprocess' },
         { type: 'run_masterplan_zone_detection' },
         { type: 'run_exploded_component_detection' },
         { type: 'run_section_area_detection' },

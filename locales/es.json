@@ -69,6 +69,14 @@
   "generation": {
     "generate": "Generar",
     "generating": "Generando",
+    "stages": {
+      "preparing": "Preparando",
+      "aiLayer": "Capa IA",
+      "generation": "Renderizando",
+      "transfer": "Transfiriendo",
+      "finalizing": "Finalizando",
+      "complete": "Completo"
+    },
     "generateMasterplan": "Generar Plan Maestro",
     "generateExplodedView": "Generar Vista Explosionada",
     "generateSection": "Generar Sección",
@@ -477,19 +485,6 @@
       "change": "Cambiar referencia...",
       "remove": "Eliminar referencia",
       "alt": "Referencia de fondo"
-    },
-    "problemAreas": {
-      "title": "Áreas Problemáticas",
-      "description": "La IA marca áreas detalladas o con patrones que pueden requerir más cuidado. El color indica dificultad.",
-      "run": "Ejecutar preprocesado de IA",
-      "rerun": "Repetir preprocesado de IA",
-      "analyzing": "Analizando...",
-      "analyzingStatus": "Analizando áreas problemáticas...",
-      "waiting": "Esperando resultados del análisis...",
-      "none": "No se detectaron áreas problemáticas.",
-      "high": "Alta",
-      "medium": "Media",
-      "low": "Baja"
     }
   },
   "masterplan": {

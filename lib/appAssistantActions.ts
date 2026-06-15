@@ -53,8 +53,6 @@ export type AppAssistantActionType =
   | 'sign_out'
   | 'run_generation'
   | 'cancel_generation'
-  | 'run_preprocess'
-  | 'run_image_to_cad_preprocess'
   | 'run_masterplan_zone_detection'
   | 'run_exploded_component_detection'
   | 'run_section_area_detection'
@@ -298,7 +296,6 @@ const WORKFLOW_MODE_PATH_PREFIXES: Record<GenerationMode, readonly string[]> = {
   'render-3d': [
     'sourceType',
     'viewType',
-    'prioritizationEnabled',
     'renderMode',
     'canvasSync',
     'compareMode',
@@ -325,8 +322,6 @@ const WORKFLOW_MODE_PATH_PREFIXES: Record<GenerationMode, readonly string[]> = {
 };
 
 const WORKFLOW_DYNAMIC_SKIP_PREFIXES = [
-  'detectedElements',
-  'cadLayers',
   'mpZones',
   'mpBoundary.points',
   'mpBoundaryUndoStack',
@@ -636,7 +631,6 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
     values: ['plan', 'section', 'elevation', 'site'],
   }),
   workflow('cadScale', 'CAD scale', 'string', ['render-cad']),
-  workflow('cadLayerDetectionEnabled', 'CAD layer detection', 'boolean', ['render-cad']),
   workflow('cadCamera.height', 'CAD camera height', 'number', ['render-cad'], { min: 0.2, max: 20 }),
   workflow('cadCamera.focalLength', 'CAD focal length', 'number', ['render-cad'], { min: 12, max: 120 }),
   workflow('cadCamera.lookAt', 'CAD camera direction', 'string', ['render-cad'], {
@@ -959,7 +953,6 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('imgToCadLine.simplify', 'Line simplification', 'number', ['img-to-cad'], { min: 0, max: 100 }),
   workflow('imgToCadLine.connect', 'Connect gaps', 'boolean', ['img-to-cad']),
   workflow('imgToCadFormat', 'CAD export format', 'string', ['img-to-cad'], { values: ['dxf', 'dwg', 'svg', 'pdf'] }),
-  workflow('imgToCadPreprocess.guidance', 'CAD guidance text', 'string', ['img-to-cad']),
 
   workflow('videoState.inputMode', 'Video input mode', 'string', ['video'], {
     values: ['image-animate', 'camera-path', 'image-morph', 'multi-shot'],
@@ -2081,17 +2074,7 @@ export const normalizeAppAssistantActions = (
       }];
     }
 
-    if (request.type === 'run_preprocess') {
-      return [{
-        id: `${index}-run-preprocess`,
-        type: 'run_preprocess',
-        label: request.label || 'Run AI pre-processing',
-        reason: request.reason,
-      }];
-    }
-
     if (
-      request.type === 'run_image_to_cad_preprocess' ||
       request.type === 'run_masterplan_zone_detection' ||
       request.type === 'run_exploded_component_detection' ||
       request.type === 'run_section_area_detection'
@@ -2099,7 +2082,6 @@ export const normalizeAppAssistantActions = (
       const sourceImage = state.sourceImage || state.uploadedImage || state.workflow.mpInputImage;
       if (!sourceImage) return [];
       const labels: Record<typeof request.type, string> = {
-        run_image_to_cad_preprocess: 'Run Image to CAD pre-processing',
         run_masterplan_zone_detection: 'Run Masterplan zone detection',
         run_exploded_component_detection: 'Run Exploded View component detection',
         run_section_area_detection: 'Run Section area detection',
@@ -3213,8 +3195,6 @@ export const buildAppAssistantActionContext = (
     'clear_file_target removes files from document-translate-source, material-validation-document, or pdf-compression-queue. Use value "all" or omit value to clear the whole target; use a visible id/name/title/caption to remove one validation document or queued PDF.',
     'If a reference image, document, or PDF would help but no matching user attachment is available, ask them to attach it with the paperclip button in the assistant composer.',
     'run_generation runs the current workflow. Treat it as final execution for every feature: generate, render, translate, validate, compress, upscale, animate, or create headshots.',
-    'run_preprocess runs the 3D Rendering AI problem-area analysis. Use it in 3D Rendering setup when a source image is available, especially for skylights, ceiling trusses, columns, glass, signage, stairs, fine frames, or noisy viewport geometry.',
-    'run_image_to_cad_preprocess runs the Image to CAD AI guidance helper when a source image is available.',
     'run_masterplan_zone_detection runs Masterplan zone auto-detection when a masterplan/source image is available.',
     'run_exploded_component_detection runs Exploded View component auto-detection when a source image is available.',
     'run_section_area_detection runs Section area auto-detection when a source image is available.',
@@ -3223,7 +3203,7 @@ export const buildAppAssistantActionContext = (
     'When you say "I will switch", "I will set", "I will trigger", or similar, you must include the matching hidden assistant_actions block in the same response. For the common request "change the color of the chairs, carpet, and plants" from a non-Visual-Edit mode, include actions for set_mode visual-edit, set_image_generation_model chatgpt-image-generation-2, set_workflow activeTool select, set_workflow visualSelection.mode lasso, set_workflow visualPrompt, and open_right_panel. Then tell the user to select the chairs, carpet, and plants manually.',
     `Download actions currently available: ${availableDownloads.length ? availableDownloads.map((type) => `${type} (${getDownloadActionLabel(type)})`).join(', ') : 'none'}. Use a download action when the user asks to download/export the current project JSON or an existing generated output.`,
     'For download_current_image, optional value may be {"format":"png"|"jpg","resolution":"full"|"medium"} to match the top-bar image download format and resolution controls.',
-    'For broad creative requests in any feature, treat the request as setup intent, not final permission. Apply safe setup actions, use available analysis/preprocessing when useful, ask for missing style/reference/output details, and wait for confirmation before run_generation.',
+    'For broad creative requests in any feature, treat the request as setup intent, not final permission. Apply safe setup actions, use available detection helpers when useful, ask for missing style/reference/output details, and wait for confirmation before run_generation.',
     'For complete operational requests where all required inputs and settings are present, run_generation is allowed. Examples: "compress these PDFs with balanced", "translate this document to French preserving formatting", or "validate these uploaded specs against the BoQ".',
     'If the user is deciding on a direction, apply only useful setup actions and ask whether they are ready for the final run. Add run_generation only after they confirm.',
     'Do not write action labels or reasons using azimuth, elevation, altitude, or sun angle. Use visible UI language such as Light Source, Front, Back, Left, Right, high-noon lighting, intensity, color temperature, and shadows.',

@@ -69,6 +69,14 @@
   "generation": {
     "generate": "Générer",
     "generating": "Génération",
+    "stages": {
+      "preparing": "Préparation",
+      "aiLayer": "Couche IA",
+      "generation": "Rendu",
+      "transfer": "Transfert",
+      "finalizing": "Finalisation",
+      "complete": "Terminé"
+    },
     "generateMasterplan": "Générer le Plan Directeur",
     "generateExplodedView": "Générer la Vue Éclatée",
     "generateSection": "Générer la Section",
@@ -476,19 +484,6 @@
       "change": "Changer la reference...",
       "remove": "Supprimer la reference",
       "alt": "Reference de fond"
-    },
-    "problemAreas": {
-      "title": "Zones Problematiques",
-      "description": "L'IA signale les zones detaillees ou a motifs qui peuvent necessiter plus d'attention. La couleur indique la difficulte.",
-      "run": "Lancer le pre-traitement IA",
-      "rerun": "Relancer le pre-traitement IA",
-      "analyzing": "Analyse...",
-      "analyzingStatus": "Analyse des zones problematiques...",
-      "waiting": "En attente des resultats d'analyse...",
-      "none": "Aucune zone problematique detectee.",
-      "high": "Eleve",
-      "medium": "Moyen",
-      "low": "Faible"
     }
   },
   "masterplan": {

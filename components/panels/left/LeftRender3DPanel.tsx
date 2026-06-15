@@ -1,33 +1,19 @@
-import { useMemo, useState, useCallback, useEffect, useRef, ChangeEvent } from 'react';
+import { useMemo, useState, useCallback, useRef, ChangeEvent } from 'react';
 import { useAppStore } from '../../../store';
 import { useTranslation } from 'react-i18next';
 import { StyleBrowserDialog } from '../../modals/StyleBrowserDialog';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionHeader, StyleGrid, StyleReferenceUploader } from './SharedLeftComponents';
-import { cn } from '../../../lib/utils';
-import { BUILT_IN_STYLES, generatePrompt } from '../../../engine/promptEngine';
-import { nanoid } from 'nanoid';
-import { RefreshCw, X } from 'lucide-react';
-import {
-  getGeminiService,
-  initGeminiService,
-  isGeminiServiceInitialized,
-  ImageUtils
-} from '../../../services/geminiService';
-import { isGatewayAuthenticated } from '../../../services/apiGateway';
-import { DEFAULT_RENDER_GENERATION_MODE } from '../../../types';
+import { BUILT_IN_STYLES } from '../../../engine/promptEngine';
+import { X } from 'lucide-react';
 
 
 export const LeftRender3DPanel = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const analyzingRef = useRef(false);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const wf = state.workflow;
-  const PREPROCESS_MODEL = 'gemini-3.5-flash';
-  const PREPROCESS_TIMEOUT_MS = 60000;
   const isEnhanceMode = wf.renderMode === 'enhance';
 
   const availableStyles = useMemo(
@@ -35,7 +21,6 @@ export const LeftRender3DPanel = () => {
     [state.customStyles]
   );
   const isStyleReferenceMode = Boolean(wf.styleReferenceEnabled);
-  const hasStyleReferenceImage = Boolean(wf.styleReferenceEnabled && wf.styleReferenceImage);
   const getStyleDisplayName = useCallback(
     (style: { id: string; name: string }) => t(`styles.names.${style.id}`, { defaultValue: style.name }),
     [t]
@@ -45,11 +30,6 @@ export const LeftRender3DPanel = () => {
     []
   );
 
-  const activeStyleRawName = useMemo(() => {
-    if (isStyleReferenceMode) return 'Reference image';
-    const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
-    return activeStyle ? activeStyle.name : toTitle(state.activeStyleId);
-  }, [availableStyles, isStyleReferenceMode, state.activeStyleId, toTitle]);
   const activeStyleLabel = useMemo(() => {
     if (isStyleReferenceMode) return t('render3d.styleReference.activeLabel');
     const activeStyle = availableStyles.find((style) => style.id === state.activeStyleId);
@@ -86,268 +66,6 @@ export const LeftRender3DPanel = () => {
       backgroundReferenceEnabled: false
     });
   }, [updateWf]);
-
-  const getRiskMeta = useCallback((confidence: number) => {
-    if (confidence >= 0.8) {
-      return { label: t('render3d.problemAreas.high'), dotClass: 'bg-rose-500', textClass: 'text-rose-500' };
-    }
-    if (confidence >= 0.6) {
-      return { label: t('render3d.problemAreas.medium'), dotClass: 'bg-amber-500', textClass: 'text-amber-600' };
-    }
-    return { label: t('render3d.problemAreas.low'), dotClass: 'bg-emerald-500', textClass: 'text-emerald-600' };
-  }, [t]);
-
-  const ensureServiceInitialized = useCallback((): boolean => {
-    if (isGeminiServiceInitialized()) {
-      return true;
-    }
-    if (!isGatewayAuthenticated()) {
-      return false;
-    }
-    initGeminiService();
-    return true;
-  }, []);
-
-  const parseProblemAreas = useCallback((raw: string) => {
-    const trimmed = raw.trim();
-    const jsonStart = trimmed.indexOf('[');
-    const jsonEnd = trimmed.lastIndexOf(']');
-    const jsonSlice = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonSlice);
-    } catch {
-      return [];
-    }
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .slice(0, 10)
-      .map((item: any, index: number) => {
-        const rawName = typeof item?.name === 'string' ? item.name : `Area ${index + 1}`;
-        const name = rawName.length > 60 ? `${rawName.slice(0, 57).trimEnd()}...` : rawName;
-        const detail =
-          typeof item?.detail === 'string'
-            ? item.detail
-            : typeof item?.description === 'string'
-              ? item.description
-              : typeof item?.guidance === 'string'
-                ? item.guidance
-                : '';
-        const type = ['structural', 'envelope', 'interior', 'site'].includes(item?.type)
-          ? item.type
-          : 'interior';
-        const confidenceRaw = typeof item?.confidence === 'number' ? item.confidence : 0.6;
-        const confidence = Math.min(0.99, Math.max(0.3, confidenceRaw));
-        return {
-          id: nanoid(),
-          name,
-          type,
-          detail: detail.trim(),
-          confidence,
-          selected: true
-        };
-      });
-  }, []);
-
-  const buildDefaultProblemAreas = useCallback(() => ([
-    {
-      id: nanoid(),
-      name: 'Fine edges',
-      type: 'structural' as const,
-      detail: 'Preserve thin edges, mullions, frames, railings, and small profile changes without melting or simplifying them.',
-      confidence: 0.72,
-      selected: true
-    },
-    {
-      id: nanoid(),
-      name: 'Material transitions',
-      type: 'envelope' as const,
-      detail: 'Keep material boundaries, joints, panels, openings, and surface direction clear so the render does not blur adjacent finishes together.',
-      confidence: 0.66,
-      selected: true
-    },
-    {
-      id: nanoid(),
-      name: 'Lighting context',
-      type: 'interior' as const,
-      detail: 'Maintain readable shadows, reflections, glazing, bright highlights, and depth cues while improving realism.',
-      confidence: 0.6,
-      selected: true
-    }
-  ]), []);
-
-  const analyzeProblemAreas = useCallback(async () => {
-    if (analyzingRef.current) return;
-    const sourceImage = state.sourceImage || state.uploadedImage;
-    if (!sourceImage) {
-      updateWf({ detectedElements: [] });
-      return;
-    }
-    if (!ensureServiceInitialized()) {
-      dispatch({
-        type: 'SET_APP_ALERT',
-        payload: {
-          id: nanoid(),
-          tone: 'warning',
-          message: 'Please sign in to use AI analysis.'
-        }
-      });
-      updateWf({ detectedElements: [] });
-      return;
-    }
-
-    setIsAnalyzing(true);
-    analyzingRef.current = true;
-    try {
-      const service = getGeminiService();
-      const imageData = ImageUtils.dataUrlToImageData(sourceImage);
-      const renderIntent = generatePrompt({
-        ...state,
-        workflow: {
-          ...state.workflow,
-          detectedElements: [],
-          prioritizationEnabled: false
-        }
-      });
-      const render3dContext = {
-        ...wf.render3d,
-        lighting: {
-          preset: wf.render3d.lighting.preset,
-          ambient: wf.render3d.lighting.ambient,
-          sun: {
-            enabled: wf.render3d.lighting.sun.enabled,
-            azimuth: wf.render3d.lighting.sun.azimuth,
-            elevation: wf.render3d.lighting.sun.elevation,
-            colorTemp: wf.render3d.lighting.sun.colorTemp
-          }
-        }
-      };
-      const settingsContext = {
-        mode: state.mode,
-        viewType: wf.viewType,
-        sourceType: wf.sourceType,
-        renderMode: isEnhanceMode ? 'enhance' : DEFAULT_RENDER_GENERATION_MODE,
-        activeStyle: {
-          id: state.activeStyleId,
-          name: activeStyleRawName,
-          referenceImageEnabled: hasStyleReferenceImage
-        },
-        render3d: render3dContext,
-        lighting: state.lighting,
-        context: state.context,
-        output: state.output
-      };
-      const prompt = [
-        `You are an expert architectural visualization analyst. Analyze this ${wf.viewType} 3D render/model image and identify specific areas that could be problematic during AI image generation.`,
-        '',
-        '**Your Task:**',
-        'Examine the source image and identify areas that may cause issues when rendering a photorealistic architectural visualization. Consider the following render settings and intended style:',
-        '',
-        `**Render Intent:** ${renderIntent}`,
-        '',
-        `**Current Settings:** ${JSON.stringify(settingsContext, null, 2)}`,
-        '',
-        '**What to Look For:**',
-        '- Complex visual details that may lose definition (ornate details, thin elements, intricate patterns)',
-        '- Regions with difficult lighting conditions (deep shadows, bright highlights, glass reflections)',
-        '- Elements that commonly get distorted or hallucinated (window frames, railings, furniture details)',
-        '- Fine visual details that need preservation during generation',
-        '',
-        '**Response Format:**',
-        'Return ONLY a valid JSON array with 3-8 problem areas. Each object must have:',
-        '```json',
-        '[',
-        '  {',
-        '    "name": "Short title (2-5 words) for display in UI",',
-        '    "detail": "Specific instruction for the AI on how to handle this area. Be precise and actionable. Example: Preserve the sharp edges of the window frames and maintain accurate glass reflections without distortion.",',
-        '    "type": "structural|envelope|interior|site",',
-        '    "confidence": 0.3-0.99 (how likely this area will cause issues)',
-        '  }',
-        ']',
-        '```',
-        '',
-        'The "name" will be shown to the user. The "detail" will be included as a rendering instruction. Make details specific and actionable.'
-      ].join('\n');
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), PREPROCESS_TIMEOUT_MS);
-      let text = '';
-      try {
-        text = await service.generateText({
-          prompt,
-          images: [imageData],
-          model: PREPROCESS_MODEL,
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1024,
-            responseMimeType: 'application/json',
-            thinkingConfig: { thinkingLevel: 'high' },
-            abortSignal: controller.signal
-          }
-        });
-      } finally {
-        window.clearTimeout(timeoutId);
-      }
-      let parsed = parseProblemAreas(text);
-      if (!parsed.length) {
-        const retryText = await service.generateText({
-          prompt: 'Return only a JSON array of 3 architectural render risk areas for this image. Each item must have name, detail, type, and confidence.',
-          images: [imageData],
-          model: PREPROCESS_MODEL,
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 900,
-            responseMimeType: 'application/json'
-          }
-        }).catch(() => '');
-        parsed = parseProblemAreas(retryText);
-      }
-      if (!parsed.length) {
-        parsed = buildDefaultProblemAreas();
-      }
-      updateWf({ detectedElements: parsed });
-    } catch (error) {
-      updateWf({ detectedElements: buildDefaultProblemAreas() });
-    } finally {
-      setIsAnalyzing(false);
-      analyzingRef.current = false;
-    }
-  }, [
-    state,
-    wf.viewType,
-    wf.sourceType,
-    wf.renderMode,
-    isEnhanceMode,
-    activeStyleRawName,
-    hasStyleReferenceImage,
-    ensureServiceInitialized,
-    buildDefaultProblemAreas,
-    parseProblemAreas,
-    updateWf
-  ]);
-
-  const problemAreas = useMemo(() => {
-    return [...wf.detectedElements].sort((a, b) => b.confidence - a.confidence);
-  }, [wf.detectedElements]);
-
-  const handleProblemAreaAnalysis = useCallback(() => {
-    if (isAnalyzing) return;
-    updateWf({ prioritizationEnabled: true, detectedElements: [] });
-    analyzeProblemAreas();
-  }, [analyzeProblemAreas, isAnalyzing, updateWf]);
-
-  useEffect(() => {
-    const handleAssistantPreprocess = () => {
-      handleProblemAreaAnalysis();
-    };
-    window.addEventListener('archviz:assistant-run-render3d-preprocess', handleAssistantPreprocess);
-    return () => window.removeEventListener('archviz:assistant-run-render3d-preprocess', handleAssistantPreprocess);
-  }, [handleProblemAreaAnalysis]);
-
-  const problemAreasActionLabel = isAnalyzing
-    ? t('render3d.problemAreas.analyzing')
-    : problemAreas.length > 0
-      ? t('render3d.problemAreas.rerun')
-      : t('render3d.problemAreas.run');
 
   if (isEnhanceMode) {
     return <div className="space-y-6" />;
@@ -491,73 +209,6 @@ export const LeftRender3DPanel = () => {
             >
               <X size={14} />
             </button>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <SectionHeader title={t('render3d.problemAreas.title')} />
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleProblemAreaAnalysis}
-            disabled={isAnalyzing}
-            className={cn(
-              "w-full py-2 text-xs font-semibold rounded border transition-colors",
-              isAnalyzing
-                ? "bg-surface-sunken text-foreground-muted border-border"
-                : "bg-foreground text-background border-foreground hover:opacity-90"
-            )}
-          >
-            {problemAreasActionLabel}
-          </button>
-
-          {wf.prioritizationEnabled && (
-            <>
-              <p className="text-[10px] text-foreground-muted">
-                {t('render3d.problemAreas.description')}
-              </p>
-
-              <div className="space-y-1">
-                {isAnalyzing && (
-                  <div className="flex items-center gap-2 text-[10px] text-foreground-muted py-2">
-                    <RefreshCw size={12} className="animate-spin" />
-                    {t('render3d.problemAreas.analyzingStatus')}
-                  </div>
-                )}
-                {problemAreas.length === 0 && (
-                  <div className="text-[10px] text-foreground-muted py-2">
-                    {isAnalyzing
-                      ? t('render3d.problemAreas.waiting')
-                      : t('render3d.problemAreas.none')}
-                  </div>
-                )}
-
-                {problemAreas.map((el, index) => {
-                  const risk = getRiskMeta(el.confidence);
-                  return (
-                    <div
-                      key={el.id}
-                      className={cn(
-                        "flex items-center justify-between gap-3 p-2 rounded text-xs border",
-                        "bg-surface-elevated border-border"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[9px] text-foreground-muted font-mono w-4">
-                          {index + 1}
-                        </span>
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", risk.dotClass)} />
-                        <span className="truncate">{el.name}</span>
-                      </div>
-                      <span className={cn("text-[9px] font-bold uppercase tracking-wider", risk.textClass)}>
-                        {risk.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
           )}
         </div>
       </div>

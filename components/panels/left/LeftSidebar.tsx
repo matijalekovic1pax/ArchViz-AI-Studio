@@ -31,10 +31,10 @@ import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType }[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
+  { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
   { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Combine },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
-  { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },

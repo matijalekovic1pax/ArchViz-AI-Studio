@@ -69,6 +69,14 @@
   "generation": {
     "generate": "Generate",
     "generating": "Generating",
+    "stages": {
+      "preparing": "Preparing",
+      "aiLayer": "AI layer",
+      "generation": "Rendering",
+      "transfer": "Transferring",
+      "finalizing": "Finalizing",
+      "complete": "Complete"
+    },
     "generateMasterplan": "Generate Masterplan",
     "generateExplodedView": "Generate Exploded View",
     "generateSection": "Generate Section",
@@ -476,19 +484,6 @@
       "change": "Change reference...",
       "remove": "Remove reference",
       "alt": "Background reference"
-    },
-    "problemAreas": {
-      "title": "Problem Areas",
-      "description": "AI flags detailed or patterned areas that may need extra care. Color shows difficulty.",
-      "run": "Run AI Pre-Processing",
-      "rerun": "Re-run AI Pre-Processing",
-      "analyzing": "Analyzing...",
-      "analyzingStatus": "Analyzing problem areas...",
-      "waiting": "Waiting for analysis results...",
-      "none": "No problem areas detected yet.",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
     }
   },
   "masterplan": {

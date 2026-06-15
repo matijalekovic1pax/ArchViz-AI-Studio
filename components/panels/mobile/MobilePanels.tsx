@@ -40,6 +40,7 @@ import {
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
+import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../../lib/generationProgress';
 import { generatePrompt } from '../../../engine/promptEngine';
 import { useGeneration } from '../../../hooks/useGeneration';
 import { downloadImage } from '../../../lib/download';
@@ -88,10 +89,10 @@ type WorkflowItem = {
 const MOBILE_WORKFLOWS: WorkflowItem[] = [
   { id: 'generate-text', labelKey: 'workflows.generateText', icon: Sparkles },
   { id: 'render-3d', labelKey: 'workflows.render3d', icon: Palette },
+  { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
   { id: 'scene-compose', labelKey: 'workflows.sceneCompose', icon: Combine },
   { id: 'render-cad', labelKey: 'workflows.renderCad', icon: FileCode },
   { id: 'masterplan', labelKey: 'workflows.masterplan', icon: Map },
-  { id: 'visual-edit', labelKey: 'workflows.visualEdit', icon: Eraser },
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
@@ -497,6 +498,10 @@ export const MobilePanels: React.FC<{
                 ? !headshotReady
                 : !state.uploadedImage;
   const generateLabel = getGenerateLabel(state.mode, t);
+  const generationProgress = getGenerationProgressPercent(state.progress);
+  const generationStageLabel = state.generationStage
+    ? t(GENERATION_STAGE_LABEL_KEYS[state.generationStage])
+    : t('generation.generating');
 
   const handleGenerate = async () => {
     if (state.isGenerating) {
@@ -597,7 +602,7 @@ export const MobilePanels: React.FC<{
                 className={cn(
                   "relative -mt-6 flex h-[4.55rem] min-w-0 flex-col items-center justify-center gap-1 rounded-[1.6rem] border text-[10px] font-bold shadow-elevated transition-all active:scale-95",
                   state.isGenerating
-                    ? "border-red-500 bg-red-600 text-white"
+                    ? "overflow-hidden border-red-500 bg-red-600 text-white"
                     : generateDisabled
                       ? "border-border bg-surface-sunken text-foreground-muted shadow-none"
                       : "border-foreground bg-foreground text-background"
@@ -605,10 +610,18 @@ export const MobilePanels: React.FC<{
                 aria-label={state.isGenerating ? t('generation.cancel') : generateLabel}
                 title={state.isGenerating ? t('generation.cancel') : generateLabel}
               >
+                {state.isGenerating && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-500 ease-out"
+                    style={{ width: `${generationProgress}%` }}
+                  />
+                )}
                 {state.isGenerating ? (
                   <>
-                    <X size={19} />
-                    <span className="max-w-[4.25rem] truncate">{Math.round(state.progress)}%</span>
+                    <X size={18} className="relative z-10 shrink-0" />
+                    <span className="relative z-10 max-w-[4.25rem] truncate">{generationStageLabel}</span>
+                    <span className="relative z-10 font-mono text-[9px] leading-none opacity-85 tabular-nums">{generationProgress}%</span>
                   </>
                 ) : (
                   <>

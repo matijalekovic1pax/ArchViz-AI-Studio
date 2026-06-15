@@ -69,6 +69,14 @@
   "generation": {
     "generate": "生成",
     "generating": "正在生成",
+    "stages": {
+      "preparing": "准备中",
+      "aiLayer": "AI 层",
+      "generation": "渲染中",
+      "transfer": "传输中",
+      "finalizing": "收尾中",
+      "complete": "完成"
+    },
     "generateMasterplan": "生成总平面",
     "generateExplodedView": "生成爆炸图",
     "generateSection": "生成剖面",
@@ -476,19 +484,6 @@
       "change": "更换参考...",
       "remove": "移除参考",
       "alt": "背景参考"
-    },
-    "problemAreas": {
-      "title": "问题区域",
-      "description": "AI 会标记可能需要额外处理的细节或图案区域。颜色表示难度。",
-      "run": "运行 AI 预处理",
-      "rerun": "重新运行 AI 预处理",
-      "analyzing": "正在分析...",
-      "analyzingStatus": "正在分析问题区域...",
-      "waiting": "正在等待分析结果...",
-      "none": "尚未检测到问题区域。",
-      "high": "高",
-      "medium": "中",
-      "low": "低"
     }
   },
   "masterplan": {

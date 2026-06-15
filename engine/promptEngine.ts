@@ -1,5 +1,5 @@
 
-import { AppState, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
+import { AppState, DEFAULT_RENDER3D_SOURCE_MODE, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
 
 type ImagePromptMode = AppState['mode'];
@@ -170,7 +170,7 @@ const getPromptIntent = (mode?: string, activeTool?: ImagePromptTool): PromptInt
       artifact: 'CAD-style technical drawing',
       task: 'Convert the source image into a clean CAD drawing.',
       keep: 'Preserve visible proportions, structural rhythm, opening positions, edge relationships, and readable annotations or dimensions.',
-      change: 'Apply output drawing type, line sensitivity, simplification, layer, preprocessing, and export settings.',
+      change: 'Apply output drawing type, line sensitivity, simplification, layer, and export settings.',
       textRule: 'Convert readable source annotations exactly where possible; do not invent unsupported labels.'
     },
     upscale: {
@@ -238,6 +238,15 @@ const summarizeRenderSettings = (state: AppState): string[] => {
     : state.mode === 'render-cad'
       ? DEFAULT_RENDER_GENERATION_MODE
       : workflow.renderMode;
+  const render3dSourceMode = workflow.render3dSourceMode || DEFAULT_RENDER3D_SOURCE_MODE;
+
+  if (state.mode === 'render-3d' && render3dSourceMode === 'alter-rendering') {
+    return compactItems([
+      'render flow alter rendering',
+      'use latest render as source',
+      'apply settings as restrained refinements'
+    ]);
+  }
 
   if (state.mode === 'render-3d' && renderMode === 'enhance') {
     return compactItems([
@@ -256,6 +265,7 @@ const summarizeRenderSettings = (state: AppState): string[] => {
   ]);
 
   return compactItems([
+    state.mode === 'render-3d' ? `render flow ${render3dSourceMode}` : null,
     `render mode ${renderMode}`,
     `view ${workflow.viewType}, source ${workflow.sourceType}`,
     lightingSummary,
@@ -507,7 +517,6 @@ const summarizeWorkflowSettings = (state: AppState): string[] => {
       .map(([target, material]) => `${target}=${material}`);
     return compactItems([
       `CAD ${workflow.cadDrawingType}${workflow.cadScale ? `, scale ${workflow.cadScale}` : ''}, orientation ${workflow.cadOrientation}`,
-      workflow.cadLayerDetectionEnabled ? `visible layers ${workflow.cadLayers.filter((layer) => layer.visible).map((layer) => layer.name).join(', ') || 'auto'}` : null,
       `space ${workflow.cadSpace.roomType}, ${workflow.cadSpace.ceilingStyle} ceiling, ${workflow.cadSpace.windowStyle} windows, ${workflow.cadSpace.doorStyle} doors`,
       `spatial assumptions ${describeSettingStrength(workflow.cadSpatial.style, 'conservative', 'balanced', 'creative')}, ${workflow.cadSpatial.ceilingHeight < 2.7 ? 'low ceiling' : workflow.cadSpatial.ceilingHeight > 3.4 ? 'tall ceiling' : 'typical ceiling'}`,
       `camera ${workflow.cadCamera.angle}, look ${workflow.cadCamera.lookAt}, ${workflow.cadCamera.focalLength < 28 ? 'wide lens' : workflow.cadCamera.focalLength > 60 ? 'compressed lens' : 'natural lens'}${workflow.cadCamera.verticalCorrection ? ', corrected verticals' : ''}`,
@@ -675,9 +684,7 @@ const summarizeWorkflowSettings = (state: AppState): string[] => {
       `source ${workflow.imgToCadType}, output ${workflow.imgToCadOutput}`,
       `line sensitivity ${workflow.imgToCadLine.sensitivity}, simplification ${workflow.imgToCadLine.simplify}, connect gaps ${formatToggle(workflow.imgToCadLine.connect)}`,
       layers.length ? `layers ${layers.join(', ')}` : null,
-      `format ${workflow.imgToCadFormat.toUpperCase()}`,
-      workflow.imgToCadPreprocess.guidance?.trim() ? `preprocess guidance ${workflow.imgToCadPreprocess.guidance.trim()}` : null,
-      workflow.imgToCadPreprocess.focus?.length ? `preprocess focus ${workflow.imgToCadPreprocess.focus.join(', ')}` : null
+      `format ${workflow.imgToCadFormat.toUpperCase()}`
     ]);
   }
   if (state.mode === 'headshot') {
@@ -2333,7 +2340,9 @@ function generate3DRenderPrompt(state: AppState): string {
   const renderMode: RenderGenerationMode = workflow.renderMode === 'enhance'
     ? 'enhance'
     : DEFAULT_RENDER_GENERATION_MODE;
-  const isEnhanceMode = renderMode === 'enhance';
+  const render3dSourceMode = workflow.render3dSourceMode || DEFAULT_RENDER3D_SOURCE_MODE;
+  const isAlterRenderingMode = render3dSourceMode === 'alter-rendering';
+  const isEnhanceMode = !isAlterRenderingMode && renderMode === 'enhance';
 
   const availableStyles = [...BUILT_IN_STYLES, ...(customStyles ?? [])];
   const style = availableStyles.find(s => s.id === activeStyleId);
@@ -2377,51 +2386,50 @@ function generate3DRenderPrompt(state: AppState): string {
     'detail': 'Create a detail render focused on the selected architectural element',
   };
 
-  const viewIntro = viewDescriptions[workflow.viewType] || 'Create an architectural render';
-  parts.push(`${viewIntro}, rendered from ${sourceDescriptions[workflow.sourceType] || 'a 3D architectural model'}.`);
-  if (hasSourceImage) {
-    parts.push(buildSourceImageRelationship(
-      '3D/render source',
-      'Convert or enhance what is already present in the source; keep the architectural design, spatial relationships, major entourage, and composition anchored to that image.'
-    ));
+  if (isAlterRenderingMode) {
+    parts.push('Alter the latest rendered architectural image with restrained, source-faithful adjustments.');
+    if (hasSourceImage) {
+      parts.push(buildSourceImageRelationship(
+        'latest rendered image',
+        'Treat the source as an approved render that should remain recognizable as the same image. Preserve the exact composition, crop, camera, architecture, geometry, material identity, signage/text positions, furniture, people, objects, and spatial relationships. Apply style, lighting, atmosphere, and render-quality changes as subtle refinements, color grade, accents, and polish rather than a full redesign or fresh re-render.'
+      ));
+    } else {
+      parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+    }
   } else {
-    parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+    const viewIntro = viewDescriptions[workflow.viewType] || 'Create an architectural render';
+    parts.push(`${viewIntro}, rendered from ${sourceDescriptions[workflow.sourceType] || 'a 3D architectural model'}.`);
+    if (hasSourceImage) {
+      parts.push(buildSourceImageRelationship(
+        '3D/render source',
+        'Convert or enhance what is already present in the source; keep the architectural design, spatial relationships, major entourage, and composition anchored to that image.'
+      ));
+    } else {
+      parts.push(TEXT_TO_IMAGE_FRAMEWORK);
+    }
   }
 
   // 2. STYLE
   if (hasStyleReference) {
-    parts.push(getStyleReferenceInstruction(hasSourceImage));
+    parts.push(isAlterRenderingMode
+      ? 'Style reference: use the reference image only as a gentle color, material, contrast, lighting, and atmosphere influence. Do not copy its content or replace the approved render style wholesale.'
+      : getStyleReferenceInstruction(hasSourceImage));
   } else if (!isNoStyle && style) {
-    parts.push(style.description);
+    parts.push(isAlterRenderingMode
+      ? `Subtle style adjustment: borrow light accents from this style without replacing the approved render: ${style.description}`
+      : style.description);
     if (style.promptBundle?.renderingLanguage?.atmosphere) {
       const atmosphereWords = style.promptBundle.renderingLanguage.atmosphere;
-      parts.push(`The overall feeling should be ${atmosphereWords.slice(0, -1).join(', ')}${atmosphereWords.length > 1 ? ' and ' : ''}${atmosphereWords[atmosphereWords.length - 1]}.`);
+      parts.push(isAlterRenderingMode
+        ? `Nudge the atmosphere toward ${atmosphereWords.slice(0, -1).join(', ')}${atmosphereWords.length > 1 ? ' and ' : ''}${atmosphereWords[atmosphereWords.length - 1]} while keeping the same render identity.`
+        : `The overall feeling should be ${atmosphereWords.slice(0, -1).join(', ')}${atmosphereWords.length > 1 ? ' and ' : ''}${atmosphereWords[atmosphereWords.length - 1]}.`);
     }
   }
 
   // 3. GENERATION MODE
-  parts.push(describeRenderMode(renderMode));
-
-  if (workflow.prioritizationEnabled) {
-    const problemAreas = [...workflow.detectedElements]
-      .filter((el) => el.selected !== false)
-      .sort((a, b) => b.confidence - a.confidence);
-    if (problemAreas.length > 0) {
-      const instructions = problemAreas
-        .filter((el) => el.detail?.trim())
-        .map((el) => {
-          const priority = el.confidence >= 0.8
-            ? 'must fix'
-            : el.confidence >= 0.6
-              ? 'address'
-              : 'Note';
-          return `[${priority}] ${el.detail.trim()}`;
-        });
-      if (instructions.length > 0) {
-        parts.push(`Rendering instructions for detected problem areas: ${instructions.join(' ')}`);
-      }
-    }
-  }
+  parts.push(isAlterRenderingMode
+    ? 'Render flow: alter rendering. Keep the current image mostly intact and adjust only the visible rendering treatment. Do not rebuild from the original model, change geometry, replace major materials, rearrange objects, add new entourage, remove existing content, or reinterpret the design.'
+    : describeRenderMode(renderMode));
 
   // 5. LIGHTING
   const light = r3d.lighting;
@@ -2449,33 +2457,37 @@ function generate3DRenderPrompt(state: AppState): string {
   }
 
   // 9. SCENERY & CONTEXT
-  const scene = r3d.scenery;
-  const sceneParts: string[] = [];
+  if (isAlterRenderingMode) {
+    parts.push('Preserve the existing setting, entourage, furniture, planting, vehicles, and object count. Do not use scenery controls as permission to add or remove content.');
+  } else {
+    const scene = r3d.scenery;
+    const sceneParts: string[] = [];
 
-  const contextDescriptions: Record<string, string> = {
-    'urban': 'set within a vibrant urban environment',
-    'suburban': 'nestled in a peaceful suburban neighborhood',
-    'rural': 'situated in a serene rural landscape',
-    'coastal': 'positioned along a coastal setting',
-    'forest': 'embraced by a natural forest environment',
-    'mountain': 'set against a dramatic mountain backdrop',
-    'desert': 'placed in an expansive desert landscape',
-  };
-  sceneParts.push(`The building is ${contextDescriptions[scene.preset] || `in a ${formatContextPreset(scene.preset)} setting`}`);
+    const contextDescriptions: Record<string, string> = {
+      'urban': 'set within a vibrant urban environment',
+      'suburban': 'nestled in a peaceful suburban neighborhood',
+      'rural': 'situated in a serene rural landscape',
+      'coastal': 'positioned along a coastal setting',
+      'forest': 'embraced by a natural forest environment',
+      'mountain': 'set against a dramatic mountain backdrop',
+      'desert': 'placed in an expansive desert landscape',
+    };
+    sceneParts.push(`The building is ${contextDescriptions[scene.preset] || `in a ${formatContextPreset(scene.preset)} setting`}`);
 
-  if (scene.people.enabled) {
-    sceneParts.push(`, with ${describePeopleActivity(scene.people.count)}`);
+    if (scene.people.enabled) {
+      sceneParts.push(`, with ${describePeopleActivity(scene.people.count)}`);
+    }
+
+    if (scene.trees.enabled) {
+      sceneParts.push(`, complemented by ${describeVegetation(scene.trees.count)}`);
+    }
+
+    if (scene.cars.enabled) {
+      sceneParts.push(', with realistically placed vehicles adding to the sense of place');
+    }
+
+    parts.push(`${sceneParts.join('')}.`);
   }
-
-  if (scene.trees.enabled) {
-    sceneParts.push(`, complemented by ${describeVegetation(scene.trees.count)}`);
-  }
-
-  if (scene.cars.enabled) {
-    sceneParts.push(', with realistically placed vehicles adding to the sense of place');
-  }
-
-  parts.push(`${sceneParts.join('')}.`);
 
   // 9b. BACKGROUND REFERENCE - Environment matching instruction
   if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
@@ -2484,10 +2496,14 @@ function generate3DRenderPrompt(state: AppState): string {
 
   // 10. RENDER FORMAT & OUTPUT
   const rend = r3d.render;
-  parts.push(`${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
+  parts.push(isAlterRenderingMode
+    ? 'Keep the same crop, framing, aspect ratio, perspective, and camera behavior as the attached render.'
+    : `${describeResolution(rend.resolution)} ${describeAspectRatio(rend.aspectRatio)}, presented as a ${formatViewType(rend.viewType)}.`);
 
   // 11. TECHNICAL QUALITY
-  parts.push(describeRenderModeClosing(renderMode, rend.resolution));
+  parts.push(isAlterRenderingMode
+    ? 'Finish as the same render with more refined lighting, tone, material response, and atmosphere, not as a new composition.'
+    : describeRenderModeClosing(renderMode, rend.resolution));
 
   return parts.filter(p => p.trim()).join(' ');
 }
@@ -3452,12 +3468,6 @@ function generateCadRenderPrompt(state: AppState): string {
 
   parts.push(describeRenderMode(DEFAULT_RENDER_GENERATION_MODE));
 
-  if (workflow.cadLayerDetectionEnabled && workflow.cadLayers?.length) {
-    const visibleLayers = workflow.cadLayers.filter(layer => layer.visible).map(layer => layer.name);
-    if (visibleLayers.length) {
-      parts.push(`Focus on rendering these visible layers: ${visibleLayers.join(', ')}.`);
-    }
-  }
   const cadMaterials = summarizeMaterialAssignments(workflow.cadMaterialAssignments);
   if (cadMaterials) {
     parts.push(`Material assignments from the CAD setup: ${cadMaterials}. Use these only on their assigned elements.`);
@@ -3868,13 +3878,6 @@ function generateImageToCadPrompt(state: AppState): string {
     parts.push(`Include CAD layers for ${layers.join(', ')}.`);
   }
 
-  if (workflow.imgToCadPreprocess?.guidance) {
-    parts.push(`AI pre-processing guidance: ${workflow.imgToCadPreprocess.guidance}`);
-  }
-  if (workflow.imgToCadPreprocess?.focus?.length) {
-    parts.push(`Prioritize: ${workflow.imgToCadPreprocess.focus.join(', ')}.`);
-  }
-
   parts.push(`Export as ${workflow.imgToCadFormat.toUpperCase()} with clean, continuous polylines and readable line hierarchy.`);
 
   return parts.filter(Boolean).join(' ');
@@ -3885,6 +3888,7 @@ function generateUpscalePrompt(state: AppState): string {
   const parts: string[] = [];
   const userPrompt = state.prompt?.trim();
   const outputResolution = state.output?.resolution?.toUpperCase?.() || '4K';
+  const isAiSlopMode = workflow.upscaleMode === 'ai-slop';
   const describeSlider = (value: number, low: string, high: string) => {
     if (value <= 20) return `very ${low}`;
     if (value <= 40) return low;
@@ -3893,15 +3897,27 @@ function generateUpscalePrompt(state: AppState): string {
     return `very ${high}`;
   };
 
-  parts.push('Conservative architectural image restoration and upscale.');
+  parts.push(isAiSlopMode
+    ? 'AI artifact restoration and precision cleanup for a degraded generated or repeatedly edited architectural image.'
+    : 'Conservative architectural image restoration and upscale.'
+  );
   parts.push(buildSourceImageRelationship(
     'upscale/restoration source',
-    'This is a restoration pass, not generation from imagination. Make the same image cleaner, sharper, and less noisy using only visible source evidence.'
+    isAiSlopMode
+      ? 'This is an artifact repair pass, not generation from imagination. Restore the same image to cleaner original-looking clarity using only visible source evidence.'
+      : 'This is a restoration pass, not generation from imagination. Make the same image cleaner, sharper, and less noisy using only visible source evidence.'
   ));
   parts.push(`Upscale goal: ${workflow.upscaleFactor} toward ${outputResolution}; keep the original crop, aspect ratio, camera, perspective, object count, people, material identity, colors, lighting direction, and signage layout.`);
-  parts.push(`Restoration intent: sharpness ${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}, clarity ${describeSlider(workflow.upscaleClarity, 'low', 'high')}, edge definition ${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}, fine detail ${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}.`);
-  parts.push('Allowed changes: reduce noise and compression artifacts, gently deblur, improve anti-aliasing, recover local contrast, and clarify already-visible texture.');
-  parts.push('Ambiguity rule: blurry, tiny, occluded, or uncertain areas should stay source-faithful and slightly soft rather than sharp and invented.');
+  if (isAiSlopMode) {
+    parts.push(`AI slop restoration intent: sharpness ${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}, clarity ${describeSlider(workflow.upscaleClarity, 'low', 'high')}, edge stabilization ${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'precise')}, fine-detail recovery ${describeSlider(workflow.upscaleFineDetail, 'restrained', 'detailed')}.`);
+    parts.push('Repair targets: wiggly or wavy lines, melted geometry, warped edges, foggy haze, muddy texture, blotchy discoloration, color banding, over-smoothed surfaces, over-sharpen halos, noisy compression, and AI regeneration smear.');
+    parts.push('Allowed changes: straighten already-visible architectural lines, restore crisp material boundaries, normalize strange color patches, remove artificial haze, deblur gently, improve anti-aliasing, and clarify source-supported texture.');
+    parts.push('Strict preservation: do not redesign architecture, replace materials, change signage text or layout, alter people, add objects, remove objects, change lighting direction, or invent detail where the source is ambiguous.');
+  } else {
+    parts.push(`Restoration intent: sharpness ${describeSlider(workflow.upscaleSharpness, 'soft', 'crisp')}, clarity ${describeSlider(workflow.upscaleClarity, 'low', 'high')}, edge definition ${describeSlider(workflow.upscaleEdgeDefinition, 'soft', 'sharp')}, fine detail ${describeSlider(workflow.upscaleFineDetail, 'smooth', 'detailed')}.`);
+    parts.push('Allowed changes: reduce noise and compression artifacts, gently deblur, improve anti-aliasing, recover local contrast, and clarify already-visible texture.');
+    parts.push('Ambiguity rule: blurry, tiny, occluded, or uncertain areas should stay source-faithful and slightly soft rather than sharp and invented.');
+  }
 
   if (userPrompt) {
     parts.push(`User notes, subordinate to preservation rules: ${userPrompt}.`);

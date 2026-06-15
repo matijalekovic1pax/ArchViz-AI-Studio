@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
 import { VideoLockBanner } from '../video/VideoLockBanner';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
+import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
 type CanvasPoint = { x: number; y: number };
 type ImageLayout = {
@@ -55,6 +56,10 @@ const PromptBar: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyContainerRef = useRef<HTMLDivElement>(null);
   const historyItems = state.history;
+  const generationProgress = getGenerationProgressPercent(state.progress);
+  const generationStageLabel = state.generationStage
+    ? t(GENERATION_STAGE_LABEL_KEYS[state.generationStage])
+    : t('generation.generating');
 
   const formatModeLabel = (mode: string) => mode.replace(/-/g, ' ');
   const truncatePrompt = (text: string, maxChars = 220) => {
@@ -269,14 +274,29 @@ const PromptBar: React.FC = () => {
                         onClick={handleGenerate}
                         disabled={(!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating}
                         className={cn(
-                        "p-3 rounded-full transition-all shrink-0 flex items-center justify-center relative overflow-hidden group",
-                            (!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating
-                                ? "bg-transparent text-foreground-muted"
-                                : "bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+                            "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full transition-all group",
+                            state.isGenerating
+                                ? "min-w-[7.25rem] gap-2 bg-foreground text-background px-4 py-3 shadow-lg"
+                                : (!inputText.trim() && attachments.length === 0 && !isHeadshotReady)
+                                    ? "p-3 bg-transparent text-foreground-muted"
+                                    : "p-3 bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
                         )}
                     >
+                        {state.isGenerating && (
+                            <div
+                                aria-hidden="true"
+                                className="absolute inset-y-0 left-0 bg-accent/25 transition-[width] duration-500 ease-out"
+                                style={{ width: `${generationProgress}%` }}
+                            />
+                        )}
                         {state.isGenerating ? (
-                            <RefreshCw size={20} className="animate-spin" />
+                            <>
+                                <RefreshCw size={18} className="relative z-10 shrink-0 animate-spin" />
+                                <span className="relative z-10 flex min-w-0 flex-col items-start leading-none">
+                                    <span className="max-w-[4.5rem] truncate text-[10px] font-bold">{generationStageLabel}</span>
+                                    <span className="font-mono text-[9px] opacity-80 tabular-nums">{generationProgress}%</span>
+                                </span>
+                            </>
                         ) : (
                             <div className="relative">
                                 <Sparkles size={20} className={cn((inputText || attachments.length > 0 || isHeadshotReady) && "text-accent fill-accent animate-pulse-subtle")} />

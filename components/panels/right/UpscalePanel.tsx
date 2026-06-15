@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
+import { SegmentedControl } from '../../ui/SegmentedControl';
 import { cn } from '../../../lib/utils';
 
 export const UpscalePanel = () => {
@@ -17,6 +18,16 @@ export const UpscalePanel = () => {
     { value: '4k', label: '4K' },
   ];
 
+  const modeOptions = [
+    { value: 'resolution', label: 'Resolution' },
+    { value: 'ai-slop', label: 'AI Slop' },
+  ];
+
+  const handleModeChange = (upscaleMode: 'resolution' | 'ai-slop') => {
+    if (upscaleMode === wf.upscaleMode) return;
+    updateWf({ upscaleMode });
+  };
+
   const handleResolutionChange = (resolution: '2k' | '4k') => {
     if (resolution === state.output.resolution) return;
     dispatch({ type: 'UPDATE_OUTPUT', payload: { resolution } });
@@ -24,6 +35,24 @@ export const UpscalePanel = () => {
 
   return (
     <div className="space-y-6">
+      {/* Mode */}
+      <div>
+        <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
+          Mode
+        </label>
+        <SegmentedControl
+          value={wf.upscaleMode}
+          options={modeOptions}
+          onChange={handleModeChange}
+          className="w-full"
+        />
+        {wf.upscaleMode === 'ai-slop' && (
+          <p className="mt-2 text-[10px] leading-relaxed text-foreground-muted">
+            Repairs AI regeneration artifacts, waviness, haze, discoloration, and smeared detail while preserving the source image.
+          </p>
+        )}
+      </div>
+
       {/* Resolution */}
       <div>
         <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
