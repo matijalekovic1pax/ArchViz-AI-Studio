@@ -2754,7 +2754,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     parts.push(`${materialDesc.join(', ')}.`);
 
-    parts.push('Material lock: change only the target surface finish. Preserve geometry, edges, joints, seams, UV direction, adjacent materials, objects, positions, camera, and image clarity.');
+    parts.push('Material lock: re-render the target finish as a physically integrated AI edit. Do not paste, tile, or overlay a flat texture image. Preserve geometry, edges, joints, seams, UV direction, adjacent materials, objects, positions, camera, lighting, shadows, reflections, and image clarity.');
     return parts.filter(Boolean).join(' ');
   }
 

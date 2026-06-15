@@ -32,8 +32,6 @@ import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiSe
 import { compressPdfBatch } from '../lib/pdfCompression';
 import { getMaterialById } from '../lib/materialCatalog';
 import {
-  applyMaskedMaterialReplacement,
-  applyPromptTargetedMaterialReplacement,
   applyVisualPostProduction
 } from '../lib/visualPostProcessing';
 import { nanoid } from 'nanoid';
@@ -1989,16 +1987,9 @@ export function useGeneration(): UseGenerationReturn {
         const materialReference = activeVisualTool === 'material' && !isMaterialReferenceMode
           ? getMaterialById(visualMaterial.materialId)
           : null;
-        const hasLocalMaskedMaterialEdit = Boolean(
-          activeVisualTool === 'material' &&
-          !isMaterialReferenceMode &&
-          shouldUseSelectionMask &&
-          selectedMaskDataUrl &&
-          materialReference
-        );
         const materialReferenceImage = isMaterialReferenceMode && visualMaterial.referenceImage
           ? dataUrlToImageData(visualMaterial.referenceImage)
-          : materialReference && !hasLocalMaskedMaterialEdit
+          : materialReference
             ? await materialPreviewToImageData(
                 materialReference.referenceUrl || materialReference.previewUrl,
                 materialReference.fallbackPreviewUrl
@@ -2015,44 +2006,7 @@ export function useGeneration(): UseGenerationReturn {
           adjust.transformPerspective !== 0
         );
 
-        if (hasLocalMaskedMaterialEdit && selectedMaskDataUrl && materialReference) {
-          const materialImage = await applyMaskedMaterialReplacement(
-            sourceImageUrl!,
-            localSelectionMaskDataUrl || selectedMaskDataUrl,
-            materialReference,
-            state.workflow.visualMaterial
-          );
-          result = { text: null, images: [materialImage] };
-          visualMaskHandledLocally = true;
-          updateProgress(90);
-        } else if (activeVisualTool === 'material' && !isMaterialReferenceMode && !shouldUseSelectionMask && materialReference && state.workflow.visualPrompt.trim()) {
-          const materialImage = await applyPromptTargetedMaterialReplacement(
-            sourceImageUrl!,
-            materialReference,
-            visualMaterial,
-            state.workflow.visualPrompt
-          );
-          if (materialImage) {
-            result = { text: null, images: [materialImage] };
-            updateProgress(90);
-          } else {
-            result = await runWithRetry(
-              'image edit',
-              () => service.editImage({
-                sourceImage,
-                maskImage: maskImage || undefined,
-                maskMode,
-                referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-                prompt: basePrompt,
-                editType,
-                activeTool: activeVisualTool,
-                imageGenerationModel: state.imageGenerationModel,
-                generationConfig: generationConfigWithAbort
-              }),
-              imageGenerationRetryOptions
-            );
-          }
-        } else if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
+        if (activeVisualTool === 'adjust' && !hasAdjustGeometryChange) {
           const adjustedImage = await applyVisualPostProduction(
             sourceImageUrl!,
             adjust,
