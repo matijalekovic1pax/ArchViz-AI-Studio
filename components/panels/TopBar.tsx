@@ -12,7 +12,7 @@ import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
-import { DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
@@ -424,6 +424,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleModelChange = (model: ImageGenerationModel) => {
+    if (state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop') {
+      dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: AI_SLOP_UPSCALE_IMAGE_MODEL });
+      setShowModelMenu(false);
+      return;
+    }
     dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: model });
     setShowModelMenu(false);
   };
@@ -627,7 +632,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   const activeLanguage = (i18n.language || 'en').split('-')[0];
 
-  const activeImageGenerationModel = state.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
+  const isAiSlopModelLocked = state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop';
+  const activeImageGenerationModel = isAiSlopModelLocked
+    ? AI_SLOP_UPSCALE_IMAGE_MODEL
+    : state.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
   const getModelCopy = (model: ImageGenerationModel) => {
     if (model === 'chatgpt-image-generation-2') {
       return {
@@ -650,11 +658,18 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       <button
         type="button"
         ref={modelButtonRef}
-        onClick={() => setShowModelMenu(!showModelMenu)}
-        className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground"
-        title={t('topBar.modelSelector.title')}
+        onClick={() => {
+          if (isAiSlopModelLocked) return;
+          setShowModelMenu(!showModelMenu);
+        }}
+        disabled={isAiSlopModelLocked}
+        className={cn(
+          "flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground",
+          isAiSlopModelLocked && "cursor-not-allowed border-foreground/10 bg-surface-elevated text-foreground"
+        )}
+        title={isAiSlopModelLocked ? "AI Slop is locked to ChatGPT Image Generation 2" : t('topBar.modelSelector.title')}
         aria-label={t('topBar.modelSelector.title')}
-        aria-expanded={showModelMenu}
+        aria-expanded={isAiSlopModelLocked ? false : showModelMenu}
       >
         {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
           <Shield size={12} className="text-foreground-muted" />

@@ -38,7 +38,7 @@ import {
   applyVisualPostProduction
 } from '../lib/visualPostProcessing';
 import { nanoid } from 'nanoid';
-import type { AppState, GenerationMode, GenerationProgressStage, TranslationProgress, VideoGenerationProgress } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
@@ -385,6 +385,10 @@ export function useGeneration(): UseGenerationReturn {
   const upscaleBatchSnapshotRef = useRef<AppState['workflow']['upscaleBatch'] | null>(null);
 
   const isReady = ensureServiceInitialized();
+  const effectiveImageGenerationModel =
+    state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop'
+      ? AI_SLOP_UPSCALE_IMAGE_MODEL
+      : state.imageGenerationModel;
 
   // Auto-initialize PDF services
   useEffect(() => {
@@ -883,6 +887,14 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_PROGRESS', payload: next });
       }
     };
+    const resetImagePipelineProgress = () => {
+      if (isMaterialValidationMode) return;
+      lastProgress = 0;
+      lastGenerationStage = null;
+      dispatch({ type: 'SET_PROGRESS', payload: 0 });
+      updateGenerationStage('preparing');
+      updateProgress(2);
+    };
     const updateImagePipelineProgress = (progress: ImageGenerationProgress) => {
       const range = IMAGE_PIPELINE_PROGRESS_RANGES[progress.phase];
       const stage = IMAGE_PIPELINE_STAGES[progress.phase];
@@ -1344,11 +1356,11 @@ export function useGeneration(): UseGenerationReturn {
           ? { promptOptimized: true, skipPromptOptimization: true }
           : {};
 
-        if (state.imageGenerationModel === 'chatgpt-image-generation-2') {
+        if (effectiveImageGenerationModel === 'chatgpt-image-generation-2') {
           const result = await service.generateImages({
             ...request,
             prompt: promptForModel,
-            imageGenerationModel: state.imageGenerationModel,
+            imageGenerationModel: effectiveImageGenerationModel,
             ...promptPreparationFlags
           } as any);
           updateProgress(result.images.length > 0 ? 95 : 85);
@@ -1446,6 +1458,9 @@ export function useGeneration(): UseGenerationReturn {
           if (abortSignal.aborted) {
             throw new DOMException('Request aborted', 'AbortError');
           }
+          if (attempt > 1) {
+            resetImagePipelineProgress();
+          }
           const resultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
             () => generateAttempt(promptForAttempt, attempt > 1),
@@ -1487,6 +1502,9 @@ export function useGeneration(): UseGenerationReturn {
         for (let attempt = 1; attempt <= OUTPUT_VERIFICATION_MAX_ATTEMPTS; attempt += 1) {
           if (abortSignal.aborted) {
             throw new DOMException('Request aborted', 'AbortError');
+          }
+          if (attempt > 1) {
+            resetImagePipelineProgress();
           }
           const resultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
@@ -1905,7 +1923,7 @@ export function useGeneration(): UseGenerationReturn {
           (promptForAttempt, promptAlreadyOptimized) => service.generateImages({
             prompt: promptForAttempt,
             images: images.length > 0 ? images : undefined,
-            imageGenerationModel: state.imageGenerationModel,
+            imageGenerationModel: effectiveImageGenerationModel,
             generationConfig: gridGenerationConfig,
             ...(promptAlreadyOptimized ? { promptOptimized: true, skipPromptOptimization: true } : {})
           } as any),
@@ -2074,7 +2092,7 @@ export function useGeneration(): UseGenerationReturn {
                   (promptForAttempt, promptAlreadyOptimized) => service.generateImages({
                     prompt: promptForAttempt,
                     images: [source],
-                    imageGenerationModel: state.imageGenerationModel,
+                    imageGenerationModel: effectiveImageGenerationModel,
                     generationConfig: {
                       ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
                       abortSignal,
@@ -2212,7 +2230,7 @@ export function useGeneration(): UseGenerationReturn {
           ? await createEditableMaskDataUrl(
               guidanceMaskDataUrl,
               editOutsideSelection,
-              state.imageGenerationModel === 'chatgpt-image-generation-2' && maskMode === 'strict'
+              effectiveImageGenerationModel === 'chatgpt-image-generation-2' && maskMode === 'strict'
             )
           : null;
         const maskImage = editableMaskDataUrl
@@ -2288,7 +2306,7 @@ export function useGeneration(): UseGenerationReturn {
               prompt: promptForAttempt,
               editType,
               activeTool: activeVisualTool,
-              imageGenerationModel: state.imageGenerationModel,
+              imageGenerationModel: effectiveImageGenerationModel,
               generationConfig: generationConfigWithAbort
             }),
             basePrompt
@@ -2458,7 +2476,7 @@ export function useGeneration(): UseGenerationReturn {
             numberOfImages: options.numberOfImages,
             imageConfig: generationConfig.imageConfig,
             openAI: generationConfigWithAbort.openAI,
-            imageGenerationModel: state.imageGenerationModel,
+            imageGenerationModel: effectiveImageGenerationModel,
             abortSignal,
             onProgress: updateImagePipelineProgress,
             promptAlreadyOptimized
@@ -2722,7 +2740,7 @@ export function useGeneration(): UseGenerationReturn {
         lowerMessage.includes('overloaded');
       const isImageMode = !TEXT_ONLY_MODES.includes(state.mode);
       if (isImageMode && isServiceUnavailable) {
-        const providerName = state.imageGenerationModel === 'chatgpt-image-generation-2'
+        const providerName = effectiveImageGenerationModel === 'chatgpt-image-generation-2'
           ? 'ChatGPT Image Generation 2'
           : 'Nano Banana Pro';
         dispatch({

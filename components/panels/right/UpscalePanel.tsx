@@ -3,6 +3,7 @@ import { useAppStore } from '../../../store';
 import { Slider } from '../../ui/Slider';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { cn } from '../../../lib/utils';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL } from '../../../types';
 
 export const UpscalePanel = () => {
   const { state, dispatch } = useAppStore();
@@ -26,6 +27,9 @@ export const UpscalePanel = () => {
   const handleModeChange = (upscaleMode: 'resolution' | 'ai-slop') => {
     if (upscaleMode === wf.upscaleMode) return;
     updateWf({ upscaleMode });
+    if (upscaleMode === 'ai-slop') {
+      dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: AI_SLOP_UPSCALE_IMAGE_MODEL });
+    }
   };
 
   const handleResolutionChange = (resolution: '2k' | '4k') => {

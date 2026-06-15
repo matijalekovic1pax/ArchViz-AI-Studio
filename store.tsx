@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -169,6 +169,9 @@ const updateWorkflow = (
   workflow: WorkflowSettings,
   payload: Partial<WorkflowSettings>
 ): WorkflowSettings => normalizeWorkflow({ ...workflow, ...payload });
+
+const shouldLockAiSlopModel = (mode: AppState['mode'], workflow: WorkflowSettings) =>
+  mode === 'upscale' && workflow.upscaleMode === 'ai-slop';
 
 const initialVideoState: VideoState = {
   inputMode: 'image-animate',
@@ -1026,10 +1029,23 @@ const initialState: AppState = {
 
 function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'SET_MODE': return { ...state, mode: action.payload, activeRightTab: 'default', prompt: '' };
+    case 'SET_MODE': {
+      const nextMode = action.payload;
+      return {
+        ...state,
+        mode: nextMode,
+        activeRightTab: 'default',
+        prompt: '',
+        imageGenerationModel: shouldLockAiSlopModel(nextMode, state.workflow)
+          ? AI_SLOP_UPSCALE_IMAGE_MODEL
+          : state.imageGenerationModel
+      };
+    }
     case 'SET_IMAGE_GENERATION_MODEL': return {
       ...state,
-      imageGenerationModel: normalizeImageGenerationModel(action.payload)
+      imageGenerationModel: shouldLockAiSlopModel(state.mode, state.workflow)
+        ? AI_SLOP_UPSCALE_IMAGE_MODEL
+        : normalizeImageGenerationModel(action.payload)
     };
     case 'SET_PROMPT': return { ...state, prompt: action.payload };
     case 'SET_STYLE': return {
@@ -1043,7 +1059,16 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'SET_GENERATION_STAGE': return { ...state, generationStage: action.payload };
-    case 'UPDATE_WORKFLOW': return { ...state, workflow: updateWorkflow(state.workflow, action.payload) };
+    case 'UPDATE_WORKFLOW': {
+      const workflow = updateWorkflow(state.workflow, action.payload);
+      return {
+        ...state,
+        workflow,
+        imageGenerationModel: shouldLockAiSlopModel(state.mode, workflow)
+          ? AI_SLOP_UPSCALE_IMAGE_MODEL
+          : state.imageGenerationModel
+      };
+    }
     
     // Video State Reducers
     case 'UPDATE_VIDEO_STATE': return { ...state, workflow: { ...state.workflow, videoState: { ...state.workflow.videoState, ...action.payload } } };
@@ -1085,13 +1110,18 @@ function appReducer(state: AppState, action: Action): AppState {
 
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
-    case 'LOAD_PROJECT': return {
-      ...action.payload,
-      imageGenerationModel: normalizeImageGenerationModel(action.payload?.imageGenerationModel),
-      workflow: normalizeWorkflow(action.payload.workflow),
-      sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
-      appAlert: action.payload?.appAlert ?? null
-    };
+    case 'LOAD_PROJECT': {
+      const workflow = normalizeWorkflow(action.payload.workflow);
+      return {
+        ...action.payload,
+        imageGenerationModel: shouldLockAiSlopModel(action.payload.mode, workflow)
+          ? AI_SLOP_UPSCALE_IMAGE_MODEL
+          : normalizeImageGenerationModel(action.payload?.imageGenerationModel),
+        workflow,
+        sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
+        appAlert: action.payload?.appAlert ?? null
+      };
+    }
     case 'RESET_PROJECT': return { ...initialState };
     default: return state;
   }
