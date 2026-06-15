@@ -1461,10 +1461,19 @@ function sanitizeGeminiGenerationConfig(config) {
   const wantsImage = Array.isArray(next.responseModalities)
     ? next.responseModalities.includes('IMAGE')
     : Boolean(responseImageConfig);
+  const thinkingConfig = next.thinkingConfig &&
+    typeof next.thinkingConfig === 'object' &&
+    !Array.isArray(next.thinkingConfig)
+      ? next.thinkingConfig
+      : undefined;
 
   delete next.thinkingConfig;
   delete next.responseModalities;
   delete next.responseFormat;
+
+  if (!wantsImage && thinkingConfig) {
+    next.thinkingConfig = thinkingConfig;
+  }
 
   if (wantsImage && responseImageConfig) {
     delete next.imageConfig;

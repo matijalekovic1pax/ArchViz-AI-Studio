@@ -16,8 +16,12 @@ export const DEFAULT_MODEL = 'gemini-3-pro-image';
 export const IMAGE_MODEL = 'gemini-3-pro-image';
 export const TEXT_MODEL = 'gemini-3.5-flash';
 export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
+export const PROMPT_OPTIMIZER_MODEL = 'gemini-3.5-flash';
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
+const PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES = 420;
+const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
+const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -45,6 +49,22 @@ export interface GeminiRequest {
   generationConfig?: GenerationConfig;
   model?: string;
   imageGenerationModel?: ImageGenerationModel;
+}
+
+interface InternalGeminiRequest extends GeminiRequest {
+  maskImage?: ImageData;
+  promptOptimized?: boolean;
+  skipPromptOptimization?: boolean;
+}
+
+type ImagePromptKind = 'generation' | 'batch' | 'edit' | 'grid';
+
+interface PromptOptimizationContext {
+  promptKind: ImagePromptKind;
+  imageGenerationModel?: ImageGenerationModel;
+  hasMaskImage?: boolean;
+  hasReferenceImages?: boolean;
+  originalUserPrompt?: string;
 }
 
 export interface ImageConfig {
@@ -298,7 +318,7 @@ export class GeminiService {
   async generate(request: GeminiRequest): Promise<GeminiResponse> {
     const wantsImage = (request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']).includes('IMAGE');
     const preparedRequest = wantsImage
-      ? { ...request, prompt: this.prepareImagePrompt(request, 'generation') }
+      ? await this.prepareImageRequest(request, 'generation')
       : request;
 
     if (this.isOpenAIImageRequest(preparedRequest)) {
@@ -338,10 +358,7 @@ export class GeminiService {
   }
 
   async generateImages(request: GeminiRequest): Promise<GeminiResponse> {
-    const preparedRequest = {
-      ...request,
-      prompt: this.prepareImagePrompt(request, 'generation')
-    };
+    const preparedRequest = await this.prepareImageRequest(request, 'generation');
 
     if (this.isOpenAIImageRequest(preparedRequest)) {
       return this.generateOpenAIImages(preparedRequest);
@@ -371,23 +388,35 @@ export class GeminiService {
   async generateBatchImages(request: BatchImageRequest): Promise<BatchImageResponse> {
     const numberOfImages = Math.min(Math.max(1, request.numberOfImages), 8);
     const promises: Promise<GeminiResponse>[] = [];
+    const preparedBaseRequest = await this.prepareImageRequest({
+      prompt: request.prompt,
+      images: request.referenceImages,
+      imageGenerationModel: request.imageGenerationModel,
+      generationConfig: {
+        imageConfig: request.imageConfig,
+        openAI: request.openAI,
+        abortSignal: request.abortSignal
+      }
+    }, 'batch');
 
     for (let i = 0; i < numberOfImages; i++) {
       const prompt = numberOfImages > 1
-        ? `${request.prompt} (Variation ${i + 1})`
-        : request.prompt;
+        ? `${preparedBaseRequest.prompt} Variation ${i + 1}: keep the same intent and references, but choose a distinct, plausible visual interpretation.`
+        : preparedBaseRequest.prompt;
 
       promises.push(
         this.generateImages({
           prompt,
           images: request.referenceImages,
           imageGenerationModel: request.imageGenerationModel,
+          promptOptimized: true,
+          skipPromptOptimization: true,
           generationConfig: {
             imageConfig: request.imageConfig,
             openAI: request.openAI,
             abortSignal: request.abortSignal
           }
-        })
+        } as InternalGeminiRequest)
       );
     }
 
@@ -566,6 +595,18 @@ export class GeminiService {
         promptKind: 'edit'
       }
     );
+    const optimizedEditPrompt = await this.optimizePromptForImageGeneration(
+      adaptedEditPrompt,
+      images,
+      request.generationConfig,
+      {
+        promptKind: 'edit',
+        imageGenerationModel: request.imageGenerationModel,
+        hasMaskImage: Boolean(request.maskImage),
+        hasReferenceImages: referenceCount > 0,
+        originalUserPrompt: request.prompt
+      }
+    );
 
     if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
@@ -576,7 +617,7 @@ export class GeminiService {
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
 
       return this.generateOpenAIImages({
-        prompt: adaptedEditPrompt,
+        prompt: optimizedEditPrompt,
         images: openAIImages,
         maskImage: maskMode === 'strict' ? request.maskImage : undefined,
         imageGenerationModel: request.imageGenerationModel,
@@ -585,11 +626,13 @@ export class GeminiService {
     }
 
     return this.generate({
-      prompt: adaptedEditPrompt,
+      prompt: optimizedEditPrompt,
       images,
       imageGenerationModel: request.imageGenerationModel,
+      promptOptimized: true,
+      skipPromptOptimization: true,
       generationConfig: request.generationConfig
-    });
+    } as InternalGeminiRequest);
   }
 
   async generateBatchImagesParallel(request: BatchImageRequest): Promise<BatchImageResponse> {
@@ -679,7 +722,7 @@ export class GeminiService {
   async *generateStream(request: GeminiRequest): AsyncGenerator<Partial<GeminiResponse>> {
     const wantsImage = (request.generationConfig?.responseModalities || ['TEXT', 'IMAGE']).includes('IMAGE');
     const preparedRequest = wantsImage
-      ? { ...request, prompt: this.prepareImagePrompt(request, 'generation') }
+      ? await this.prepareImageRequest(request, 'generation')
       : request;
 
     if (wantsImage && this.isOpenAIImageRequest(preparedRequest)) {
@@ -849,13 +892,163 @@ export class GeminiService {
   // Private Helper Methods
   // --------------------------------------------------------------------------
 
+  private async prepareImageRequest(
+    request: InternalGeminiRequest,
+    promptKind: ImagePromptKind = 'generation'
+  ): Promise<InternalGeminiRequest> {
+    if (request.promptOptimized) {
+      return request;
+    }
+
+    const prompt = this.prepareImagePrompt(request, promptKind);
+    const preparedRequest: InternalGeminiRequest = { ...request, prompt };
+
+    if (request.skipPromptOptimization) {
+      return preparedRequest;
+    }
+
+    const optimizedPrompt = await this.optimizePromptForImageGeneration(
+      prompt,
+      request.images,
+      request.generationConfig,
+      {
+        promptKind,
+        imageGenerationModel: request.imageGenerationModel,
+        hasMaskImage: Boolean(request.maskImage),
+        hasReferenceImages: Boolean(request.images && request.images.length > 1)
+      }
+    );
+
+    return {
+      ...preparedRequest,
+      prompt: optimizedPrompt,
+      promptOptimized: optimizedPrompt !== prompt
+    };
+  }
+
+  private async optimizePromptForImageGeneration(
+    prompt: string,
+    images: ImageData[] | undefined,
+    generationConfig: GenerationConfig | undefined,
+    context: PromptOptimizationContext
+  ): Promise<string> {
+    if (!this.shouldOptimizePromptForImageGeneration(prompt, images)) {
+      return prompt;
+    }
+
+    try {
+      const optimized = await this.generateText({
+        model: PROMPT_OPTIMIZER_MODEL,
+        prompt: this.buildPromptOptimizerPrompt(prompt, images, context),
+        images,
+        generationConfig: {
+          temperature: 0.18,
+          topP: 0.85,
+          maxOutputTokens: PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS,
+          responseModalities: ['TEXT'],
+          thinkingConfig: { thinkingLevel: 'high' },
+          abortSignal: generationConfig?.abortSignal
+        }
+      });
+
+      return this.cleanOptimizedPrompt(optimized, prompt);
+    } catch (error) {
+      console.warn('Prompt optimizer failed; using the original image prompt.', error);
+      return prompt;
+    }
+  }
+
+  private shouldOptimizePromptForImageGeneration(prompt: string, images?: ImageData[]): boolean {
+    const normalized = prompt.trim();
+    if (!normalized) return false;
+    if (ADAPTED_IMAGE_PROMPT_PATTERN.test(normalized)) return true;
+    if (images && images.length > 0) return true;
+    return normalized.length >= PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES;
+  }
+
+  private buildPromptOptimizerPrompt(
+    appPrompt: string,
+    images: ImageData[] | undefined,
+    context: PromptOptimizationContext
+  ): string {
+    const imageCount = images?.length || 0;
+    const imageRelationship = imageCount === 0
+      ? 'No images are attached.'
+      : context.hasMaskImage
+        ? `Attached images: image 1 is the source/current image, image 2 is the mask or selection guidance, and any later images are secondary references.`
+        : imageCount === 1
+          ? 'Attached image: image 1 is the primary source or visual reference.'
+          : `Attached images: image 1 is the primary source/current image, and images 2-${imageCount} are secondary references.`;
+    const modelName = context.imageGenerationModel === 'chatgpt-image-generation-2'
+      ? 'ChatGPT Image Generation 2'
+      : 'Nano Banana Pro / Gemini image';
+    const originalUserLine = context.originalUserPrompt?.trim()
+      ? `Original user request, before app expansion:\n${this.truncatePromptForOptimizer(context.originalUserPrompt.trim(), 1800)}`
+      : '';
+
+    return [
+      'You are the prompt optimization layer inside an architectural image generation app.',
+      'Your job is to read the app-generated prompt and inspect the attached images, infer the user intent, then rewrite the prompt for the final image model in natural human language.',
+      '',
+      `Final image model: ${modelName}.`,
+      `Prompt kind: ${context.promptKind}.`,
+      imageRelationship,
+      originalUserLine,
+      '',
+      'Rewrite goals:',
+      '- Keep the essential user intent and the most important visual priorities.',
+      '- Preserve source-image relationships, camera, composition, spatial layout, geometry, and existing design when the prompt says the source is locked.',
+      '- For edit or mask requests, keep the selected/masked area scope clear and preserve unaffected regions.',
+      '- Keep exact visible text, signage, logos, or labels only when the prompt explicitly requires them.',
+      '- Keep the few most important material, style, lighting, atmosphere, and quality cues.',
+      '- Remove redundant rule lists, internal labels, priority systems, legalistic phrasing, excessive negative instructions, and over-specific micro-control.',
+      '- Do not invent new requirements, new objects, new camera moves, or new design changes.',
+      '',
+      'Output requirements:',
+      '- Return one concise prompt only.',
+      '- Use natural language, as if an art director is briefing a renderer.',
+      '- Prefer one paragraph, two short paragraphs only if the mask/reference relationship needs clarity.',
+      '- Do not use markdown, bullets, JSON, quotes, headings, or meta commentary.',
+      '- Target roughly 60-180 words, unless the request is extremely simple.',
+      '',
+      'App-generated prompt to rewrite:',
+      this.truncatePromptForOptimizer(appPrompt, PROMPT_OPTIMIZER_MAX_INPUT_CHARS)
+    ].filter(Boolean).join('\n');
+  }
+
+  private truncatePromptForOptimizer(prompt: string, maxChars: number): string {
+    if (prompt.length <= maxChars) return prompt;
+    const headLength = Math.floor(maxChars * 0.68);
+    const tailLength = maxChars - headLength;
+    return `${prompt.slice(0, headLength)}\n\n[...middle of app prompt omitted for brevity...]\n\n${prompt.slice(-tailLength)}`;
+  }
+
+  private cleanOptimizedPrompt(optimized: string, fallbackPrompt: string): string {
+    const strippedFence = optimized
+      .replace(/```(?:text|markdown|md)?\s*([\s\S]*?)```/gi, '$1')
+      .replace(/^\s*(?:optimized prompt|rewritten prompt|final prompt)\s*:\s*/i, '')
+      .trim();
+    const withoutWrappingQuotes = strippedFence
+      .replace(/^["'`]+/, '')
+      .replace(/["'`]+$/, '')
+      .trim();
+    const normalized = withoutWrappingQuotes.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    const refusalPattern = /\b(?:i can(?:not|'t)|i'm unable|i am unable|sorry)\b/i;
+
+    if (normalized.length < 24 || refusalPattern.test(normalized)) {
+      return fallbackPrompt;
+    }
+
+    return normalized;
+  }
+
   private isOpenAIImageRequest(request: GeminiRequest): boolean {
     return request.imageGenerationModel === 'chatgpt-image-generation-2';
   }
 
   private prepareImagePrompt(
     request: GeminiRequest & { maskImage?: ImageData },
-    promptKind: 'generation' | 'batch' | 'edit' | 'grid' = 'generation'
+    promptKind: ImagePromptKind = 'generation'
   ): string {
     const prompt = request.prompt || '';
     if (!prompt.trim() || ADAPTED_IMAGE_PROMPT_PATTERN.test(prompt)) return prompt;
@@ -947,6 +1140,9 @@ export class GeminiService {
     const result: Record<string, any> = {
       ...rest,
     };
+    if (!wantsImage && thinkingConfig && Object.keys(thinkingConfig).length > 0) {
+      result.thinkingConfig = thinkingConfig;
+    }
     if (wantsImage && responseImageConfig) {
       if (this.usesResponseFormatImageConfig(model)) {
         result.responseFormat = { image: responseImageConfig };
