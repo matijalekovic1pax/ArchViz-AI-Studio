@@ -454,7 +454,7 @@ export interface WorkflowSettings {
   };
   visualPeople: {
     // Operation mode
-    mode: 'enhance' | 'repopulate';
+    mode: 'enhance' | 'automatic' | 'repopulate';
 
     // Airport zone context
     airportZone: 'terminal-general' | 'check-in' | 'security' | 'departure-gate' | 'arrival-hall' | 'baggage-claim' | 'retail-area' | 'food-court' | 'lounge' | 'transit-corridor';

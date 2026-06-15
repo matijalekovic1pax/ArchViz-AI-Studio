@@ -442,7 +442,7 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
-    const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
+    const peopleMode = people.mode === 'automatic' || people.mode === 'repopulate' ? people.mode : 'enhance';
     if (peopleMode === 'enhance') {
       return compactItems([
         selectionSummary,
@@ -451,6 +451,17 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
         're-render existing 3D people as realistic humans',
         'preserve existing pose, placement, scale, count, lighting, perspective, ground contact, and immediate accessories',
         'fix low-poly faces, hands, silhouettes, clothing, and render artifacts'
+      ]);
+    }
+    if (peopleMode === 'automatic') {
+      return compactItems([
+        selectionSummary,
+        ...selectionControls,
+        'people mode automatic',
+        'analyze current image context and existing people',
+        'infer zone, density, scale, flow, demographics, wardrobe, luggage, staff presence, lighting, and perspective automatically',
+        'add or refine only context-appropriate people on walkable or occupiable areas',
+        'preserve architecture, materials, camera, signage, and composition; avoid overcrowding'
       ]);
     }
     const staffTypes = compactItems([
@@ -2875,18 +2886,30 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
-    const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
+    const peopleMode = people.mode === 'automatic' || people.mode === 'repopulate' ? people.mode : 'enhance';
     const describeRange = (value: number, low: string, mid: string, high: string) =>
       value > 65 ? high : value > 30 ? mid : low;
     const joinIf = (items: Array<string | false | null | undefined>) => compactItems(items).join(', ');
 
-    parts.push('People-only architectural edit. Modify human figures and immediate personal accessories only; keep architecture, materials, landscaping, vehicles, signage, camera, and composition unchanged.');
+    parts.push(
+      peopleMode === 'automatic'
+        ? 'People-only architectural edit. Add, refine, or repair human figures and immediate personal accessories only; keep architecture, materials, landscaping, vehicles, signage, camera, and composition unchanged.'
+        : 'People-only architectural edit. Modify human figures and immediate personal accessories only; keep architecture, materials, landscaping, vehicles, signage, camera, and composition unchanged.'
+    );
     parts.push(...selectionParts);
 
     if (selectionCount === 0) {
-      parts.push('No selection is provided: detect people across the frame and target people only.');
+      parts.push(
+        peopleMode === 'automatic'
+          ? 'No selection is provided: analyze the full frame and choose context-appropriate walkable, queuing, standing, or seated areas for people.'
+          : 'No selection is provided: detect people across the frame and target people only.'
+      );
     } else {
-      parts.push('Within the selected area, identify human figures and edit those people only; floors, furniture, walls, and background pixels are reconstruction context, not overwrite targets.');
+      parts.push(
+        peopleMode === 'automatic'
+          ? 'Within the selected area, use the full image as context and add or refine people only where the selection contains plausible occupiable space; floors, furniture, walls, and background pixels are placement and reconstruction context.'
+          : 'Within the selected area, identify human figures and edit those people only; floors, furniture, walls, and background pixels are reconstruction context, not overwrite targets.'
+      );
     }
 
     const zoneDescriptions: Record<string, string> = {
@@ -2905,6 +2928,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     const operationDesc: Record<string, string> = {
       enhance: 'enhance existing people while preserving count and placement unless a small correction is needed',
       repopulate: 'replace or repopulate people to match requested density and flow',
+      automatic: 'automatically infer and add context-appropriate people from the current image',
     };
 
     if (peopleMode === 'enhance') {
@@ -2913,6 +2937,15 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push('Improve faces, hands, hair, clothing folds, body proportions, silhouettes, edge blending, and render quality. Match the scene lighting, shadow direction, color temperature, lens behavior, depth of field, and resolution.');
       parts.push('Keep immediate personal accessories attached to the same people when present, including luggage, bags, phones, carts, and contact shadows.');
       parts.push('Constraints: modify only existing people and their attached artifacts/accessories. Do not change building, landscape, vehicles, sky, signage, materials, camera, perspective, composition, or nearby non-human content. Do not add captions, labels, UI, handwriting, or prompt text.');
+      return parts.filter(Boolean).join(' ');
+    }
+
+    if (peopleMode === 'automatic') {
+      parts.push('Operation: automatically repopulate the image with believable people using visual analysis only.');
+      parts.push('Infer the scene type, public-space function, walkable areas, camera height, perspective, human scale, crowd density, movement flow, queue logic, seating/waiting zones, staff presence, luggage needs, wardrobe, demographics, lighting, shadows, and image quality directly from the current image.');
+      parts.push('Use any existing people as the primary reference for scale, density, pose language, wardrobe style, motion, demographics, luggage, staff roles, lighting, and render fidelity. Preserve existing people unless they are clear artifacts; add a natural number of new people that makes the scene feel plausibly occupied without overcrowding.');
+      parts.push('Place figures only where people could physically stand, walk, queue, or sit. Match perspective, occlusion, ground contact, contact shadows, depth of field, color temperature, and resolution. Leave architectural focal areas and circulation clear where the image suggests they should remain open.');
+      parts.push('Do not use manual people settings in this automatic mode. Do not change building, landscape, vehicles, sky, signage, materials, camera, perspective, or composition. Do not add captions, labels, UI, handwriting, or prompt text.');
       return parts.filter(Boolean).join(' ');
     }
 

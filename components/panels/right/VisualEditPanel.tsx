@@ -2953,13 +2953,15 @@ export const VisualEditPanel = () => {
         );
       case 'people': {
         const people = wf.visualPeople;
-        const peopleMode = people.mode === 'repopulate' ? 'repopulate' : 'enhance';
+        const peopleMode = people.mode === 'automatic' || people.mode === 'repopulate' ? people.mode : 'enhance';
 
         return (
           <div className="space-y-2 animate-fade-in">
             <SectionDesc>
               {peopleMode === 'enhance'
                 ? 'Re-render existing 3D people more realistically while preserving their scene placement.'
+                : peopleMode === 'automatic'
+                  ? 'Analyze the current image and add context-matched people automatically.'
                 : 'Edit and refine people in airport renderings — adjust demographics, wardrobe, luggage, and behavior.'}
             </SectionDesc>
 
@@ -2979,6 +2981,7 @@ export const VisualEditPanel = () => {
               value={peopleMode}
               options={[
                 { label: 'Enhance', value: 'enhance' },
+                { label: 'Auto', value: 'automatic' },
                 { label: 'Repopulate', value: 'repopulate' },
               ]}
               onChange={(value) => updatePeople({ mode: value })}
@@ -2986,10 +2989,12 @@ export const VisualEditPanel = () => {
             <div className="text-[10px] text-foreground-muted -mt-0.5">
               {peopleMode === 'enhance'
                 ? 'Re-render existing 3D people as realistic humans while preserving pose, placement, scale, and scene integration.'
+                : peopleMode === 'automatic'
+                  ? 'Infer zone, density, flow, wardrobe, staff, luggage, and placement from the image and existing people.'
                 : 'Replace or add people to match desired look and density.'}
             </div>
 
-            {peopleMode !== 'enhance' && (
+            {peopleMode === 'repopulate' && (
               <>
             {/* Airport Zone */}
             <PeopleSection title="Airport Zone">

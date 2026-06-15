@@ -824,7 +824,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualAdjust.transformDistortion', 'Transform distortion', 'number', ['visual-edit'], { min: -100, max: 100 }),
   workflow('visualAdjust.transformPerspective', 'Transform perspective', 'number', ['visual-edit'], { min: -100, max: 100 }),
   workflow('visualAdjust.styleStrength', 'Adjustment style strength', 'number', ['visual-edit'], { min: -100, max: 100 }),
-  workflow('visualPeople.mode', 'People edit mode', 'string', ['visual-edit'], { values: ['enhance', 'repopulate'] }),
+  workflow('visualPeople.mode', 'People edit mode', 'string', ['visual-edit'], { values: ['enhance', 'automatic', 'repopulate'] }),
   workflow('visualPeople.airportZone', 'People airport zone', 'string', ['visual-edit'], {
     values: ['terminal-general', 'check-in', 'security', 'departure-gate', 'arrival-hall', 'baggage-claim', 'retail-area', 'food-court', 'lounge', 'transit-corridor'],
   }),
