@@ -150,7 +150,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const isVideoMode = state.mode === 'video';
   const isUpscaleMode = state.mode === 'upscale';
   const isPdfCompressionMode = state.mode === 'pdf-compression';
-  const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
+  const upscaleReady = state.workflow.upscaleBatch.length > 0 || Boolean(state.uploadedImage);
   const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
   const canUseDownloadControls = Boolean(state.uploadedImage) && !state.isGenerating;
@@ -185,7 +185,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       : isPdfCompressionMode
         ? !pdfQueueReady
         : isUpscaleMode
-          ? !upscaleQueueReady
+          ? !upscaleReady
           : isVideoMode
             ? !videoReady || !videoUnlocked
             : !state.uploadedImage;
@@ -248,7 +248,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       return;
     }
     if (isUpscaleMode) {
-      if (!upscaleQueueReady) return;
+      if (!upscaleReady) return;
       await generate();
       return;
     }

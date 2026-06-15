@@ -708,9 +708,9 @@ const getAssistantGenerationReadiness = (
         ? { ready: true }
         : { ready: false, message: 'Add PDFs to the queue before compressing.' };
     case 'upscale':
-      return state.workflow.upscaleBatch.length > 0
+      return state.workflow.upscaleBatch.length > 0 || Boolean(state.uploadedImage)
         ? { ready: true }
-        : { ready: false, message: 'Add an image to the upscale batch before running upscale.' };
+        : { ready: false, message: 'Add an image to the canvas or upscale batch before running upscale.' };
     case 'visual-edit':
       if (!state.uploadedImage) {
         return { ready: false, message: 'Upload or select an image before running Visual Edit.' };

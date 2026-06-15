@@ -462,7 +462,7 @@ export const MobilePanels: React.FC<{
   const isUpscaleMode = state.mode === 'upscale';
   const isPdfCompressionMode = state.mode === 'pdf-compression';
   const isHeadshotMode = state.mode === 'headshot';
-  const upscaleQueueReady = state.workflow.upscaleBatch.length > 0;
+  const upscaleReady = state.workflow.upscaleBatch.length > 0 || Boolean(state.uploadedImage);
   const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
   const headshotReady = Boolean(
@@ -491,7 +491,7 @@ export const MobilePanels: React.FC<{
         : isPdfCompressionMode
           ? !pdfQueueReady
           : isUpscaleMode
-            ? !upscaleQueueReady
+            ? !upscaleReady
             : isVideoMode
               ? !videoReady || !videoUnlocked
               : isHeadshotMode

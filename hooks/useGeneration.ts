@@ -1958,9 +1958,23 @@ export function useGeneration(): UseGenerationReturn {
       } else if (isUpscaleMode) {
         updateProgress(10);
         const wf = state.workflow;
-        const queued = wf.upscaleBatch.map((item) => ({ ...item }));
+        const hasBatchQueue = wf.upscaleBatch.length > 0;
+        const canvasUpscaleItem = !hasBatchQueue && state.uploadedImage
+          ? {
+              id: `canvas-${Date.now()}`,
+              name: 'Canvas Image',
+              status: 'queued' as const,
+              url: state.uploadedImage
+            }
+          : null;
+        const queued = hasBatchQueue
+          ? wf.upscaleBatch.map((item) => ({ ...item }))
+          : canvasUpscaleItem
+            ? [canvasUpscaleItem]
+            : [];
         const failedItems: typeof queued = []; // Track failed items to keep them in the batch
         const syncUpscaleBatch = (nextBatch: typeof queued) => {
+          if (!hasBatchQueue) return;
           upscaleBatchSnapshotRef.current = nextBatch.map((item) => ({ ...item }));
           dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleBatch: [...nextBatch] } });
         };
@@ -2155,7 +2169,9 @@ export function useGeneration(): UseGenerationReturn {
               payload: {
                 id: nanoid(),
                 tone: 'warning',
-                message: `Failed to upscale "${item.name}" after ${MAX_RETRIES + 1} attempts. Image kept in queue for retry.`
+                message: hasBatchQueue
+                  ? `Failed to upscale "${item.name}" after ${MAX_RETRIES + 1} attempts. Image kept in queue for retry.`
+                  : `Failed to upscale the current canvas image after ${MAX_RETRIES + 1} attempts.`
               }
             });
           }
