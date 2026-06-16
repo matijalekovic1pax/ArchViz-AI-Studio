@@ -76,6 +76,7 @@ const DEFAULT_APPWRITE_REPORTS_COLLECTION_ID = 'feedback_reports';
 const DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID = 'feedback_activity';
 const DEFAULT_APPWRITE_ADMINS_COLLECTION_ID = 'feedback_admins';
 const DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID = 'feedback_snapshots';
+const FEEDBACK_ADMIN_EMAIL = 'matija.lekovic@1pax.com';
 const GEMINI_JSON_REWRITE_MAX_BYTES = 1 * 1024 * 1024;
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -1620,26 +1621,7 @@ async function withLoggedGatewayRequest(request, env, ctx, user, details, handle
 }
 
 async function isFeedbackAdmin(env, email) {
-  if (!email) return false;
-  if (isAppwriteFeedbackConfigured(env)) {
-    try {
-      return await isAppwriteFeedbackAdmin(env, email);
-    } catch (error) {
-      console.error('[feedback] Appwrite admin check failed', error?.message || error);
-      return false;
-    }
-  }
-
-  try {
-    const rows = await supabaseJson(
-      env,
-      `/rest/v1/feedback_admins?select=email&email=eq.${encodeURIComponent(email)}&is_active=eq.true&limit=1`
-    );
-    return Array.isArray(rows) && rows.length > 0;
-  } catch (error) {
-    console.error('[feedback] admin check failed', error?.message || error);
-    return false;
-  }
+  return String(email || '').trim().toLowerCase() === FEEDBACK_ADMIN_EMAIL;
 }
 
 async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {

@@ -74,7 +74,7 @@ Feedback reports are written by the Worker using a server API key. The browser n
 npm run setup:appwrite-feedback
 ```
 
-The script creates the `archviz_reports` database, `feedback_reports`, `feedback_activity`, and `feedback_admins` collections, the `feedback_snapshots` bucket, and the initial feedback admin email.
+The script creates the `archviz_reports` database, `feedback_reports`, `feedback_activity`, and `feedback_admins` collections, the `feedback_snapshots` bucket, and seeds the initial feedback admin record for metadata. Admin API access is enforced in the Worker and is restricted to `matija.lekovic@1pax.com`.
 
 For production, set the matching `APPWRITE_*` values as Cloudflare Worker secrets from the `cloudflare-worker` directory. Vercel does not need the Appwrite API key because Vercel only serves the frontend bundle.
 
