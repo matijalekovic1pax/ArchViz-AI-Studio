@@ -76,6 +76,8 @@ const DEFAULT_APPWRITE_REPORTS_COLLECTION_ID = 'feedback_reports';
 const DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID = 'feedback_activity';
 const DEFAULT_APPWRITE_ADMINS_COLLECTION_ID = 'feedback_admins';
 const DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID = 'feedback_snapshots';
+const DEFAULT_APPWRITE_LOG_SESSIONS_COLLECTION_ID = 'app_generation_sessions';
+const DEFAULT_APPWRITE_LOG_EVENTS_COLLECTION_ID = 'app_request_logs';
 const FEEDBACK_ADMIN_EMAIL = 'matija.lekovic@1pax.com';
 const GEMINI_JSON_REWRITE_MAX_BYTES = 1 * 1024 * 1024;
 
@@ -555,6 +557,8 @@ function resolveAppwriteConfig(env) {
     activityCollectionId: env.APPWRITE_ACTIVITY_COLLECTION_ID || DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID,
     adminsCollectionId: env.APPWRITE_ADMINS_COLLECTION_ID || DEFAULT_APPWRITE_ADMINS_COLLECTION_ID,
     snapshotsBucketId: env.APPWRITE_SNAPSHOTS_BUCKET_ID || DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID,
+    logSessionsCollectionId: env.APPWRITE_LOG_SESSIONS_COLLECTION_ID || DEFAULT_APPWRITE_LOG_SESSIONS_COLLECTION_ID,
+    logEventsCollectionId: env.APPWRITE_LOG_EVENTS_COLLECTION_ID || DEFAULT_APPWRITE_LOG_EVENTS_COLLECTION_ID,
   };
 }
 
@@ -734,6 +738,7 @@ function appwriteSetupSchemas() {
   const priorityValues = ['low', 'normal', 'high', 'urgent'];
   const categoryValues = ['bug', 'quality', 'ux', 'performance', 'feature_request', 'other'];
   const activityKindValues = ['created', 'comment', 'status_changed', 'priority_changed', 'system'];
+  const logStatusValues = ['started', 'running', 'completed', 'failed', 'cancelled'];
 
   return {
     reportAttributes: [
@@ -785,6 +790,48 @@ function appwriteSetupSchemas() {
       appwriteSetupStringAttr('created_by', 120),
       appwriteSetupTextAttr('notes'),
     ],
+    logSessionAttributes: [
+      appwriteSetupStringAttr('trace_id', 160, true),
+      appwriteSetupDatetimeAttr('created_at', true),
+      appwriteSetupDatetimeAttr('started_at', true),
+      appwriteSetupDatetimeAttr('updated_at', true),
+      appwriteSetupDatetimeAttr('completed_at'),
+      appwriteSetupEmailAttr('user_email'),
+      appwriteSetupStringAttr('user_name', 200),
+      appwriteSetupEnumAttr('status', logStatusValues, true),
+      appwriteSetupStringAttr('mode', 80),
+      appwriteSetupStringAttr('provider', 120),
+      appwriteSetupStringAttr('model', 160),
+      appwriteSetupTextAttr('prompt'),
+      appwriteSetupStringAttr('prompt_hash', 128),
+      appwriteSetupIntAttr('duration_ms'),
+      appwriteSetupTextAttr('input_summary_json'),
+      appwriteSetupTextAttr('output_summary_json'),
+      appwriteSetupTextAttr('error_message'),
+      appwriteSetupTextAttr('metadata_json'),
+    ],
+    logEventAttributes: [
+      appwriteSetupIntAttr('event_id', true),
+      appwriteSetupDatetimeAttr('created_at', true),
+      appwriteSetupStringAttr('trace_id', 160, true),
+      appwriteSetupStringAttr('generation_id', 36),
+      appwriteSetupEmailAttr('user_email'),
+      appwriteSetupStringAttr('user_name', 200),
+      appwriteSetupStringAttr('event_type', 120, true),
+      appwriteSetupStringAttr('provider', 120),
+      appwriteSetupStringAttr('model', 160),
+      appwriteSetupStringAttr('action', 160),
+      appwriteSetupStringAttr('method', 16),
+      appwriteSetupStringAttr('path', 600),
+      appwriteSetupIntAttr('status_code'),
+      appwriteSetupIntAttr('duration_ms'),
+      appwriteSetupTextAttr('prompt'),
+      appwriteSetupStringAttr('prompt_hash', 128),
+      appwriteSetupTextAttr('request_summary_json'),
+      appwriteSetupTextAttr('response_summary_json'),
+      appwriteSetupTextAttr('error_message'),
+      appwriteSetupTextAttr('metadata_json'),
+    ],
   };
 }
 
@@ -802,7 +849,7 @@ async function setupAppwriteFeedbackResources(env, requestedPhase = 'all', optio
     : null;
   const batchSlice = (items) => batchLimit ? items.slice(batchStart, batchStart + batchLimit) : items;
   const logs = [];
-  const { reportAttributes, activityAttributes, adminAttributes } = appwriteSetupSchemas();
+  const { reportAttributes, activityAttributes, adminAttributes, logSessionAttributes, logEventAttributes } = appwriteSetupSchemas();
 
   if (shouldRun('resources')) {
     await appwriteSetupCreateIfMissing(
@@ -866,6 +913,36 @@ async function setupAppwriteFeedbackResources(env, requestedPhase = 'all', optio
     await appwriteSetupCreateIfMissing(
       env,
       logs,
+      'log sessions collection',
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}`,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections`,
+      {
+        collectionId: config.logSessionsCollectionId,
+        name: 'App Generation Sessions',
+        permissions: [],
+        documentSecurity: false,
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
+      'log events collection',
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logEventsCollectionId)}`,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections`,
+      {
+        collectionId: config.logEventsCollectionId,
+        name: 'App Request Logs',
+        permissions: [],
+        documentSecurity: false,
+        enabled: true,
+      }
+    );
+
+    await appwriteSetupCreateIfMissing(
+      env,
+      logs,
       'snapshot bucket',
       `/storage/buckets/${encodeURIComponent(config.snapshotsBucketId)}`,
       '/storage/buckets',
@@ -903,6 +980,18 @@ async function setupAppwriteFeedbackResources(env, requestedPhase = 'all', optio
     }
   }
 
+  if (shouldRun('logs') || shouldRun('log-sessions')) {
+    for (const spec of batchSlice(logSessionAttributes)) {
+      await appwriteSetupCreateAttribute(env, logs, config, config.logSessionsCollectionId, spec);
+    }
+  }
+
+  if (shouldRun('logs') || shouldRun('log-events')) {
+    for (const spec of batchSlice(logEventAttributes)) {
+      await appwriteSetupCreateAttribute(env, logs, config, config.logEventsCollectionId, spec);
+    }
+  }
+
   if (shouldRun('indexes')) {
     const indexes = [
       [config.reportsCollectionId, 'created_at_desc', ['created_at'], ['DESC']],
@@ -913,6 +1002,16 @@ async function setupAppwriteFeedbackResources(env, requestedPhase = 'all', optio
       [config.reportsCollectionId, 'reporter_email_idx', ['reporter_email']],
       [config.activityCollectionId, 'report_created_idx', ['report_id', 'created_at'], ['ASC', 'ASC']],
       [config.adminsCollectionId, 'email_active_idx', ['email', 'is_active'], ['ASC', 'ASC']],
+      [config.logSessionsCollectionId, 'trace_id_idx', ['trace_id']],
+      [config.logSessionsCollectionId, 'created_at_desc', ['created_at'], ['DESC']],
+      [config.logSessionsCollectionId, 'status_created_idx', ['status', 'created_at'], ['ASC', 'DESC']],
+      [config.logSessionsCollectionId, 'provider_created_idx', ['provider', 'created_at'], ['ASC', 'DESC']],
+      [config.logSessionsCollectionId, 'mode_created_idx', ['mode', 'created_at'], ['ASC', 'DESC']],
+      [config.logSessionsCollectionId, 'user_created_idx', ['user_email', 'created_at'], ['ASC', 'DESC']],
+      [config.logEventsCollectionId, 'trace_created_idx', ['trace_id', 'created_at'], ['ASC', 'ASC']],
+      [config.logEventsCollectionId, 'event_id_idx', ['event_id']],
+      [config.logEventsCollectionId, 'created_at_desc', ['created_at'], ['DESC']],
+      [config.logEventsCollectionId, 'event_type_created_idx', ['event_type', 'created_at'], ['ASC', 'DESC']],
     ];
     for (const [collectionId, key, attributes, orders = []] of batchSlice(indexes)) {
       await appwriteSetupCreateIndex(env, logs, config, collectionId, key, attributes, orders);
@@ -1501,6 +1600,10 @@ async function getAppGenerationSessionByTrace(env, traceId) {
 }
 
 async function createAppLogEvent(env, user, rawBody) {
+  if (isAppwriteFeedbackConfigured(env)) {
+    return createAppwriteAppLogEvent(env, user, rawBody);
+  }
+
   if (!isSupabaseConfigured(env)) {
     return { success: false, skipped: true, reason: 'Supabase logging is not configured.' };
   }
@@ -1622,6 +1725,307 @@ async function withLoggedGatewayRequest(request, env, ctx, user, details, handle
 
 async function isFeedbackAdmin(env, email) {
   return String(email || '').trim().toLowerCase() === FEEDBACK_ADMIN_EMAIL;
+}
+
+function appwriteLogJsonText(value) {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return '{}';
+  }
+}
+
+function appwriteLogSessionToRow(doc) {
+  if (!doc) return null;
+  return {
+    id: doc.$id || doc.id,
+    trace_id: doc.trace_id,
+    created_at: doc.created_at || doc.$createdAt,
+    started_at: doc.started_at || doc.created_at || doc.$createdAt,
+    updated_at: doc.updated_at || doc.$updatedAt || doc.created_at || doc.$createdAt,
+    completed_at: doc.completed_at || null,
+    user_email: doc.user_email || null,
+    user_name: doc.user_name || null,
+    status: normalizeLogStatus(doc.status, 'running'),
+    mode: doc.mode || null,
+    provider: doc.provider || null,
+    model: doc.model || null,
+    prompt: doc.prompt || null,
+    prompt_hash: doc.prompt_hash || null,
+    duration_ms: Number.isFinite(Number(doc.duration_ms)) ? Number(doc.duration_ms) : null,
+    input_summary: parseJsonValue(doc.input_summary_json, {}),
+    output_summary: parseJsonValue(doc.output_summary_json, {}),
+    error_message: doc.error_message || null,
+    metadata: parseJsonValue(doc.metadata_json, {}),
+  };
+}
+
+function appwriteLogEventToRow(doc) {
+  if (!doc) return null;
+  return {
+    id: Number.isFinite(Number(doc.event_id)) ? Number(doc.event_id) : Date.parse(doc.created_at || doc.$createdAt || '') || 0,
+    created_at: doc.created_at || doc.$createdAt,
+    trace_id: doc.trace_id,
+    generation_id: doc.generation_id || null,
+    user_email: doc.user_email || null,
+    user_name: doc.user_name || null,
+    event_type: doc.event_type || 'client_event',
+    provider: doc.provider || null,
+    model: doc.model || null,
+    action: doc.action || null,
+    method: doc.method || null,
+    path: doc.path || null,
+    status_code: Number.isFinite(Number(doc.status_code)) ? Number(doc.status_code) : null,
+    duration_ms: Number.isFinite(Number(doc.duration_ms)) ? Number(doc.duration_ms) : null,
+    prompt: doc.prompt || null,
+    prompt_hash: doc.prompt_hash || null,
+    request_summary: parseJsonValue(doc.request_summary_json, {}),
+    response_summary: parseJsonValue(doc.response_summary_json, {}),
+    error_message: doc.error_message || null,
+    metadata: parseJsonValue(doc.metadata_json, {}),
+  };
+}
+
+async function appwriteLogSessionDocumentId(traceId) {
+  const hash = await sha256Hex(traceId);
+  return `log_${hash.slice(0, 32)}`;
+}
+
+async function findAppwriteLogSessionDocumentByTrace(env, traceId) {
+  const config = resolveAppwriteConfig(env);
+  const query = buildAppwriteQueryString([
+    appwriteQuery('equal', 'trace_id', [traceId]),
+    appwriteQuery('limit', null, [1]),
+  ]);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}/documents?${query}`
+  );
+  return Array.isArray(result?.documents) && result.documents.length > 0 ? result.documents[0] : null;
+}
+
+async function getAppwriteLogSessionDocument(env, identifier) {
+  const config = resolveAppwriteConfig(env);
+  const byTrace = await findAppwriteLogSessionDocumentByTrace(env, identifier);
+  if (byTrace) return byTrace;
+
+  const resp = await appwriteFetch(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}/documents/${encodeURIComponent(identifier)}`
+  );
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Appwrite request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  return resp.json();
+}
+
+function appwriteLogSessionDocumentData(user, traceId, body, prompt, promptHash, existingDoc = null) {
+  const now = new Date().toISOString();
+  const eventType = sanitizeLogText(body?.eventType || body?.event_type, 120) || 'client_event';
+  const isCompletion = eventType === 'generation_completed' || eventType === 'generation_failed' || eventType === 'generation_cancelled';
+  const statusFromEvent =
+    eventType === 'generation_completed' ? 'completed' :
+    eventType === 'generation_failed' ? 'failed' :
+    eventType === 'generation_cancelled' ? 'cancelled' :
+    eventType === 'generation_started' ? 'started' :
+    normalizeLogStatus(body?.status, null);
+  const hasInputSummary = 'inputSummary' in body || 'input_summary' in body;
+  const hasOutputSummary = 'outputSummary' in body || 'output_summary' in body;
+  const hasMetadata = 'metadata' in body;
+
+  return compactObject({
+    trace_id: traceId,
+    created_at: existingDoc?.created_at || now,
+    started_at: eventType === 'generation_started' ? now : existingDoc?.started_at || now,
+    updated_at: now,
+    completed_at: isCompletion ? now : existingDoc?.completed_at,
+    user_email: sanitizeLogText(user?.email, 320) || existingDoc?.user_email,
+    user_name: sanitizeLogText(user?.name, 200) || existingDoc?.user_name,
+    status: statusFromEvent || normalizeLogStatus(existingDoc?.status, null) || 'running',
+    mode: sanitizeLogText(body?.mode, 80) || existingDoc?.mode,
+    provider: sanitizeLogText(body?.provider, 120) || existingDoc?.provider,
+    model: sanitizeLogText(body?.model, 160) || existingDoc?.model,
+    prompt: prompt || existingDoc?.prompt,
+    prompt_hash: promptHash || existingDoc?.prompt_hash,
+    duration_ms: normalizeLogInteger(body?.durationMs ?? body?.duration_ms, 0, 24 * 60 * 60 * 1000) ?? existingDoc?.duration_ms,
+    input_summary_json: hasInputSummary
+      ? appwriteLogJsonText(sanitizeLogJson(body?.inputSummary ?? body?.input_summary ?? {}))
+      : existingDoc?.input_summary_json,
+    output_summary_json: hasOutputSummary
+      ? appwriteLogJsonText(sanitizeLogJson(body?.outputSummary ?? body?.output_summary ?? {}))
+      : existingDoc?.output_summary_json,
+    error_message: sanitizeLogText(body?.errorMessage ?? body?.error_message, 20000) || existingDoc?.error_message,
+    metadata_json: hasMetadata ? appwriteLogJsonText(sanitizeLogJson(body?.metadata ?? {})) : existingDoc?.metadata_json,
+  });
+}
+
+async function upsertAppwriteGenerationSession(env, user, traceId, body, prompt, promptHash) {
+  const config = resolveAppwriteConfig(env);
+  const existingDoc = await findAppwriteLogSessionDocumentByTrace(env, traceId);
+  const data = appwriteLogSessionDocumentData(user, traceId, body, prompt, promptHash, existingDoc);
+
+  if (existingDoc) {
+    const doc = await appwriteJson(
+      env,
+      `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}/documents/${encodeURIComponent(existingDoc.$id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ data }),
+      }
+    );
+    return appwriteLogSessionToRow(doc);
+  }
+
+  const documentId = await appwriteLogSessionDocumentId(traceId);
+  const resp = await appwriteFetch(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}/documents`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ documentId, data }),
+    }
+  );
+  if (resp.status === 409) {
+    const retryDoc = await findAppwriteLogSessionDocumentByTrace(env, traceId);
+    if (retryDoc) return appwriteLogSessionToRow(retryDoc);
+  }
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Appwrite request failed (${resp.status}): ${errText.slice(0, 600)}`);
+  }
+  return appwriteLogSessionToRow(await resp.json());
+}
+
+async function createAppwriteLogEventDocument(env, user, body, traceId, eventType, session, prompt, promptHash) {
+  const config = resolveAppwriteConfig(env);
+  const now = new Date().toISOString();
+  const eventId = Date.now() + Math.floor(Math.random() * 1000);
+  const data = compactObject({
+    event_id: eventId,
+    created_at: now,
+    trace_id: traceId,
+    generation_id: session?.id,
+    user_email: sanitizeLogText(user?.email, 320),
+    user_name: sanitizeLogText(user?.name, 200),
+    event_type: eventType,
+    provider: sanitizeLogText(body.provider, 120),
+    model: sanitizeLogText(body.model, 160),
+    action: sanitizeLogText(body.action, 160),
+    method: sanitizeLogText(body.method, 16),
+    path: sanitizeLogText(body.path, 600),
+    status_code: normalizeLogInteger(body.statusCode ?? body.status_code, 100, 599),
+    duration_ms: normalizeLogInteger(body.durationMs ?? body.duration_ms, 0, 24 * 60 * 60 * 1000),
+    prompt,
+    prompt_hash: promptHash,
+    request_summary_json: appwriteLogJsonText(sanitizeLogJson(body.requestSummary ?? body.request_summary ?? {})),
+    response_summary_json: appwriteLogJsonText(sanitizeLogJson(body.responseSummary ?? body.response_summary ?? {})),
+    error_message: sanitizeLogText(body.errorMessage ?? body.error_message, 20000),
+    metadata_json: appwriteLogJsonText(sanitizeLogJson(body.metadata ?? {})),
+  });
+
+  const doc = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logEventsCollectionId)}/documents`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        documentId: crypto.randomUUID(),
+        data,
+      }),
+    }
+  );
+  return appwriteLogEventToRow(doc);
+}
+
+async function createAppwriteAppLogEvent(env, user, rawBody) {
+  const body = rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) ? rawBody : {};
+  const traceId = sanitizeLogTraceId(body.traceId || body.trace_id) || crypto.randomUUID();
+  const eventType = sanitizeLogText(body.eventType || body.event_type, 120) || 'client_event';
+  const prompt = extractPromptFromLogPayload(body);
+  const promptHash = prompt ? await sha256Hex(prompt) : null;
+  const shouldUpsertSession =
+    eventType.startsWith('generation_') ||
+    body.session === true ||
+    body.sessionEvent === true;
+
+  let session = null;
+  if (shouldUpsertSession) {
+    session = await upsertAppwriteGenerationSession(env, user, traceId, body, prompt, promptHash);
+  } else {
+    session = appwriteLogSessionToRow(await findAppwriteLogSessionDocumentByTrace(env, traceId));
+  }
+
+  const event = await createAppwriteLogEventDocument(env, user, body, traceId, eventType, session, prompt, promptHash);
+  return {
+    success: true,
+    traceId,
+    generationId: session?.id || null,
+    event: event ? { id: event.id, created_at: event.created_at } : null,
+  };
+}
+
+async function listAppwriteGenerationLogs(env, filters) {
+  const config = resolveAppwriteConfig(env);
+  const queries = [
+    appwriteQuery('orderDesc', 'created_at'),
+    appwriteQuery('limit', null, [Math.max(1, Math.min(filters.limit || 80, 200))]),
+    appwriteQuery('offset', null, [Math.max(0, filters.offset || 0)]),
+  ];
+  if (filters.status) queries.push(appwriteQuery('equal', 'status', [filters.status]));
+  if (filters.mode) queries.push(appwriteQuery('equal', 'mode', [filters.mode]));
+  if (filters.provider) queries.push(appwriteQuery('equal', 'provider', [filters.provider]));
+  if (filters.userEmail) queries.push(appwriteQuery('equal', 'user_email', [filters.userEmail]));
+
+  const query = buildAppwriteQueryString(queries);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logSessionsCollectionId)}/documents?${query}`
+  );
+
+  let sessions = Array.isArray(result?.documents)
+    ? result.documents.map(appwriteLogSessionToRow).filter(Boolean)
+    : [];
+  if (filters.search) {
+    const needle = String(filters.search).toLowerCase();
+    sessions = sessions.filter((session) =>
+      [
+        session.trace_id,
+        session.user_email,
+        session.user_name,
+        session.mode,
+        session.provider,
+        session.model,
+        session.prompt,
+        session.error_message,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle))
+    );
+  }
+  return sessions;
+}
+
+async function getAppwriteGenerationLogDetail(env, identifier) {
+  const config = resolveAppwriteConfig(env);
+  const sessionDoc = await getAppwriteLogSessionDocument(env, identifier);
+  const session = appwriteLogSessionToRow(sessionDoc);
+  if (!session) return null;
+
+  const query = buildAppwriteQueryString([
+    appwriteQuery('equal', 'trace_id', [session.trace_id]),
+    appwriteQuery('orderAsc', 'created_at'),
+    appwriteQuery('limit', null, [500]),
+  ]);
+  const result = await appwriteJson(
+    env,
+    `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(config.logEventsCollectionId)}/documents?${query}`
+  );
+  const events = Array.isArray(result?.documents)
+    ? result.documents.map(appwriteLogEventToRow).filter(Boolean)
+    : [];
+  return { session, events };
 }
 
 async function uploadFeedbackSnapshotToStorage(env, reportId, snapshotText) {
@@ -3728,7 +4132,25 @@ async function handleAppLogList(request, env, isAdmin) {
     const mode = sanitizeText(url.searchParams.get('mode'), 80);
     const provider = sanitizeText(url.searchParams.get('provider'), 120);
     const userEmail = sanitizeText(url.searchParams.get('userEmail'), 320);
-    const search = sanitizePostgrestSearch(url.searchParams.get('search'));
+    const searchText = sanitizeText(url.searchParams.get('search'), 240);
+
+    if (isAppwriteFeedbackConfigured(env)) {
+      const sessions = await listAppwriteGenerationLogs(env, {
+        limit,
+        offset,
+        status,
+        mode,
+        provider,
+        userEmail,
+        search: searchText,
+      });
+      return corsResponse(origin, {
+        success: true,
+        sessions,
+      });
+    }
+
+    const search = sanitizePostgrestSearch(searchText);
 
     const params = new URLSearchParams();
     params.set('select', 'id,trace_id,created_at,started_at,updated_at,completed_at,user_email,user_name,status,mode,provider,model,prompt,prompt_hash,duration_ms,input_summary,output_summary,error_message,metadata');
@@ -3764,6 +4186,18 @@ async function handleAppLogDetail(request, env, identifier, isAdmin) {
   if (!isAdmin) return forbidden(origin, 'Admin access required.');
 
   try {
+    if (isAppwriteFeedbackConfigured(env)) {
+      const detail = await getAppwriteGenerationLogDetail(env, identifier);
+      if (!detail) {
+        return corsResponse(origin, { error: 'Log session not found.' }, { status: 404 });
+      }
+      return corsResponse(origin, {
+        success: true,
+        session: detail.session,
+        events: detail.events,
+      });
+    }
+
     const isUuid = /^[0-9a-fA-F-]{36}$/.test(identifier);
     const filter = isUuid
       ? `or=(id.eq.${encodeURIComponent(identifier)},trace_id.eq.${encodeURIComponent(identifier)})`

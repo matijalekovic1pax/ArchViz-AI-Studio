@@ -39,6 +39,8 @@ APPWRITE_SNAPSHOTS_BUCKET_ID = "feedback_snapshots"
 #   APPWRITE_ACTIVITY_COLLECTION_ID  - Optional, defaults to feedback_activity
 #   APPWRITE_ADMINS_COLLECTION_ID    - Optional, defaults to feedback_admins
 #   APPWRITE_SNAPSHOTS_BUCKET_ID     - Optional, defaults to feedback_snapshots
+#   APPWRITE_LOG_SESSIONS_COLLECTION_ID - Optional, defaults to app_generation_sessions
+#   APPWRITE_LOG_EVENTS_COLLECTION_ID   - Optional, defaults to app_request_logs
 #   SUPABASE_URL                     - Supabase project URL for generation logs / legacy feedback fallback
 #   SUPABASE_SERVICE_ROLE_KEY        - Server-only Supabase service role key
 #   SUPABASE_FEEDBACK_BUCKET         - Optional, defaults to feedback-snapshots
