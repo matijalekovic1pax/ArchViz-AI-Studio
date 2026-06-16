@@ -26,12 +26,37 @@ const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
 const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
 const GEMINI_PRO_IMAGE_TIMEOUT_MS = 10 * 60_000;
+const LOG_EVENT_TIMEOUT_MS = 15_000;
+const LOG_STRING_PREVIEW_CHARS = 1200;
+const LOG_PROMPT_MAX_CHARS = 80_000;
+const LOG_JSON_MAX_DEPTH = 6;
+const LOG_JSON_MAX_ARRAY_ITEMS = 80;
+const LOG_JSON_MAX_OBJECT_KEYS = 100;
+const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_EDGE_MULTIPLE = 16;
+const OPENAI_IMAGE_MAX_OUTPUTS = 10;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
 let _jwt: string | null = null;
 let _jwtExpiresAt: number = 0;
 let _onSessionExpired: (() => void) | null = null;
+let _activeGenerationTraceId: string | null = null;
+
+export class GatewayApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public provider?: string,
+    public details?: unknown
+  ) {
+    super(message);
+    this.name = 'GatewayApiError';
+  }
+}
 
 export interface GatewaySessionDiagnostics {
   gatewayUrl: string;
@@ -113,6 +138,268 @@ export function setOnSessionExpired(callback: (() => void) | null): void {
   _onSessionExpired = callback;
 }
 
+// ─── Application Request / Generation Logging ───────────────────────────────
+
+export function createGatewayTraceId(prefix = 'trace'): string {
+  const randomPart =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${randomPart}`;
+}
+
+export function setActiveGenerationTraceId(traceId: string | null): void {
+  _activeGenerationTraceId = traceId;
+}
+
+export function getActiveGenerationTraceId(): string | null {
+  return _activeGenerationTraceId;
+}
+
+const estimateDataUrlBytes = (payload: string): number => {
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+};
+
+const summarizeDataUrlForLog = (value: string) => {
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?,(.*)$/s);
+  const payload = match?.[2] || '';
+  const isBase64 = /;base64,/i.test(value.slice(0, 128));
+  return {
+    kind: 'data-url',
+    mimeType: match?.[1] || null,
+    chars: value.length,
+    bytesApprox: isBase64 ? estimateDataUrlBytes(payload) : payload.length,
+    preview: value.slice(0, 96),
+  };
+};
+
+const summarizeStringForLog = (value: string, maxLength = LOG_STRING_PREVIEW_CHARS) => {
+  if (value.startsWith('data:')) return summarizeDataUrlForLog(value);
+  if (value.length <= maxLength) return value;
+  return {
+    kind: 'string',
+    chars: value.length,
+    preview: value.slice(0, maxLength),
+    truncated: true,
+  };
+};
+
+const summarizeValueForLog = (value: unknown, depth = 0): unknown => {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return summarizeStringForLog(value);
+  if (typeof value !== 'object') return String(value).slice(0, 500);
+  if (depth >= LOG_JSON_MAX_DEPTH) return '[MaxDepth]';
+
+  if (Array.isArray(value)) {
+    const items = value.slice(0, LOG_JSON_MAX_ARRAY_ITEMS).map((item) => summarizeValueForLog(item, depth + 1));
+    if (value.length > LOG_JSON_MAX_ARRAY_ITEMS) {
+      items.push({ truncatedItems: value.length - LOG_JSON_MAX_ARRAY_ITEMS });
+    }
+    return items;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, LOG_JSON_MAX_OBJECT_KEYS);
+  const output: Record<string, unknown> = {};
+  entries.forEach(([key, item]) => {
+    output[key.slice(0, 120)] = summarizeValueForLog(item, depth + 1);
+  });
+  const keyCount = Object.keys(value as Record<string, unknown>).length;
+  if (keyCount > LOG_JSON_MAX_OBJECT_KEYS) {
+    output.__truncatedKeys = keyCount - LOG_JSON_MAX_OBJECT_KEYS;
+  }
+  return output;
+};
+
+const getPartText = (part: any): string[] => {
+  if (!part || typeof part !== 'object') return [];
+  if (typeof part.text === 'string') return [part.text];
+  return [];
+};
+
+const extractPromptFromGatewayBody = (body: unknown): string | null => {
+  if (!body || typeof body !== 'object') return null;
+  const record = body as Record<string, any>;
+  if (typeof record.prompt === 'string') return record.prompt.slice(0, LOG_PROMPT_MAX_CHARS);
+  if (typeof record.negativePrompt === 'string' && !record.prompt) return record.negativePrompt.slice(0, LOG_PROMPT_MAX_CHARS);
+
+  const contentPrompts: string[] = [];
+  const contents = Array.isArray(record.contents) ? record.contents : [];
+  contents.forEach((content) => {
+    const parts = Array.isArray(content?.parts) ? content.parts : [];
+    parts.forEach((part: any) => contentPrompts.push(...getPartText(part)));
+  });
+
+  const batchRequests = Array.isArray(record.requests) ? record.requests : [];
+  batchRequests.forEach((request) => {
+    const requestContents = Array.isArray(request?.contents) ? request.contents : [];
+    requestContents.forEach((content: any) => {
+      const parts = Array.isArray(content?.parts) ? content.parts : [];
+      parts.forEach((part: any) => contentPrompts.push(...getPartText(part)));
+    });
+  });
+
+  const joined = contentPrompts.map((item) => item.trim()).filter(Boolean).join('\n\n');
+  return joined ? joined.slice(0, LOG_PROMPT_MAX_CHARS) : null;
+};
+
+const summarizeGatewayBodyForLog = (body: BodyInit | null | undefined) => {
+  if (!body) return { summary: {}, prompt: null as string | null };
+  if (typeof body === 'string') {
+    const summary: Record<string, unknown> = {
+      bodyType: 'json-string',
+      chars: body.length,
+    };
+    try {
+      const parsed = JSON.parse(body);
+      summary.body = summarizeValueForLog(parsed);
+      return {
+        summary,
+        prompt: extractPromptFromGatewayBody(parsed),
+      };
+    } catch {
+      summary.body = summarizeStringForLog(body);
+      return { summary, prompt: null };
+    }
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    const fields: Array<Record<string, unknown>> = [];
+    body.forEach((value, key) => {
+      if (typeof File !== 'undefined' && value instanceof File) {
+        fields.push({ key, kind: 'file', name: value.name, type: value.type, size: value.size });
+      } else if (value instanceof Blob) {
+        fields.push({ key, kind: 'blob', type: value.type, size: value.size });
+      } else {
+        fields.push({ key, value: summarizeStringForLog(String(value), 300) });
+      }
+    });
+    return { summary: { bodyType: 'form-data', fields }, prompt: null };
+  }
+  return { summary: { bodyType: Object.prototype.toString.call(body) }, prompt: null };
+};
+
+const getGatewayLogRouteInfo = (path: string) => {
+  if (path.startsWith('/api/gemini/')) {
+    const match = path.match(/^\/api\/gemini\/models\/([^:]+):([^?]+)/);
+    return { provider: 'gemini', model: match?.[1], action: match?.[2] || 'request' };
+  }
+  if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2', action: 'images' };
+  if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
+  if (path.startsWith('/api/kling/')) return { provider: 'kling', action: path.split('/').pop() || 'request' };
+  if (path.startsWith('/api/convert/')) return { provider: 'convertapi', action: path.split('/').pop() || 'request' };
+  if (path.startsWith('/api/ilovepdf/')) return { provider: 'ilovepdf', action: path.replace('/api/ilovepdf/', '') };
+  if (path.startsWith('/api/fetch-url')) return { provider: 'url-fetch', action: 'fetch-url' };
+  if (path.startsWith('/api/feedback/')) return { provider: 'feedback', action: 'feedback-api' };
+  return { provider: 'gateway', action: 'request' };
+};
+
+const summarizeResponseForLog = async (
+  resp: Response,
+  options: { skipBody?: boolean } = {}
+): Promise<Record<string, unknown>> => {
+  const contentType = resp.headers.get('Content-Type') || '';
+  const contentLength = resp.headers.get('Content-Length');
+  const summary: Record<string, unknown> = {
+    contentType,
+    contentLength,
+  };
+
+  if (options.skipBody) {
+    return { ...summary, bodySkipped: 'image-generation-response' };
+  }
+
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return summary;
+  }
+
+  const length = contentLength ? Number(contentLength) : 0;
+  if (Number.isFinite(length) && length > 2_000_000) {
+    return { ...summary, bodySkipped: 'response-too-large' };
+  }
+
+  try {
+    const data = await resp.json();
+    summary.body = summarizeValueForLog(data);
+  } catch {
+    summary.bodySkipped = 'unreadable-json';
+  }
+  return summary;
+};
+
+export interface AppLogEventPayload {
+  traceId?: string;
+  eventType: string;
+  mode?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  action?: string | null;
+  method?: string | null;
+  path?: string | null;
+  status?: 'started' | 'running' | 'completed' | 'failed' | 'cancelled';
+  statusCode?: number | null;
+  durationMs?: number | null;
+  prompt?: string | null;
+  inputSummary?: Record<string, any>;
+  outputSummary?: Record<string, any>;
+  requestSummary?: Record<string, any>;
+  responseSummary?: Record<string, any>;
+  errorMessage?: string | null;
+  metadata?: Record<string, any>;
+  session?: boolean;
+  sessionEvent?: boolean;
+}
+
+export async function submitAppLogEvent(payload: AppLogEventPayload, tokenOverride?: string | null): Promise<void> {
+  const token = tokenOverride ?? getGatewayToken();
+  if (!token) return;
+  const resp = await fetchWithTimeout(`${GATEWAY_URL}/api/logs/events`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    timeoutMs: LOG_EVENT_TIMEOUT_MS,
+  });
+  if (!resp.ok) {
+    throw new Error(`Application log write failed (${resp.status})`);
+  }
+}
+
+export function queueAppLogEvent(payload: AppLogEventPayload, tokenOverride?: string | null): void {
+  void submitAppLogEvent(payload, tokenOverride).catch((error) => {
+    if (import.meta.env.DEV) {
+      console.warn('[logs] failed to write application log', error);
+    }
+  });
+}
+
+const queueGatewayRequestLog = (
+  payload: Omit<AppLogEventPayload, 'eventType'>,
+  token: string,
+  response?: Response,
+): void => {
+  void (async () => {
+    const provider = String(payload.provider || '').toLowerCase();
+    const model = String(payload.model || '').toLowerCase();
+    const shouldSkipLargeResponseBody =
+      provider === 'openai' ||
+      (provider === 'gemini' && model.includes('image'));
+    const responseSummary = response
+      ? await summarizeResponseForLog(response, { skipBody: shouldSkipLargeResponseBody })
+      : payload.responseSummary;
+    await submitAppLogEvent({
+      ...payload,
+      eventType: payload.errorMessage ? 'gateway_request_failed' : 'gateway_request',
+      responseSummary: responseSummary as Record<string, any> | undefined,
+    }, token);
+  })().catch((error) => {
+    if (import.meta.env.DEV) {
+      console.warn('[logs] failed to write gateway request log', error);
+    }
+  });
+};
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export interface GatewayAuthResult {
@@ -153,17 +440,68 @@ async function gatewayFetch(
   if (!token) throw new Error('Not authenticated. Please sign in.');
 
   const { timeoutMs, ...restInit } = init;
+  const method = restInit.method || 'GET';
+  const traceId = _activeGenerationTraceId || createGatewayTraceId('req');
+  const shouldLogRequest = !path.startsWith('/api/logs/');
+  const routeInfo = getGatewayLogRouteInfo(path);
+  const { summary: requestSummary, prompt } = shouldLogRequest
+    ? summarizeGatewayBodyForLog(restInit.body)
+    : { summary: {}, prompt: null };
+  const startedAt = Date.now();
   const headers = new Headers(restInit.headers);
   headers.set('Authorization', `Bearer ${token}`);
+  headers.set('X-Archviz-Trace-Id', traceId);
   if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {
     headers.set('Content-Type', 'application/json');
   }
 
-  const resp = await fetchWithTimeout(`${GATEWAY_URL}${path}`, {
-    ...restInit,
-    headers,
-    timeoutMs: timeoutMs ?? 30_000,
-  });
+  let resp: Response;
+  try {
+    resp = await fetchWithTimeout(`${GATEWAY_URL}${path}`, {
+      ...restInit,
+      headers,
+      timeoutMs: timeoutMs ?? 30_000,
+    });
+  } catch (error) {
+    if (shouldLogRequest) {
+      queueGatewayRequestLog({
+        traceId,
+        provider: routeInfo.provider,
+        model: routeInfo.model,
+        action: routeInfo.action,
+        method,
+        path,
+        durationMs: Date.now() - startedAt,
+        prompt,
+        requestSummary: requestSummary as Record<string, any>,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        metadata: {
+          source: 'client',
+          gatewayUrl: GATEWAY_URL,
+        },
+      }, token);
+    }
+    throw error;
+  }
+
+  if (shouldLogRequest) {
+    queueGatewayRequestLog({
+      traceId,
+      provider: routeInfo.provider,
+      model: routeInfo.model,
+      action: routeInfo.action,
+      method,
+      path,
+      statusCode: resp.status,
+      durationMs: Date.now() - startedAt,
+      prompt,
+      requestSummary: requestSummary as Record<string, any>,
+      metadata: {
+        source: 'client',
+        gatewayUrl: GATEWAY_URL,
+      },
+    }, token, resp.clone());
+  }
 
   if (resp.status === 401) {
     // Only treat 401 as a real session expiry when it comes from the gateway's
@@ -271,24 +609,157 @@ export async function geminiGetOperation(operationName: string): Promise<any> {
 
 // ─── OpenAI Image API ───────────────────────────────────────────────────────
 
+const roundToOpenAIEdge = (value: number): number =>
+  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.round(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+
+const floorToOpenAIEdge = (value: number): number =>
+  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.floor(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+
+const ceilToOpenAIEdge = (value: number): number =>
+  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.ceil(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
+
+const parseOpenAIAspectRatio = (aspectRatio: unknown): number => {
+  if (typeof aspectRatio !== 'string') return 16 / 9;
+  const [widthRaw, heightRaw] = aspectRatio.split(':').map(Number);
+  if (!Number.isFinite(widthRaw) || !Number.isFinite(heightRaw) || widthRaw <= 0 || heightRaw <= 0) {
+    return 16 / 9;
+  }
+  return Math.min(3, Math.max(1 / 3, widthRaw / heightRaw));
+};
+
+const getOpenAITargetLongEdge = (imageSize: unknown): number => {
+  if (imageSize === '4K') return 3840;
+  if (imageSize === '1K') return 1024;
+  return 2048;
+};
+
+const normalizeOpenAISize = (aspectRatio: unknown, imageSize: unknown): string => {
+  const ratio = parseOpenAIAspectRatio(aspectRatio);
+  const targetLongEdge = getOpenAITargetLongEdge(imageSize);
+  let width = ratio >= 1 ? targetLongEdge : targetLongEdge * ratio;
+  let height = ratio >= 1 ? targetLongEdge / ratio : targetLongEdge;
+
+  width = roundToOpenAIEdge(width);
+  height = roundToOpenAIEdge(height);
+
+  const fitWithinLimits = () => {
+    const edgeScale = Math.min(1, OPENAI_IMAGE_MAX_EDGE / Math.max(width, height));
+    const pixelScale = Math.min(1, Math.sqrt(OPENAI_IMAGE_MAX_PIXELS / (width * height)));
+    const scale = Math.min(edgeScale, pixelScale);
+    if (scale < 1) {
+      width = floorToOpenAIEdge(width * scale);
+      height = floorToOpenAIEdge(height * scale);
+    }
+  };
+
+  fitWithinLimits();
+
+  if (width * height < OPENAI_IMAGE_MIN_PIXELS) {
+    const scale = Math.sqrt(OPENAI_IMAGE_MIN_PIXELS / (width * height));
+    width = ceilToOpenAIEdge(width * scale);
+    height = ceilToOpenAIEdge(height * scale);
+    fitWithinLimits();
+  }
+
+  return `${width}x${height}`;
+};
+
+const normalizeOpenAIQuality = (imageSize: unknown): string => {
+  if (imageSize === '4K') return 'high';
+  if (imageSize === '1K') return 'low';
+  return 'medium';
+};
+
+const getOpenAIImageOptions = (generationConfig: any = {}) => {
+  const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
+  const background = generationConfig.openAI?.background || imageConfig.background;
+  return {
+    size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
+    quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
+    outputFormat: 'png',
+    background: background === 'opaque' || background === 'auto' ? background : 'auto',
+  };
+};
+
+const normalizeOpenAIImageMimeType = (mimeType: unknown): string =>
+  typeof mimeType === 'string' && /^image\/(png|jpe?g|webp)$/i.test(mimeType)
+    ? mimeType.toLowerCase().replace('image/jpg', 'image/jpeg')
+    : 'image/png';
+
+const getOpenAIImageExtension = (mimeType: string): string =>
+  mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
+
+const openAIImageToBlob = async (image: any): Promise<{ blob: Blob; mimeType: string } | null> => {
+  if (!image || typeof image.base64 !== 'string') return null;
+  const mimeType = normalizeOpenAIImageMimeType(image.mimeType);
+  const response = await fetch(`data:${mimeType};base64,${image.base64}`);
+  return { blob: await response.blob(), mimeType };
+};
+
+const appendOpenAIImageToForm = async (
+  form: FormData,
+  fieldName: string,
+  image: any,
+  filenamePrefix: string,
+  index: number,
+): Promise<void> => {
+  const result = await openAIImageToBlob(image);
+  if (!result) return;
+  form.append(fieldName, result.blob, `${filenamePrefix}-${index + 1}.${getOpenAIImageExtension(result.mimeType)}`);
+};
+
+const buildOpenAIImageFormData = async (body: any): Promise<FormData> => {
+  const form = new FormData();
+  const prompt = typeof body?.prompt === 'string' ? body.prompt : '';
+  const numberOfImages = Math.max(1, Math.min(
+    OPENAI_IMAGE_MAX_OUTPUTS,
+    Math.floor(Number.isFinite(Number(body?.numberOfImages)) ? Number(body.numberOfImages) : 1)
+  ));
+  const { size, quality, outputFormat, background } = getOpenAIImageOptions(body?.generationConfig);
+
+  form.append('model', body?.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL);
+  form.append('prompt', prompt);
+  form.append('n', String(numberOfImages));
+  form.append('size', size);
+  form.append('quality', quality);
+  form.append('output_format', outputFormat);
+  if (background !== 'auto') form.append('background', background);
+
+  const images = Array.isArray(body?.images) ? body.images : [];
+  for (let index = 0; index < images.length; index += 1) {
+    await appendOpenAIImageToForm(form, 'image[]', images[index], 'input', index);
+  }
+  if (body?.maskImage) {
+    await appendOpenAIImageToForm(form, 'mask', body.maskImage, 'mask', 0);
+  }
+
+  return form;
+};
+
 export async function openAIImageRequest(
   body: any,
   options?: { signal?: AbortSignal }
 ): Promise<any> {
+  const hasInputImages = Array.isArray(body?.images) && body.images.length > 0;
+  const requestBody = hasInputImages
+    ? await buildOpenAIImageFormData(body)
+    : JSON.stringify(body);
   const resp = await gatewayFetch('/api/openai/images', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: requestBody,
     signal: options?.signal,
     timeoutMs: OPENAI_IMAGE_TIMEOUT_MS,
   });
   if (!resp.ok) {
     const errText = await resp.text();
     let msg = `OpenAI image API error (${resp.status})`;
+    let details: unknown = errText;
     try {
       const parsed = JSON.parse(errText);
+      details = parsed;
       msg = parsed.error?.message || parsed.error || msg;
     } catch {}
-    throw new Error(msg);
+    throw new GatewayApiError(msg, resp.status, 'openai-image', details);
   }
   return resp.json();
 }
@@ -553,6 +1024,72 @@ export interface FeedbackReportDeleteResult {
   deletedSnapshotStorage: boolean;
 }
 
+export interface AppGenerationLogSession {
+  id: string;
+  trace_id: string;
+  created_at: string;
+  started_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  status: 'started' | 'running' | 'completed' | 'failed' | 'cancelled';
+  mode?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  prompt?: string | null;
+  prompt_hash?: string | null;
+  duration_ms?: number | null;
+  input_summary?: Record<string, any> | null;
+  output_summary?: Record<string, any> | null;
+  error_message?: string | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface AppRequestLogEntry {
+  id: number;
+  created_at: string;
+  trace_id: string;
+  generation_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  event_type: string;
+  provider?: string | null;
+  model?: string | null;
+  action?: string | null;
+  method?: string | null;
+  path?: string | null;
+  status_code?: number | null;
+  duration_ms?: number | null;
+  prompt?: string | null;
+  prompt_hash?: string | null;
+  request_summary?: Record<string, any> | null;
+  response_summary?: Record<string, any> | null;
+  error_message?: string | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface AppGenerationLogListParams {
+  limit?: number;
+  offset?: number;
+  status?: AppGenerationLogSession['status'] | '';
+  mode?: string;
+  provider?: string;
+  userEmail?: string;
+  search?: string;
+}
+
+export interface AppGenerationLogListResult {
+  success: boolean;
+  sessions: AppGenerationLogSession[];
+}
+
+export interface AppGenerationLogDetailResult {
+  success: boolean;
+  session: AppGenerationLogSession;
+  events: AppRequestLogEntry[];
+}
+
 const buildFeedbackListQuery = (params: FeedbackReportListParams = {}) => {
   const qs = new URLSearchParams();
   if (params.limit != null) qs.set('limit', String(params.limit));
@@ -562,6 +1099,18 @@ const buildFeedbackListQuery = (params: FeedbackReportListParams = {}) => {
   if (params.category) qs.set('category', params.category);
   if (params.mode) qs.set('mode', params.mode);
   if (params.reporterEmail) qs.set('reporterEmail', params.reporterEmail);
+  if (params.search) qs.set('search', params.search);
+  return qs.toString();
+};
+
+const buildAppLogListQuery = (params: AppGenerationLogListParams = {}) => {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  if (params.offset != null) qs.set('offset', String(params.offset));
+  if (params.status) qs.set('status', params.status);
+  if (params.mode) qs.set('mode', params.mode);
+  if (params.provider) qs.set('provider', params.provider);
+  if (params.userEmail) qs.set('userEmail', params.userEmail);
   if (params.search) qs.set('search', params.search);
   return qs.toString();
 };
@@ -617,4 +1166,16 @@ export async function deleteFeedbackReport(reportId: string): Promise<FeedbackRe
     throw new Error(err.error || `Request failed (${resp.status})`);
   }
   return resp.json();
+}
+
+export async function listAppGenerationLogs(
+  params: AppGenerationLogListParams = {}
+): Promise<AppGenerationLogListResult> {
+  const query = buildAppLogListQuery(params);
+  const path = query ? `/api/logs/generations?${query}` : '/api/logs/generations';
+  return gatewayGet(path, { timeoutMs: 30_000 });
+}
+
+export async function getAppGenerationLog(identifier: string): Promise<AppGenerationLogDetailResult> {
+  return gatewayGet(`/api/logs/generations/${encodeURIComponent(identifier)}`, { timeoutMs: 30_000 });
 }

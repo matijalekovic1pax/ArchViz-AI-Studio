@@ -5,6 +5,7 @@ import { useAppStore } from '../store';
 import type { AppState, GenerationMode } from '../types';
 import { useGeneration } from '../hooks/useGeneration';
 import { cn } from '../lib/utils';
+import { AI_SLOP_UPSCALER_SUGGESTION_EVENT, type AiSlopUpscalerSuggestionDetail } from '../lib/assistantEvents';
 import {
   buildAppAssistantPrompt,
   buildAppAssistantWorkspaceSnapshot,
@@ -36,6 +37,13 @@ interface AssistantMessage {
   files?: AppAssistantChatFile[];
   actions?: AppAssistantAction[];
   appliedActionIds?: string[];
+}
+
+interface AiSlopAssistantSuggestion {
+  id: string;
+  messageId: string;
+  content: string;
+  action: AppAssistantAction;
 }
 
 interface PendingGenerationRequest {
@@ -142,6 +150,12 @@ const isAppAssistantSubmitSmokeEnabled = () => {
   return params.has('archwizAssistantSubmitSmoke');
 };
 
+const isAppAssistantAiSlopSuggestionSmokeEnabled = () => {
+  if (!isAppAssistantTestBridgeEnabled()) return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has('archwizAiSlopSuggestionSmoke');
+};
+
 const writeAssistantSmokeTrigger = (name: string, payload: unknown) => {
   if (!isAppAssistantSmokeEnabled()) return false;
   document.documentElement.setAttribute(name, JSON.stringify(payload));
@@ -172,6 +186,36 @@ interface InspectRect {
 const getCompactText = (value: string | null | undefined, maxLength = 220) => {
   const text = (value || '').replace(/\s+/g, ' ').trim();
   return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
+};
+
+const makeAiSlopUpscalerAction = (id: string): AppAssistantAction => ({
+  id: `${id}-open-ai-slop-upscaler`,
+  type: 'open_ai_slop_upscaler',
+  label: 'Open AI Slop Upscaler',
+  reason: 'Switches to Image Upscaler with AI Slop mode enabled for the current canvas image.',
+});
+
+const buildAiSlopAssistantSuggestion = (
+  detail: AiSlopUpscalerSuggestionDetail
+): AiSlopAssistantSuggestion => {
+  const id = detail.id || makeMessageId();
+  const indicators = (detail.indicators || [])
+    .map((indicator) => getCompactText(indicator, 64))
+    .filter(Boolean)
+    .slice(0, 3);
+  const summary = getCompactText(detail.summary, 160);
+  const indicatorText = indicators.length > 0
+    ? ` I noticed ${indicators.join(', ')}.`
+    : summary
+      ? ` ${summary}`
+      : '';
+
+  return {
+    id,
+    messageId: `${id}-ai-slop-suggestion`,
+    content: `I detected possible AI-regeneration distortion in this result.${indicatorText} AI Slop Upscaling can help restore cleaner lines, color, and detail.`,
+    action: makeAiSlopUpscalerAction(id),
+  };
 };
 
 const getAssistantImageSources = (state: AppState, chatImages: AppAssistantChatImage[] = []) => {
@@ -962,12 +1006,14 @@ export const AppAssistant: React.FC = () => {
   const [composerImages, setComposerImages] = useState<AppAssistantChatImage[]>([]);
   const [composerFiles, setComposerFiles] = useState<AppAssistantChatFile[]>([]);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [aiSlopSuggestion, setAiSlopSuggestion] = useState<AiSlopAssistantSuggestion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const inspectToolbarRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const lastAiSlopSuggestionRef = useRef<string | null>(null);
   const assistantSmokeRef = useRef<AppAssistantSmokeState>({
     phase: 'idle',
     setupActionTypes: [],
@@ -1508,6 +1554,7 @@ export const AppAssistant: React.FC = () => {
     const openFeedbackAdminAction = actions.find((action) => action.type === 'open_feedback_admin');
     const openDocsAction = actions.find((action) => action.type === 'open_docs');
     const signOutAction = actions.find((action) => action.type === 'sign_out');
+    const openAiSlopUpscalerAction = actions.find((action) => action.type === 'open_ai_slop_upscaler');
     const runGenerationAction = actions.find((action) => action.type === 'run_generation');
     const cancelGenerationAction = actions.find((action) => action.type === 'cancel_generation');
     const runMasterplanZoneDetectionAction = actions.find((action) => action.type === 'run_masterplan_zone_detection');
@@ -1535,6 +1582,7 @@ export const AppAssistant: React.FC = () => {
         action.type !== 'open_feedback_admin' &&
         action.type !== 'open_docs' &&
         action.type !== 'sign_out' &&
+        action.type !== 'open_ai_slop_upscaler' &&
         action.type !== 'run_generation' &&
         action.type !== 'cancel_generation' &&
         action.type !== 'run_masterplan_zone_detection' &&
@@ -1566,6 +1614,17 @@ export const AppAssistant: React.FC = () => {
 
     if (signOutAction) {
       window.dispatchEvent(new CustomEvent('archviz:assistant-sign-out'));
+    }
+
+    if (openAiSlopUpscalerAction) {
+      dispatch({ type: 'SET_MODE', payload: 'upscale' });
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { upscaleMode: 'ai-slop' } });
+      if (!state.rightPanelOpen) {
+        dispatch({ type: 'TOGGLE_RIGHT_PANEL' });
+      }
+      setAiSlopSuggestion(null);
+      setInspectMode(false);
+      setOpen(false);
     }
 
     if (openDocsAction) {
@@ -1635,6 +1694,8 @@ export const AppAssistant: React.FC = () => {
           ? 'Assistant opened feedback admin.'
         : openFeedbackReportAction
           ? 'Assistant opened feedback reporting.'
+        : openAiSlopUpscalerAction
+          ? 'Assistant opened AI Slop Upscaler.'
         : setLanguageAction
           ? 'Assistant switched the app language.'
         : setModeAction
@@ -1662,6 +1723,51 @@ export const AppAssistant: React.FC = () => {
       });
     }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleAiSlopSuggestion = (event: Event) => {
+      const detail = (event as CustomEvent<AiSlopUpscalerSuggestionDetail>).detail || { id: makeMessageId() };
+      const suggestion = buildAiSlopAssistantSuggestion(detail);
+      if (lastAiSlopSuggestionRef.current === suggestion.id) return;
+      lastAiSlopSuggestionRef.current = suggestion.id;
+
+      const message: AssistantMessage = {
+        id: suggestion.messageId,
+        role: 'assistant',
+        content: suggestion.content,
+        actions: [suggestion.action],
+      };
+
+      setMessages((current) => [
+        ...current.filter((item) => item.id !== suggestion.messageId),
+        message,
+      ]);
+      setAiSlopSuggestion(suggestion);
+      setHintVisible(false);
+      setError(null);
+    };
+
+    window.addEventListener(AI_SLOP_UPSCALER_SUGGESTION_EVENT, handleAiSlopSuggestion);
+    const smokeTimer = isAppAssistantAiSlopSuggestionSmokeEnabled()
+      ? window.setTimeout(() => {
+          handleAiSlopSuggestion({
+            detail: {
+              id: 'assistant-ai-slop-suggestion-smoke',
+              score: 87,
+              summary: 'Wavy architectural lines and smeared detail are visible.',
+              indicators: ['wavy architectural lines', 'smeared detail', 'blotchy discoloration'],
+            },
+          } as CustomEvent<AiSlopUpscalerSuggestionDetail> as Event);
+        }, 150)
+      : undefined;
+
+    return () => {
+      if (smokeTimer !== undefined) window.clearTimeout(smokeTimer);
+      window.removeEventListener(AI_SLOP_UPSCALER_SUGGESTION_EVENT, handleAiSlopSuggestion);
+    };
+  }, []);
 
   const startImageSelectionHandoff = () => {
     if (!state.uploadedImage) {
@@ -2351,6 +2457,7 @@ export const AppAssistant: React.FC = () => {
                               </div>
                               {message.actions.map((action) => {
                                 const applied = (message.appliedActionIds || []).includes(action.id);
+                                const actionButtonLabel = action.type === 'open_ai_slop_upscaler' ? 'Open' : 'Apply';
                                 return (
                                   <div
                                     key={action.id}
@@ -2374,7 +2481,7 @@ export const AppAssistant: React.FC = () => {
                                             : 'bg-surface-sunken text-foreground hover:bg-foreground hover:text-background'
                                         )}
                                       >
-                                        {applied ? 'Applied' : 'Apply'}
+                                        {applied ? 'Applied' : actionButtonLabel}
                                       </button>
                                     </div>
                                   </div>
@@ -2515,6 +2622,33 @@ export const AppAssistant: React.FC = () => {
         )}
       </button>
 
+      {aiSlopSuggestion && !open && !inspectMode && (
+        <div
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+8rem)] right-3 z-[89] max-w-[260px] animate-fade-in rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary shadow-lg lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)]"
+          role="status"
+        >
+          <button
+            type="button"
+            onClick={() => setAiSlopSuggestion(null)}
+            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground"
+            aria-label={String(t('common.close'))}
+          >
+            <X size={12} />
+          </button>
+          <div className="pr-5 font-semibold text-foreground">AI distortion detected</div>
+          <div className="mt-1 pr-2 text-[11px] text-foreground-muted">
+            Try AI Slop Upscaling to restore cleaner lines, color, and detail.
+          </div>
+          <button
+            type="button"
+            onClick={() => applyActions(aiSlopSuggestion.messageId, [aiSlopSuggestion.action])}
+            className="mt-2 rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-bold text-background transition hover:opacity-90"
+          >
+            Open AI Slop Upscaler
+          </button>
+        </div>
+      )}
+
       {inspectMode && open && (
         <div
           ref={inspectToolbarRef}
@@ -2550,7 +2684,7 @@ export const AppAssistant: React.FC = () => {
         </div>
       )}
 
-      {hintVisible && !open && (
+      {hintVisible && !open && !aiSlopSuggestion && (
         <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+8rem)] right-3 z-[89] max-w-[220px] animate-fade-in rounded-xl border border-border bg-surface-elevated px-3 py-2 text-xs leading-relaxed text-foreground-secondary shadow-lg lg:bottom-[calc(env(safe-area-inset-bottom)+4rem)]">
           <button
             type="button"

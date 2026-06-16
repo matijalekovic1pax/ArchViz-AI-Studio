@@ -1357,6 +1357,7 @@ export interface HistoryItem {
 
 export interface AppAlert {
   id: string;
+  title?: string;
   message: string;
   tone: 'info' | 'warning' | 'error';
 }
@@ -1369,6 +1370,11 @@ export type GenerationProgressStage =
   | 'finalizing'
   | 'complete';
 
+export interface GenerationRetryNotice {
+  reason: 'unsatisfactory-result';
+  attempt: number;
+}
+
 export interface AppState {
   mode: GenerationMode;
   imageGenerationModel: ImageGenerationModel;
@@ -1378,6 +1384,7 @@ export interface AppState {
   isGenerating: boolean;
   progress: number;
   generationStage: GenerationProgressStage | null;
+  generationRetryNotice: GenerationRetryNotice | null;
   prompt: string;
   
   workflow: WorkflowSettings;
@@ -1420,6 +1427,7 @@ export type Action =
   | { type: 'SET_GENERATING'; payload: boolean }
   | { type: 'SET_PROGRESS'; payload: number }
   | { type: 'SET_GENERATION_STAGE'; payload: GenerationProgressStage | null }
+  | { type: 'SET_GENERATION_RETRY_NOTICE'; payload: GenerationRetryNotice | null }
   | { type: 'UPDATE_WORKFLOW'; payload: Partial<WorkflowSettings> }
   | { type: 'UPDATE_VIDEO_STATE'; payload: Partial<VideoState> }
   | { type: 'UPDATE_VIDEO_CAMERA'; payload: Partial<VideoState['camera']> }

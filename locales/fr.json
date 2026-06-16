@@ -77,6 +77,9 @@
       "finalizing": "Finalisation",
       "complete": "Terminé"
     },
+    "retryNotice": {
+      "unsatisfactory": "Le résultat n'est pas satisfaisant. Régénération..."
+    },
     "generateMasterplan": "Générer le Plan Directeur",
     "generateExplodedView": "Générer la Vue Éclatée",
     "generateSection": "Générer la Section",

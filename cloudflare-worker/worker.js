@@ -59,6 +59,13 @@ const FEEDBACK_ALLOWED_PRIORITIES = new Set(['low', 'normal', 'high', 'urgent'])
 const FEEDBACK_ALLOWED_CATEGORIES = new Set(['bug', 'quality', 'ux', 'performance', 'feature_request', 'other']);
 const FEEDBACK_ALLOWED_IMAGE_SOURCES = new Set(['source', 'current', 'history']);
 const FEEDBACK_ALLOWED_DOCUMENT_KINDS = new Set(['original', 'translated']);
+const APP_LOG_ALLOWED_STATUSES = new Set(['started', 'running', 'completed', 'failed', 'cancelled']);
+const APP_LOG_PROMPT_MAX_CHARS = 80_000;
+const APP_LOG_TEXT_MAX_CHARS = 12_000;
+const APP_LOG_JSON_MAX_DEPTH = 6;
+const APP_LOG_JSON_MAX_ARRAY_ITEMS = 80;
+const APP_LOG_JSON_MAX_OBJECT_KEYS = 100;
+const APP_LOG_DATA_URL_PREVIEW_CHARS = 96;
 const SUPABASE_REQUEST_TIMEOUT_MS = 20_000;
 const SUPABASE_STORAGE_TIMEOUT_MS = 90_000;
 const APPWRITE_REQUEST_TIMEOUT_MS = 20_000;
@@ -69,6 +76,7 @@ const DEFAULT_APPWRITE_REPORTS_COLLECTION_ID = 'feedback_reports';
 const DEFAULT_APPWRITE_ACTIVITY_COLLECTION_ID = 'feedback_activity';
 const DEFAULT_APPWRITE_ADMINS_COLLECTION_ID = 'feedback_admins';
 const DEFAULT_APPWRITE_SNAPSHOTS_BUCKET_ID = 'feedback_snapshots';
+const GEMINI_JSON_REWRITE_MAX_BYTES = 1 * 1024 * 1024;
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -230,7 +238,7 @@ function getCorsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Archviz-Trace-Id',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -1315,6 +1323,302 @@ async function supabaseJson(env, path, init = {}) {
   return JSON.parse(text);
 }
 
+function isSupabaseConfigured(env) {
+  return Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function sanitizeLogTraceId(value) {
+  const text = sanitizeText(value, 160);
+  return text && /^[a-zA-Z0-9_.:-]{8,160}$/.test(text) ? text : null;
+}
+
+function sanitizeLogText(value, maxLen = APP_LOG_TEXT_MAX_CHARS) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text) return null;
+  return text.slice(0, maxLen);
+}
+
+function summarizeDataUrlForLog(value) {
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?,(.*)$/s);
+  const mimeType = match?.[1] || null;
+  const payload = match?.[2] || '';
+  const isBase64 = /;base64,/i.test(value.slice(0, Math.min(value.length, 128)));
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  const bytesApprox = isBase64
+    ? Math.max(0, Math.floor((payload.length * 3) / 4) - padding)
+    : payload.length;
+
+  return {
+    kind: 'data-url',
+    mimeType,
+    chars: value.length,
+    bytesApprox,
+    preview: value.slice(0, APP_LOG_DATA_URL_PREVIEW_CHARS),
+  };
+}
+
+function summarizeStringForLog(value, maxLen = APP_LOG_TEXT_MAX_CHARS) {
+  if (value.startsWith('data:')) return summarizeDataUrlForLog(value);
+  if (value.length <= maxLen) return value;
+  return {
+    kind: 'string',
+    chars: value.length,
+    preview: value.slice(0, maxLen),
+    truncated: true,
+  };
+}
+
+function sanitizeLogJson(value, depth = 0) {
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return summarizeStringForLog(value);
+  if (typeof value !== 'object') return String(value).slice(0, 500);
+  if (depth >= APP_LOG_JSON_MAX_DEPTH) return '[MaxDepth]';
+
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, APP_LOG_JSON_MAX_ARRAY_ITEMS)
+      .map((item) => sanitizeLogJson(item, depth + 1));
+    if (value.length > APP_LOG_JSON_MAX_ARRAY_ITEMS) {
+      items.push({ truncatedItems: value.length - APP_LOG_JSON_MAX_ARRAY_ITEMS });
+    }
+    return items;
+  }
+
+  const entries = Object.entries(value).slice(0, APP_LOG_JSON_MAX_OBJECT_KEYS);
+  const output = {};
+  for (const [key, item] of entries) {
+    output[String(key).slice(0, 120)] = sanitizeLogJson(item, depth + 1);
+  }
+  if (Object.keys(value).length > APP_LOG_JSON_MAX_OBJECT_KEYS) {
+    output.__truncatedKeys = Object.keys(value).length - APP_LOG_JSON_MAX_OBJECT_KEYS;
+  }
+  return output;
+}
+
+function normalizeLogStatus(value, fallback = null) {
+  return sanitizeEnum(value, APP_LOG_ALLOWED_STATUSES, fallback);
+}
+
+function normalizeLogInteger(value, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+}
+
+function extractPromptFromLogPayload(body) {
+  return sanitizeLogText(
+    body?.prompt ||
+    body?.metadata?.prompt ||
+    body?.requestSummary?.prompt ||
+    body?.request_summary?.prompt,
+    APP_LOG_PROMPT_MAX_CHARS
+  );
+}
+
+function summarizeResponseHeaders(response) {
+  return {
+    contentType: response.headers.get('Content-Type'),
+    contentLength: response.headers.get('Content-Length'),
+  };
+}
+
+function getLogProviderForPath(path) {
+  if (path.startsWith('/api/gemini/')) return 'gemini';
+  if (path.startsWith('/api/openai/')) return 'openai';
+  if (path.startsWith('/api/veo/')) return 'veo';
+  if (path.startsWith('/api/kling/')) return 'kling';
+  if (path.startsWith('/api/convert/')) return 'convertapi';
+  if (path.startsWith('/api/ilovepdf/')) return 'ilovepdf';
+  if (path.startsWith('/api/fetch-url')) return 'url-fetch';
+  if (path.startsWith('/api/feedback/')) return 'feedback';
+  return null;
+}
+
+async function upsertAppGenerationSession(env, user, traceId, body, prompt, promptHash) {
+  const eventType = sanitizeLogText(body?.eventType, 120) || 'client_event';
+  const isCompletion = eventType === 'generation_completed' || eventType === 'generation_failed' || eventType === 'generation_cancelled';
+  const statusFromEvent =
+    eventType === 'generation_completed' ? 'completed' :
+    eventType === 'generation_failed' ? 'failed' :
+    eventType === 'generation_cancelled' ? 'cancelled' :
+    eventType === 'generation_started' ? 'started' :
+    normalizeLogStatus(body?.status, null);
+
+  const payload = {
+    trace_id: traceId,
+    user_email: sanitizeLogText(user?.email, 320),
+    user_name: sanitizeLogText(user?.name, 200),
+    status: statusFromEvent || 'running',
+    mode: sanitizeLogText(body?.mode, 80),
+    provider: sanitizeLogText(body?.provider, 120),
+    model: sanitizeLogText(body?.model, 160),
+    prompt: prompt || undefined,
+    prompt_hash: promptHash || undefined,
+    duration_ms: normalizeLogInteger(body?.durationMs ?? body?.duration_ms, 0, 24 * 60 * 60 * 1000),
+    error_message: sanitizeLogText(body?.errorMessage ?? body?.error_message, 20000),
+  };
+
+  if ('inputSummary' in body || 'input_summary' in body) {
+    payload.input_summary = sanitizeLogJson(body?.inputSummary ?? body?.input_summary ?? {});
+  }
+  if ('outputSummary' in body || 'output_summary' in body) {
+    payload.output_summary = sanitizeLogJson(body?.outputSummary ?? body?.output_summary ?? {});
+  }
+  if ('metadata' in body) {
+    payload.metadata = sanitizeLogJson(body?.metadata ?? {});
+  }
+
+  if (eventType === 'generation_started') {
+    payload.started_at = new Date().toISOString();
+  }
+  if (isCompletion) {
+    payload.completed_at = new Date().toISOString();
+  }
+
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === undefined) delete payload[key];
+  });
+
+  const rows = await supabaseJson(env, '/rest/v1/app_generation_sessions?on_conflict=trace_id&select=id,trace_id,status,created_at,started_at,updated_at,completed_at', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(payload),
+  });
+
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function getAppGenerationSessionByTrace(env, traceId) {
+  if (!traceId) return null;
+  const rows = await supabaseJson(
+    env,
+    `/rest/v1/app_generation_sessions?select=id,trace_id,status&trace_id=eq.${encodeURIComponent(traceId)}&limit=1`
+  );
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function createAppLogEvent(env, user, rawBody) {
+  if (!isSupabaseConfigured(env)) {
+    return { success: false, skipped: true, reason: 'Supabase logging is not configured.' };
+  }
+
+  const body = rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) ? rawBody : {};
+  const traceId = sanitizeLogTraceId(body.traceId || body.trace_id) || crypto.randomUUID();
+  const eventType = sanitizeLogText(body.eventType || body.event_type, 120) || 'client_event';
+  const prompt = extractPromptFromLogPayload(body);
+  const promptHash = prompt ? await sha256Hex(prompt) : null;
+  const shouldUpsertSession =
+    eventType.startsWith('generation_') ||
+    body.session === true ||
+    body.sessionEvent === true;
+
+  let session = null;
+  if (shouldUpsertSession) {
+    session = await upsertAppGenerationSession(env, user, traceId, body, prompt, promptHash);
+  } else if (traceId) {
+    session = await getAppGenerationSessionByTrace(env, traceId);
+  }
+
+  const logPayload = {
+    trace_id: traceId,
+    generation_id: session?.id || null,
+    user_email: sanitizeLogText(user?.email, 320),
+    user_name: sanitizeLogText(user?.name, 200),
+    event_type: eventType,
+    provider: sanitizeLogText(body.provider, 120),
+    model: sanitizeLogText(body.model, 160),
+    action: sanitizeLogText(body.action, 160),
+    method: sanitizeLogText(body.method, 16),
+    path: sanitizeLogText(body.path, 600),
+    status_code: normalizeLogInteger(body.statusCode ?? body.status_code, 100, 599),
+    duration_ms: normalizeLogInteger(body.durationMs ?? body.duration_ms, 0, 24 * 60 * 60 * 1000),
+    prompt,
+    prompt_hash: promptHash,
+    request_summary: sanitizeLogJson(body.requestSummary ?? body.request_summary ?? {}),
+    response_summary: sanitizeLogJson(body.responseSummary ?? body.response_summary ?? {}),
+    error_message: sanitizeLogText(body.errorMessage ?? body.error_message, 20000),
+    metadata: sanitizeLogJson(body.metadata ?? {}),
+  };
+
+  const rows = await supabaseJson(env, '/rest/v1/app_request_logs?select=id,created_at', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(logPayload),
+  });
+
+  return {
+    success: true,
+    traceId,
+    generationId: session?.id || null,
+    event: Array.isArray(rows) && rows.length > 0 ? rows[0] : null,
+  };
+}
+
+function getRequestTraceId(request) {
+  return sanitizeLogTraceId(request.headers.get('X-Archviz-Trace-Id'));
+}
+
+function logEventInBackground(ctx, env, user, event) {
+  const promise = createAppLogEvent(env, user, event).catch((error) => {
+    console.warn('[logs] background log failed', error?.message || error);
+  });
+  if (ctx?.waitUntil) ctx.waitUntil(promise);
+}
+
+async function withLoggedGatewayRequest(request, env, ctx, user, details, handler) {
+  const startedAt = Date.now();
+  const url = new URL(request.url);
+  const traceId = getRequestTraceId(request) || crypto.randomUUID();
+  const provider = details.provider || getLogProviderForPath(url.pathname);
+  const method = request.method;
+  const path = url.pathname + url.search;
+  const requestSummary = {
+    source: 'worker',
+    contentType: request.headers.get('Content-Type'),
+    contentLength: request.headers.get('Content-Length'),
+  };
+
+  try {
+    const response = await handler();
+    logEventInBackground(ctx, env, user, {
+      traceId,
+      eventType: 'worker_request',
+      provider,
+      model: details.model,
+      action: details.action,
+      method,
+      path,
+      statusCode: response.status,
+      durationMs: Date.now() - startedAt,
+      requestSummary,
+      responseSummary: summarizeResponseHeaders(response),
+      metadata: {
+        route: details.route || url.pathname,
+      },
+    });
+    return response;
+  } catch (error) {
+    logEventInBackground(ctx, env, user, {
+      traceId,
+      eventType: 'worker_request_failed',
+      provider,
+      model: details.model,
+      action: details.action,
+      method,
+      path,
+      durationMs: Date.now() - startedAt,
+      requestSummary,
+      errorMessage: error?.message || String(error),
+      metadata: {
+        route: details.route || url.pathname,
+      },
+    });
+    throw error;
+  }
+}
+
 async function isFeedbackAdmin(env, email) {
   if (!email) return false;
   if (isAppwriteFeedbackConfigured(env)) {
@@ -1488,6 +1792,11 @@ async function getGeminiProxyBody(request) {
 
   const contentType = request.headers.get('Content-Type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {
+    return request.body;
+  }
+
+  const contentLength = Number(request.headers.get('Content-Length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > GEMINI_JSON_REWRITE_MAX_BYTES) {
     return request.body;
   }
 
@@ -1685,6 +1994,48 @@ function normalizeOpenAIImageResponse(data) {
   };
 }
 
+async function createOpenAIImageProxyResponse(origin, upstreamResp) {
+  const respHeaders = { ...getCorsHeaders(origin) };
+  const contentType = upstreamResp.headers.get('Content-Type');
+  if (contentType) respHeaders['Content-Type'] = contentType;
+
+  if (upstreamResp.ok) {
+    return new Response(upstreamResp.body, {
+      status: upstreamResp.status,
+      headers: respHeaders,
+    });
+  }
+
+  const errText = await upstreamResp.text().catch(() => '');
+  let errData = null;
+  try {
+    errData = errText ? JSON.parse(errText) : null;
+  } catch {}
+
+  const message = extractOpenAIError(
+    errData,
+    errText.slice(0, 500) || `OpenAI image API error (${upstreamResp.status})`
+  );
+  return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+}
+
+async function handleOpenAIMultipartImages(request, env, origin) {
+  const contentType = request.headers.get('Content-Type') || '';
+  const upstreamResp = await fetchWithRetry((signal) =>
+    fetch(`${OPENAI_API_BASE}/images/edits`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': contentType,
+      },
+      body: request.body,
+      signal,
+    }),
+    { maxRetries: 0, timeoutMs: OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS, label: 'OpenAI image edit' }
+  );
+  return createOpenAIImageProxyResponse(origin, upstreamResp);
+}
+
 async function handleOpenAIImages(request, env) {
   const origin = request.headers.get('Origin') || '';
   if (!env.OPENAI_API_KEY) {
@@ -1694,6 +2045,11 @@ async function handleOpenAIImages(request, env) {
   }
 
   try {
+    const contentType = request.headers.get('Content-Type') || '';
+    if (contentType.toLowerCase().includes('multipart/form-data')) {
+      return await handleOpenAIMultipartImages(request, env, origin);
+    }
+
     const body = await request.json();
     const prompt = sanitizeText(body.prompt, OPENAI_IMAGE_MAX_PROMPT_CHARS);
     if (!prompt) return badRequest(origin, 'Missing prompt');
@@ -3354,6 +3710,107 @@ async function handleFeedbackActivityCreate(request, env, reportId, isAdmin, use
   }
 }
 
+// ─── App Generation Logs API ────────────────────────────────────────────────
+
+async function handleAppLogEventCreate(request, env, user) {
+  const origin = request.headers.get('Origin') || '';
+
+  try {
+    const body = await request.json();
+    const result = await createAppLogEvent(env, user, body);
+    return corsResponse(origin, result);
+  } catch (error) {
+    console.error('[logs] event create failed', {
+      message: error?.message || String(error),
+    });
+    return corsResponse(origin, { error: error.message || 'Failed to write application log.' }, { status: 500 });
+  }
+}
+
+function sanitizePostgrestSearch(value) {
+  const text = sanitizeText(value, 160);
+  return text ? text.replace(/[*,()]/g, ' ').replace(/\s+/g, ' ').trim() : null;
+}
+
+async function handleAppLogList(request, env, isAdmin) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const url = new URL(request.url);
+    const limitRaw = Number(url.searchParams.get('limit') || 80);
+    const offsetRaw = Number(url.searchParams.get('offset') || 0);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 200)) : 80;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+    const status = normalizeLogStatus(url.searchParams.get('status'), null);
+    const mode = sanitizeText(url.searchParams.get('mode'), 80);
+    const provider = sanitizeText(url.searchParams.get('provider'), 120);
+    const userEmail = sanitizeText(url.searchParams.get('userEmail'), 320);
+    const search = sanitizePostgrestSearch(url.searchParams.get('search'));
+
+    const params = new URLSearchParams();
+    params.set('select', 'id,trace_id,created_at,started_at,updated_at,completed_at,user_email,user_name,status,mode,provider,model,prompt,prompt_hash,duration_ms,input_summary,output_summary,error_message,metadata');
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    if (status) params.set('status', `eq.${status}`);
+    if (mode) params.set('mode', `eq.${mode}`);
+    if (provider) params.set('provider', `eq.${provider}`);
+    if (userEmail) params.set('user_email', `eq.${userEmail}`);
+    if (search) {
+      params.set(
+        'or',
+        `(trace_id.ilike.*${search}*,user_email.ilike.*${search}*,mode.ilike.*${search}*,provider.ilike.*${search}*,model.ilike.*${search}*,prompt.ilike.*${search}*,error_message.ilike.*${search}*)`
+      );
+    }
+
+    const sessions = await supabaseJson(env, `/rest/v1/app_generation_sessions?${params.toString()}`, {
+      headers: { Prefer: 'count=exact' },
+    });
+
+    return corsResponse(origin, {
+      success: true,
+      sessions: Array.isArray(sessions) ? sessions : [],
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to load application logs.' }, { status: 500 });
+  }
+}
+
+async function handleAppLogDetail(request, env, identifier, isAdmin) {
+  const origin = request.headers.get('Origin') || '';
+  if (!isAdmin) return forbidden(origin, 'Admin access required.');
+
+  try {
+    const isUuid = /^[0-9a-fA-F-]{36}$/.test(identifier);
+    const filter = isUuid
+      ? `or=(id.eq.${encodeURIComponent(identifier)},trace_id.eq.${encodeURIComponent(identifier)})`
+      : `trace_id=eq.${encodeURIComponent(identifier)}`;
+    const sessions = await supabaseJson(
+      env,
+      `/rest/v1/app_generation_sessions?select=id,trace_id,created_at,started_at,updated_at,completed_at,user_email,user_name,status,mode,provider,model,prompt,prompt_hash,duration_ms,input_summary,output_summary,error_message,metadata&${filter}&limit=1`
+    );
+
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return corsResponse(origin, { error: 'Log session not found.' }, { status: 404 });
+    }
+
+    const session = sessions[0];
+    const events = await supabaseJson(
+      env,
+      `/rest/v1/app_request_logs?select=id,created_at,trace_id,generation_id,user_email,user_name,event_type,provider,model,action,method,path,status_code,duration_ms,prompt,prompt_hash,request_summary,response_summary,error_message,metadata&trace_id=eq.${encodeURIComponent(session.trace_id)}&order=created_at.asc&limit=500`
+    );
+
+    return corsResponse(origin, {
+      success: true,
+      session,
+      events: Array.isArray(events) ? events : [],
+    });
+  } catch (error) {
+    return corsResponse(origin, { error: error.message || 'Failed to load application log detail.' }, { status: 500 });
+  }
+}
+
 async function handleAppwriteFeedbackSetup(request, env) {
   const origin = request.headers.get('Origin') || '';
   const setupToken = env.APPWRITE_SETUP_TOKEN;
@@ -3445,7 +3902,10 @@ export default {
     if (!user) return unauthorized(origin);
 
     const isFeedbackRoute = path.startsWith('/api/feedback/');
-    const needsFeedbackAdmin = isFeedbackRoute && !(path === '/api/feedback/reports' && request.method === 'POST');
+    const isAppLogRoute = path.startsWith('/api/logs/');
+    const needsFeedbackAdmin =
+      (isFeedbackRoute && !(path === '/api/feedback/reports' && request.method === 'POST')) ||
+      (isAppLogRoute && !(path === '/api/logs/events' && request.method === 'POST'));
     let feedbackAdmin = false;
     if (needsFeedbackAdmin) {
       feedbackAdmin = await isFeedbackAdmin(env, user.email);
@@ -3479,37 +3939,82 @@ export default {
       return handleFeedbackDelete(request, env, feedbackReportMatch[1], feedbackAdmin);
     }
 
+    if (path === '/api/logs/events' && request.method === 'POST') {
+      return handleAppLogEventCreate(request, env, user);
+    }
+    if (path === '/api/logs/generations' && request.method === 'GET') {
+      return handleAppLogList(request, env, feedbackAdmin);
+    }
+    const appLogGenerationMatch = path.match(/^\/api\/logs\/generations\/([^/]+)$/);
+    if (appLogGenerationMatch && request.method === 'GET') {
+      return handleAppLogDetail(request, env, appLogGenerationMatch[1], feedbackAdmin);
+    }
+
     // Gemini passthrough: /api/gemini/{anything}
     if (path.startsWith('/api/gemini/')) {
       const subpath = path.replace('/api/gemini/', '') + url.search;
-      return handleGeminiProxy(request, env, subpath);
+      return withLoggedGatewayRequest(
+        request,
+        env,
+        ctx,
+        user,
+        { provider: 'gemini', action: subpath.split(':')[1]?.split('?')[0] || 'request', route: '/api/gemini/*' },
+        () => handleGeminiProxy(request, env, subpath)
+      );
     }
 
     // OpenAI Image API
-    if (path === '/api/openai/images' && request.method === 'POST') return handleOpenAIImages(request, env);
+    if (path === '/api/openai/images' && request.method === 'POST') {
+      return withLoggedGatewayRequest(
+        request,
+        env,
+        ctx,
+        user,
+        { provider: 'openai', model: OPENAI_IMAGE_MODEL, action: 'images', route: '/api/openai/images' },
+        () => handleOpenAIImages(request, env)
+      );
+    }
 
     // Veo video generation
-    if (path === '/api/veo/generate' && request.method === 'POST') return handleVeoGenerate(request, env);
-    if (path === '/api/veo/status' && request.method === 'GET') return handleVeoStatus(request, env);
-    if (path === '/api/veo/download' && request.method === 'GET') return handleVeoDownload(request, env);
-    if (path === '/api/veo/video' && request.method === 'GET') return handleVeoVideo(request, env);
+    if (path === '/api/veo/generate' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'generate', route: '/api/veo/generate' }, () => handleVeoGenerate(request, env));
+    }
+    if (path === '/api/veo/status' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'status', route: '/api/veo/status' }, () => handleVeoStatus(request, env));
+    }
+    if (path === '/api/veo/download' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'download', route: '/api/veo/download' }, () => handleVeoDownload(request, env));
+    }
+    if (path === '/api/veo/video' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'video', route: '/api/veo/video' }, () => handleVeoVideo(request, env));
+    }
 
     // Kling video generation
-    if (path === '/api/kling/generate' && request.method === 'POST') return handleKlingGenerate(request, env);
-    if (path === '/api/kling/status' && request.method === 'GET') return handleKlingStatus(request, env);
+    if (path === '/api/kling/generate' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'kling', action: 'generate', route: '/api/kling/generate' }, () => handleKlingGenerate(request, env));
+    }
+    if (path === '/api/kling/status' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'kling', action: 'status', route: '/api/kling/status' }, () => handleKlingStatus(request, env));
+    }
 
     // ConvertAPI
-    if (path === '/api/convert/pdf-to-docx' && request.method === 'POST') return handleConvertApi(request, env, 'pdf', 'docx');
-    if (path === '/api/convert/docx-to-pdf' && request.method === 'POST') return handleConvertApi(request, env, 'docx', 'pdf');
+    if (path === '/api/convert/pdf-to-docx' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'convertapi', action: 'pdf-to-docx', route: '/api/convert/pdf-to-docx' }, () => handleConvertApi(request, env, 'pdf', 'docx'));
+    }
+    if (path === '/api/convert/docx-to-pdf' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'convertapi', action: 'docx-to-pdf', route: '/api/convert/docx-to-pdf' }, () => handleConvertApi(request, env, 'docx', 'pdf'));
+    }
 
     // iLovePDF multi-step proxy
     if (path.startsWith('/api/ilovepdf/')) {
       const subpath = path.replace('/api/ilovepdf/', '');
-      return handleILovePdfProxy(request, env, subpath);
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'ilovepdf', action: subpath, route: '/api/ilovepdf/*' }, () => handleILovePdfProxy(request, env, subpath));
     }
 
     // URL fetch proxy (material validation link fetching)
-    if (path === '/api/fetch-url' && request.method === 'GET') return handleFetchUrl(request, env);
+    if (path === '/api/fetch-url' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'url-fetch', action: 'fetch-url', route: '/api/fetch-url' }, () => handleFetchUrl(request, env));
+    }
 
     return corsResponse(origin, { error: 'Not found' }, { status: 404 });
   },

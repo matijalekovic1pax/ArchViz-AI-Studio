@@ -113,6 +113,7 @@ const createTestSnapshot = (state: AppState) => ({
   isGenerating: state.isGenerating,
   progress: state.progress,
   generationStage: state.generationStage,
+  generationRetryNotice: state.generationRetryNotice,
   uploadedImage: summarizeDataUrl(state.uploadedImage),
   sourceImage: summarizeDataUrl(state.sourceImage),
   canvas: state.canvas,
@@ -1001,6 +1002,7 @@ const initialState: AppState = {
   isGenerating: false,
   progress: 0,
   generationStage: null,
+  generationRetryNotice: null,
   prompt: '',
   workflow: initialWorkflow,
   materialValidation: initialMaterialValidation,
@@ -1059,6 +1061,7 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'SET_GENERATION_STAGE': return { ...state, generationStage: action.payload };
+    case 'SET_GENERATION_RETRY_NOTICE': return { ...state, generationRetryNotice: action.payload };
     case 'UPDATE_WORKFLOW': {
       const workflow = updateWorkflow(state.workflow, action.payload);
       return {

@@ -117,7 +117,17 @@ const Layout: React.FC = () => {
             )}>
               {state.appAlert.tone === 'info' ? <Info size={16} /> : <AlertTriangle size={16} />}
             </div>
-            <div className="text-sm font-medium flex-1">{state.appAlert.message}</div>
+            <div className="flex-1 min-w-0">
+              {state.appAlert.title && (
+                <div className="text-sm font-semibold leading-5">{state.appAlert.title}</div>
+              )}
+              <div className={cn(
+                "text-sm leading-5",
+                state.appAlert.title ? "font-normal opacity-90" : "font-medium"
+              )}>
+                {state.appAlert.message}
+              </div>
+            </div>
             <button
               className="p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
               onClick={() => dispatch({ type: 'SET_APP_ALERT', payload: null })}

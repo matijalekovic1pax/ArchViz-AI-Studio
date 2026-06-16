@@ -20,6 +20,7 @@ import {
   AttachmentData,
   GenerationConfig,
   ImageConfig,
+  TEXT_MODEL,
   OUTPUT_VERIFICATION_MIN_SCORE,
   type ImageGenerationProgress,
   type ImageOutputVerificationResult
@@ -29,7 +30,12 @@ import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
-import { isGatewayAuthenticated } from '../services/apiGateway';
+import {
+  createGatewayTraceId,
+  isGatewayAuthenticated,
+  queueAppLogEvent,
+  setActiveGenerationTraceId,
+} from '../services/apiGateway';
 import { isConvertApiConfigured } from '../services/convertApiService';
 import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiService';
 import { compressPdfBatch } from '../lib/pdfCompression';
@@ -37,6 +43,7 @@ import { getMaterialById } from '../lib/materialCatalog';
 import {
   applyVisualPostProduction
 } from '../lib/visualPostProcessing';
+import { AI_SLOP_UPSCALER_SUGGESTION_EVENT } from '../lib/assistantEvents';
 import { nanoid } from 'nanoid';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
 
@@ -57,6 +64,142 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
 const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
 const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-sketch'];
 const OUTPUT_VERIFICATION_MAX_ATTEMPTS = 3;
+const OUTPUT_VERIFICATION_TIMEOUT_MS = 90 * 1000;
+const TEMPORARY_AI_SERVICE_STATUSES = new Set([500, 502, 503, 504]);
+
+const estimateBase64Bytes = (base64: string): number => {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+};
+
+const summarizeDataUrlForLog = (value: string | null | undefined) => {
+  if (!value) return null;
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?,(.*)$/s);
+  const payload = match?.[2] || '';
+  return {
+    present: true,
+    mimeType: match?.[1] || null,
+    chars: value.length,
+    bytesApprox: payload ? estimateBase64Bytes(payload) : null,
+  };
+};
+
+const summarizeImageDataForLog = (image: ImageData, index: number) => ({
+  index,
+  mimeType: image.mimeType,
+  width: image.width ?? null,
+  height: image.height ?? null,
+  base64Chars: image.base64?.length || 0,
+  bytesApprox: image.base64 ? estimateBase64Bytes(image.base64) : 0,
+});
+
+const summarizeAttachmentForLog = (attachment: AttachmentData, index: number) => ({
+  index,
+  name: attachment.name || null,
+  mimeType: attachment.mimeType,
+  base64Chars: attachment.base64?.length || 0,
+  bytesApprox: attachment.base64 ? estimateBase64Bytes(attachment.base64) : 0,
+});
+
+const getGenerationLogRoute = (
+  mode: GenerationMode,
+  imageGenerationModel: AppState['imageGenerationModel'],
+  videoState: AppState['workflow']['videoState']
+) => {
+  if (mode === 'video') {
+    const usesKling = videoState.model === 'kling-2.6';
+    return {
+      provider: usesKling ? 'kling' : 'veo',
+      model: videoState.model,
+    };
+  }
+
+  if (mode === 'pdf-compression') {
+    return { provider: 'pdf-compression', model: null };
+  }
+
+  if (imageGenerationModel === 'chatgpt-image-generation-2' && !TEXT_ONLY_MODES.includes(mode)) {
+    return { provider: 'openai', model: 'gpt-image-2' };
+  }
+
+  return {
+    provider: 'gemini',
+    model: TEXT_ONLY_MODES.includes(mode) ? TEXT_MODEL : IMAGE_MODEL,
+  };
+};
+
+const getErrorMetadata = (error: unknown): { status?: number; provider?: string } => {
+  const seen = new Set<unknown>();
+  const metadata: { status?: number; provider?: string } = {};
+
+  const visit = (value: unknown, depth = 0) => {
+    if (!value || depth > 4 || seen.has(value)) return;
+    seen.add(value);
+
+    if (typeof value === 'object') {
+      const candidate = value as {
+        status?: unknown;
+        provider?: unknown;
+        details?: unknown;
+        cause?: unknown;
+      };
+      if (metadata.status === undefined && typeof candidate.status === 'number') {
+        metadata.status = candidate.status;
+      }
+      if (metadata.provider === undefined && typeof candidate.provider === 'string') {
+        metadata.provider = candidate.provider;
+      }
+      visit(candidate.details, depth + 1);
+      visit(candidate.cause, depth + 1);
+    }
+  };
+
+  visit(error);
+  return metadata;
+};
+
+const isTemporaryAiServiceFailure = (error: unknown, message: string): boolean => {
+  const { status, provider } = getErrorMetadata(error);
+  const lowerMessage = message.toLowerCase();
+  const isAuthOrConfigurationIssue =
+    status === 401 ||
+    status === 403 ||
+    lowerMessage.includes('unauthorized') ||
+    lowerMessage.includes('forbidden') ||
+    lowerMessage.includes('api_key') ||
+    lowerMessage.includes('api key') ||
+    lowerMessage.includes('not configured');
+
+  if (isAuthOrConfigurationIssue) return false;
+
+  if (status !== undefined && TEMPORARY_AI_SERVICE_STATUSES.has(status)) {
+    return provider === 'openai-image' || lowerMessage.includes('openai') || lowerMessage.includes('image api');
+  }
+
+  return (
+    lowerMessage.includes('503') ||
+    lowerMessage.includes('502') ||
+    lowerMessage.includes('504') ||
+    lowerMessage.includes('service unavailable') ||
+    lowerMessage.includes('temporarily unavailable') ||
+    lowerMessage.includes('overloaded') ||
+    lowerMessage.includes('capacity') ||
+    lowerMessage.includes('try again later') ||
+    lowerMessage.includes('gateway timeout') ||
+    lowerMessage.includes('timed out')
+  );
+};
+
+const getTemporaryAiServiceAlertMessage = (error: unknown, message: string): string => {
+  const { status } = getErrorMetadata(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (status === 504 || lowerMessage.includes('timeout') || lowerMessage.includes('timed out')) {
+    return 'The AI image service did not return in time. This is usually temporary, so please try again in a few minutes.';
+  }
+
+  return 'The request reached the app, but the AI image service returned a temporary availability error. This is usually an upstream service disruption, so please try again in a few minutes.';
+};
 
 const IMAGE_PIPELINE_PROGRESS_RANGES: Record<ImageGenerationProgress['phase'], [number, number]> = {
   'ai-middle-layer': [3, 28],
@@ -186,9 +329,45 @@ const withOutputVerificationSettings = (
       score: result.outputVerification.score,
       summary: result.outputVerification.summary,
       issues: result.outputVerification.issues,
-      attempts: result.outputVerificationAttempts ?? 1
+      attempts: result.outputVerificationAttempts ?? 1,
+      aiSlopDetected: result.outputVerification.aiSlopDetected || undefined,
+      aiSlopConfidence: result.outputVerification.aiSlopConfidence,
+      aiSlopIndicators: result.outputVerification.aiSlopIndicators,
+      aiSlopSuggestion: result.outputVerification.aiSlopSuggestion
     }
   };
+};
+
+const getAiSlopDetectionForVisibleResult = (result: GeminiResponse) => {
+  const verifications = [
+    result.outputVerification,
+    ...(result.outputVerifications || [])
+  ].filter((verification): verification is ImageOutputVerificationResult => Boolean(verification));
+
+  return verifications
+    .filter((verification) => verification.aiSlopDetected)
+    .sort((a, b) => (b.aiSlopConfidence ?? 0) - (a.aiSlopConfidence ?? 0))[0] || null;
+};
+
+const suggestAiSlopUpscalerIfNeeded = (
+  result: GeminiResponse,
+  mode: GenerationMode,
+  upscaleMode: AppState['workflow']['upscaleMode']
+) => {
+  if (typeof window === 'undefined') return;
+  if (mode === 'upscale' && upscaleMode === 'ai-slop') return;
+
+  const detection = getAiSlopDetectionForVisibleResult(result);
+  if (!detection) return;
+
+  window.dispatchEvent(new CustomEvent(AI_SLOP_UPSCALER_SUGGESTION_EVENT, {
+    detail: {
+      id: nanoid(),
+      score: detection.aiSlopConfidence,
+      summary: detection.aiSlopSuggestion || detection.summary,
+      indicators: detection.aiSlopIndicators || []
+    }
+  }));
 };
 
 const drawMaskImageData = (
@@ -869,6 +1048,9 @@ export function useGeneration(): UseGenerationReturn {
     }
     abortControllerRef.current = new AbortController();
     const abortSignal = abortControllerRef.current.signal;
+    const generationTraceId = createGatewayTraceId('gen');
+    const generationStartedAt = Date.now();
+    setActiveGenerationTraceId(generationTraceId);
 
     const isMaterialValidationMode = state.mode === 'material-validation';
     let lastProgress = 0;
@@ -895,6 +1077,19 @@ export function useGeneration(): UseGenerationReturn {
       updateGenerationStage('preparing');
       updateProgress(2);
     };
+    const clearGenerationRetryNotice = () => {
+      dispatch({ type: 'SET_GENERATION_RETRY_NOTICE', payload: null });
+    };
+    const showUnsatisfactoryRetryNotice = (nextAttempt: number) => {
+      if (isMaterialValidationMode) return;
+      dispatch({
+        type: 'SET_GENERATION_RETRY_NOTICE',
+        payload: {
+          reason: 'unsatisfactory-result',
+          attempt: nextAttempt
+        }
+      });
+    };
     const updateImagePipelineProgress = (progress: ImageGenerationProgress) => {
       const range = IMAGE_PIPELINE_PROGRESS_RANGES[progress.phase];
       const stage = IMAGE_PIPELINE_STAGES[progress.phase];
@@ -904,11 +1099,18 @@ export function useGeneration(): UseGenerationReturn {
       updateProgress(start + ((end - start) * progress.progress) / 100);
     };
 
+    clearGenerationRetryNotice();
     dispatch({ type: 'SET_GENERATING', payload: true });
     let multiAngleHistoryHandled = false;
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
     updateGenerationStage('preparing');
     updateProgress(2);
+    let generationPromptForLog = state.prompt?.trim() || options.prompt?.trim() || '';
+    let generationLogRoute = getGenerationLogRoute(
+      state.mode,
+      effectiveImageGenerationModel,
+      state.workflow.videoState
+    );
 
     try {
       if (abortSignal.aborted) {
@@ -1134,6 +1336,62 @@ export function useGeneration(): UseGenerationReturn {
           ? (state.workflow.headshot.style === 'website-custom' ? '16:9' : '3:4')
           : undefined;
 
+      generationLogRoute = getGenerationLogRoute(
+        state.mode,
+        effectiveImageGenerationModel,
+        state.workflow.videoState
+      );
+      generationPromptForLog = fullPrompt;
+      const generationInputSummary = {
+        explicitPrompt: explicitPrompt || null,
+        modePrefix: modePrefix || null,
+        optionPromptProvided: Boolean(options.prompt),
+        requestedImageCount: options.numberOfImages || 1,
+        sourceImage: summarizeDataUrlForLog(baseImage),
+        plainGenerateContextImage: summarizeDataUrlForLog(plainGenerateContextImage),
+        attachmentUrls: attachmentUrls.map((url, index) => ({
+          index,
+          summary: summarizeDataUrlForLog(url),
+        })),
+        imageInputs: images.map(summarizeImageDataForLog),
+        attachments: attachments.map(summarizeAttachmentForLog),
+        output: {
+          aspectRatio: state.output.aspectRatio,
+          resolution: state.output.resolution,
+        },
+        workflow: {
+          renderMode: state.workflow.renderMode,
+          render3dSourceMode: state.workflow.render3dSourceMode,
+          activeVisualTool: state.workflow.activeTool,
+          upscaleMode: state.workflow.upscaleMode,
+          videoInputMode: state.workflow.videoState.inputMode,
+          videoModel: state.workflow.videoState.model,
+          videoDuration: state.workflow.videoState.duration,
+          videoResolution: state.workflow.videoState.resolution,
+          videoAspectRatio: state.workflow.videoState.aspectRatio,
+          headshotStyle: state.workflow.headshot.style,
+        },
+        historyCount: state.history.length,
+      };
+
+      queueAppLogEvent({
+        traceId: generationTraceId,
+        eventType: 'generation_started',
+        session: true,
+        status: 'started',
+        mode: state.mode,
+        provider: generationLogRoute.provider,
+        model: generationLogRoute.model,
+        action: options.numberOfImages && options.numberOfImages > 1 ? 'batch-generation' : 'generation',
+        prompt: fullPrompt,
+        inputSummary: generationInputSummary,
+        metadata: {
+          imageGenerationModel: effectiveImageGenerationModel,
+          language: i18n.language,
+          app: 'archviz-ai-studio',
+        },
+      });
+
       if (isPdfCompressionMode) {
         updateGenerationStage('generation');
         updateProgress(5);
@@ -1249,8 +1507,48 @@ export function useGeneration(): UseGenerationReturn {
             }
           });
 
+          queueAppLogEvent({
+            traceId: generationTraceId,
+            eventType: 'generation_completed',
+            session: true,
+            status: 'completed',
+            mode: state.mode,
+            provider: generationLogRoute.provider,
+            model: generationLogRoute.model,
+            action: 'pdf-compression',
+            prompt: fullPrompt,
+            durationMs: Date.now() - generationStartedAt,
+            outputSummary: {
+              inputCount: queue.length,
+              outputCount: outputs.length,
+              averageCompressionRatio: Number.isFinite(avgCompression) ? avgCompression : null,
+              results: results.map((result) => ({
+                id: result.id,
+                name: result.name,
+                success: result.success,
+                originalSize: result.originalSize,
+                compressedSize: result.compressedSize,
+                compressionRatio: result.compressionRatio,
+                error: result.error || null,
+              })),
+            },
+          });
+
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'PDF compression failed';
+          queueAppLogEvent({
+            traceId: generationTraceId,
+            eventType: 'generation_failed',
+            session: true,
+            status: 'failed',
+            mode: state.mode,
+            provider: generationLogRoute.provider,
+            model: generationLogRoute.model,
+            action: 'pdf-compression',
+            prompt: fullPrompt,
+            durationMs: Date.now() - generationStartedAt,
+            errorMessage,
+          });
 
           // Check if it's an API configuration error
           if (errorMessage.includes('not configured') || errorMessage.includes('API key')) {
@@ -1332,6 +1630,38 @@ export function useGeneration(): UseGenerationReturn {
         }
 
         throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
+      };
+      const runAbortableWithTimeout = async <T>(
+        label: string,
+        timeoutMs: number,
+        fn: (signal: AbortSignal) => Promise<T>
+      ): Promise<T> => {
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
+        }
+
+        const controller = new AbortController();
+        const abortFromParent = () => controller.abort();
+        abortSignal.addEventListener('abort', abortFromParent, { once: true });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+        try {
+          return await Promise.race([
+            fn(controller.signal),
+            new Promise<never>((_, reject) => {
+              timeoutId = setTimeout(() => {
+                controller.abort();
+                reject(new Error(`${label} timed out after ${timeoutMs / 1000} seconds`));
+              }, timeoutMs);
+            })
+          ]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+          abortSignal.removeEventListener('abort', abortFromParent);
+          if (!controller.signal.aborted) {
+            controller.abort();
+          }
+        }
       };
       const imageGenerationRetryOptions = {
         timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
@@ -1421,17 +1751,21 @@ export function useGeneration(): UseGenerationReturn {
         if (abortSignal.aborted) {
           throw new DOMException('Request aborted', 'AbortError');
         }
-        return service.verifyImageOutput({
-          prompt: resultToVerify.optimizedPrompt || promptForVerification,
-          originalPrompt: originalPromptForVerification || promptForVerification,
-          referenceImages,
-          generatedImage: finalImage,
-          threshold: OUTPUT_VERIFICATION_MIN_SCORE,
-          generationConfig: {
-            abortSignal,
-            onProgress: updateImagePipelineProgress
-          }
-        });
+        return runAbortableWithTimeout(
+          'AI output verification',
+          OUTPUT_VERIFICATION_TIMEOUT_MS,
+          (verificationSignal) => service.verifyImageOutput({
+            prompt: resultToVerify.optimizedPrompt || promptForVerification,
+            originalPrompt: originalPromptForVerification || promptForVerification,
+            referenceImages,
+            generatedImage: finalImage,
+            threshold: OUTPUT_VERIFICATION_MIN_SCORE,
+            generationConfig: {
+              abortSignal: verificationSignal,
+              onProgress: updateImagePipelineProgress
+            }
+          })
+        );
       };
 
       const formatVerificationFailure = (
@@ -1449,7 +1783,8 @@ export function useGeneration(): UseGenerationReturn {
         prompt: string,
         referenceImages: ImageData[] | undefined,
         generateAttempt: (promptForAttempt: string, promptAlreadyOptimized: boolean) => Promise<GeminiResponse>,
-        originalPromptForVerification = prompt
+        originalPromptForVerification = prompt,
+        generationRetryOptions: { timeoutMs?: number; maxRetries?: number } = imageGenerationRetryOptions
       ): Promise<GeminiResponse> => {
         let promptForAttempt = prompt;
         let lastVerification: ImageOutputVerificationResult | null = null;
@@ -1464,7 +1799,7 @@ export function useGeneration(): UseGenerationReturn {
           const resultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
             () => generateAttempt(promptForAttempt, attempt > 1),
-            imageGenerationRetryOptions
+            generationRetryOptions
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
           const verification = await verifyImageResult(
@@ -1484,6 +1819,9 @@ export function useGeneration(): UseGenerationReturn {
 
           lastVerification = verification;
           promptForAttempt = verification.revisedPrompt?.trim() || promptUsed;
+          if (attempt < OUTPUT_VERIFICATION_MAX_ATTEMPTS) {
+            showUnsatisfactoryRetryNotice(attempt + 1);
+          }
         }
 
         throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
@@ -1514,17 +1852,21 @@ export function useGeneration(): UseGenerationReturn {
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
           const verifications = await Promise.all(
             resultForAttempt.images.map((image) =>
-              service.verifyImageOutput({
-                prompt: promptUsed,
-                originalPrompt: originalPromptForVerification,
-                referenceImages,
-                generatedImage: image,
-                threshold: OUTPUT_VERIFICATION_MIN_SCORE,
-                generationConfig: {
-                  abortSignal,
-                  onProgress: updateImagePipelineProgress
-                }
-              })
+              runAbortableWithTimeout(
+                'AI output verification',
+                OUTPUT_VERIFICATION_TIMEOUT_MS,
+                (verificationSignal) => service.verifyImageOutput({
+                  prompt: promptUsed,
+                  originalPrompt: originalPromptForVerification,
+                  referenceImages,
+                  generatedImage: image,
+                  threshold: OUTPUT_VERIFICATION_MIN_SCORE,
+                  generationConfig: {
+                    abortSignal: verificationSignal,
+                    onProgress: updateImagePipelineProgress
+                  }
+                })
+              )
             )
           );
 
@@ -1541,6 +1883,9 @@ export function useGeneration(): UseGenerationReturn {
 
           lastVerification = failed.sort((a, b) => a.score - b.score)[0] || null;
           promptForAttempt = lastVerification?.revisedPrompt?.trim() || promptUsed;
+          if (attempt < OUTPUT_VERIFICATION_MAX_ATTEMPTS) {
+            showUnsatisfactoryRetryNotice(attempt + 1);
+          }
         }
 
         throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
@@ -1558,6 +1903,7 @@ export function useGeneration(): UseGenerationReturn {
       };
 
       let result: GeminiResponse;
+      let generationOutputSummary: Record<string, any> = {};
       const isTextOnlyMode = TEXT_ONLY_MODES.includes(state.mode);
       const hasImageSourceForPrompt = Boolean(
         baseImage ||
@@ -2084,30 +2430,24 @@ export function useGeneration(): UseGenerationReturn {
                 hasReferenceImages: false,
                 promptKind: 'edit'
               });
-              const upscaleResult = await Promise.race([
-                runVerifiedImageGeneration(
-                  'image upscale',
-                  upscalePrompt,
-                  [source],
-                  (promptForAttempt, promptAlreadyOptimized) => service.generateImages({
-                    prompt: promptForAttempt,
-                    images: [source],
-                    imageGenerationModel: effectiveImageGenerationModel,
-                    generationConfig: {
-                      ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
-                      abortSignal,
-                      onProgress: updateImagePipelineProgress
-                    },
-                    ...(promptAlreadyOptimized ? { promptOptimized: true, skipPromptOptimization: true } : {})
-                  } as any),
-                  upscalePrompt
-                ),
-                new Promise<never>((_, reject) => {
-                  setTimeout(() => {
-                    reject(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`));
-                  }, REQUEST_TIMEOUT_MS);
-                })
-              ]);
+              const upscaleResult = await runVerifiedImageGeneration(
+                'image upscale',
+                upscalePrompt,
+                [source],
+                (promptForAttempt, promptAlreadyOptimized) => service.generateImages({
+                  prompt: promptForAttempt,
+                  images: [source],
+                  imageGenerationModel: effectiveImageGenerationModel,
+                  generationConfig: {
+                    ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
+                    abortSignal,
+                    onProgress: updateImagePipelineProgress
+                  },
+                  ...(promptAlreadyOptimized ? { promptOptimized: true, skipPromptOptimization: true } : {})
+                } as any),
+                upscalePrompt,
+                { timeoutMs: REQUEST_TIMEOUT_MS, maxRetries: 0 }
+              );
 
               const finalUpscaleImage = pickFinalImage(upscaleResult.images);
               if (finalUpscaleImage) {
@@ -2434,6 +2774,12 @@ export function useGeneration(): UseGenerationReturn {
 
           // Also set as uploaded image for canvas display compatibility
           dispatch({ type: 'SET_IMAGE', payload: videoResult.videoUrl });
+          generationOutputSummary = {
+            videoUrlKind: videoResult.videoUrl.startsWith('blob:') ? 'blob' : 'remote',
+            thumbnailUrlPresent: Boolean(videoResult.thumbnailUrl),
+            model: videoResult.model,
+            expiresAt: videoResult.expiresAt?.toISOString?.() || null,
+          };
 
           // Return empty result to skip normal image handling
           result = { text: null, images: [] };
@@ -2536,6 +2882,7 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_IMAGE', payload: generatedImageUrl });
         dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
         dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
+        suggestAiSlopUpscalerIfNeeded(result, state.mode, state.workflow.upscaleMode);
 
         if (isVisualEditMode) {
           dispatch({
@@ -2702,6 +3049,44 @@ export function useGeneration(): UseGenerationReturn {
 
       updateGenerationStage('complete');
       updateProgress(100);
+      queueAppLogEvent({
+        traceId: generationTraceId,
+        eventType: 'generation_completed',
+        session: true,
+        status: 'completed',
+        mode: state.mode,
+        provider: generationLogRoute.provider,
+        model: generationLogRoute.model,
+        action: options.numberOfImages && options.numberOfImages > 1 ? 'batch-generation' : 'generation',
+        prompt: fullPrompt,
+        durationMs: Date.now() - generationStartedAt,
+        outputSummary: {
+          ...generationOutputSummary,
+          imageCount: result.images?.length || 0,
+          textChars: result.text?.length || 0,
+          optimizedPromptChars: result.optimizedPrompt?.length || 0,
+          outputVerificationAttempts: result.outputVerificationAttempts || null,
+          outputVerification: result.outputVerification
+            ? {
+                score: result.outputVerification.score,
+                passed: result.outputVerification.passed,
+                summary: result.outputVerification.summary,
+                issues: result.outputVerification.issues,
+                aiSlopDetected: result.outputVerification.aiSlopDetected || false,
+                aiSlopConfidence: result.outputVerification.aiSlopConfidence || null,
+              }
+            : null,
+          outputVerifications: result.outputVerifications?.map((verification) => ({
+            score: verification.score,
+            passed: verification.passed,
+            summary: verification.summary,
+            issues: verification.issues,
+            aiSlopDetected: verification.aiSlopDetected || false,
+            aiSlopConfidence: verification.aiSlopConfidence || null,
+          })) || null,
+        },
+      });
+      clearGenerationRetryNotice();
       dispatch({ type: 'SET_GENERATING', payload: false });
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
       dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
@@ -2720,12 +3105,26 @@ export function useGeneration(): UseGenerationReturn {
 
       if ((error as DOMException)?.name === 'AbortError') {
         resetUpscaleProcessing();
+        queueAppLogEvent({
+          traceId: generationTraceId,
+          eventType: 'generation_cancelled',
+          session: true,
+          status: 'cancelled',
+          mode: state.mode,
+          provider: generationLogRoute.provider,
+          model: generationLogRoute.model,
+          action: 'generation',
+          prompt: generationPromptForLog,
+          durationMs: Date.now() - generationStartedAt,
+          errorMessage: 'Generation cancelled.',
+        });
         if (state.mode === 'material-validation') {
           dispatch({
             type: 'UPDATE_MATERIAL_VALIDATION',
             payload: { isRunning: false, error: 'Validation canceled.' }
           });
         }
+        clearGenerationRetryNotice();
         dispatch({ type: 'SET_GENERATING', payload: false });
         dispatch({ type: 'SET_PROGRESS', payload: 0 });
         dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
@@ -2733,13 +3132,25 @@ export function useGeneration(): UseGenerationReturn {
       }
       resetUpscaleProcessing();
       const errorMessage = error instanceof Error ? error.message : '';
-      const lowerMessage = errorMessage.toLowerCase();
-      const isServiceUnavailable =
-        lowerMessage.includes('503') ||
-        lowerMessage.includes('service unavailable') ||
-        lowerMessage.includes('overloaded');
+      queueAppLogEvent({
+        traceId: generationTraceId,
+        eventType: 'generation_failed',
+        session: true,
+        status: 'failed',
+        mode: state.mode,
+        provider: generationLogRoute.provider,
+        model: generationLogRoute.model,
+        action: 'generation',
+        prompt: generationPromptForLog,
+        durationMs: Date.now() - generationStartedAt,
+        errorMessage: errorMessage || 'Generation failed.',
+        metadata: {
+          errorName: error instanceof Error ? error.name : null,
+        },
+      });
       const isImageMode = !TEXT_ONLY_MODES.includes(state.mode);
-      if (isImageMode && isServiceUnavailable) {
+      const isServiceUnavailable = isImageMode && isTemporaryAiServiceFailure(error, errorMessage);
+      if (isServiceUnavailable) {
         const providerName = effectiveImageGenerationModel === 'chatgpt-image-generation-2'
           ? 'ChatGPT Image Generation 2'
           : 'Nano Banana Pro';
@@ -2748,7 +3159,8 @@ export function useGeneration(): UseGenerationReturn {
           payload: {
             id: nanoid(),
             tone: 'warning',
-            message: `${providerName} is temporarily unavailable (503). Please retry in a moment.`
+            title: `${providerName} is currently unavailable`,
+            message: getTemporaryAiServiceAlertMessage(error, errorMessage)
           }
         });
       }
@@ -2772,12 +3184,15 @@ export function useGeneration(): UseGenerationReturn {
           }
         });
       }
+      clearGenerationRetryNotice();
       dispatch({ type: 'SET_GENERATING', payload: false });
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
       dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
 
       // Could dispatch an error action here
       // dispatch({ type: 'SET_ERROR', payload: error.message });
+    } finally {
+      setActiveGenerationTraceId(null);
     }
   }, [
     state,
@@ -2822,6 +3237,7 @@ export function useGeneration(): UseGenerationReturn {
     dispatch({ type: 'SET_GENERATING', payload: false });
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
     dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
+    dispatch({ type: 'SET_GENERATION_RETRY_NOTICE', payload: null });
   }, [dispatch, state.mode]);
 
   return {

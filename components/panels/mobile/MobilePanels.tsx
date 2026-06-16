@@ -44,6 +44,7 @@ import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../..
 import { generatePrompt } from '../../../engine/promptEngine';
 import { useGeneration } from '../../../hooks/useGeneration';
 import { downloadImage } from '../../../lib/download';
+import { GenerationRetryNotice } from '../../ui/GenerationRetryNotice';
 import { LeftRender3DPanel } from '../left/LeftRender3DPanel';
 import { LeftSceneComposePanel } from '../left/LeftSceneComposePanel';
 import { LeftRenderCADPanel } from '../left/LeftRenderCADPanel';
@@ -632,6 +633,7 @@ export const MobilePanels: React.FC<{
                   </>
                 )}
               </button>
+              <GenerationRetryNotice className="absolute left-1/2 top-0 -mt-2 -translate-x-1/2 -translate-y-full" compact />
 
               {dockItems.slice(2).map((item) => {
                 const Icon = item.icon;

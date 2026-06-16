@@ -47,6 +47,7 @@ export type AppAssistantActionType =
   | 'close_left_sidebar'
   | 'open_bottom_panel'
   | 'collapse_bottom_panel'
+  | 'open_ai_slop_upscaler'
   | 'open_feedback_report'
   | 'open_feedback_admin'
   | 'open_docs'
@@ -2028,6 +2029,7 @@ export const normalizeAppAssistantActions = (
       request.type === 'close_left_sidebar' ||
       request.type === 'open_bottom_panel' ||
       request.type === 'collapse_bottom_panel' ||
+      request.type === 'open_ai_slop_upscaler' ||
       request.type === 'open_feedback_report' ||
       request.type === 'open_feedback_admin' ||
       request.type === 'open_docs' ||
@@ -2040,6 +2042,7 @@ export const normalizeAppAssistantActions = (
         close_left_sidebar: 'Close the workflow sidebar',
         open_bottom_panel: 'Open the bottom panel',
         collapse_bottom_panel: 'Collapse the bottom panel',
+        open_ai_slop_upscaler: 'Open AI Slop Upscaler',
         open_feedback_report: 'Open feedback report',
         open_feedback_admin: 'Open feedback admin',
         open_docs: 'Open user manual',
@@ -3177,7 +3180,7 @@ export const buildAppAssistantActionContext = (
     'set_multi_angle_points replaces manual Multi-Angle points. Use value as an array of objects with azimuth and elevation.',
     'set_prompt can write a complete optimized prompt into the global prompt override.',
     'set_active_right_tab and set_active_bottom_tab can open a tab by string value when useful.',
-    'open_right_panel, close_right_panel, open_left_sidebar, close_left_sidebar, open_bottom_panel, and collapse_bottom_panel can change workspace panel visibility.',
+    'open_right_panel, close_right_panel, open_left_sidebar, close_left_sidebar, open_bottom_panel, and collapse_bottom_panel can change workspace panel visibility. open_ai_slop_upscaler switches directly to Image Upscaler with AI Slop mode enabled.',
     'open_feedback_report opens the in-app feedback report dialog. open_feedback_admin opens the admin dashboard when the signed-in user is an admin. open_docs opens the user manual. sign_out signs the current user out; use sign_out only when the user explicitly asks to sign out or log out.',
     `cancel_generation is available only while generation is running. Current generation status: ${state.isGenerating ? 'running' : 'idle'}.`,
     'reset_project resets the entire workspace. Use it only when the user explicitly asks to reset/start over/new project, and do not combine it with other setup actions.',

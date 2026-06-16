@@ -2,6 +2,10 @@ name = "archviz-api-gateway"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"
 APPWRITE_PROJECT_ID = "6a28198a0007906d225d"
@@ -35,6 +39,9 @@ APPWRITE_SNAPSHOTS_BUCKET_ID = "feedback_snapshots"
 #   APPWRITE_ACTIVITY_COLLECTION_ID  - Optional, defaults to feedback_activity
 #   APPWRITE_ADMINS_COLLECTION_ID    - Optional, defaults to feedback_admins
 #   APPWRITE_SNAPSHOTS_BUCKET_ID     - Optional, defaults to feedback_snapshots
+#   SUPABASE_URL                     - Supabase project URL for generation logs / legacy feedback fallback
+#   SUPABASE_SERVICE_ROLE_KEY        - Server-only Supabase service role key
+#   SUPABASE_FEEDBACK_BUCKET         - Optional, defaults to feedback-snapshots
 
 [env.production]
 name = "archviz-api-gateway-prod"

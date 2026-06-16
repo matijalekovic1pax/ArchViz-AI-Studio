@@ -77,6 +77,9 @@
       "finalizing": "Finalizing",
       "complete": "Complete"
     },
+    "retryNotice": {
+      "unsatisfactory": "Result was unsatisfactory. Regenerating..."
+    },
     "generateMasterplan": "Generate Masterplan",
     "generateExplodedView": "Generate Exploded View",
     "generateSection": "Generate Section",

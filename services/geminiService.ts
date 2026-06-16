@@ -157,6 +157,10 @@ export interface ImageOutputVerificationResult {
   summary: string;
   issues: string[];
   revisedPrompt?: string;
+  aiSlopDetected?: boolean;
+  aiSlopConfidence?: number;
+  aiSlopIndicators?: string[];
+  aiSlopSuggestion?: string;
 }
 
 export interface BatchTextResult {
@@ -1183,6 +1187,11 @@ export class GeminiService {
       'Score strictly but practically: preserve-source failures, wrong camera/composition, missing requested style/lighting, architectural drift, broken geometry, unwanted text changes, and obvious artifacts should reduce the score.',
       'Do not penalize harmless variation when the prompt asks for a render variation.',
       '',
+      'Also detect AI regeneration distortion separately from the pass/fail score.',
+      'Mark aiSlopDetected true only when the generated output visibly contains AI degradation such as wavy or wiggly architectural lines, melted/smeared detail, haze or fog not requested, blotchy discoloration, warped signage/text, malformed repeated geometry, distorted people, or over-smoothed regenerated texture.',
+      'Do not mark aiSlopDetected true for normal low resolution, intentional stylization, depth-of-field blur, natural atmospheric lighting, or minor compression.',
+      'If detected, list the clearest visual indicators and write one short suggestion that this image would benefit from AI Slop upscaling/restoration.',
+      '',
       'If the score is below the threshold, write a revised prompt that can be sent directly to the image model with the same reference images. The revised prompt should be natural, concise, and focused on correcting the observed issues while preserving the original intent.',
       'If the score is at or above the threshold, revisedPrompt must be an empty string.',
       '',
@@ -1192,7 +1201,7 @@ export class GeminiService {
       this.truncatePromptForOptimizer(request.prompt, OUTPUT_VERIFICATION_MAX_PROMPT_CHARS),
       '',
       'Return only valid JSON with this exact shape:',
-      '{"score": number, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string"}'
+      '{"score": number, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string", "aiSlopDetected": boolean, "aiSlopConfidence": number, "aiSlopIndicators": ["indicator"], "aiSlopSuggestion": "short suggestion or empty string"}'
     ].filter(Boolean).join('\n');
   }
 
@@ -1238,14 +1247,26 @@ export class GeminiService {
         summary?: unknown;
         issues?: unknown;
         revisedPrompt?: unknown;
+        aiSlopDetected?: unknown;
+        aiSlopConfidence?: unknown;
+        aiSlopIndicators?: unknown;
+        aiSlopSuggestion?: unknown;
       };
       const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score))));
       const validScore = Number.isFinite(score) ? score : 0;
+      const aiSlopConfidence = Math.max(0, Math.min(100, Math.round(Number(parsed.aiSlopConfidence))));
+      const validAiSlopConfidence = Number.isFinite(aiSlopConfidence) ? aiSlopConfidence : undefined;
       const issues = Array.isArray(parsed.issues)
         ? parsed.issues
             .map((issue) => typeof issue === 'string' ? issue.trim() : '')
             .filter(Boolean)
             .slice(0, 6)
+        : [];
+      const aiSlopIndicators = Array.isArray(parsed.aiSlopIndicators)
+        ? parsed.aiSlopIndicators
+            .map((indicator) => typeof indicator === 'string' ? indicator.trim() : '')
+            .filter(Boolean)
+            .slice(0, 5)
         : [];
       const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
         ? parsed.summary.trim()
@@ -1255,13 +1276,23 @@ export class GeminiService {
       const revisedPrompt = typeof parsed.revisedPrompt === 'string'
         ? this.cleanOptimizedPrompt(parsed.revisedPrompt, fallbackPrompt)
         : fallbackPrompt;
+      const aiSlopDetected =
+        parsed.aiSlopDetected === true ||
+        (typeof parsed.aiSlopDetected === 'string' && ['true', 'yes'].includes(parsed.aiSlopDetected.trim().toLowerCase()));
+      const aiSlopSuggestion = typeof parsed.aiSlopSuggestion === 'string'
+        ? parsed.aiSlopSuggestion.trim()
+        : '';
 
       return {
         score: validScore,
         passed: validScore >= threshold,
         summary,
         issues,
-        revisedPrompt: validScore >= threshold ? undefined : revisedPrompt
+        revisedPrompt: validScore >= threshold ? undefined : revisedPrompt,
+        aiSlopDetected,
+        aiSlopConfidence: validAiSlopConfidence,
+        aiSlopIndicators,
+        aiSlopSuggestion: aiSlopDetected && aiSlopSuggestion ? aiSlopSuggestion : undefined
       };
     } catch {
       return {
@@ -1269,7 +1300,8 @@ export class GeminiService {
         passed: false,
         summary: 'Output verification returned an unreadable response.',
         issues: ['The verifier could not produce a valid score for the generated image.'],
-        revisedPrompt: fallbackPrompt
+        revisedPrompt: fallbackPrompt,
+        aiSlopDetected: false
       };
     }
   }
@@ -1465,8 +1497,8 @@ export class GeminiService {
 
         throw new GeminiError(
           lastError.message || 'Request failed',
-          undefined,
-          undefined,
+          (lastError as Error & { code?: string }).code,
+          (lastError as Error & { status?: number }).status,
           lastError
         );
       }
@@ -1528,12 +1560,19 @@ export class GeminiService {
   }
 
   private parseOpenAIResponse(response: any): GeminiResponse {
-    const images: GeneratedImage[] = Array.isArray(response?.images)
+    const outputFormat = response?.output_format || response?.outputFormat || 'png';
+    const defaultMimeType = (outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`) as ImageMimeType;
+    const responseImages = Array.isArray(response?.images)
       ? response.images
+      : Array.isArray(response?.data)
+        ? response.data
+        : [];
+    const images: GeneratedImage[] = responseImages.length > 0
+      ? responseImages
           .map((image: any): GeneratedImage | null => {
             const base64 = image?.base64 || image?.b64_json;
             if (!base64 || typeof base64 !== 'string') return null;
-            const mimeType = (image?.mimeType || image?.mime_type || 'image/png') as ImageMimeType;
+            const mimeType = (image?.mimeType || image?.mime_type || defaultMimeType) as ImageMimeType;
             return {
               base64,
               mimeType,

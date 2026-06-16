@@ -5,8 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthGate';
 import { useAppStore } from '../../store';
 import { feedbackService } from '../../services/feedbackService';
+import { appLogService } from '../../services/appLogService';
 import { FeedbackImageMarkupCanvas } from '../feedback/FeedbackImageMarkupCanvas';
 import { resolveFeedbackAnnotationImageUrl } from '../../lib/feedbackImageAnnotations';
+import type { AppGenerationLogSession, AppRequestLogEntry } from '../../services/apiGateway';
 import type {
   AppState,
   FeedbackDocumentAttachment,
@@ -28,6 +30,8 @@ interface FeedbackAdminDashboardProps {
 const STATUS_OPTIONS: FeedbackReportStatus[] = ['new', 'triaged', 'in_progress', 'resolved', 'closed'];
 const PRIORITY_OPTIONS: FeedbackReportPriority[] = ['low', 'normal', 'high', 'urgent'];
 const CATEGORY_OPTIONS: Array<FeedbackReportCategory | ''> = ['', 'bug', 'quality', 'ux', 'performance', 'feature_request', 'other'];
+const LOG_STATUS_OPTIONS: Array<AppGenerationLogSession['status'] | ''> = ['', 'started', 'running', 'completed', 'failed', 'cancelled'];
+const LOG_PROVIDER_OPTIONS = ['', 'gemini', 'openai', 'veo', 'kling', 'convertapi', 'ilovepdf', 'pdf-compression', 'url-fetch'];
 
 const ADMIN_EMAIL = 'matija.lekovic@1pax.com';
 
@@ -85,6 +89,31 @@ const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatDuration = (durationMs?: number | null): string => {
+  if (!Number.isFinite(Number(durationMs)) || !durationMs) return '-';
+  if (durationMs < 1000) return `${durationMs} ms`;
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return `${minutes}m ${remainder}s`;
+};
+
+const formatJson = (value: unknown): string => {
+  if (value == null) return '{}';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const getPromptPreview = (prompt?: string | null, maxLength = 180): string => {
+  const text = (prompt || '').trim().replace(/\s+/g, ' ');
+  if (!text) return '-';
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
 };
 
 const sanitizeImageAnnotations = (value: any): FeedbackImageAnnotation[] => {
@@ -215,6 +244,18 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
   const [categoryFilter, setCategoryFilter] = useState<FeedbackReportCategory | ''>('');
   const [search, setSearch] = useState('');
 
+  const [activeView, setActiveView] = useState<'feedback' | 'logs'>('feedback');
+  const [logSessions, setLogSessions] = useState<AppGenerationLogSession[]>([]);
+  const [selectedLogTraceId, setSelectedLogTraceId] = useState<string | null>(null);
+  const [selectedLogSession, setSelectedLogSession] = useState<AppGenerationLogSession | null>(null);
+  const [selectedLogEvents, setSelectedLogEvents] = useState<AppRequestLogEntry[]>([]);
+  const [isLogLoading, setIsLogLoading] = useState(false);
+  const [isLogDetailLoading, setIsLogDetailLoading] = useState(false);
+  const [logSearch, setLogSearch] = useState('');
+  const [logStatusFilter, setLogStatusFilter] = useState<AppGenerationLogSession['status'] | ''>('');
+  const [logProviderFilter, setLogProviderFilter] = useState('');
+  const [logModeFilter, setLogModeFilter] = useState('');
+
   const isAdmin = (user?.email || '').toLowerCase() === ADMIN_EMAIL;
 
   const imageAnnotations = useMemo(
@@ -301,6 +342,44 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     }
   };
 
+  const loadLogs = async (opts?: { forceSelectFirst?: boolean }) => {
+    if (!open || !isAdmin) return;
+    setIsLogLoading(true);
+    try {
+      const result = await appLogService.list({
+        limit: 100,
+        status: logStatusFilter,
+        provider: logProviderFilter || undefined,
+        mode: logModeFilter.trim() || undefined,
+        search: logSearch.trim() || undefined,
+      });
+      const nextSessions = result.sessions || [];
+      setLogSessions(nextSessions);
+      if (nextSessions.length === 0) {
+        setSelectedLogTraceId(null);
+        setSelectedLogSession(null);
+        setSelectedLogEvents([]);
+      } else if (
+        opts?.forceSelectFirst ||
+        !selectedLogTraceId ||
+        !nextSessions.some((item) => item.trace_id === selectedLogTraceId)
+      ) {
+        setSelectedLogTraceId(nextSessions[0].trace_id);
+      }
+    } catch (error: any) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'error',
+          message: error?.message || 'Failed to load generation logs.',
+        },
+      });
+    } finally {
+      setIsLogLoading(false);
+    }
+  };
+
   const loadDetail = async (reportId: string) => {
     setIsDetailLoading(true);
     setSelectedSnapshot(null);
@@ -331,15 +410,45 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    loadReports();
-  }, [open, statusFilter, priorityFilter, categoryFilter]);
+  const loadLogDetail = async (traceId: string) => {
+    setIsLogDetailLoading(true);
+    try {
+      const detail = await appLogService.get(traceId);
+      setSelectedLogSession(detail.session);
+      setSelectedLogEvents(detail.events || []);
+    } catch (error: any) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'error',
+          message: error?.message || 'Failed to load generation log details.',
+        },
+      });
+    } finally {
+      setIsLogDetailLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!open || !selectedReportId || !isAdmin) return;
+    if (!open || activeView !== 'feedback') return;
+    loadReports();
+  }, [open, activeView, statusFilter, priorityFilter, categoryFilter]);
+
+  useEffect(() => {
+    if (!open || activeView !== 'feedback' || !selectedReportId || !isAdmin) return;
     loadDetail(selectedReportId);
-  }, [open, selectedReportId, isAdmin]);
+  }, [open, activeView, selectedReportId, isAdmin]);
+
+  useEffect(() => {
+    if (!open || activeView !== 'logs') return;
+    loadLogs();
+  }, [open, activeView, logStatusFilter, logProviderFilter, logModeFilter]);
+
+  useEffect(() => {
+    if (!open || activeView !== 'logs' || !selectedLogTraceId || !isAdmin) return;
+    loadLogDetail(selectedLogTraceId);
+  }, [open, activeView, selectedLogTraceId, isAdmin]);
 
   if (!open) return null;
 
@@ -451,13 +560,39 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
     <div className="fixed inset-0 z-[95] bg-black/65 backdrop-blur-sm animate-fade-in">
       <div className="h-full w-full bg-background/95">
         <div className="h-16 border-b border-border px-4 lg:px-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 min-w-0">
             <ShieldCheck size={18} className="text-accent" />
-            <h2 className="text-base lg:text-lg font-bold text-foreground">{t('feedback.admin.title')}</h2>
+            <h2 className="text-base lg:text-lg font-bold text-foreground shrink-0">{t('feedback.admin.title')}</h2>
+            {isAdmin && (
+              <div className="hidden sm:flex h-9 rounded-lg border border-border bg-surface p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('feedback')}
+                  className={`px-3 rounded-md text-sm transition-colors ${
+                    activeView === 'feedback'
+                      ? 'bg-foreground text-background'
+                      : 'text-foreground-muted hover:text-foreground hover:bg-surface-elevated'
+                  }`}
+                >
+                  Feedback
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('logs')}
+                  className={`px-3 rounded-md text-sm transition-colors ${
+                    activeView === 'logs'
+                      ? 'bg-foreground text-background'
+                      : 'text-foreground-muted hover:text-foreground hover:bg-surface-elevated'
+                  }`}
+                >
+                  Generation Logs
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => loadReports()}
+              onClick={() => activeView === 'logs' ? loadLogs() : loadReports()}
               className="h-9 px-3 rounded-lg border border-border text-foreground hover:bg-surface-sunken transition-colors flex items-center gap-2"
             >
               <RefreshCw size={14} />
@@ -479,9 +614,25 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
               <p className="text-sm text-foreground-muted mt-2">{t('feedback.admin.noAccessBody')}</p>
             </div>
           </div>
-        ) : (
+        ) : activeView === 'feedback' ? (
           <div className="h-[calc(100%-4rem)] grid grid-cols-1 lg:grid-cols-[380px_1fr]">
             <div className="border-r border-border p-4 flex flex-col gap-3 overflow-hidden">
+              <div className="sm:hidden h-9 rounded-lg border border-border bg-surface p-1 grid grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('feedback')}
+                  className="rounded-md bg-foreground text-background text-sm"
+                >
+                  Feedback
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('logs')}
+                  className="rounded-md text-sm text-foreground-muted hover:text-foreground"
+                >
+                  Logs
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={statusFilter}
@@ -780,6 +931,222 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                       >
                         {isCommenting ? <Loader2 size={14} className="animate-spin" /> : t('feedback.admin.addComment')}
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="h-[calc(100%-4rem)] grid grid-cols-1 lg:grid-cols-[420px_1fr]">
+            <div className="border-r border-border p-4 flex flex-col gap-3 overflow-hidden">
+              <div className="sm:hidden h-9 rounded-lg border border-border bg-surface p-1 grid grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('feedback')}
+                  className="rounded-md text-sm text-foreground-muted hover:text-foreground"
+                >
+                  Feedback
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('logs')}
+                  className="rounded-md bg-foreground text-background text-sm"
+                >
+                  Logs
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={logStatusFilter}
+                  onChange={(e) => setLogStatusFilter(e.target.value as AppGenerationLogSession['status'] | '')}
+                  className="h-9 px-2 rounded-lg border border-border bg-surface-elevated text-sm"
+                >
+                  {LOG_STATUS_OPTIONS.map((value) => (
+                    <option key={value || 'all'} value={value}>
+                      {value ? value : 'All statuses'}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={logProviderFilter}
+                  onChange={(e) => setLogProviderFilter(e.target.value)}
+                  className="h-9 px-2 rounded-lg border border-border bg-surface-elevated text-sm"
+                >
+                  {LOG_PROVIDER_OPTIONS.map((value) => (
+                    <option key={value || 'all'} value={value}>
+                      {value ? value : 'All providers'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[1fr_120px] gap-2">
+                <input
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  placeholder="Search prompts, users, models..."
+                  className="h-9 px-3 rounded-lg border border-border bg-surface-elevated text-sm"
+                />
+                <input
+                  value={logModeFilter}
+                  onChange={(e) => setLogModeFilter(e.target.value)}
+                  placeholder="Mode"
+                  className="h-9 px-3 rounded-lg border border-border bg-surface-elevated text-sm"
+                />
+              </div>
+
+              <button
+                onClick={() => loadLogs()}
+                className="h-9 px-3 rounded-lg bg-foreground text-background text-sm font-semibold"
+              >
+                Search Logs
+              </button>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                {isLogLoading ? (
+                  <div className="py-8 flex items-center justify-center"><Loader2 className="animate-spin" size={18} /></div>
+                ) : logSessions.length === 0 ? (
+                  <div className="text-sm text-foreground-muted py-8 text-center">No generation logs found.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {logSessions.map((session) => (
+                      <button
+                        key={session.trace_id}
+                        onClick={() => setSelectedLogTraceId(session.trace_id)}
+                        className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                          session.trace_id === selectedLogTraceId
+                            ? 'border-foreground bg-surface-elevated'
+                            : 'border-border bg-surface hover:bg-surface-elevated'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs uppercase tracking-wider text-foreground-muted">{session.status}</span>
+                          <span className="text-[11px] text-foreground-muted">{new Date(session.created_at).toLocaleString()}</span>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-foreground line-clamp-2">{getPromptPreview(session.prompt)}</p>
+                        <div className="mt-2 text-[11px] text-foreground-muted grid grid-cols-3 gap-2">
+                          <span className="truncate" title={session.user_email || ''}>{session.user_email || '-'}</span>
+                          <span className="truncate">{session.mode || '-'}</span>
+                          <span className="truncate text-right">{formatDuration(session.duration_ms)}</span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-foreground-muted flex justify-between gap-2">
+                          <span className="truncate">{session.provider || '-'}</span>
+                          <span className="truncate">{session.model || '-'}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 lg:p-6 overflow-y-auto custom-scrollbar">
+              {!selectedLogTraceId ? (
+                <div className="h-full flex items-center justify-center text-foreground-muted">Select a generation log to inspect details.</div>
+              ) : isLogDetailLoading ? (
+                <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" size={22} /></div>
+              ) : !selectedLogSession ? (
+                <div className="h-full flex items-center justify-center text-foreground-muted">Generation log unavailable.</div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="rounded-xl border border-border p-4 bg-surface space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wider text-foreground-muted">Trace</p>
+                        <h3 className="text-lg font-semibold text-foreground break-all">{selectedLogSession.trace_id}</h3>
+                      </div>
+                      <span className="px-2 py-1 rounded-md border border-border text-xs uppercase tracking-wider text-foreground-muted">
+                        {selectedLogSession.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-foreground-muted">
+                      <span>User: {selectedLogSession.user_email || '-'}</span>
+                      <span>Mode: {selectedLogSession.mode || '-'}</span>
+                      <span>Duration: {formatDuration(selectedLogSession.duration_ms)}</span>
+                      <span>Provider: {selectedLogSession.provider || '-'}</span>
+                      <span>Model: {selectedLogSession.model || '-'}</span>
+                      <span>Events: {selectedLogEvents.length}</span>
+                    </div>
+                    {selectedLogSession.error_message && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 whitespace-pre-wrap">
+                        {selectedLogSession.error_message}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4 bg-surface space-y-2">
+                    <p className="text-sm font-semibold text-foreground">Prompt</p>
+                    <pre className="max-h-[260px] overflow-auto custom-scrollbar whitespace-pre-wrap rounded-lg border border-border-subtle bg-surface-elevated p-3 text-xs leading-relaxed text-foreground-secondary">
+                      {selectedLogSession.prompt || 'No prompt captured.'}
+                    </pre>
+                    {selectedLogSession.prompt_hash && (
+                      <p className="text-[11px] text-foreground-muted break-all">SHA-256: {selectedLogSession.prompt_hash}</p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-border p-4 bg-surface space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Input Summary</p>
+                      <pre className="max-h-[320px] overflow-auto custom-scrollbar rounded-lg border border-border-subtle bg-surface-elevated p-3 text-xs text-foreground-secondary">
+                        {formatJson(selectedLogSession.input_summary)}
+                      </pre>
+                    </div>
+                    <div className="rounded-xl border border-border p-4 bg-surface space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Output Summary</p>
+                      <pre className="max-h-[320px] overflow-auto custom-scrollbar rounded-lg border border-border-subtle bg-surface-elevated p-3 text-xs text-foreground-secondary">
+                        {formatJson(selectedLogSession.output_summary)}
+                      </pre>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4 bg-surface space-y-3">
+                    <p className="text-sm font-semibold text-foreground">Request Timeline</p>
+                    <div className="space-y-2">
+                      {selectedLogEvents.length === 0 ? (
+                        <p className="text-sm text-foreground-muted">No events captured for this trace.</p>
+                      ) : (
+                        selectedLogEvents.map((event) => (
+                          <div key={event.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-foreground-muted">
+                              <span className="uppercase tracking-wider">{event.event_type}</span>
+                              <span>{new Date(event.created_at).toLocaleString()}</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs text-foreground-muted">
+                              <span>{event.provider || '-'}</span>
+                              <span>{event.model || event.action || '-'}</span>
+                              <span>{event.method || '-'} {event.status_code || ''}</span>
+                              <span>{formatDuration(event.duration_ms)}</span>
+                            </div>
+                            {event.path && (
+                              <p className="text-xs text-foreground-secondary break-all">{event.path}</p>
+                            )}
+                            {event.prompt && event.prompt !== selectedLogSession.prompt && (
+                              <div className="rounded-md border border-border bg-surface px-2.5 py-2">
+                                <p className="text-[11px] text-foreground-muted mb-1">Event Prompt</p>
+                                <p className="text-xs text-foreground-secondary whitespace-pre-wrap">{event.prompt}</p>
+                              </div>
+                            )}
+                            {event.error_message && (
+                              <p className="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-800 whitespace-pre-wrap">
+                                {event.error_message}
+                              </p>
+                            )}
+                            <details className="rounded-md border border-border bg-surface">
+                              <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-foreground">Payload summaries</summary>
+                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 p-3 pt-0">
+                                <pre className="max-h-[300px] overflow-auto custom-scrollbar rounded-md bg-surface-elevated p-3 text-[11px] text-foreground-secondary">
+                                  {formatJson(event.request_summary)}
+                                </pre>
+                                <pre className="max-h-[300px] overflow-auto custom-scrollbar rounded-md bg-surface-elevated p-3 text-[11px] text-foreground-secondary">
+                                  {formatJson(event.response_summary)}
+                                </pre>
+                              </div>
+                            </details>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

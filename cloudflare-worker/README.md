@@ -108,3 +108,4 @@ After deployment, update the frontend `VITE_API_GATEWAY_URL` to the Worker URL.
 - ChatGPT Image Generation 2 normalizes requested size/quality and can force an opaque output background for unsupported transparent-background requests.
 - Vertex AI and video jobs may require repeated polling; the frontend handles progress and status checks through this gateway.
 - Feedback snapshots are stored in Appwrite Storage when `APPWRITE_*` secrets are configured. Supabase remains as a legacy fallback only if Appwrite is not configured.
+- Generation/request logs are stored in Supabase through the Worker using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Direct client access remains blocked by RLS; admins browse logs through the existing feedback admin dashboard.

@@ -12,6 +12,7 @@ import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
+import { GenerationRetryNotice } from '../ui/GenerationRetryNotice';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
@@ -1277,7 +1278,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   </>
                 )}
               </button>
-              {state.isGenerating && null}
+              <GenerationRetryNotice className="absolute left-1/2 top-full mt-2 -translate-x-1/2" />
             </div>
 
             {state.isGenerating && (
