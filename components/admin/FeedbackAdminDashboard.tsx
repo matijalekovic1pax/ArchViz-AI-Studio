@@ -110,6 +110,103 @@ const formatJson = (value: unknown): string => {
   }
 };
 
+const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ');
+
+const LOG_STATUS_STYLES: Record<AppGenerationLogSession['status'], { chip: string; card: string; rail: string; dot: string }> = {
+  completed: {
+    chip: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    card: 'border-emerald-200 bg-emerald-50/55',
+    rail: 'bg-emerald-500',
+    dot: 'bg-emerald-500',
+  },
+  failed: {
+    chip: 'border-red-200 bg-red-50 text-red-800',
+    card: 'border-red-300 bg-red-50/75',
+    rail: 'bg-red-500',
+    dot: 'bg-red-500',
+  },
+  cancelled: {
+    chip: 'border-zinc-300 bg-zinc-100 text-zinc-700',
+    card: 'border-zinc-300 bg-zinc-100/70',
+    rail: 'bg-zinc-400',
+    dot: 'bg-zinc-400',
+  },
+  running: {
+    chip: 'border-sky-200 bg-sky-50 text-sky-800',
+    card: 'border-sky-200 bg-sky-50/60',
+    rail: 'bg-sky-500',
+    dot: 'bg-sky-500',
+  },
+  started: {
+    chip: 'border-amber-200 bg-amber-50 text-amber-800',
+    card: 'border-amber-200 bg-amber-50/65',
+    rail: 'bg-amber-500',
+    dot: 'bg-amber-500',
+  },
+};
+
+const PROVIDER_STYLES: Record<string, string> = {
+  openai: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  gemini: 'border-violet-200 bg-violet-50 text-violet-800',
+  veo: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800',
+  kling: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  convertapi: 'border-orange-200 bg-orange-50 text-orange-800',
+  ilovepdf: 'border-rose-200 bg-rose-50 text-rose-800',
+  'pdf-compression': 'border-stone-300 bg-stone-100 text-stone-700',
+  'url-fetch': 'border-blue-200 bg-blue-50 text-blue-800',
+  feedback: 'border-yellow-200 bg-yellow-50 text-yellow-800',
+};
+
+const getLogStatusStyle = (status?: AppGenerationLogSession['status'] | null) =>
+  LOG_STATUS_STYLES[status || 'running'] || LOG_STATUS_STYLES.running;
+
+const getProviderStyle = (provider?: string | null) =>
+  PROVIDER_STYLES[String(provider || '').toLowerCase()] || 'border-border bg-surface text-foreground-secondary';
+
+const getEventStyle = (event: AppRequestLogEntry) => {
+  if (event.error_message || event.event_type.includes('failed') || Number(event.status_code) >= 400) {
+    return {
+      card: 'border-red-200 bg-red-50/70',
+      chip: 'border-red-200 bg-red-100 text-red-800',
+      rail: 'bg-red-500',
+    };
+  }
+  if (event.event_type.startsWith('generation_')) {
+    return {
+      card: 'border-indigo-200 bg-indigo-50/65',
+      chip: 'border-indigo-200 bg-indigo-100 text-indigo-800',
+      rail: 'bg-indigo-500',
+    };
+  }
+  if (event.event_type === 'worker_request' || event.event_type === 'gateway_request') {
+    return {
+      card: 'border-sky-200 bg-sky-50/60',
+      chip: 'border-sky-200 bg-sky-100 text-sky-800',
+      rail: 'bg-sky-500',
+    };
+  }
+  return {
+    card: 'border-border bg-surface-elevated',
+    chip: 'border-border bg-surface text-foreground-secondary',
+    rail: 'bg-border-strong',
+  };
+};
+
+const getStatusCodeStyle = (statusCode?: number | null) => {
+  if (!statusCode) return 'border-border bg-surface text-foreground-muted';
+  if (statusCode >= 500) return 'border-red-200 bg-red-100 text-red-800';
+  if (statusCode >= 400) return 'border-orange-200 bg-orange-100 text-orange-800';
+  if (statusCode >= 300) return 'border-amber-200 bg-amber-100 text-amber-800';
+  return 'border-emerald-200 bg-emerald-100 text-emerald-800';
+};
+
+const getDurationStyle = (durationMs?: number | null) => {
+  if (!durationMs) return 'border-border bg-surface text-foreground-muted';
+  if (durationMs >= 120_000) return 'border-red-200 bg-red-100 text-red-800';
+  if (durationMs >= 30_000) return 'border-amber-200 bg-amber-100 text-amber-800';
+  return 'border-sky-200 bg-sky-100 text-sky-800';
+};
+
 const getPromptPreview = (prompt?: string | null, maxLength = 180): string => {
   const text = (prompt || '').trim().replace(/\s+/g, ' ');
   if (!text) return '-';
@@ -1011,32 +1108,43 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                   <div className="text-sm text-foreground-muted py-8 text-center">No generation logs found.</div>
                 ) : (
                   <div className="space-y-2">
-                    {logSessions.map((session) => (
-                      <button
-                        key={session.trace_id}
-                        onClick={() => setSelectedLogTraceId(session.trace_id)}
-                        className={`w-full text-left p-3 rounded-xl border transition-colors ${
-                          session.trace_id === selectedLogTraceId
-                            ? 'border-foreground bg-surface-elevated'
-                            : 'border-border bg-surface hover:bg-surface-elevated'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs uppercase tracking-wider text-foreground-muted">{session.status}</span>
-                          <span className="text-[11px] text-foreground-muted">{new Date(session.created_at).toLocaleString()}</span>
-                        </div>
-                        <p className="mt-1 text-sm font-semibold text-foreground line-clamp-2">{getPromptPreview(session.prompt)}</p>
-                        <div className="mt-2 text-[11px] text-foreground-muted grid grid-cols-3 gap-2">
-                          <span className="truncate" title={session.user_email || ''}>{session.user_email || '-'}</span>
-                          <span className="truncate">{session.mode || '-'}</span>
-                          <span className="truncate text-right">{formatDuration(session.duration_ms)}</span>
-                        </div>
-                        <div className="mt-1 text-[11px] text-foreground-muted flex justify-between gap-2">
-                          <span className="truncate">{session.provider || '-'}</span>
-                          <span className="truncate">{session.model || '-'}</span>
-                        </div>
-                      </button>
-                    ))}
+                    {logSessions.map((session) => {
+                      const statusStyle = getLogStatusStyle(session.status);
+                      const selected = session.trace_id === selectedLogTraceId;
+                      return (
+                        <button
+                          key={session.trace_id}
+                          onClick={() => setSelectedLogTraceId(session.trace_id)}
+                          className={cx(
+                            'relative w-full text-left p-3 pl-4 rounded-xl border transition-colors overflow-hidden',
+                            selected ? `${statusStyle.card} shadow-sm ring-1 ring-foreground/10` : 'border-border bg-surface hover:bg-surface-elevated'
+                          )}
+                        >
+                          <span className={cx('absolute inset-y-0 left-0 w-1', statusStyle.rail)} />
+                          <div className="flex items-center justify-between gap-3">
+                            <span className={cx('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', statusStyle.chip)}>
+                              <span className={cx('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
+                              {session.status}
+                            </span>
+                            <span className="text-[11px] text-foreground-muted">{new Date(session.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="mt-2 text-sm font-semibold text-foreground line-clamp-2">{getPromptPreview(session.prompt)}</p>
+                          <div className="mt-2 text-[11px] text-foreground-muted grid grid-cols-3 gap-2">
+                            <span className="truncate" title={session.user_email || ''}>{session.user_email || '-'}</span>
+                            <span className="truncate">{session.mode || '-'}</span>
+                            <span className={cx('justify-self-end rounded-full border px-2 py-0.5 font-medium', getDurationStyle(session.duration_ms))}>
+                              {formatDuration(session.duration_ms)}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+                            <span className={cx('max-w-[48%] truncate rounded-full border px-2 py-0.5 font-semibold', getProviderStyle(session.provider))}>
+                              {session.provider || '-'}
+                            </span>
+                            <span className="truncate text-foreground-muted">{session.model || '-'}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1051,23 +1159,42 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                 <div className="h-full flex items-center justify-center text-foreground-muted">Generation log unavailable.</div>
               ) : (
                 <div className="space-y-5">
-                  <div className="rounded-xl border border-border p-4 bg-surface space-y-3">
+                  <div className={cx('rounded-xl border p-4 space-y-3', getLogStatusStyle(selectedLogSession.status).card)}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs uppercase tracking-wider text-foreground-muted">Trace</p>
                         <h3 className="text-lg font-semibold text-foreground break-all">{selectedLogSession.trace_id}</h3>
                       </div>
-                      <span className="px-2 py-1 rounded-md border border-border text-xs uppercase tracking-wider text-foreground-muted">
+                      <span className={cx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold uppercase tracking-wider', getLogStatusStyle(selectedLogSession.status).chip)}>
+                        <span className={cx('h-1.5 w-1.5 rounded-full', getLogStatusStyle(selectedLogSession.status).dot)} />
                         {selectedLogSession.status}
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-foreground-muted">
-                      <span>User: {selectedLogSession.user_email || '-'}</span>
-                      <span>Mode: {selectedLogSession.mode || '-'}</span>
-                      <span>Duration: {formatDuration(selectedLogSession.duration_ms)}</span>
-                      <span>Provider: {selectedLogSession.provider || '-'}</span>
-                      <span>Model: {selectedLogSession.model || '-'}</span>
-                      <span>Events: {selectedLogEvents.length}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <div className="rounded-lg border border-white/70 bg-white/60 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-muted">User</p>
+                        <p className="mt-0.5 truncate font-medium text-foreground" title={selectedLogSession.user_email || ''}>{selectedLogSession.user_email || '-'}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/70 bg-white/60 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-muted">Mode</p>
+                        <p className="mt-0.5 truncate font-medium text-foreground">{selectedLogSession.mode || '-'}</p>
+                      </div>
+                      <div className={cx('rounded-lg border px-3 py-2', getDurationStyle(selectedLogSession.duration_ms))}>
+                        <p className="text-[10px] uppercase tracking-wider opacity-70">Duration</p>
+                        <p className="mt-0.5 font-bold">{formatDuration(selectedLogSession.duration_ms)}</p>
+                      </div>
+                      <div className={cx('rounded-lg border px-3 py-2', getProviderStyle(selectedLogSession.provider))}>
+                        <p className="text-[10px] uppercase tracking-wider opacity-70">Provider</p>
+                        <p className="mt-0.5 truncate font-bold">{selectedLogSession.provider || '-'}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/70 bg-white/60 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-muted">Model</p>
+                        <p className="mt-0.5 truncate font-medium text-foreground">{selectedLogSession.model || '-'}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/70 bg-white/60 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-muted">Events</p>
+                        <p className="mt-0.5 font-bold text-foreground">{selectedLogEvents.length}</p>
+                      </div>
                     </div>
                     {selectedLogSession.error_message && (
                       <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 whitespace-pre-wrap">
@@ -1087,14 +1214,14 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                   </div>
 
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-border p-4 bg-surface space-y-2">
-                      <p className="text-sm font-semibold text-foreground">Input Summary</p>
+                    <div className="rounded-xl border border-blue-100 p-4 bg-blue-50/35 space-y-2">
+                      <p className="text-sm font-semibold text-blue-900">Input Summary</p>
                       <pre className="max-h-[320px] overflow-auto custom-scrollbar rounded-lg border border-border-subtle bg-surface-elevated p-3 text-xs text-foreground-secondary">
                         {formatJson(selectedLogSession.input_summary)}
                       </pre>
                     </div>
-                    <div className="rounded-xl border border-border p-4 bg-surface space-y-2">
-                      <p className="text-sm font-semibold text-foreground">Output Summary</p>
+                    <div className="rounded-xl border border-emerald-100 p-4 bg-emerald-50/35 space-y-2">
+                      <p className="text-sm font-semibold text-emerald-900">Output Summary</p>
                       <pre className="max-h-[320px] overflow-auto custom-scrollbar rounded-lg border border-border-subtle bg-surface-elevated p-3 text-xs text-foreground-secondary">
                         {formatJson(selectedLogSession.output_summary)}
                       </pre>
@@ -1107,20 +1234,27 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                       {selectedLogEvents.length === 0 ? (
                         <p className="text-sm text-foreground-muted">No events captured for this trace.</p>
                       ) : (
-                        selectedLogEvents.map((event) => (
-                          <div key={event.id} className="rounded-lg border border-border-subtle bg-surface-elevated p-3 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-foreground-muted">
-                              <span className="uppercase tracking-wider">{event.event_type}</span>
-                              <span>{new Date(event.created_at).toLocaleString()}</span>
+                        selectedLogEvents.map((event) => {
+                          const eventStyle = getEventStyle(event);
+                          return (
+                          <div key={event.id} className={cx('relative rounded-lg border p-3 pl-4 space-y-2 overflow-hidden', eventStyle.card)}>
+                            <span className={cx('absolute inset-y-0 left-0 w-1', eventStyle.rail)} />
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className={cx('inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', eventStyle.chip)}>
+                                {event.event_type}
+                              </span>
+                              <span className="text-[11px] text-foreground-muted">{new Date(event.created_at).toLocaleString()}</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs text-foreground-muted">
-                              <span>{event.provider || '-'}</span>
-                              <span>{event.model || event.action || '-'}</span>
-                              <span>{event.method || '-'} {event.status_code || ''}</span>
-                              <span>{formatDuration(event.duration_ms)}</span>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+                              <span className={cx('truncate rounded-full border px-2 py-1 font-semibold', getProviderStyle(event.provider))}>{event.provider || '-'}</span>
+                              <span className="truncate rounded-full border border-border bg-white/70 px-2 py-1 text-foreground-secondary">{event.model || event.action || '-'}</span>
+                              <span className={cx('rounded-full border px-2 py-1 font-semibold', getStatusCodeStyle(event.status_code))}>
+                                {event.method || '-'} {event.status_code || ''}
+                              </span>
+                              <span className={cx('rounded-full border px-2 py-1 font-semibold', getDurationStyle(event.duration_ms))}>{formatDuration(event.duration_ms)}</span>
                             </div>
                             {event.path && (
-                              <p className="text-xs text-foreground-secondary break-all">{event.path}</p>
+                              <p className="rounded-md border border-white/70 bg-white/65 px-2.5 py-2 text-xs text-foreground-secondary break-all">{event.path}</p>
                             )}
                             {event.prompt && event.prompt !== selectedLogSession.prompt && (
                               <div className="rounded-md border border-border bg-surface px-2.5 py-2">
@@ -1145,7 +1279,8 @@ export const FeedbackAdminDashboard: React.FC<FeedbackAdminDashboardProps> = ({ 
                               </div>
                             </details>
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
