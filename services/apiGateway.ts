@@ -33,11 +33,8 @@ const LOG_JSON_MAX_DEPTH = 6;
 const LOG_JSON_MAX_ARRAY_ITEMS = 80;
 const LOG_JSON_MAX_OBJECT_KEYS = 100;
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
-const OPENAI_IMAGE_MIN_PIXELS = 655_360;
-const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
-const OPENAI_IMAGE_MAX_EDGE = 3840;
-const OPENAI_IMAGE_EDGE_MULTIPLE = 16;
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
+const OPENAI_IMAGE_ALLOWED_SIZES = ['1024x1024', '1024x1536', '1536x1024', 'auto'] as const;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
@@ -609,15 +606,6 @@ export async function geminiGetOperation(operationName: string): Promise<any> {
 
 // ─── OpenAI Image API ───────────────────────────────────────────────────────
 
-const roundToOpenAIEdge = (value: number): number =>
-  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.round(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-
-const floorToOpenAIEdge = (value: number): number =>
-  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.floor(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-
-const ceilToOpenAIEdge = (value: number): number =>
-  Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.ceil(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-
 const parseOpenAIAspectRatio = (aspectRatio: unknown): number => {
   if (typeof aspectRatio !== 'string') return 16 / 9;
   const [widthRaw, heightRaw] = aspectRatio.split(':').map(Number);
@@ -627,41 +615,13 @@ const parseOpenAIAspectRatio = (aspectRatio: unknown): number => {
   return Math.min(3, Math.max(1 / 3, widthRaw / heightRaw));
 };
 
-const getOpenAITargetLongEdge = (imageSize: unknown): number => {
-  if (imageSize === '4K') return 3840;
-  if (imageSize === '1K') return 1024;
-  return 2048;
-};
-
 const normalizeOpenAISize = (aspectRatio: unknown, imageSize: unknown): string => {
+  if (OPENAI_IMAGE_ALLOWED_SIZES.includes(imageSize as any)) return imageSize as string;
+
   const ratio = parseOpenAIAspectRatio(aspectRatio);
-  const targetLongEdge = getOpenAITargetLongEdge(imageSize);
-  let width = ratio >= 1 ? targetLongEdge : targetLongEdge * ratio;
-  let height = ratio >= 1 ? targetLongEdge / ratio : targetLongEdge;
-
-  width = roundToOpenAIEdge(width);
-  height = roundToOpenAIEdge(height);
-
-  const fitWithinLimits = () => {
-    const edgeScale = Math.min(1, OPENAI_IMAGE_MAX_EDGE / Math.max(width, height));
-    const pixelScale = Math.min(1, Math.sqrt(OPENAI_IMAGE_MAX_PIXELS / (width * height)));
-    const scale = Math.min(edgeScale, pixelScale);
-    if (scale < 1) {
-      width = floorToOpenAIEdge(width * scale);
-      height = floorToOpenAIEdge(height * scale);
-    }
-  };
-
-  fitWithinLimits();
-
-  if (width * height < OPENAI_IMAGE_MIN_PIXELS) {
-    const scale = Math.sqrt(OPENAI_IMAGE_MIN_PIXELS / (width * height));
-    width = ceilToOpenAIEdge(width * scale);
-    height = ceilToOpenAIEdge(height * scale);
-    fitWithinLimits();
-  }
-
-  return `${width}x${height}`;
+  if (ratio > 1.05) return '1536x1024';
+  if (ratio < 0.95) return '1024x1536';
+  return '1024x1024';
 };
 
 const normalizeOpenAIQuality = (imageSize: unknown): string => {
@@ -677,7 +637,7 @@ const getOpenAIImageOptions = (generationConfig: any = {}) => {
     size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
-    background: background === 'opaque' || background === 'auto' ? background : 'auto',
+    background: background === 'transparent' || background === 'opaque' || background === 'auto' ? background : 'auto',
   };
 };
 

@@ -2141,12 +2141,130 @@ return corsResponse(origin, { error: 'Authentication failed: ' + err.message }, 
 
 // ─── Route: /api/gemini/* (passthrough proxy) ────────────────────────────────
 
-function sanitizeGeminiGenerationConfig(config) {
+const GEMINI_IMAGE_RESPONSE_ASPECT_RATIO_MAP = {
+  '1:1': 'ASPECT_RATIO_ONE_BY_ONE',
+  '2:3': 'ASPECT_RATIO_TWO_BY_THREE',
+  '3:2': 'ASPECT_RATIO_THREE_BY_TWO',
+  '3:4': 'ASPECT_RATIO_THREE_BY_FOUR',
+  '4:3': 'ASPECT_RATIO_FOUR_BY_THREE',
+  '4:5': 'ASPECT_RATIO_FOUR_BY_FIVE',
+  '5:4': 'ASPECT_RATIO_FIVE_BY_FOUR',
+  '9:16': 'ASPECT_RATIO_NINE_BY_SIXTEEN',
+  '16:9': 'ASPECT_RATIO_SIXTEEN_BY_NINE',
+  '21:9': 'ASPECT_RATIO_TWENTY_ONE_BY_NINE',
+  '1:8': 'ASPECT_RATIO_ONE_BY_EIGHT',
+  '8:1': 'ASPECT_RATIO_EIGHT_BY_ONE',
+  '1:4': 'ASPECT_RATIO_ONE_BY_FOUR',
+  '4:1': 'ASPECT_RATIO_FOUR_BY_ONE',
+};
+
+const GEMINI_IMAGE_RESPONSE_SIZE_MAP = {
+  '512': 'IMAGE_SIZE_FIVE_TWELVE',
+  '1K': 'IMAGE_SIZE_ONE_K',
+  '2K': 'IMAGE_SIZE_TWO_K',
+  '4K': 'IMAGE_SIZE_FOUR_K',
+};
+
+const GEMINI_IMAGE_CONFIG_ASPECT_RATIO_MAP = {
+  ASPECT_RATIO_ONE_BY_ONE: '1:1',
+  ASPECT_RATIO_TWO_BY_THREE: '2:3',
+  ASPECT_RATIO_THREE_BY_TWO: '3:2',
+  ASPECT_RATIO_THREE_BY_FOUR: '3:4',
+  ASPECT_RATIO_FOUR_BY_THREE: '4:3',
+  ASPECT_RATIO_FOUR_BY_FIVE: '4:5',
+  ASPECT_RATIO_FIVE_BY_FOUR: '5:4',
+  ASPECT_RATIO_NINE_BY_SIXTEEN: '9:16',
+  ASPECT_RATIO_SIXTEEN_BY_NINE: '16:9',
+  ASPECT_RATIO_TWENTY_ONE_BY_NINE: '21:9',
+  ASPECT_RATIO_ONE_BY_EIGHT: '1:8',
+  ASPECT_RATIO_EIGHT_BY_ONE: '8:1',
+  ASPECT_RATIO_ONE_BY_FOUR: '1:4',
+  ASPECT_RATIO_FOUR_BY_ONE: '4:1',
+};
+
+const GEMINI_IMAGE_CONFIG_SIZE_MAP = {
+  IMAGE_SIZE_FIVE_TWELVE: '512',
+  IMAGE_SIZE_ONE_K: '1K',
+  IMAGE_SIZE_TWO_K: '2K',
+  IMAGE_SIZE_FOUR_K: '4K',
+};
+
+const GEMINI_THINKING_LEVEL_MAP = {
+  minimal: 'MINIMAL',
+  low: 'LOW',
+  medium: 'MEDIUM',
+  high: 'HIGH',
+  MINIMAL: 'MINIMAL',
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+};
+
+function toGeminiImageResponseFormat(imageConfig) {
+  if (!imageConfig || typeof imageConfig !== 'object' || Array.isArray(imageConfig)) {
+    return imageConfig;
+  }
+
+  const responseImageConfig = { ...imageConfig };
+  if (typeof imageConfig.aspectRatio === 'string') {
+    responseImageConfig.aspectRatio =
+      GEMINI_IMAGE_RESPONSE_ASPECT_RATIO_MAP[imageConfig.aspectRatio] || imageConfig.aspectRatio;
+  }
+  if (typeof imageConfig.imageSize === 'string') {
+    responseImageConfig.imageSize =
+      GEMINI_IMAGE_RESPONSE_SIZE_MAP[imageConfig.imageSize] || imageConfig.imageSize;
+  }
+
+  return responseImageConfig;
+}
+
+function toGeminiImageConfig(imageConfig) {
+  if (!imageConfig || typeof imageConfig !== 'object' || Array.isArray(imageConfig)) {
+    return imageConfig;
+  }
+
+  const legacyImageConfig = { ...imageConfig };
+  if (typeof imageConfig.aspectRatio === 'string') {
+    legacyImageConfig.aspectRatio =
+      GEMINI_IMAGE_CONFIG_ASPECT_RATIO_MAP[imageConfig.aspectRatio] || imageConfig.aspectRatio;
+  }
+  if (typeof imageConfig.imageSize === 'string') {
+    legacyImageConfig.imageSize =
+      GEMINI_IMAGE_CONFIG_SIZE_MAP[imageConfig.imageSize] || imageConfig.imageSize;
+  }
+
+  return legacyImageConfig;
+}
+
+function toGeminiThinkingConfig(thinkingConfig) {
+  if (!thinkingConfig || typeof thinkingConfig !== 'object' || Array.isArray(thinkingConfig)) {
+    return thinkingConfig;
+  }
+
+  const next = { ...thinkingConfig };
+  if (typeof thinkingConfig.thinkingLevel === 'string') {
+    next.thinkingLevel = GEMINI_THINKING_LEVEL_MAP[thinkingConfig.thinkingLevel] || thinkingConfig.thinkingLevel;
+  }
+
+  return next;
+}
+
+function geminiProxyModelFromSubpath(subpath) {
+  return subpath.match(/^models\/([^:/?]+)/)?.[1] || '';
+}
+
+function usesGeminiResponseFormatImageConfig(subpath) {
+  const modelId = geminiProxyModelFromSubpath(subpath).toLowerCase();
+  return modelId.startsWith('gemini-3') && modelId.includes('image');
+}
+
+function sanitizeGeminiGenerationConfig(config, subpath = '') {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return config;
   }
 
   const next = { ...config };
+  const usesResponseFormatImage = usesGeminiResponseFormatImageConfig(subpath);
   const responseImageConfig = next.responseFormat?.image || next.imageConfig;
   const wantsImage = Array.isArray(next.responseModalities)
     ? next.responseModalities.includes('IMAGE')
@@ -2162,18 +2280,22 @@ function sanitizeGeminiGenerationConfig(config) {
   delete next.responseFormat;
 
   if (!wantsImage && thinkingConfig) {
-    next.thinkingConfig = thinkingConfig;
+    next.thinkingConfig = toGeminiThinkingConfig(thinkingConfig);
   }
 
   if (wantsImage && responseImageConfig) {
-    delete next.imageConfig;
-    next.responseFormat = { image: responseImageConfig };
+    if (usesResponseFormatImage) {
+      delete next.imageConfig;
+      next.responseFormat = { image: toGeminiImageResponseFormat(responseImageConfig) };
+    } else {
+      next.imageConfig = toGeminiImageConfig(responseImageConfig);
+    }
   }
 
   return next;
 }
 
-async function getGeminiProxyBody(request) {
+async function getGeminiProxyBody(request, subpath = '') {
   if (request.method === 'GET') return undefined;
 
   const contentType = request.headers.get('Content-Type') || '';
@@ -2192,7 +2314,7 @@ async function getGeminiProxyBody(request) {
   try {
     const body = JSON.parse(rawBody);
     if (body && typeof body === 'object' && !Array.isArray(body) && 'generationConfig' in body) {
-      body.generationConfig = sanitizeGeminiGenerationConfig(body.generationConfig);
+      body.generationConfig = sanitizeGeminiGenerationConfig(body.generationConfig, subpath);
     }
     return JSON.stringify(body);
   } catch {
@@ -2217,7 +2339,7 @@ async function handleGeminiProxy(request, env, subpath) {
   const upstreamResp = await fetch(url, {
     method: request.method,
     headers,
-    body: await getGeminiProxyBody(request),
+    body: await getGeminiProxyBody(request, subpath),
   });
 
   // Stream the response back with CORS headers
@@ -2233,31 +2355,10 @@ async function handleGeminiProxy(request, env, subpath) {
 
 // ─── Route: POST /api/openai/images ─────────────────────────────────────────
 
-const OPENAI_IMAGE_MIN_PIXELS = 655_360;
-const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
-const OPENAI_IMAGE_MAX_EDGE = 3840;
-const OPENAI_IMAGE_EDGE_MULTIPLE = 16;
 const OPENAI_IMAGE_MAX_PROMPT_CHARS = 32_000;
 const OPENAI_IMAGE_MAX_INPUT_IMAGES = 16;
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
-
-function roundToOpenAIEdge(value) {
-  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.round(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-}
-
-function floorToOpenAIEdge(value) {
-  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.floor(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-}
-
-function ceilToOpenAIEdge(value) {
-  return Math.max(OPENAI_IMAGE_EDGE_MULTIPLE, Math.ceil(value / OPENAI_IMAGE_EDGE_MULTIPLE) * OPENAI_IMAGE_EDGE_MULTIPLE);
-}
-
-function getOpenAITargetLongEdge(imageSize) {
-  if (imageSize === '4K') return 3840;
-  if (imageSize === '1K') return 1024;
-  return 2048;
-}
+const OPENAI_IMAGE_ALLOWED_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024', 'auto']);
 
 function parseAspectRatio(aspectRatio) {
   if (typeof aspectRatio !== 'string') return 16 / 9;
@@ -2271,34 +2372,22 @@ function parseAspectRatio(aspectRatio) {
 }
 
 function normalizeOpenAISize(aspectRatio, imageSize) {
+  if (OPENAI_IMAGE_ALLOWED_SIZES.has(imageSize)) return imageSize;
+
   const ratio = parseAspectRatio(aspectRatio);
-  const targetLongEdge = getOpenAITargetLongEdge(imageSize);
-  let width = ratio >= 1 ? targetLongEdge : targetLongEdge * ratio;
-  let height = ratio >= 1 ? targetLongEdge / ratio : targetLongEdge;
+  if (ratio > 1.05) return '1536x1024';
+  if (ratio < 0.95) return '1024x1536';
+  return '1024x1024';
+}
 
-  width = roundToOpenAIEdge(width);
-  height = roundToOpenAIEdge(height);
+function normalizeOpenAISizeValue(size) {
+  if (OPENAI_IMAGE_ALLOWED_SIZES.has(size)) return size;
+  if (typeof size !== 'string') return 'auto';
 
-  const fitWithinLimits = () => {
-    const edgeScale = Math.min(1, OPENAI_IMAGE_MAX_EDGE / Math.max(width, height));
-    const pixelScale = Math.min(1, Math.sqrt(OPENAI_IMAGE_MAX_PIXELS / (width * height)));
-    const scale = Math.min(edgeScale, pixelScale);
-    if (scale < 1) {
-      width = floorToOpenAIEdge(width * scale);
-      height = floorToOpenAIEdge(height * scale);
-    }
-  };
+  const match = size.match(/^(\d+)x(\d+)$/);
+  if (!match) return 'auto';
 
-  fitWithinLimits();
-
-  if (width * height < OPENAI_IMAGE_MIN_PIXELS) {
-    const scale = Math.sqrt(OPENAI_IMAGE_MIN_PIXELS / (width * height));
-    width = ceilToOpenAIEdge(width * scale);
-    height = ceilToOpenAIEdge(height * scale);
-    fitWithinLimits();
-  }
-
-  return `${width}x${height}`;
+  return normalizeOpenAISize(`${match[1]}:${match[2]}`, undefined);
 }
 
 function normalizeOpenAIQuality(imageSize) {
@@ -2307,8 +2396,20 @@ function normalizeOpenAIQuality(imageSize) {
   return 'medium';
 }
 
+function normalizeOpenAIQualityValue(value) {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'auto'
+    ? value
+    : 'medium';
+}
+
+function normalizeOpenAIOutputFormat(value) {
+  return value === 'png' || value === 'webp' || value === 'jpeg'
+    ? value
+    : 'png';
+}
+
 function normalizeOpenAIBackground(value) {
-  return value === 'opaque' || value === 'auto'
+  return value === 'transparent' || value === 'opaque' || value === 'auto'
     ? value
     : 'auto';
 }
@@ -2405,16 +2506,52 @@ async function createOpenAIImageProxyResponse(origin, upstreamResp) {
   return corsResponse(origin, { error: message }, { status: upstreamResp.status });
 }
 
+function appendOpenAIFormFile(form, key, value, fallbackName) {
+  if (!(value instanceof Blob)) return;
+  const filename = typeof value.name === 'string' && value.name.trim()
+    ? value.name
+    : fallbackName;
+  form.append(key, value, filename);
+}
+
 async function handleOpenAIMultipartImages(request, env, origin) {
-  const contentType = request.headers.get('Content-Type') || '';
+  const incoming = await request.formData();
+  const prompt = sanitizeText(String(incoming.get('prompt') || ''), OPENAI_IMAGE_MAX_PROMPT_CHARS);
+  if (!prompt) return badRequest(origin, 'Missing prompt');
+
+  const form = new FormData();
+  form.append('model', OPENAI_IMAGE_MODEL);
+  form.append('prompt', prompt);
+  form.append('n', String(Math.max(1, Math.min(
+    OPENAI_IMAGE_MAX_OUTPUTS,
+    Math.floor(clampNumber(incoming.get('n'), 1, OPENAI_IMAGE_MAX_OUTPUTS, 1))
+  ))));
+  form.append('size', normalizeOpenAISizeValue(incoming.get('size')));
+  form.append('quality', normalizeOpenAIQualityValue(incoming.get('quality')));
+  form.append('output_format', normalizeOpenAIOutputFormat(incoming.get('output_format')));
+
+  const background = normalizeOpenAIBackground(incoming.get('background'));
+  if (background !== 'auto') {
+    form.append('background', background);
+  }
+
+  const images = [
+    ...incoming.getAll('image[]'),
+    ...incoming.getAll('image'),
+  ].slice(0, OPENAI_IMAGE_MAX_INPUT_IMAGES);
+  if (images.length === 0) return badRequest(origin, 'Missing image');
+  images.forEach((image, index) => {
+    appendOpenAIFormFile(form, 'image[]', image, `input-${index + 1}.png`);
+  });
+  appendOpenAIFormFile(form, 'mask', incoming.get('mask'), 'mask.png');
+
   const upstreamResp = await fetchWithRetry((signal) =>
     fetch(`${OPENAI_API_BASE}/images/edits`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-        'Content-Type': contentType,
       },
-      body: request.body,
+      body: form,
       signal,
     }),
     { maxRetries: 0, timeoutMs: OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS, label: 'OpenAI image edit' }

@@ -83,6 +83,36 @@ export interface ImageConfig {
   imageSize?: '1K' | '2K' | '4K';
 }
 
+const GEMINI_IMAGE_RESPONSE_ASPECT_RATIO_MAP: Record<NonNullable<ImageConfig['aspectRatio']>, string> = {
+  '1:1': 'ASPECT_RATIO_ONE_BY_ONE',
+  '2:3': 'ASPECT_RATIO_TWO_BY_THREE',
+  '3:2': 'ASPECT_RATIO_THREE_BY_TWO',
+  '3:4': 'ASPECT_RATIO_THREE_BY_FOUR',
+  '4:3': 'ASPECT_RATIO_FOUR_BY_THREE',
+  '4:5': 'ASPECT_RATIO_FOUR_BY_FIVE',
+  '5:4': 'ASPECT_RATIO_FIVE_BY_FOUR',
+  '9:16': 'ASPECT_RATIO_NINE_BY_SIXTEEN',
+  '16:9': 'ASPECT_RATIO_SIXTEEN_BY_NINE',
+  '21:9': 'ASPECT_RATIO_TWENTY_ONE_BY_NINE',
+};
+
+const GEMINI_IMAGE_RESPONSE_SIZE_MAP: Record<NonNullable<ImageConfig['imageSize']>, string> = {
+  '1K': 'IMAGE_SIZE_ONE_K',
+  '2K': 'IMAGE_SIZE_TWO_K',
+  '4K': 'IMAGE_SIZE_FOUR_K',
+};
+
+const GEMINI_THINKING_LEVEL_MAP: Record<string, 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH'> = {
+  minimal: 'MINIMAL',
+  low: 'LOW',
+  medium: 'MEDIUM',
+  high: 'HIGH',
+  MINIMAL: 'MINIMAL',
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+};
+
 export interface GenerationConfig {
   temperature?: number;
   topP?: number;
@@ -97,10 +127,10 @@ export interface GenerationConfig {
   };
   thinkingConfig?: {
     thinkingBudget?: number;
-    thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
+    thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' | 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
   };
   openAI?: {
-    background?: 'opaque' | 'auto';
+    background?: 'transparent' | 'opaque' | 'auto';
   };
   onProgress?: ImageGenerationProgressCallback;
 }
@@ -750,11 +780,22 @@ export class GeminiService {
     // Create batch job via gateway passthrough
     const batchJob = await this.executeWithRetry(() =>
       geminiRequest(TEXT_MODEL, 'batchGenerateContent', {
-        requests: src.map(s => ({
+        batch: {
+          displayName: `archviz-batch-${Date.now()}`,
           model: `models/${TEXT_MODEL}`,
-          contents: s.contents,
-          generationConfig: s.config,
-        }))
+          inputConfig: {
+            requests: {
+              requests: src.map((s, index) => ({
+                request: {
+                  model: `models/${TEXT_MODEL}`,
+                  contents: s.contents,
+                  generationConfig: s.config,
+                },
+                metadata: { index },
+              })),
+            },
+          },
+        },
       })
     );
 
@@ -773,7 +814,15 @@ export class GeminiService {
     let job = batchJob;
     while (true) {
       const state = typeof job.state === 'string' ? job.state : job.state?.name;
-      if (state === 'JOB_STATE_SUCCEEDED' || state === 'JOB_STATE_FAILED' || state === 'JOB_STATE_CANCELLED') {
+      if (
+        state === 'BATCH_STATE_SUCCEEDED' ||
+        state === 'BATCH_STATE_FAILED' ||
+        state === 'BATCH_STATE_CANCELLED' ||
+        state === 'BATCH_STATE_EXPIRED' ||
+        state === 'JOB_STATE_SUCCEEDED' ||
+        state === 'JOB_STATE_FAILED' ||
+        state === 'JOB_STATE_CANCELLED'
+      ) {
         break;
       }
       await this.sleep(pollIntervalMs);
@@ -782,11 +831,11 @@ export class GeminiService {
     }
 
     const finalState = typeof job.state === 'string' ? job.state : job.state?.name;
-    if (finalState !== 'JOB_STATE_SUCCEEDED') {
+    if (finalState !== 'BATCH_STATE_SUCCEEDED' && finalState !== 'JOB_STATE_SUCCEEDED') {
       throw new GeminiError(`Batch job failed: ${finalState || 'unknown'}`);
     }
 
-    const dest = job.dest || {};
+    const dest = job.output || job.dest || {};
     const inlineResponses = dest.inlinedResponses || dest.inlined_responses || dest.inlineResponses || [];
 
     return inlineResponses.map((response: any) => {
@@ -1408,11 +1457,13 @@ export class GeminiService {
       ...rest,
     };
     if (!wantsImage && thinkingConfig && Object.keys(thinkingConfig).length > 0) {
-      result.thinkingConfig = thinkingConfig;
+      result.thinkingConfig = this.toGeminiThinkingConfig(thinkingConfig);
     }
     if (wantsImage && responseImageConfig) {
       if (this.usesResponseFormatImageConfig(model)) {
-        result.responseFormat = { image: responseImageConfig };
+        result.responseFormat = {
+          image: this.toGeminiImageResponseFormat(responseImageConfig)
+        };
       } else {
         result.imageConfig = responseImageConfig;
       }
@@ -1434,6 +1485,32 @@ export class GeminiService {
     return modelId.startsWith('gemini-3') && modelId.includes('image');
   }
 
+  private toGeminiImageResponseFormat(imageConfig: ImageConfig): Record<string, any> {
+    const responseImageConfig: Record<string, any> = { ...imageConfig };
+    const aspectRatio = imageConfig.aspectRatio;
+    const imageSize = imageConfig.imageSize;
+
+    if (aspectRatio) {
+      responseImageConfig.aspectRatio = GEMINI_IMAGE_RESPONSE_ASPECT_RATIO_MAP[aspectRatio] || aspectRatio;
+    }
+    if (imageSize) {
+      responseImageConfig.imageSize = GEMINI_IMAGE_RESPONSE_SIZE_MAP[imageSize] || imageSize;
+    }
+
+    return responseImageConfig;
+  }
+
+  private toGeminiThinkingConfig(thinkingConfig: NonNullable<GenerationConfig['thinkingConfig']>): Record<string, any> {
+    const next: Record<string, any> = { ...thinkingConfig };
+    const thinkingLevel = thinkingConfig.thinkingLevel;
+
+    if (typeof thinkingLevel === 'string') {
+      next.thinkingLevel = GEMINI_THINKING_LEVEL_MAP[thinkingLevel] || thinkingLevel;
+    }
+
+    return next;
+  }
+
   private normalizeThinkingConfig(model: string, config: GenerationConfig): GenerationConfig {
     const modelId = model.toLowerCase();
     const isGemini3 = modelId.startsWith('gemini-3');
@@ -1448,10 +1525,13 @@ export class GeminiService {
       if ('thinkingBudget' in thinkingConfig) {
         delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
       }
+      const normalizedThinkingLevel = typeof thinkingConfig.thinkingLevel === 'string'
+        ? thinkingConfig.thinkingLevel.toLowerCase()
+        : '';
       if (
         !thinkingConfig.thinkingLevel ||
-        thinkingConfig.thinkingLevel === 'minimal' ||
-        thinkingConfig.thinkingLevel === 'low'
+        normalizedThinkingLevel === 'minimal' ||
+        normalizedThinkingLevel === 'low'
       ) {
         thinkingConfig.thinkingLevel = 'medium';
       }
