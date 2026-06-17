@@ -247,64 +247,64 @@ export const BottomPanel: React.FC = () => {
     
     // ... (Keep existing handlers for legend, cleanup, history)
     if (resolvedBottomTab === 'history') {
-        return (
-          <div className="absolute inset-0 p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
-                {t('bottomPanel.tabs.history')}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => downloadHistoryItems(historyItems)}
-                  disabled={historyItems.length === 0}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
-                    historyItems.length === 0
-                      ? "border-border text-foreground-muted/60 cursor-not-allowed"
-                      : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
-                  )}
-                >
-                  <Download size={12} />
-                  {t('bottomPanel.history.downloadAll')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (historySelectMode) {
-                      setSelectedHistoryIds(new Set());
-                    }
-                    setHistorySelectMode((prev) => !prev);
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
-                    historySelectMode
-                      ? "border-accent text-accent bg-accent/10"
-                      : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
-                  )}
-                >
-                  <Check size={12} />
-                  {historySelectMode ? t('bottomPanel.history.cancelSelection') : t('bottomPanel.history.select')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadHistoryItems(selectedHistoryItems)}
-                  disabled={selectedHistoryItems.length === 0}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
-                    selectedHistoryItems.length === 0
-                      ? "border-border text-foreground-muted/60 cursor-not-allowed"
-                      : "border-accent text-white bg-accent hover:bg-accent/90"
-                  )}
-                >
-                  <Download size={12} />
-                  {t('bottomPanel.history.downloadSelected')}
-                  {selectedHistoryItems.length > 0 ? ` (${selectedHistoryItems.length})` : ''}
-                </button>
-              </div>
+      return (
+        <div className="absolute inset-0 p-4 flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
+              {t('bottomPanel.tabs.history')}
             </div>
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto custom-scrollbar">
+              <button
+                type="button"
+                onClick={() => downloadHistoryItems(historyItems)}
+                disabled={historyItems.length === 0}
+                className={cn(
+                  "shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  historyItems.length === 0
+                    ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                    : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
+                )}
+              >
+                <Download size={12} />
+                {t('bottomPanel.history.downloadAll')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (historySelectMode) {
+                    setSelectedHistoryIds(new Set());
+                  }
+                  setHistorySelectMode((prev) => !prev);
+                }}
+                className={cn(
+                  "shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  historySelectMode
+                    ? "border-accent text-accent bg-accent/10"
+                    : "border-border text-foreground-muted hover:text-foreground hover:bg-surface-sunken"
+                )}
+              >
+                <Check size={12} />
+                {historySelectMode ? t('bottomPanel.history.cancelSelection') : t('bottomPanel.history.select')}
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadHistoryItems(selectedHistoryItems)}
+                disabled={selectedHistoryItems.length === 0}
+                className={cn(
+                  "shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  selectedHistoryItems.length === 0
+                    ? "border-border text-foreground-muted/60 cursor-not-allowed"
+                    : "border-accent text-white bg-accent hover:bg-accent/90"
+                )}
+              >
+                <Download size={12} />
+                {t('bottomPanel.history.downloadSelected')}
+                {selectedHistoryItems.length > 0 ? ` (${selectedHistoryItems.length})` : ''}
+              </button>
+            </div>
+          </div>
 
-            <div className="flex-1 overflow-x-auto overflow-y-visible flex items-start gap-4 custom-scrollbar py-1">
+          <div className="flex-1 min-w-0 overflow-x-auto overflow-y-visible flex items-start gap-4 custom-scrollbar py-1">
               {historyItems.length === 0 ? (
                  <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted gap-2">
                     <Clock size={24} className="opacity-20" />
@@ -409,12 +409,12 @@ export const BottomPanel: React.FC = () => {
   return (
     <div 
       className={cn(
-        "bg-background-secondary border-t border-border transition-all duration-300 flex flex-col z-30",
+        "min-w-0 max-w-full overflow-hidden bg-background-secondary border-t border-border transition-all duration-300 flex flex-col z-30",
         state.bottomPanelCollapsed ? "h-10" : "h-[55vh] sm:h-[220px]"
       )}
     >
-      <div className="h-10 sm:h-9 flex items-center justify-between px-2 sm:px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
-        <div className="flex h-full overflow-x-auto no-scrollbar">
+      <div className="h-10 sm:h-9 flex min-w-0 items-center justify-between px-2 sm:px-0 bg-surface-elevated border-b border-border-subtle shrink-0">
+        <div className="flex h-full min-w-0 flex-1 overflow-x-auto no-scrollbar">
            {bottomTabs.map(tab => (
              <button 
                key={tab}
@@ -434,8 +434,8 @@ export const BottomPanel: React.FC = () => {
            ))}
         </div>
         
-        <div 
-          className="h-full flex items-center px-2 sm:px-4 cursor-pointer hover:bg-surface-sunken border-l border-border-subtle"
+        <div
+          className="h-full shrink-0 flex items-center px-2 sm:px-4 cursor-pointer hover:bg-surface-sunken border-l border-border-subtle"
           onClick={() => dispatch({ type: 'TOGGLE_BOTTOM_PANEL' })}
         >
           <ChevronDown 
@@ -449,7 +449,7 @@ export const BottomPanel: React.FC = () => {
       </div>
 
       {!state.bottomPanelCollapsed && (
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 min-w-0 overflow-hidden relative">
            {renderContent()}
         </div>
       )}

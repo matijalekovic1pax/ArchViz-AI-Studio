@@ -34,7 +34,7 @@ export const RightPanel: React.FC = () => {
 
   if (!rightPanelOpen) {
     return (
-      <div className="w-12 bg-background-tertiary border-l border-border relative flex flex-col items-center py-4 gap-4">
+      <div className="w-12 shrink-0 bg-background-tertiary border-l border-border relative flex flex-col items-center py-4 gap-4">
         <button 
           onClick={() => dispatch({ type: 'TOGGLE_RIGHT_PANEL' })}
           className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-md transition-all"
@@ -190,23 +190,28 @@ export const RightPanel: React.FC = () => {
   return (
     <div
       className={cn(
-        "bg-background-tertiary border-l border-border flex flex-col overflow-hidden transition-all relative z-10"
+        "min-w-0 shrink-0 bg-background-tertiary border-l border-border flex flex-col overflow-hidden transition-all relative z-10"
       )}
-      style={{ width: `${panelWidth}px` }}
+      style={{
+        width: `${panelWidth}px`,
+        minWidth: `${panelWidth}px`,
+        maxWidth: `${panelWidth}px`,
+        flexBasis: `${panelWidth}px`,
+      }}
     >
       <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle flex justify-between items-center relative">
-          <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                  <PanelIcon size={16} className="text-foreground-secondary"/>
-                  <h2 className="text-sm font-bold tracking-tight text-foreground">{panelTitle}</h2>
+          <div className="min-w-0 flex flex-col">
+            <div className="flex min-w-0 items-center gap-2">
+              <PanelIcon size={16} className="shrink-0 text-foreground-secondary"/>
+              <h2 className="truncate text-sm font-bold tracking-tight text-foreground">{panelTitle}</h2>
+            </div>
+            {panelMeta && (
+              <div className="mt-1 truncate text-[10px] text-foreground-muted">
+                {panelMeta}
               </div>
-              {panelMeta && (
-                <div className="mt-1 text-[10px] text-foreground-muted">
-                  {panelMeta}
-                </div>
-              )}
+            )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="shrink-0 flex items-center gap-1">
             <button 
                 className={cn("text-foreground-muted hover:text-foreground p-1 rounded-md transition-colors", showHelp && "bg-surface-sunken text-foreground")}
                 onClick={() => setShowHelp(!showHelp)}
@@ -248,8 +253,8 @@ export const RightPanel: React.FC = () => {
           )}
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-5" style={{ scrollbarGutter: 'stable' }}>
-         <div className="min-w-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-5" style={{ scrollbarGutter: 'stable' }}>
+         <div className="w-full min-w-0 max-w-full">
            {panelContent}
          </div>
       </div>

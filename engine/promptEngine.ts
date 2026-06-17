@@ -3374,13 +3374,14 @@ function generateSceneComposePrompt(state: AppState): string {
   };
 
   const parts: string[] = [
-    `Create a photorealistic ${viewDescriptions[workflow.viewType] || 'architectural'} scene composition from ${sourceDescriptions[workflow.sourceType] || 'a 3D scene screenshot'}.`,
+    `Create a photorealistic ${viewDescriptions[workflow.viewType] || 'architectural'} scene composition by editing the current base scene from ${sourceDescriptions[workflow.sourceType] || 'a 3D scene screenshot'}.`,
     buildSourceImageRelationship(
       'base scene',
-      'Preserve the base scene architecture, structural geometry, room or site layout, material boundaries, and existing composition exactly.'
+      'Preserve the base scene architecture, structural geometry, room or site layout, material boundaries, existing people, furniture, planting, signage, graphics, and composition exactly unless a reference caption explicitly requests a local insertion that must occlude something.'
     ),
-    buildReferenceStackRelationship('object, material, entourage, and placement references for scene insertion'),
+    'Reference relationship: attachment #1 is the locked base scene. A placement guidance map may appear after the source; use it only as hidden spatial metadata and never as scene content. The remaining photographic attachments are object, material, entourage, and placement references for scene insertion in listed order.',
     'Do not redesign the architecture. Only insert, arrange, and render scene elements based on the provided reference stack.',
+    'This is an additive local edit, not a fresh render. Do not clear, simplify, or repopulate the rest of the image.',
     'All outputs must look like a single coherent photograph with consistent lens behavior, lighting direction, shadows, reflections, and contact points.'
   ];
 
@@ -3390,12 +3391,12 @@ function generateSceneComposePrompt(state: AppState): string {
     );
   } else {
     parts.push(
-      `The remaining ${references.length} attachment${references.length === 1 ? '' : 's'} are insertion references in stack order. Attachment #1 is the locked base scene, and attachment #2 onward map to Reference 1 onward in the same order.`
+      `There ${references.length === 1 ? 'is' : 'are'} ${references.length} insertion reference${references.length === 1 ? '' : 's'} in stack order. If a placement guidance map is supplied, skip it when mapping references: Reference 1 maps to the first photographic insertion reference, Reference 2 to the next, and so on.`
     );
     references.forEach((reference, index) => {
       const caption = reference.caption?.trim();
       const placement = reference.placement
-        ? ` Placement pin: x=${(reference.placement.x * 100).toFixed(2)}%, y=${(reference.placement.y * 100).toFixed(2)}% from the top-left of the base image (normalized coordinates on attachment #1). Anchor the main object from this reference around that coordinate, and keep the contact-point centroid as close to that pin as physically plausible.`
+        ? ` Placement pin: x=${(reference.placement.x * 100).toFixed(2)}%, y=${(reference.placement.y * 100).toFixed(2)}% from the top-left of the base image (normalized coordinates on attachment #1). Treat this as the intended ground/contact or placement anchor, not as a UI mark. Keep the inserted object's contact footprint as close to that pin as physically plausible.`
         : ' No explicit placement pin provided; choose the most plausible location based on scene logic.';
       parts.push(
         `Reference ${index + 1}: ${
@@ -3407,6 +3408,12 @@ function generateSceneComposePrompt(state: AppState): string {
     });
     parts.push(
       'Honor every caption as an instruction for what to insert and how to place/style it. If captions conflict with scene physics, choose the most realistic interpretation.'
+    );
+    parts.push(
+      'When a caption uses spatial language such as behind, in front of, beside, left of, right of, under, on top of, or against, resolve that relationship against visible objects in the base scene and maintain correct occlusion and depth ordering.'
+    );
+    parts.push(
+      'Scale inserted furniture and objects from nearby people, seats, doors, floor tiles, and perspective lines. Keep them grounded on the same floor plane or supporting surface as the placement pin.'
     );
     if (referencesWithPlacement.length > 0) {
       parts.push(

@@ -44,7 +44,7 @@ export const GenerationRetryNotice: React.FC<GenerationRetryNoticeProps> = ({
         )}
       >
         <Icon size={12} className="shrink-0 text-amber-600" />
-        <span className="min-w-0 whitespace-normal">{message}</span>
+        <span className="min-w-0 whitespace-normal text-center">{message}</span>
       </div>
     </div>
   );

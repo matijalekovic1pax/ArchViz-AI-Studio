@@ -438,6 +438,54 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean, a
   return drawMaskImageData(mask, width, height, { invert, alphaMask })?.toDataURL('image/png') || maskDataUrl;
 };
 
+const createSceneComposePlacementGuideDataUrl = async (
+  sourceDataUrl: string,
+  references: AppState['workflow']['sceneInsertionReferences']
+): Promise<string | null> => {
+  const placedReferences = references.filter((reference) => Boolean(reference.placement));
+  if (placedReferences.length === 0) return null;
+
+  const source = await loadCanvasImage(sourceDataUrl);
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  if (!width || !height) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, width, height);
+
+  const shortEdge = Math.min(width, height);
+  const radiusScale = placedReferences.length === 1 ? 0.2 : 0.15;
+  const radiusX = Math.min(width * 0.32, Math.max(96, shortEdge * radiusScale * 1.25));
+  const radiusY = Math.min(height * 0.28, Math.max(72, shortEdge * radiusScale * 0.9));
+
+  placedReferences.forEach((reference) => {
+    if (!reference.placement) return;
+    const x = Math.min(Math.max(reference.placement.x, 0), 1) * width;
+    const y = Math.min(Math.max(reference.placement.y, 0), 1) * height;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(radiusX, radiusY);
+    const gradient = ctx.createRadialGradient(0, 0, 0.05, 0, 0, 1);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.42, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  return canvas.toDataURL('image/png');
+};
+
 const getVisualMaskMode = (
   activeVisualTool: string,
   shouldUseSelectionMask: boolean,
@@ -1147,8 +1195,9 @@ export function useGeneration(): UseGenerationReturn {
       const keepsStructuredPrompt = isSourceLockedMode || state.mode === 'upscale';
       const usesRender3DAlterSource =
         state.mode === 'render-3d' && state.workflow.render3dSourceMode === 'alter-rendering';
+      const usesSceneComposeCurrentCanvas = state.mode === 'scene-compose';
       const sourceImage = state.sourceImage || state.uploadedImage;
-      const baseImage = usesRender3DAlterSource
+      const baseImage = usesRender3DAlterSource || usesSceneComposeCurrentCanvas
         ? state.uploadedImage || sourceImage
         : isSourceLockedMode
           ? sourceImage
@@ -1336,6 +1385,7 @@ export function useGeneration(): UseGenerationReturn {
       const isAngleChangeMode = state.mode === 'angle-change';
       const isUpscaleMode = state.mode === 'upscale';
       const isVisualEditMode = state.mode === 'visual-edit';
+      const isSceneComposeMode = state.mode === 'scene-compose';
       const isVideoMode = state.mode === 'video';
       const isPdfCompressionMode = state.mode === 'pdf-compression';
       const isHeadshotMode = state.mode === 'headshot';
@@ -2770,6 +2820,52 @@ export function useGeneration(): UseGenerationReturn {
             )
           };
         }
+      } else if (isSceneComposeMode && baseImage && sceneInsertionReferences.length > 0) {
+        updateProgress(10);
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
+        }
+
+        const sceneSourceImage = dataUrlToImageData(baseImage);
+        if (!sceneSourceImage) {
+          throw new Error('No source image available for scene composition.');
+        }
+
+        const sceneReferenceImages = sceneInsertionReferences
+          .map((reference) => dataUrlToImageData(reference.image))
+          .filter((image): image is ImageData => Boolean(image));
+
+        if (sceneReferenceImages.length === 0) {
+          throw new Error('No valid scene composition reference images were found.');
+        }
+
+        const placementGuideDataUrl = await createSceneComposePlacementGuideDataUrl(baseImage, sceneInsertionReferences);
+        const placementGuideImage = placementGuideDataUrl
+          ? dataUrlToImageData(placementGuideDataUrl)
+          : null;
+        const editReferenceImages = [
+          sceneSourceImage,
+          ...(placementGuideImage ? [placementGuideImage] : []),
+          ...sceneReferenceImages
+        ];
+
+        result = await runVerifiedImageGeneration(
+          'scene composition edit',
+          fullPrompt,
+          editReferenceImages,
+          (promptForAttempt) => service.editImage({
+            sourceImage: sceneSourceImage,
+            maskImage: placementGuideImage || undefined,
+            maskMode: placementGuideImage ? 'guided' : undefined,
+            referenceImages: sceneReferenceImages,
+            prompt: promptForAttempt,
+            editType: 'inpaint',
+            activeTool: 'object',
+            imageGenerationModel: effectiveImageGenerationModel,
+            generationConfig: generationConfigWithAbort
+          }),
+          fullPrompt
+        );
       } else if (isVideoMode) {
         updateProgress(10);
         const videoState = state.workflow.videoState;
@@ -2989,7 +3085,9 @@ export function useGeneration(): UseGenerationReturn {
 
       // Process result
       if (result.images && result.images.length > 0 && !isUpscaleMode && !multiAngleHistoryHandled) {
-        const sourceForHistory = state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
+        const sourceForHistory = state.mode === 'scene-compose'
+          ? baseImage
+          : state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
         const hasSourceEntry = sourceForHistory
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
           : false;

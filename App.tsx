@@ -146,7 +146,7 @@ const Layout: React.FC = () => {
         <div className="hidden lg:flex h-full">
           <LeftSidebar />
         </div>
-        <div className="flex-1 flex flex-col min-w-0 relative pb-24 lg:pb-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-24 lg:pb-0">
           {state.mode === 'material-validation' ? (
             <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
@@ -163,7 +163,7 @@ const Layout: React.FC = () => {
             </div>
           )}
         </div>
-        <div className="hidden lg:flex h-full">
+        <div className="hidden lg:flex h-full shrink-0">
           <RightPanel />
         </div>
       </div>
