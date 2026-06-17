@@ -78,7 +78,8 @@
       "complete": "完成"
     },
     "retryNotice": {
-      "unsatisfactory": "结果不理想。正在重新生成..."
+      "unsatisfactory": "结果不理想。正在重新生成...",
+      "fallback": "AI 审核重试后仍未通过。正在显示最新结果。"
     },
     "generateMasterplan": "生成总平面",
     "generateExplodedView": "生成爆炸图",

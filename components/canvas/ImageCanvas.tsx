@@ -9,7 +9,6 @@ import { nanoid } from 'nanoid';
 import { useGeneration } from '../../hooks/useGeneration';
 import { VideoLockBanner } from '../video/VideoLockBanner';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
-import { GenerationRetryNotice } from '../ui/GenerationRetryNotice';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
 type CanvasPoint = { x: number; y: number };
@@ -306,7 +305,6 @@ const PromptBar: React.FC = () => {
                     </button>
                 </div>
             </div>
-            <GenerationRetryNotice className="absolute right-0 top-full mt-2" compact />
         </div>
         <div className="text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-500">
             <span className="text-[10px] text-foreground-muted/50 font-medium tracking-wide">

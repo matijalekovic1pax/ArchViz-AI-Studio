@@ -21,7 +21,6 @@ import {
   GenerationConfig,
   ImageConfig,
   TEXT_MODEL,
-  OUTPUT_VERIFICATION_MIN_SCORE,
   type ImageGenerationProgress,
   type ImageOutputVerificationResult
 } from '../services/geminiService';
@@ -326,7 +325,7 @@ const withOutputVerificationSettings = (
   return {
     ...(settings || {}),
     outputVerification: {
-      score: result.outputVerification.score,
+      passed: result.outputVerification.passed,
       summary: result.outputVerification.summary,
       issues: result.outputVerification.issues,
       attempts: result.outputVerificationAttempts ?? 1,
@@ -1090,6 +1089,16 @@ export function useGeneration(): UseGenerationReturn {
         }
       });
     };
+    const showVerificationFallbackNotice = (attempts: number) => {
+      if (isMaterialValidationMode) return;
+      dispatch({
+        type: 'SET_GENERATION_RETRY_NOTICE',
+        payload: {
+          reason: 'verification-fallback',
+          attempts
+        }
+      });
+    };
     const updateImagePipelineProgress = (progress: ImageGenerationProgress) => {
       const range = IMAGE_PIPELINE_PROGRESS_RANGES[progress.phase];
       const stage = IMAGE_PIPELINE_STAGES[progress.phase];
@@ -1318,6 +1327,10 @@ export function useGeneration(): UseGenerationReturn {
       const isVideoMode = state.mode === 'video';
       const isPdfCompressionMode = state.mode === 'pdf-compression';
       const isHeadshotMode = state.mode === 'headshot';
+      const excludesAiMiddleLayer =
+        state.mode === 'generate-text' ||
+        isHeadshotMode ||
+        isUpscaleMode;
 
       // Add headshot reference images (front first as primary, then left, then right)
       if (isHeadshotMode) {
@@ -1673,6 +1686,7 @@ export function useGeneration(): UseGenerationReturn {
         images?: ImageData[];
         generationConfig?: GenerationConfig;
         promptAlreadyOptimized?: boolean;
+        skipPromptOptimization?: boolean;
       }): Promise<GeminiResponse> => {
         updateProgress(10);
         if (abortSignal.aborted) {
@@ -1684,6 +1698,8 @@ export function useGeneration(): UseGenerationReturn {
           : buildImagePrompt(request.prompt);
         const promptPreparationFlags = request.promptAlreadyOptimized
           ? { promptOptimized: true, skipPromptOptimization: true }
+          : request.skipPromptOptimization
+            ? { skipPromptOptimization: true }
           : {};
 
         if (effectiveImageGenerationModel === 'chatgpt-image-generation-2') {
@@ -1759,7 +1775,6 @@ export function useGeneration(): UseGenerationReturn {
             originalPrompt: originalPromptForVerification || promptForVerification,
             referenceImages,
             generatedImage: finalImage,
-            threshold: OUTPUT_VERIFICATION_MIN_SCORE,
             generationConfig: {
               abortSignal: verificationSignal,
               onProgress: updateImagePipelineProgress
@@ -1773,9 +1788,8 @@ export function useGeneration(): UseGenerationReturn {
         verification: ImageOutputVerificationResult | null,
         attempts: number
       ) => {
-        const score = verification ? `${verification.score}/100` : 'unscored';
         const issue = verification?.issues?.[0] || verification?.summary || 'The output did not match the prompt closely enough.';
-        return `${label} did not pass AI output verification after ${attempts} attempts (last score ${score}). ${issue}`;
+        return `${label} was not approved by AI output verification after ${attempts} attempts. ${issue}`;
       };
 
       const runVerifiedImageGeneration = async (
@@ -1788,6 +1802,8 @@ export function useGeneration(): UseGenerationReturn {
       ): Promise<GeminiResponse> => {
         let promptForAttempt = prompt;
         let lastVerification: ImageOutputVerificationResult | null = null;
+        let lastResultForAttempt: GeminiResponse | null = null;
+        let lastPromptUsed = prompt;
 
         for (let attempt = 1; attempt <= OUTPUT_VERIFICATION_MAX_ATTEMPTS; attempt += 1) {
           if (abortSignal.aborted) {
@@ -1802,13 +1818,32 @@ export function useGeneration(): UseGenerationReturn {
             generationRetryOptions
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
-          const verification = await verifyImageResult(
-            resultForAttempt,
-            promptUsed,
-            referenceImages,
-            originalPromptForVerification
-          );
-          if (!verification || verification.passed) {
+          const hasGeneratedImage = resultForAttempt.images.length > 0;
+          lastResultForAttempt = resultForAttempt;
+          lastPromptUsed = promptUsed;
+          let verification: ImageOutputVerificationResult | null = null;
+          try {
+            verification = await verifyImageResult(
+              resultForAttempt,
+              promptUsed,
+              referenceImages,
+              originalPromptForVerification
+            );
+          } catch (error) {
+            if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
+              throw error;
+            }
+            if (hasGeneratedImage) {
+              showVerificationFallbackNotice(attempt);
+              return {
+                ...resultForAttempt,
+                optimizedPrompt: promptUsed,
+                outputVerificationAttempts: attempt
+              };
+            }
+            throw error;
+          }
+          if (hasGeneratedImage && (!verification || verification.passed)) {
             return {
               ...resultForAttempt,
               optimizedPrompt: promptUsed,
@@ -1824,6 +1859,16 @@ export function useGeneration(): UseGenerationReturn {
           }
         }
 
+        if (lastResultForAttempt?.images.length) {
+          showVerificationFallbackNotice(OUTPUT_VERIFICATION_MAX_ATTEMPTS);
+          return {
+            ...lastResultForAttempt,
+            optimizedPrompt: lastPromptUsed,
+            outputVerification: lastVerification || undefined,
+            outputVerificationAttempts: OUTPUT_VERIFICATION_MAX_ATTEMPTS
+          };
+        }
+
         throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
       };
 
@@ -1836,6 +1881,9 @@ export function useGeneration(): UseGenerationReturn {
       ): Promise<GeminiResponse> => {
         let promptForAttempt = prompt;
         let lastVerification: ImageOutputVerificationResult | null = null;
+        let lastVerifications: ImageOutputVerificationResult[] = [];
+        let lastResultForAttempt: GeminiResponse | null = null;
+        let lastPromptUsed = prompt;
 
         for (let attempt = 1; attempt <= OUTPUT_VERIFICATION_MAX_ATTEMPTS; attempt += 1) {
           if (abortSignal.aborted) {
@@ -1850,28 +1898,47 @@ export function useGeneration(): UseGenerationReturn {
             imageGenerationRetryOptions
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
-          const verifications = await Promise.all(
-            resultForAttempt.images.map((image) =>
-              runAbortableWithTimeout(
-                'AI output verification',
-                OUTPUT_VERIFICATION_TIMEOUT_MS,
-                (verificationSignal) => service.verifyImageOutput({
-                  prompt: promptUsed,
-                  originalPrompt: originalPromptForVerification,
-                  referenceImages,
-                  generatedImage: image,
-                  threshold: OUTPUT_VERIFICATION_MIN_SCORE,
-                  generationConfig: {
-                    abortSignal: verificationSignal,
-                    onProgress: updateImagePipelineProgress
-                  }
-                })
+          const hasGeneratedImages = resultForAttempt.images.length > 0;
+          lastResultForAttempt = resultForAttempt;
+          lastPromptUsed = promptUsed;
+          let verifications: ImageOutputVerificationResult[] = [];
+          try {
+            verifications = await Promise.all(
+              resultForAttempt.images.map((image) =>
+                runAbortableWithTimeout(
+                  'AI output verification',
+                  OUTPUT_VERIFICATION_TIMEOUT_MS,
+                  (verificationSignal) => service.verifyImageOutput({
+                    prompt: promptUsed,
+                    originalPrompt: originalPromptForVerification,
+                    referenceImages,
+                    generatedImage: image,
+                    generationConfig: {
+                      abortSignal: verificationSignal,
+                      onProgress: updateImagePipelineProgress
+                    }
+                  })
+                )
               )
-            )
-          );
+            );
+          } catch (error) {
+            if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
+              throw error;
+            }
+            if (hasGeneratedImages) {
+              showVerificationFallbackNotice(attempt);
+              return {
+                ...resultForAttempt,
+                optimizedPrompt: promptUsed,
+                outputVerificationAttempts: attempt
+              };
+            }
+            throw error;
+          }
+          lastVerifications = verifications;
 
           const failed = verifications.filter((verification) => !verification.passed);
-          if (resultForAttempt.images.length > 0 && failed.length === 0) {
+          if (hasGeneratedImages && failed.length === 0) {
             return {
               ...resultForAttempt,
               optimizedPrompt: promptUsed,
@@ -1881,11 +1948,22 @@ export function useGeneration(): UseGenerationReturn {
             };
           }
 
-          lastVerification = failed.sort((a, b) => a.score - b.score)[0] || null;
+          lastVerification = failed[0] || null;
           promptForAttempt = lastVerification?.revisedPrompt?.trim() || promptUsed;
           if (attempt < OUTPUT_VERIFICATION_MAX_ATTEMPTS) {
             showUnsatisfactoryRetryNotice(attempt + 1);
           }
+        }
+
+        if (lastResultForAttempt?.images.length) {
+          showVerificationFallbackNotice(OUTPUT_VERIFICATION_MAX_ATTEMPTS);
+          return {
+            ...lastResultForAttempt,
+            optimizedPrompt: lastPromptUsed,
+            outputVerification: lastVerification || lastVerifications[lastVerifications.length - 1],
+            outputVerifications: lastVerifications.length ? lastVerifications : undefined,
+            outputVerificationAttempts: OUTPUT_VERIFICATION_MAX_ATTEMPTS
+          };
         }
 
         throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
@@ -2430,12 +2508,10 @@ export function useGeneration(): UseGenerationReturn {
                 hasReferenceImages: false,
                 promptKind: 'edit'
               });
-              const upscaleResult = await runVerifiedImageGeneration(
+              const upscaleResult = await runWithRetry(
                 'image upscale',
-                upscalePrompt,
-                [source],
-                (promptForAttempt, promptAlreadyOptimized) => service.generateImages({
-                  prompt: promptForAttempt,
+                () => service.generateImages({
+                  prompt: upscalePrompt,
                   images: [source],
                   imageGenerationModel: effectiveImageGenerationModel,
                   generationConfig: {
@@ -2443,9 +2519,8 @@ export function useGeneration(): UseGenerationReturn {
                     abortSignal,
                     onProgress: updateImagePipelineProgress
                   },
-                  ...(promptAlreadyOptimized ? { promptOptimized: true, skipPromptOptimization: true } : {})
+                  skipPromptOptimization: true
                 } as any),
-                upscalePrompt,
                 { timeoutMs: REQUEST_TIMEOUT_MS, maxRetries: 0 }
               );
 
@@ -2811,24 +2886,39 @@ export function useGeneration(): UseGenerationReturn {
         }
       } else if (options.numberOfImages && options.numberOfImages > 1) {
         updateProgress(10);
-        // Batch image generation
-        const batchResult = await runVerifiedBatchImageGeneration(
-          'batch image generation',
-          imageModelPrompt,
-          images.length > 0 ? images : undefined,
-          (promptForAttempt, promptAlreadyOptimized) => service.generateBatchImages({
-            prompt: promptForAttempt,
-            referenceImages: images.length > 0 ? images : undefined,
-            numberOfImages: options.numberOfImages,
-            imageConfig: generationConfig.imageConfig,
-            openAI: generationConfigWithAbort.openAI,
-            imageGenerationModel: effectiveImageGenerationModel,
-            abortSignal,
-            onProgress: updateImagePipelineProgress,
-            promptAlreadyOptimized
-          }),
-          imageModelPrompt
-        );
+        const batchResult = excludesAiMiddleLayer
+          ? await runWithRetry(
+              'batch image generation',
+              () => service.generateBatchImages({
+                prompt: imageModelPrompt,
+                referenceImages: images.length > 0 ? images : undefined,
+                numberOfImages: options.numberOfImages,
+                imageConfig: generationConfig.imageConfig,
+                openAI: generationConfigWithAbort.openAI,
+                imageGenerationModel: effectiveImageGenerationModel,
+                abortSignal,
+                onProgress: updateImagePipelineProgress,
+                skipPromptOptimization: true
+              }),
+              imageGenerationRetryOptions
+            )
+          : await runVerifiedBatchImageGeneration(
+              'batch image generation',
+              imageModelPrompt,
+              images.length > 0 ? images : undefined,
+              (promptForAttempt, promptAlreadyOptimized) => service.generateBatchImages({
+                prompt: promptForAttempt,
+                referenceImages: images.length > 0 ? images : undefined,
+                numberOfImages: options.numberOfImages,
+                imageConfig: generationConfig.imageConfig,
+                openAI: generationConfigWithAbort.openAI,
+                imageGenerationModel: effectiveImageGenerationModel,
+                abortSignal,
+                onProgress: updateImagePipelineProgress,
+                promptAlreadyOptimized
+              }),
+              imageModelPrompt
+            );
         result = {
           text: batchResult.text,
           images: batchResult.images,
@@ -2839,18 +2929,29 @@ export function useGeneration(): UseGenerationReturn {
         };
       } else {
         // Standard image generation
-        result = await runVerifiedImageGeneration(
-          'image generation',
-          imageModelPrompt,
-          images.length > 0 ? images : undefined,
-          (promptForAttempt, promptAlreadyOptimized) => runStreamedImageGeneration({
-            prompt: promptForAttempt,
-            images: images.length > 0 ? images : undefined,
-            generationConfig: generationConfigWithAbort,
-            promptAlreadyOptimized
-          }),
-          imageModelPrompt
-        );
+        result = excludesAiMiddleLayer
+          ? await runWithRetry(
+              'image generation',
+              () => runStreamedImageGeneration({
+                prompt: imageModelPrompt,
+                images: images.length > 0 ? images : undefined,
+                generationConfig: generationConfigWithAbort,
+                skipPromptOptimization: true
+              }),
+              imageGenerationRetryOptions
+            )
+          : await runVerifiedImageGeneration(
+              'image generation',
+              imageModelPrompt,
+              images.length > 0 ? images : undefined,
+              (promptForAttempt, promptAlreadyOptimized) => runStreamedImageGeneration({
+                prompt: promptForAttempt,
+                images: images.length > 0 ? images : undefined,
+                generationConfig: generationConfigWithAbort,
+                promptAlreadyOptimized
+              }),
+              imageModelPrompt
+            );
       }
       updateProgress(95);
 
@@ -3068,7 +3169,6 @@ export function useGeneration(): UseGenerationReturn {
           outputVerificationAttempts: result.outputVerificationAttempts || null,
           outputVerification: result.outputVerification
             ? {
-                score: result.outputVerification.score,
                 passed: result.outputVerification.passed,
                 summary: result.outputVerification.summary,
                 issues: result.outputVerification.issues,
@@ -3077,7 +3177,6 @@ export function useGeneration(): UseGenerationReturn {
               }
             : null,
           outputVerifications: result.outputVerifications?.map((verification) => ({
-            score: verification.score,
             passed: verification.passed,
             summary: verification.summary,
             issues: verification.issues,
@@ -3086,7 +3185,6 @@ export function useGeneration(): UseGenerationReturn {
           })) || null,
         },
       });
-      clearGenerationRetryNotice();
       dispatch({ type: 'SET_GENERATING', payload: false });
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
       dispatch({ type: 'SET_GENERATION_STAGE', payload: null });

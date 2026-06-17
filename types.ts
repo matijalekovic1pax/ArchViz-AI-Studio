@@ -1371,8 +1371,9 @@ export type GenerationProgressStage =
   | 'complete';
 
 export interface GenerationRetryNotice {
-  reason: 'unsatisfactory-result';
-  attempt: number;
+  reason: 'unsatisfactory-result' | 'verification-fallback';
+  attempt?: number;
+  attempts?: number;
 }
 
 export interface AppState {

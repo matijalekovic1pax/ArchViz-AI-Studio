@@ -18,6 +18,7 @@ import { GenerationMode } from './types';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
 import { MobilePanels, MobilePanelType } from './components/panels/mobile/MobilePanels';
+import { GenerationRetryNotice } from './components/ui/GenerationRetryNotice';
 
 const ShortcutsListener: React.FC = () => {
   const { state, dispatch } = useAppStore();
@@ -86,6 +87,7 @@ const Layout: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans selection:bg-accent selection:text-foreground">
       <TopBar onToggleMobilePanel={(panel) => setMobilePanel((prev) => (prev === panel ? null : panel))} />
+      <GenerationRetryNotice className="fixed left-1/2 top-[4.35rem] hidden -translate-x-1/2 lg:block" />
       <MobilePanels
         active={mobilePanel}
         onClose={() => setMobilePanel(null)}

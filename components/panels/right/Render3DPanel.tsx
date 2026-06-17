@@ -68,6 +68,10 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
       desc: t('render3dSettings.sourceMode.options.alterRendering.desc', { defaultValue: 'Use the latest render and apply lighter style or lighting adjustments.' }),
     },
   };
+  const sourceModeOptions = RENDER3D_SOURCE_MODES.map((mode) => ({
+    value: mode,
+    label: sourceModeCopy[mode].label,
+  }));
   const generationModeCopy: Record<RenderGenerationMode, { label: string; desc: string }> = {
     'strict-realism': {
       label: t('render3dSettings.generationMode.options.strictRealism.label'),
@@ -90,17 +94,15 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
           <label className="text-xs text-foreground-muted mb-2 block font-bold uppercase tracking-wider">
             {t('render3dSettings.sourceMode.title', { defaultValue: 'Render Flow' })}
           </label>
-          <div className="space-y-1">
-            {RENDER3D_SOURCE_MODES.map((mode) => (
-              <VerticalCard
-                key={mode}
-                label={sourceModeCopy[mode].label}
-                description={sourceModeCopy[mode].desc}
-                selected={wf.render3dSourceMode === mode}
-                onClick={() => updateWf({ render3dSourceMode: mode })}
-              />
-            ))}
-          </div>
+          <SegmentedControl
+            value={wf.render3dSourceMode}
+            options={sourceModeOptions}
+            onChange={(render3dSourceMode: Render3DSourceMode) => updateWf({ render3dSourceMode })}
+            className="w-full"
+          />
+          <p className="mt-2 text-[10px] leading-relaxed text-foreground-muted">
+            {sourceModeCopy[wf.render3dSourceMode].desc}
+          </p>
         </div>
       )}
 

@@ -24,7 +24,6 @@ const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
 const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
 const OUTPUT_VERIFICATION_MAX_PROMPT_CHARS = 10000;
 const OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS = 900;
-export const OUTPUT_VERIFICATION_MIN_SCORE = 85;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -132,6 +131,7 @@ export interface BatchImageRequest {
   imageGenerationModel?: ImageGenerationModel;
   onProgress?: ImageGenerationProgressCallback;
   promptAlreadyOptimized?: boolean;
+  skipPromptOptimization?: boolean;
 }
 
 export interface BatchImageResponse {
@@ -147,12 +147,10 @@ export interface ImageOutputVerificationRequest {
   generatedImage: ImageData;
   referenceImages?: ImageData[];
   originalPrompt?: string;
-  threshold?: number;
   generationConfig?: GenerationConfig;
 }
 
 export interface ImageOutputVerificationResult {
-  score: number;
   passed: boolean;
   summary: string;
   issues: string[];
@@ -452,7 +450,7 @@ export class GeminiService {
         onProgress: request.onProgress
       },
       promptOptimized: request.promptAlreadyOptimized,
-      skipPromptOptimization: request.promptAlreadyOptimized
+      skipPromptOptimization: request.promptAlreadyOptimized || request.skipPromptOptimization
     }, 'batch');
 
     for (let i = 0; i < numberOfImages; i++) {
@@ -705,14 +703,13 @@ export class GeminiService {
   }
 
   async verifyImageOutput(request: ImageOutputVerificationRequest): Promise<ImageOutputVerificationResult> {
-    const threshold = request.threshold ?? OUTPUT_VERIFICATION_MIN_SCORE;
     const referenceImages = request.referenceImages || [];
     const images = [...referenceImages, request.generatedImage];
 
     this.emitProgress(request.generationConfig, 'verification', 8, 'Checking generated image...');
     const raw = await this.generateText({
       model: PROMPT_OPTIMIZER_MODEL,
-      prompt: this.buildOutputVerificationPrompt(request, referenceImages.length, threshold),
+      prompt: this.buildOutputVerificationPrompt(request, referenceImages.length),
       images,
       generationConfig: {
         temperature: 0.05,
@@ -725,7 +722,7 @@ export class GeminiService {
     });
     this.emitProgress(request.generationConfig, 'verification', 100, 'Output verification complete.');
 
-    return this.parseOutputVerificationResult(raw, request.prompt, threshold);
+    return this.parseOutputVerificationResult(raw, request.prompt);
   }
 
   // --------------------------------------------------------------------------
@@ -1035,19 +1032,18 @@ export class GeminiService {
     promptKind: ImagePromptKind = 'generation'
   ): Promise<InternalGeminiRequest> {
     if (request.promptOptimized) {
-      this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'Prompt already prepared.');
       return request;
     }
 
-    this.emitProgress(request.generationConfig, 'ai-middle-layer', 8, 'Preparing image prompt...');
     const prompt = this.prepareImagePrompt(request, promptKind);
     const preparedRequest: InternalGeminiRequest = { ...request, prompt };
-    this.emitProgress(request.generationConfig, 'ai-middle-layer', 35, 'Image prompt prepared.');
 
     if (request.skipPromptOptimization) {
-      this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
       return preparedRequest;
     }
+
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 8, 'Preparing image prompt...');
+    this.emitProgress(request.generationConfig, 'ai-middle-layer', 35, 'Image prompt prepared.');
 
     if (!this.shouldOptimizePromptForImageGeneration(prompt, request.images)) {
       this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
@@ -1167,8 +1163,7 @@ export class GeminiService {
 
   private buildOutputVerificationPrompt(
     request: ImageOutputVerificationRequest,
-    referenceImageCount: number,
-    threshold: number
+    referenceImageCount: number
   ): string {
     const imageRelationship = referenceImageCount === 0
       ? 'Attached image 1 is the generated output to evaluate.'
@@ -1182,18 +1177,19 @@ export class GeminiService {
       'Evaluate whether the generated output image satisfies the prompt and respects the attached source/reference images.',
       imageRelationship,
       '',
-      'Score the generated output from 0 to 100.',
-      `A score of ${threshold} or higher means the image is precise and effective enough to show to the user.`,
-      'Score strictly but practically: preserve-source failures, wrong camera/composition, missing requested style/lighting, architectural drift, broken geometry, unwanted text changes, and obvious artifacts should reduce the score.',
-      'Do not penalize harmless variation when the prompt asks for a render variation.',
+      'Make a binary decision: passed true means the prompt objective was delivered in a fair, usable way; passed false means the core objective was not delivered well enough and the image should be regenerated.',
+      'Do not require perfection, exact photographic spot-on precision, or tiny-detail compliance. The output only needs to be objectively okay for the user request.',
+      'Judge the main requested outcome concretely. For example, if the task was to change the selected person\'s blue shirt to yellow, pass only if that same shirt is now clearly yellow while the rest of the image is reasonably preserved.',
+      'For architectural renders, pass if the source composition, major geometry, requested style/material/lighting intent, and important constraints are fairly represented. Fail only for meaningful objective misses such as wrong source relationship, wrong camera/composition, missing requested change, severe architectural drift, broken geometry, unwanted text changes, or obvious artifacts that undermine the requested result.',
+      'Do not fail harmless variation when the prompt asks for a render variation.',
       '',
-      'Also detect AI regeneration distortion separately from the pass/fail score.',
+      'Also detect AI regeneration distortion separately from the passed decision.',
       'Mark aiSlopDetected true only when the generated output visibly contains AI degradation such as wavy or wiggly architectural lines, melted/smeared detail, haze or fog not requested, blotchy discoloration, warped signage/text, malformed repeated geometry, distorted people, or over-smoothed regenerated texture.',
       'Do not mark aiSlopDetected true for normal low resolution, intentional stylization, depth-of-field blur, natural atmospheric lighting, or minor compression.',
       'If detected, list the clearest visual indicators and write one short suggestion that this image would benefit from AI Slop upscaling/restoration.',
       '',
-      'If the score is below the threshold, write a revised prompt that can be sent directly to the image model with the same reference images. The revised prompt should be natural, concise, and focused on correcting the observed issues while preserving the original intent.',
-      'If the score is at or above the threshold, revisedPrompt must be an empty string.',
+      'If passed is false, write a revised prompt that can be sent directly to the image model with the same reference images. The revised prompt should be natural, concise, and focused on correcting the observed issue while preserving the original intent.',
+      'If passed is true, revisedPrompt must be an empty string.',
       '',
       originalPromptLine,
       '',
@@ -1201,7 +1197,7 @@ export class GeminiService {
       this.truncatePromptForOptimizer(request.prompt, OUTPUT_VERIFICATION_MAX_PROMPT_CHARS),
       '',
       'Return only valid JSON with this exact shape:',
-      '{"score": number, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string", "aiSlopDetected": boolean, "aiSlopConfidence": number, "aiSlopIndicators": ["indicator"], "aiSlopSuggestion": "short suggestion or empty string"}'
+      '{"passed": boolean, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string", "aiSlopDetected": boolean, "aiSlopConfidence": number, "aiSlopIndicators": ["indicator"], "aiSlopSuggestion": "short suggestion or empty string"}'
     ].filter(Boolean).join('\n');
   }
 
@@ -1233,8 +1229,7 @@ export class GeminiService {
 
   private parseOutputVerificationResult(
     raw: string,
-    fallbackPrompt: string,
-    threshold: number
+    fallbackPrompt: string
   ): ImageOutputVerificationResult {
     const normalized = raw
       .replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1')
@@ -1243,7 +1238,9 @@ export class GeminiService {
 
     try {
       const parsed = JSON.parse(jsonText) as {
-        score?: unknown;
+        passed?: unknown;
+        acceptable?: unknown;
+        ok?: unknown;
         summary?: unknown;
         issues?: unknown;
         revisedPrompt?: unknown;
@@ -1252,8 +1249,10 @@ export class GeminiService {
         aiSlopIndicators?: unknown;
         aiSlopSuggestion?: unknown;
       };
-      const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score))));
-      const validScore = Number.isFinite(score) ? score : 0;
+      const decisionValue = parsed.passed ?? parsed.acceptable ?? parsed.ok;
+      const passed =
+        decisionValue === true ||
+        (typeof decisionValue === 'string' && ['true', 'yes', 'pass', 'passed', 'acceptable', 'ok'].includes(decisionValue.trim().toLowerCase()));
       const aiSlopConfidence = Math.max(0, Math.min(100, Math.round(Number(parsed.aiSlopConfidence))));
       const validAiSlopConfidence = Number.isFinite(aiSlopConfidence) ? aiSlopConfidence : undefined;
       const issues = Array.isArray(parsed.issues)
@@ -1270,9 +1269,9 @@ export class GeminiService {
         : [];
       const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
         ? parsed.summary.trim()
-        : validScore >= threshold
+        : passed
           ? 'The generated image satisfies the prompt.'
-          : 'The generated image does not satisfy the prompt closely enough.';
+          : 'The generated image does not deliver the prompt objective well enough.';
       const revisedPrompt = typeof parsed.revisedPrompt === 'string'
         ? this.cleanOptimizedPrompt(parsed.revisedPrompt, fallbackPrompt)
         : fallbackPrompt;
@@ -1284,11 +1283,10 @@ export class GeminiService {
         : '';
 
       return {
-        score: validScore,
-        passed: validScore >= threshold,
+        passed,
         summary,
         issues,
-        revisedPrompt: validScore >= threshold ? undefined : revisedPrompt,
+        revisedPrompt: passed ? undefined : revisedPrompt,
         aiSlopDetected,
         aiSlopConfidence: validAiSlopConfidence,
         aiSlopIndicators,
@@ -1296,10 +1294,9 @@ export class GeminiService {
       };
     } catch {
       return {
-        score: 0,
         passed: false,
         summary: 'Output verification returned an unreadable response.',
-        issues: ['The verifier could not produce a valid score for the generated image.'],
+        issues: ['The verifier could not produce a valid accept/retry decision for the generated image.'],
         revisedPrompt: fallbackPrompt,
         aiSlopDetected: false
       };
