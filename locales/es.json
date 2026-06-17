@@ -1076,6 +1076,7 @@
     },
     "promptBar": {
       "placeholder": "Describe tu visión arquitectónica...",
+      "placeholderShort": "Describe...",
       "pressEnter": "Presiona Enter para generar"
     },
     "compare": {

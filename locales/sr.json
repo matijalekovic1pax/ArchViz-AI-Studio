@@ -1079,6 +1079,7 @@
     },
     "promptBar": {
       "placeholder": "Describe your architectural vision...",
+      "placeholderShort": "Describe...",
       "pressEnter": "Press Enter to Generate"
     },
     "compare": {

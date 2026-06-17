@@ -52,6 +52,7 @@ const PromptBar: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [useCompactPlaceholder, setUseCompactPlaceholder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyContainerRef = useRef<HTMLDivElement>(null);
@@ -60,12 +61,25 @@ const PromptBar: React.FC = () => {
   const generationStageLabel = state.generationStage
     ? t(GENERATION_STAGE_LABEL_KEYS[state.generationStage])
     : t('generation.generating');
+  const promptPlaceholder = useCompactPlaceholder
+    ? t('canvas.promptBar.placeholderShort', { defaultValue: t('canvas.promptBar.placeholder') })
+    : t('canvas.promptBar.placeholder');
 
   const formatModeLabel = (mode: string) => mode.replace(/-/g, ' ');
   const truncatePrompt = (text: string, maxChars = 220) => {
     if (text.length <= maxChars) return text;
     return `${text.slice(0, maxChars).trimEnd()}...`;
   };
+  const resizePromptInput = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    if (!textarea.value.trim()) {
+      textarea.style.height = '48px';
+      return;
+    }
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+  }, []);
 
   useEffect(() => {
     if (!isHistoryOpen) return;
@@ -80,21 +94,36 @@ const PromptBar: React.FC = () => {
   }, [isHistoryOpen]);
 
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 520px)');
+    const updatePlaceholderMode = () => setUseCompactPlaceholder(media.matches);
+    updatePlaceholderMode();
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', updatePlaceholderMode);
+      return () => media.removeEventListener('change', updatePlaceholderMode);
+    }
+
+    media.addListener(updatePlaceholderMode);
+    return () => media.removeListener(updatePlaceholderMode);
+  }, []);
+
+  useEffect(() => {
     if (state.mode !== 'generate-text') return;
     if (state.prompt === inputText) return;
     setInputText(state.prompt);
-    requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
-    });
   }, [inputText, state.mode, state.prompt]);
+
+  useLayoutEffect(() => {
+    resizePromptInput();
+  }, [inputText, resizePromptInput]);
 
   const isHeadshotReady = state.mode === 'headshot' &&
     Boolean(state.workflow.headshot.leftImage || state.workflow.headshot.frontImage || state.workflow.headshot.rightImage);
+  const hasPromptContent = inputText.trim().length > 0 || attachments.length > 0 || isHeadshotReady;
+  const composerIsActive = Boolean(inputText.trim() || attachments.length > 0 || isHistoryOpen || state.isGenerating);
 
   const handleGenerate = async () => {
-    if ((!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating) return;
+    if (!hasPromptContent || state.isGenerating) return;
 
     const promptText = inputText;
     const promptAttachments = attachments.slice();
@@ -147,7 +176,7 @@ const PromptBar: React.FC = () => {
       setInputText(next);
       dispatch({ type: 'SET_PROMPT', payload: next });
       e.target.style.height = 'auto';
-      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+      e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
   };
 
   const handleHistorySelect = (prompt: string, historyAttachments?: string[]) => {
@@ -158,37 +187,41 @@ const PromptBar: React.FC = () => {
       requestAnimationFrame(() => {
           if (textareaRef.current) {
               textareaRef.current.style.height = 'auto';
-              textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+              textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
               textareaRef.current.focus();
           }
       });
   };
 
   return (
-    <div className="w-full max-w-[770px] px-2 sm:px-0 pointer-events-auto transform transition-all duration-300 sm:hover:scale-[1.005]">
-        <div className="relative flex items-center gap-3">
+    <div className="w-full max-w-[900px] px-3 sm:px-4 pointer-events-auto transform transition-all duration-300">
+        <div className="relative flex items-end gap-2 sm:gap-3">
             <div className="relative shrink-0" ref={historyContainerRef}>
                 <button
                     onClick={() => setIsHistoryOpen((prev) => !prev)}
                     className={cn(
-                        "w-12 h-12 rounded-full bg-white/90 backdrop-blur-xl border border-white/70 shadow-xl flex items-center justify-center transition-all",
-                        "hover:bg-white hover:shadow-2xl hover:scale-105 active:scale-95",
-                        isHistoryOpen ? "ring-2 ring-accent/40" : "ring-1 ring-black/5"
+                        "group relative h-12 w-12 overflow-hidden rounded-2xl border border-white/70 bg-surface-elevated/90 shadow-elevated ring-1 ring-black/5 backdrop-blur-xl transition-all",
+                        "hover:-translate-y-0.5 hover:bg-white hover:shadow-2xl active:translate-y-0 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                        isHistoryOpen && "border-accent/50 bg-accent-muted/60 text-foreground shadow-2xl"
                     )}
                     title={t('canvas.promptHistory.title')}
                     aria-expanded={isHistoryOpen}
                 >
-                    <History size={18} className="text-foreground" />
+                    <span className="absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                    <History size={18} className={cn("mx-auto text-foreground-secondary transition-colors", isHistoryOpen && "text-foreground")} />
                 </button>
 
                 {isHistoryOpen && (
                     <div className="absolute bottom-full left-0 mb-3 z-50">
-                        <div className="w-[420px] max-w-[85vw] max-h-[60vh] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/70 ring-1 ring-black/5 overflow-hidden flex flex-col">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle/60">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-foreground-muted">{t('canvas.promptHistory.title')}</div>
+                        <div className="flex max-h-[60vh] w-[430px] max-w-[85vw] flex-col overflow-hidden rounded-[1.35rem] border border-white/70 bg-surface-elevated/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-2xl">
+                            <div className="flex items-center justify-between border-b border-border-subtle/70 bg-background-secondary/60 px-4 py-3">
+                                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-foreground-secondary">
+                                    <Sparkles size={13} className="text-accent" />
+                                    {t('canvas.promptHistory.title')}
+                                </div>
                                 <button
                                     onClick={() => setIsHistoryOpen(false)}
-                                    className="p-1 rounded-full text-foreground-muted hover:text-foreground hover:bg-surface-sunken transition-colors"
+                                    className="rounded-full p-1 text-foreground-muted transition-colors hover:bg-surface-sunken hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                                     title={t('common.close')}
                                 >
                                     <X size={14} />
@@ -207,7 +240,7 @@ const PromptBar: React.FC = () => {
                                                 key={item.id}
                                                 type="button"
                                                 onClick={() => handleHistorySelect(item.prompt, item.attachments)}
-                                                className="w-full text-left rounded-xl border border-border bg-white/80 p-3 shadow-sm hover:shadow-md hover:border-foreground/20 transition-all"
+                                                className="w-full rounded-2xl border border-border-subtle bg-white/75 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                                             >
                                                 <div className="flex items-center justify-between text-[10px] text-foreground-muted font-semibold uppercase tracking-wider">
                                                     <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -229,18 +262,26 @@ const PromptBar: React.FC = () => {
                 )}
             </div>
 
-            <div className={cn(
-                "flex-1 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 ring-0 flex flex-col overflow-hidden transition-shadow duration-300",
-                (inputText || attachments.length > 0) ? "shadow-2xl bg-white" : "hover:bg-white/95"
-            )}>
+            <div
+                className={cn(
+                    "group relative flex flex-1 flex-col overflow-hidden rounded-[1.7rem] border border-white/70 bg-surface-elevated/90 shadow-elevated ring-1 ring-black/5 backdrop-blur-2xl transition-all duration-300",
+                    "before:pointer-events-none before:absolute before:inset-x-8 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/80 before:to-transparent before:content-['']",
+                    "after:pointer-events-none after:absolute after:-inset-x-4 after:-bottom-10 after:h-20 after:bg-accent/20 after:blur-3xl after:transition-opacity after:duration-500 after:content-['']",
+                    composerIsActive ? "border-accent/40 bg-white after:opacity-80" : "after:opacity-0 hover:border-white hover:bg-white/95 hover:shadow-2xl",
+                    "focus-within:border-accent/60 focus-within:bg-white focus-within:shadow-2xl focus-within:ring-2 focus-within:ring-accent/25"
+                )}
+            >
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/80 via-white/35 to-accent-muted/35" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-80" />
                 {attachments.length > 0 && (
-                    <div className="flex gap-3 px-4 pt-4 pb-1 overflow-x-auto custom-scrollbar">
+                    <div className="relative z-10 flex gap-3 overflow-x-auto px-4 pb-1 pt-4 custom-scrollbar">
                         {attachments.map((att, idx) => (
-                            <div key={idx} className="relative group w-14 h-14 shrink-0 animate-scale-in">
-                                <img src={att} className="w-full h-full object-cover rounded-xl border border-black/10 shadow-sm" />
+                            <div key={idx} className="group/attachment relative h-14 w-14 shrink-0 animate-scale-in rounded-2xl bg-background-secondary p-1 shadow-sm ring-1 ring-black/5">
+                                <img src={att} className="h-full w-full rounded-xl border border-white/80 object-cover shadow-sm" />
                                 <button 
                                     onClick={() => removeAttachment(idx)}
-                                    className="absolute -top-1.5 -right-1.5 bg-white text-foreground border border-border rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-600 hover:scale-110 z-10"
+                                    className="absolute -right-1.5 -top-1.5 z-10 rounded-full border border-border bg-white p-0.5 text-foreground opacity-0 shadow-md transition-all hover:scale-110 hover:bg-red-50 hover:text-red-600 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 group-hover/attachment:opacity-100"
+                                    title={t('common.remove')}
                                 >
                                     <X size={12} />
                                 </button>
@@ -249,37 +290,44 @@ const PromptBar: React.FC = () => {
                     </div>
                 )}
 
-                <div className="flex items-center gap-1 p-2 pl-3">
+                <div className="relative z-10 flex items-end gap-1.5 p-2 pl-2.5">
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-3 text-foreground-muted hover:text-foreground hover:bg-surface-sunken rounded-full transition-all shrink-0 active:scale-95"
+                        className="mb-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-foreground-muted transition-all hover:-translate-y-0.5 hover:bg-surface-sunken hover:text-foreground active:translate-y-0 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/45"
                         title={t('canvas.promptHistory.addReference')}
                     >
-                        <Plus size={20} strokeWidth={2.5} />
+                        <Paperclip size={18} strokeWidth={2.35} />
                     </button>
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileSelect} />
+
+                    <div className="mb-0.5 hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border-subtle bg-background-secondary/70 text-accent shadow-sm sm:flex">
+                        <Wand2 size={18} strokeWidth={2.2} />
+                    </div>
                     
                     <textarea
                         ref={textareaRef}
                         value={inputText}
                         onChange={handleInput}
                         onKeyDown={handleKeyDown}
-                        placeholder={t('canvas.promptBar.placeholder')}
-                        className="flex-1 bg-transparent border-0 focus:ring-0 resize-none py-3.5 px-2 max-h-[140px] text-[15px] leading-relaxed custom-scrollbar placeholder:text-foreground-muted/60 font-medium text-foreground"
+                        placeholder={promptPlaceholder}
+                        className={cn(
+                            "max-h-[140px] min-h-[48px] flex-1 resize-none border-0 bg-transparent px-2 py-3 text-[15px] font-medium leading-relaxed text-foreground outline-none custom-scrollbar placeholder:text-foreground-muted/55 focus:outline-none focus:ring-0",
+                            !inputText.trim() && "overflow-hidden whitespace-nowrap"
+                        )}
                         rows={1}
                     />
                     
                     <button 
                         aria-label="generate-trigger"
                         onClick={handleGenerate}
-                        disabled={(!inputText.trim() && attachments.length === 0 && !isHeadshotReady) || state.isGenerating}
+                        disabled={!hasPromptContent || state.isGenerating}
                         className={cn(
-                            "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full transition-all group",
+                            "group/send relative mb-0.5 flex h-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                             state.isGenerating
-                                ? "min-w-[7.25rem] gap-2 bg-foreground text-background px-4 py-3 shadow-lg"
-                                : (!inputText.trim() && attachments.length === 0 && !isHeadshotReady)
-                                    ? "p-3 bg-transparent text-foreground-muted"
-                                    : "p-3 bg-foreground text-background shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+                                ? "min-w-[8rem] gap-2 border-foreground bg-foreground px-4 text-background shadow-lg"
+                                : !hasPromptContent
+                                    ? "w-11 border-transparent bg-surface-sunken/70 text-foreground-muted"
+                                    : "w-11 border-foreground bg-foreground text-background shadow-lg hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 active:scale-95"
                         )}
                     >
                         {state.isGenerating && (
@@ -289,24 +337,39 @@ const PromptBar: React.FC = () => {
                                 style={{ width: `${generationProgress}%` }}
                             />
                         )}
+                        {!state.isGenerating && hasPromptContent && (
+                            <span className="absolute inset-0 translate-x-[-120%] bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover/send:translate-x-[120%]" />
+                        )}
                         {state.isGenerating ? (
                             <>
-                                <RefreshCw size={18} className="relative z-10 shrink-0 animate-spin" />
+                                <RefreshCw size={17} className="relative z-10 shrink-0 animate-spin" />
                                 <span className="relative z-10 flex min-w-0 flex-col items-start leading-none">
-                                    <span className="max-w-[4.5rem] truncate text-[10px] font-bold">{generationStageLabel}</span>
-                                    <span className="font-mono text-[9px] opacity-80 tabular-nums">{generationProgress}%</span>
+                                    <span className="max-w-[5.2rem] truncate text-[10px] font-bold">{generationStageLabel}</span>
+                                    <span className="font-mono text-[9px] tabular-nums opacity-80">{generationProgress}%</span>
                                 </span>
                             </>
                         ) : (
-                            <div className="relative">
-                                <Sparkles size={20} className={cn((inputText || attachments.length > 0 || isHeadshotReady) && "text-accent fill-accent animate-pulse-subtle")} />
+                            <div className="relative z-10">
+                                {hasPromptContent ? (
+                                    <Send size={18} strokeWidth={2.3} className="transition-colors group-hover/send:text-accent" />
+                                ) : (
+                                    <Sparkles size={18} className="text-foreground-muted" />
+                                )}
                             </div>
                         )}
                     </button>
                 </div>
+                {state.isGenerating && (
+                    <div className="relative z-10 h-1 bg-border-subtle/60">
+                        <div
+                            className="h-full rounded-r-full bg-accent transition-[width] duration-500 ease-out"
+                            style={{ width: `${generationProgress}%` }}
+                        />
+                    </div>
+                )}
             </div>
         </div>
-        <div className="text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-500">
+        <div className="mt-3 text-center opacity-0 transition-opacity duration-500 hover:opacity-100">
             <span className="text-[10px] text-foreground-muted/50 font-medium tracking-wide">
                 {t('canvas.promptBar.pressEnter')}
             </span>
