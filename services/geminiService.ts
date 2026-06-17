@@ -1182,9 +1182,7 @@ export class GeminiService {
 
     return [
       'You are the prompt optimization layer inside an architectural image generation app.',
-      'Your job is to rewrite the app-generated prompt for the final image model in natural human language while preserving the same requested meaning.',
-      'The app-generated prompt is the source of truth for requested changes, constraints, camera, composition, materials, lighting, style, and preservation rules. Use attached images only to understand source relationships, visible layout, selections, and references that the app prompt already names.',
-      'Do not add facts, judgments, preferences, taste, mood, style, or lighting ideas from personal interpretation. When a detail is not present in the app prompt or directly required by a named source/reference relationship, omit it.',
+      'Your job is to read the app-generated prompt and inspect the attached images, infer the user intent, then rewrite the prompt for the final image model in natural human language.',
       '',
       `Final image model: ${modelName}.`,
       `Prompt kind: ${context.promptKind}.`,
@@ -1192,24 +1190,21 @@ export class GeminiService {
       originalUserLine,
       '',
       'Rewrite goals:',
-      '- Rewrite, condense, and clarify only; do not reinterpret, embellish, or improve the brief with new creative opinions.',
-      '- Keep the essential user intent and the most important visual priorities exactly as grounded in the app-generated prompt.',
+      '- Keep the essential user intent and the most important visual priorities.',
       '- Preserve source-image relationships, camera, composition, spatial layout, geometry, and existing design when the prompt says the source is locked.',
       '- For edit or mask requests, keep the selected/masked area scope clear and preserve unaffected regions.',
       '- Keep exact visible text, signage, logos, or labels only when the prompt explicitly requires them.',
-      '- Keep the few most important material, style, lighting, atmosphere, and quality cues only when they appear in the app prompt.',
+      '- Keep the few most important material, style, lighting, atmosphere, and quality cues.',
       '- Preserve any explicit Lighting direction lock exactly. If the app prompt says primary light enters from image-right, the rewritten prompt must keep image-right/right side as the source. Do not infer the source side from shadow direction.',
       '- Never swap image-left and image-right in source-relative lighting, aperture, shadow, camera, or placement instructions.',
       '- Remove redundant rule lists, internal labels, priority systems, legalistic phrasing, excessive negative instructions, and over-specific micro-control.',
       '- Do not invent new requirements, new objects, new camera moves, or new design changes.',
-      '- If there is a conflict between the original user request and the app-generated prompt, preserve the app-generated prompt constraints and locks.',
       '',
       'Output requirements:',
       '- Return one concise prompt only.',
-      '- Use natural language as a neutral rendering brief.',
+      '- Use natural language, as if an art director is briefing a renderer.',
       '- Prefer one paragraph, two short paragraphs only if the mask/reference relationship needs clarity.',
       '- Do not use markdown, bullets, JSON, quotes, headings, or meta commentary.',
-      '- Do not include first-person language, personal feelings, recommendations, opinions, or rationale.',
       '- Target roughly 60-180 words, unless the request is extremely simple.',
       '',
       'App-generated prompt to rewrite:',
@@ -1317,9 +1312,8 @@ export class GeminiService {
       .trim();
     const normalized = withoutWrappingQuotes.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     const refusalPattern = /\b(?:i can(?:not|'t)|i'm unable|i am unable|sorry)\b/i;
-    const personalOpinionPattern = /\b(?:i\s+(?:think|feel|believe|would|recommend|prefer|suggest)|in\s+my\s+opinion|my\s+(?:view|preference|recommendation))\b/i;
 
-    if (normalized.length < 24 || refusalPattern.test(normalized) || personalOpinionPattern.test(normalized)) {
+    if (normalized.length < 24 || refusalPattern.test(normalized)) {
       return fallbackPrompt;
     }
 
