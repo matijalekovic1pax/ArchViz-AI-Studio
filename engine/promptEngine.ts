@@ -2086,39 +2086,26 @@ const describeLightSourcePosition = (azimuth: number, elevation: number): string
     return side;
   })();
 
-  const sourceSide = frameDirection.includes('left')
-    ? 'image-left'
-    : frameDirection.includes('right')
-      ? 'image-right'
-      : null;
-  const oppositeSide = sourceSide === 'image-left'
-    ? 'image-right'
-    : sourceSide === 'image-right'
-      ? 'image-left'
-      : null;
-
   const lightingEffect: Record<string, string> = {
     front: 'visible faces should brighten evenly, with shadows pushed subtly behind objects',
     back: 'the scene should gain backlight, rim highlights, and shadows falling toward the viewer',
     centered: 'illumination should feel centered and balanced from the viewer direction',
-    left: 'the source remains on image-left; shadows should travel across the frame toward image-right',
-    right: 'the source remains on image-right; shadows should travel across the frame toward image-left',
-    'front-left': 'the source remains on image-left and the camera side; visible faces should catch that light, with shadows falling back and image-right',
-    'front-right': 'the source remains on image-right and the camera side; visible faces should catch that light, with shadows falling back and image-left',
+    left: 'shadows should travel across the frame toward the right',
+    right: 'shadows should travel across the frame toward the left',
+    'front-left': 'visible faces should catch light from image-left and the camera side, with shadows falling back and right',
+    'front-right': 'visible faces should catch light from image-right and the camera side, with shadows falling back and left',
     'back-left': 'the image-left rear should act as the source, producing backlit edges and shadows toward the front-right',
     'back-right': 'the image-right rear should act as the source, producing backlit edges and shadows toward the front-left',
   };
 
-  const directionLockInstruction = sourceSide && oppositeSide
-    ? `Lighting direction lock: primary light enters from ${sourceSide}; do not describe the source as ${oppositeSide}. ${oppositeSide} may describe shadow falloff only, never the light source side.`
-    : `Lighting direction lock: primary light direction is ${frameDirection}; do not invent a left or right source side.`;
-
   const sideApertureInstruction = (() => {
-    if (!sourceSide || !oppositeSide) return '';
-    return `For interior or terminal scenes, physically anchor this light to existing ${sourceSide} apertures: doors, glazed entries, windows, curtain wall openings, or bright exterior portals visible in the source image. If the source shows a sign above or near that ${sourceSide} aperture, treat the doorway/glazing under that sign as the believable light entry point, but preserve the sign text exactly. The brightest glow, floor highlights, and first contact shadows should originate from that ${sourceSide} opening and fall naturally toward ${oppositeSide}.`;
+    if (!frameDirection.includes('left') && !frameDirection.includes('right')) return '';
+    const side = frameDirection.includes('left') ? 'image-left' : 'image-right';
+    const opposite = frameDirection.includes('left') ? 'right' : 'left';
+    return `For interior or terminal scenes, physically anchor this light to existing ${side} apertures: doors, glazed entries, windows, curtain wall openings, or bright exterior portals visible in the source image. If the source shows a sign above or near that ${side} aperture, treat the doorway/glazing under that sign as the believable light entry point, but preserve the sign text exactly. The brightest glow, floor highlights, and first contact shadows should originate from that ${side} opening and fall naturally toward image-${opposite}.`;
   })();
 
-  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). ${directionLockInstruction} Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right, not as a geographic compass angle. ${lightingEffect[frameDirection]}. ${sideApertureInstruction}`;
+  return `primary light source placed camera-relative from the ${frameDirection} (${horizontal}, ${depth}). Treat Front as camera-side, Back as the deeper scene, Left as image-left, and Right as image-right, not as a geographic compass angle. ${lightingEffect[frameDirection]}. ${sideApertureInstruction}`;
 };
 
 const describeSunIntensity = (intensity: number): string => {

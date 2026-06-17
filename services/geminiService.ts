@@ -1195,8 +1195,6 @@ export class GeminiService {
       '- For edit or mask requests, keep the selected/masked area scope clear and preserve unaffected regions.',
       '- Keep exact visible text, signage, logos, or labels only when the prompt explicitly requires them.',
       '- Keep the few most important material, style, lighting, atmosphere, and quality cues.',
-      '- Preserve any explicit Lighting direction lock exactly. If the app prompt says primary light enters from image-right, the rewritten prompt must keep image-right/right side as the source. Do not infer the source side from shadow direction.',
-      '- Never swap image-left and image-right in source-relative lighting, aperture, shadow, camera, or placement instructions.',
       '- Remove redundant rule lists, internal labels, priority systems, legalistic phrasing, excessive negative instructions, and over-specific micro-control.',
       '- Do not invent new requirements, new objects, new camera moves, or new design changes.',
       '',
@@ -1259,48 +1257,6 @@ export class GeminiService {
     return `${prompt.slice(0, headLength)}\n\n[...middle of app prompt omitted for brevity...]\n\n${prompt.slice(-tailLength)}`;
   }
 
-  private extractLightingDirectionLock(prompt: string): { side: 'image-left' | 'image-right'; opposite: 'image-left' | 'image-right' } | null {
-    const match = prompt.match(/Lighting direction lock:\s*primary light enters from\s+(image-left|image-right)\b/i);
-    if (!match) return null;
-    const side = match[1].toLowerCase() as 'image-left' | 'image-right';
-    return {
-      side,
-      opposite: side === 'image-left' ? 'image-right' : 'image-left'
-    };
-  }
-
-  private optimizedPromptContradictsLightingLock(prompt: string, oppositeSide: 'image-left' | 'image-right'): boolean {
-    const side = oppositeSide === 'image-left' ? '(?:image-left|left)' : '(?:image-right|right)';
-    const lightTerms = '(?:primary\\s+)?(?:light|lighting|sun|sunlight|daylight|illumination|glow|source|aperture|window|opening|portal)';
-    const fromSideThenLight = new RegExp(`\\b(?:from|through|at|on|near|via|by|beside|along|entering\\s+from|streaming\\s+(?:in\\s+)?from|originating\\s+from|anchored\\s+to)\\s+(?:the\\s+)?${side}(?:\\s+side)?\\b.{0,70}\\b${lightTerms}\\b`, 'i');
-    const lightThenFromSide = new RegExp(`\\b${lightTerms}\\b.{0,90}\\b(?:from|through|at|on|near|via|by|beside|along|entering\\s+from|streaming\\s+(?:in\\s+)?from|originating\\s+from|anchored\\s+to)\\s+(?:the\\s+)?${side}(?:\\s+side)?\\b`, 'i');
-    return fromSideThenLight.test(prompt) || lightThenFromSide.test(prompt);
-  }
-
-  private optimizedPromptMentionsLightingLock(prompt: string, lockedSide: 'image-left' | 'image-right'): boolean {
-    const side = lockedSide === 'image-left' ? '(?:image-left|left)' : '(?:image-right|right)';
-    const lightTerms = '(?:primary\\s+)?(?:light|lighting|sun|sunlight|daylight|illumination|glow|source|aperture|window|opening|portal)';
-    const fromSideThenLight = new RegExp(`\\b(?:from|through|at|on|near|via|by|beside|along|entering\\s+from|streaming\\s+(?:in\\s+)?from|originating\\s+from|anchored\\s+to)\\s+(?:the\\s+)?${side}(?:\\s+side)?\\b.{0,70}\\b${lightTerms}\\b`, 'i');
-    const lightThenFromSide = new RegExp(`\\b${lightTerms}\\b.{0,90}\\b(?:from|through|at|on|near|via|by|beside|along|entering\\s+from|streaming\\s+(?:in\\s+)?from|originating\\s+from|anchored\\s+to)\\s+(?:the\\s+)?${side}(?:\\s+side)?\\b`, 'i');
-    return fromSideThenLight.test(prompt) || lightThenFromSide.test(prompt);
-  }
-
-  private enforceOptimizedLightingDirectionLock(prompt: string, fallbackPrompt: string): string {
-    const lock = this.extractLightingDirectionLock(fallbackPrompt);
-    if (!lock) return prompt;
-
-    if (this.optimizedPromptContradictsLightingLock(prompt, lock.opposite)) {
-      console.warn('Prompt optimizer contradicted locked lighting direction; using the original image prompt.');
-      return fallbackPrompt;
-    }
-
-    if (this.optimizedPromptMentionsLightingLock(prompt, lock.side)) {
-      return prompt;
-    }
-
-    return `${prompt} Keep the primary light source anchored on ${lock.side}; ${lock.opposite} may describe shadow falloff only, not the light source side.`;
-  }
-
   private cleanOptimizedPrompt(optimized: string, fallbackPrompt: string): string {
     const strippedFence = optimized
       .replace(/```(?:text|markdown|md)?\s*([\s\S]*?)```/gi, '$1')
@@ -1317,7 +1273,7 @@ export class GeminiService {
       return fallbackPrompt;
     }
 
-    return this.enforceOptimizedLightingDirectionLock(normalized, fallbackPrompt);
+    return normalized;
   }
 
   private parseOutputVerificationResult(
