@@ -320,7 +320,8 @@ const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
   return images[images.length - 1];
 };
 
-const PRECISE_EDIT_MAX_PIXELS = 2_560 * 1_440;
+const PRECISE_EDIT_MAX_LONG_EDGE = 2_048;
+const PRECISE_EDIT_MAX_PIXELS = 2_048 * 1_152;
 const PRECISE_EDIT_MIN_PIXELS = 655_360;
 
 const getPreciseEditSize = (width: number, height: number) => {
@@ -329,7 +330,12 @@ const getPreciseEditSize = (width: number, height: number) => {
   if (ratio > 3 || ratio < 1 / 3) return null;
 
   const pixels = width * height;
-  let scale = Math.min(1, Math.sqrt(PRECISE_EDIT_MAX_PIXELS / Math.max(pixels, 1)));
+  const longEdge = Math.max(width, height);
+  let scale = Math.min(
+    1,
+    PRECISE_EDIT_MAX_LONG_EDGE / Math.max(longEdge, 1),
+    Math.sqrt(PRECISE_EDIT_MAX_PIXELS / Math.max(pixels, 1))
+  );
   if (pixels * scale * scale < PRECISE_EDIT_MIN_PIXELS) {
     scale = Math.sqrt(PRECISE_EDIT_MIN_PIXELS / Math.max(pixels, 1));
   }
@@ -342,11 +348,48 @@ const getPreciseEditSize = (width: number, height: number) => {
   };
 };
 
+const renderOpenAIEditableMaskDataUrl = async (
+  imageSrc: string,
+  width: number,
+  height: number
+): Promise<{ dataUrl: string; selectedPixels: number; selectedRatio: number }> => {
+  const image = await loadCanvasImage(imageSrc);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to prepare selection mask for precise edit.');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+  let selectedPixels = 0;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
+    const selected = value >= 12;
+    if (selected) selectedPixels += 1;
+    pixels[index] = 255;
+    pixels[index + 1] = 255;
+    pixels[index + 2] = 255;
+    pixels[index + 3] = selected ? 255 : 0;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return {
+    dataUrl: canvas.toDataURL('image/png'),
+    selectedPixels,
+    selectedRatio: selectedPixels / Math.max(width * height, 1),
+  };
+};
+
 const renderImageToPngDataUrl = async (
   imageSrc: string,
   width: number,
-  height: number,
-  options: { mask?: boolean } = {}
+  height: number
 ): Promise<string> => {
   const image = await loadCanvasImage(imageSrc);
   const canvas = document.createElement('canvas');
@@ -357,23 +400,9 @@ const renderImageToPngDataUrl = async (
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = options.mask ? '#000000' : '#ffffff';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(image, 0, 0, width, height);
-
-  if (options.mask) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const pixels = imageData.data;
-    for (let index = 0; index < pixels.length; index += 4) {
-      const value = (pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3;
-      const normalized = value >= 12 ? 255 : 0;
-      pixels[index] = normalized;
-      pixels[index + 1] = normalized;
-      pixels[index + 2] = normalized;
-      pixels[index + 3] = 255;
-    }
-    ctx.putImageData(imageData, 0, 0);
-  }
 
   return canvas.toDataURL('image/png');
 };
@@ -388,9 +417,9 @@ const preparePreciseEditInputs = async (sourceDataUrl: string, selectionMaskData
   }
 
   const sourcePng = await renderImageToPngDataUrl(sourceDataUrl, size.width, size.height);
-  const maskPng = await renderImageToPngDataUrl(selectionMaskDataUrl, size.width, size.height, { mask: true });
+  const maskPng = await renderOpenAIEditableMaskDataUrl(selectionMaskDataUrl, size.width, size.height);
   const sourceImageData = ImageUtils.dataUrlToImageData(sourcePng);
-  const selectionMaskData = ImageUtils.dataUrlToImageData(maskPng);
+  const selectionMaskData = ImageUtils.dataUrlToImageData(maskPng.dataUrl);
   if (!sourceImageData || !selectionMaskData) {
     throw new Error('Failed to prepare source image and selection mask.');
   }
@@ -407,6 +436,10 @@ const preparePreciseEditInputs = async (sourceDataUrl: string, selectionMaskData
       mimeType: 'image/png' as const,
       width: size.width,
       height: size.height,
+    },
+    selectionStats: {
+      selectedPixels: maskPng.selectedPixels,
+      selectedRatio: maskPng.selectedRatio,
     },
   };
 };
@@ -2941,6 +2974,7 @@ export function useGeneration(): UseGenerationReturn {
                 const editResponse = await imageEditRequest({
                   sourceImage: preciseInputs.sourceImage,
                   selectionMask: preciseInputs.selectionMask,
+                  selectionStats: preciseInputs.selectionStats,
                   referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
                   prompt: promptForAttempt,
                   operation: getPreciseEditOperation(activeVisualTool),
@@ -2956,9 +2990,15 @@ export function useGeneration(): UseGenerationReturn {
                 }, { signal: abortSignal });
                 updateGenerationStage('transfer');
                 updateProgress(88);
+                const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
+                const compositedImages = await Promise.all(
+                  editedImages.map((image) =>
+                    compositeVisualEditResult(sourceImageUrl!, image, localSelectionMaskDataUrl || selectedMaskDataUrl, false)
+                  )
+                );
                 return {
                   text: null,
-                  images: editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl)),
+                  images: compositedImages,
                   optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                 };
               },

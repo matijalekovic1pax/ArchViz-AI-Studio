@@ -2882,6 +2882,12 @@ function decodeImageEditBase64Image(image, label) {
   return { bytes, mimeType };
 }
 
+function getDeclaredImageEditSize(image) {
+  const width = Math.floor(clampNumber(image?.width, 0, 3840, 0));
+  const height = Math.floor(clampNumber(image?.height, 0, 3840, 0));
+  return { width, height };
+}
+
 async function createOpenAIImageProxyResponse(origin, upstreamResp) {
   const respHeaders = { ...getCorsHeaders(origin) };
   const contentType = upstreamResp.headers.get('Content-Type');
@@ -2981,55 +2987,59 @@ async function handleImageEdit(request, env, user) {
       return badRequest(origin, 'The normalized edit prompt is empty.');
     }
 
-    const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image');
-    const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
-    const [sourcePng, maskPng] = await Promise.all([
-      decodePngRgba(sourceInput.bytes),
-      decodePngRgba(maskInput.bytes),
-    ]);
-
-    if (sourcePng.width !== maskPng.width || sourcePng.height !== maskPng.height) {
+    const sourceSize = getDeclaredImageEditSize(body.sourceImage);
+    const maskSize = getDeclaredImageEditSize(body.selectionMask);
+    if (!sourceSize.width || !sourceSize.height || !maskSize.width || !maskSize.height) {
+      return badRequest(origin, 'Source image and selection mask dimensions are required.');
+    }
+    if (sourceSize.width !== maskSize.width || sourceSize.height !== maskSize.height) {
       return badRequest(origin, 'Selection mask dimensions must match the source image.');
     }
-    if (sourcePng.width % 16 !== 0 || sourcePng.height % 16 !== 0) {
+    if (sourceSize.width % 16 !== 0 || sourceSize.height % 16 !== 0) {
       return badRequest(origin, 'The image dimensions must be divisible by 16 for precise editing.');
     }
 
-    const totalPixels = sourcePng.width * sourcePng.height;
-    if (totalPixels > 3_686_400) {
-      return badRequest(origin, 'The image is too large to process. Use a 2K-or-smaller source for precise edits.');
+    const longEdge = Math.max(sourceSize.width, sourceSize.height);
+    const shortEdge = Math.max(1, Math.min(sourceSize.width, sourceSize.height));
+    const totalPixels = sourceSize.width * sourceSize.height;
+    if (longEdge > 3840 || longEdge / shortEdge > 3 || totalPixels < 655_360 || totalPixels > 8_294_400) {
+      return badRequest(origin, 'The image size is outside GPT Image edit limits.');
     }
 
-    const selectedAlpha = rgbaToSelectionAlpha(maskPng);
-    const stats = alphaStats(selectedAlpha);
-    if (stats.selected === 0) {
-      return badRequest(origin, 'Please select an area to edit.');
-    }
-    if (stats.ratio < 0.0025) {
-      return badRequest(origin, 'The selected area is too small.');
-    }
-    if (operation !== 'custom' && stats.ratio > 0.7) {
-      return badRequest(origin, 'The selected area is too large for this edit. Try a smaller mask or use a custom edit.');
+    const selectedPixels = clampNumber(body.selectionStats?.selectedPixels, 0, totalPixels, null);
+    const selectedRatio = clampNumber(
+      body.selectionStats?.selectedRatio,
+      0,
+      1,
+      selectedPixels == null ? null : selectedPixels / Math.max(totalPixels, 1)
+    );
+    if (selectedRatio != null) {
+      if (selectedRatio <= 0) {
+        return badRequest(origin, 'Please select an area to edit.');
+      }
+      if (selectedRatio < 0.0025) {
+        return badRequest(origin, 'The selected area is too small.');
+      }
+      if (operation !== 'custom' && selectedRatio > 0.7) {
+        return badRequest(origin, 'The selected area is too large for this edit. Try a smaller mask or use a custom edit.');
+      }
     }
 
-    const { dilation, feather } = getImageEditRadius(sourcePng.width, sourcePng.height, operation);
-    const dilatedAlpha = dilateAlpha(selectedAlpha, sourcePng.width, sourcePng.height, dilation);
-    const compositeMatte = boxBlurAlpha(dilatedAlpha, sourcePng.width, sourcePng.height, feather);
-    const [normalizedSourceBytes, apiMaskBytes] = await Promise.all([
-      encodePngRgba(sourcePng.width, sourcePng.height, sourcePng.data),
-      buildOpenAIAlphaMaskPng(sourcePng.width, sourcePng.height, dilatedAlpha),
-    ]);
+    const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image');
+    const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
+    const outputFormat = normalizeOpenAIOutputFormat(body.outputFormat);
+    const outputMimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
 
     const form = new FormData();
     const model = env.IMAGE_EDIT_DEFAULT_MODEL || OPENAI_IMAGE_MODEL;
     form.append('model', model);
     form.append('prompt', prompt);
     form.append('n', String(variants));
-    form.append('size', `${sourcePng.width}x${sourcePng.height}`);
+    form.append('size', `${sourceSize.width}x${sourceSize.height}`);
     form.append('quality', mapImageEditQualityToOpenAI(quality));
-    form.append('output_format', 'png');
-    form.append('image[]', new Blob([normalizedSourceBytes], { type: 'image/png' }), 'source.png');
-    form.append('mask', new Blob([apiMaskBytes], { type: 'image/png' }), 'mask.png');
+    form.append('output_format', outputFormat);
+    form.append('image[]', new Blob([sourceInput.bytes], { type: sourceInput.mimeType }), 'source.png');
+    form.append('mask', new Blob([maskInput.bytes], { type: maskInput.mimeType }), 'mask.png');
 
     const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.slice(0, 4) : [];
     referenceImages.forEach((image, index) => {
@@ -3066,45 +3076,35 @@ async function handleImageEdit(request, env, user) {
 
     const editId = crypto.randomUUID();
     const requestId = upstreamResp.headers.get('x-request-id') || upstreamResp.headers.get('openai-request-id') || null;
-    const versions = [];
-    for (let index = 0; index < rawEntries.length; index += 1) {
-      const rawBase64 = rawEntries[index]?.b64_json;
-      if (!rawBase64 || typeof rawBase64 !== 'string') continue;
-      const rawBytes = base64Decode(rawBase64);
-      const editedPng = await decodePngRgba(rawBytes);
-      if (editedPng.width !== sourcePng.width || editedPng.height !== sourcePng.height) {
-        throw new Error('The edited image dimensions did not match the source image.');
-      }
-
-      const finalRgba = compositeRgba(sourcePng, editedPng, compositeMatte);
-      const finalBytes = await encodePngRgba(sourcePng.width, sourcePng.height, finalRgba);
-      const finalBase64 = base64Encode(finalBytes);
-      versions.push({
-        id: crypto.randomUUID(),
-        imageUrl: `data:image/png;base64,${finalBase64}`,
-        rawImageUrl: `data:image/png;base64,${rawBase64}`,
-        parentImageId: null,
-        operation,
-        prompt,
-        provider: 'openai',
-        model,
-        metadata: {
-          editId,
-          variantIndex: index,
-          userEmail: user?.email || null,
-          quality,
-          openAIQuality: mapImageEditQualityToOpenAI(quality),
-          outputFormat: 'png',
-          width: sourcePng.width,
-          height: sourcePng.height,
-          selectedRatio: stats.ratio,
-          dilation,
-          feather,
-          requestId,
-          usage: data?.usage || null,
-        },
-      });
-    }
+    const versions = rawEntries
+      .map((entry, index) => {
+        const rawBase64 = entry?.b64_json;
+        if (!rawBase64 || typeof rawBase64 !== 'string') return null;
+        return {
+          id: crypto.randomUUID(),
+          imageUrl: `data:${outputMimeType};base64,${rawBase64}`,
+          rawImageUrl: `data:${outputMimeType};base64,${rawBase64}`,
+          parentImageId: null,
+          operation,
+          prompt,
+          provider: 'openai',
+          model,
+          metadata: {
+            editId,
+            variantIndex: index,
+            userEmail: user?.email || null,
+            quality,
+            openAIQuality: mapImageEditQualityToOpenAI(quality),
+            outputFormat,
+            width: sourceSize.width,
+            height: sourceSize.height,
+            selectedRatio,
+            requestId,
+            usage: data?.usage || null,
+          },
+        };
+      })
+      .filter(Boolean);
 
     if (versions.length === 0) {
       return corsResponse(origin, { error: 'OpenAI image edit returned unreadable image data.' }, { status: 502 });

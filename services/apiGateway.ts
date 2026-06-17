@@ -744,6 +744,10 @@ export interface GatewayImageEditImage {
 export interface GatewayImageEditRequest {
   sourceImage: GatewayImageEditImage;
   selectionMask: GatewayImageEditImage;
+  selectionStats?: {
+    selectedPixels?: number;
+    selectedRatio?: number;
+  };
   prompt: string;
   operation: ImageEditOperation;
   targetLabel?: string;

@@ -2161,20 +2161,29 @@ export const VisualEditPanel = () => {
 
       <div className="space-y-2">
         <label className="text-[10px] uppercase tracking-wider text-foreground-muted">Category</label>
-        <SegmentedControl
-          value={wf.visualObject.category}
-          onChange={(value) => updateObject({ category: value as ObjectCategory, subcategory: 'All', assetId: '' })}
-          options={objectCategoryOptions.map((option) => ({
-            value: option.value,
-            label: (
-              <span className="flex items-center gap-1.5">
-                <option.icon size={12} />
-                <span>{option.shortLabel}</span>
-              </span>
-            ),
-          }))}
-          className="text-[10px]"
-        />
+        <div className="grid grid-cols-1 gap-2">
+          {objectCategoryOptions.map((option) => {
+            const Icon = option.icon;
+            const active = wf.visualObject.category === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => updateObject({ category: option.value, subcategory: 'All', assetId: '' })}
+                className={cn(
+                  'flex h-10 w-full items-center gap-2 rounded border px-3 text-left text-xs font-medium transition-colors',
+                  active
+                    ? 'border-border bg-surface-elevated text-foreground shadow-subtle'
+                    : 'border-border-subtle bg-surface-sunken text-foreground-muted hover:border-border hover:text-foreground-secondary'
+                )}
+              >
+                <Icon size={14} className="shrink-0" />
+                <span className="min-w-0 truncate">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="space-y-2">
