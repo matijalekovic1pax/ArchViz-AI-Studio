@@ -376,7 +376,8 @@ const renderOpenAIEditableMaskDataUrl = async (
     pixels[index] = 255;
     pixels[index + 1] = 255;
     pixels[index + 2] = 255;
-    pixels[index + 3] = selected ? 255 : 0;
+    // OpenAI edit masks use transparency for the editable region.
+    pixels[index + 3] = selected ? 0 : 255;
   }
   ctx.putImageData(imageData, 0, 0);
 
@@ -658,8 +659,8 @@ const buildSeamlessCompositeMatte = (
     const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
     const colorDistance = Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3);
     const maxDelta = Math.max(redDelta, greenDelta, blueDelta, colorDistance);
-    const coreValue = clampByte(smoothStep(28, 74, maxDelta) * selection * 255);
-    const transitionValue = clampByte(smoothStep(16, 46, maxDelta) * selection * 255);
+    const coreValue = clampByte(smoothStep(24, 68, maxDelta) * selection * 255);
+    const transitionValue = clampByte(smoothStep(13, 42, maxDelta) * selection * 255);
     coreAlpha[index] = coreValue;
     transitionAlpha[index] = transitionValue;
     if (coreValue > 24) coreCount += 1;
@@ -687,6 +688,83 @@ const buildSeamlessCompositeMatte = (
   }
 
   return matte;
+};
+
+const getPixelLuminance = (pixels: Uint8ClampedArray, pixel: number): number =>
+  pixels[pixel] * 0.2126 + pixels[pixel + 1] * 0.7152 + pixels[pixel + 2] * 0.0722;
+
+const getPixelMaxDelta = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  pixel: number
+): number => {
+  const redDelta = Math.abs(editedPixels[pixel] - sourcePixels[pixel]);
+  const greenDelta = Math.abs(editedPixels[pixel + 1] - sourcePixels[pixel + 1]);
+  const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
+  const colorDistance = Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3);
+  return Math.max(redDelta, greenDelta, blueDelta, colorDistance);
+};
+
+const buildSelectionBoundaryAlpha = (
+  selectionAlpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+  featherAmount: number
+): Uint8ClampedArray => {
+  const longEdge = Math.max(width, height);
+  const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
+  const boundaryRadius = Math.round(Math.min(54, Math.max(8, longEdge * (0.004 + normalizedFeather * 0.008))));
+  const softSelection = blurAlpha(selectionAlpha, width, height, boundaryRadius);
+  const boundaryAlpha = new Uint8ClampedArray(selectionAlpha.length);
+
+  for (let index = 0; index < boundaryAlpha.length; index += 1) {
+    const edgeDistance = Math.min(softSelection[index], 255 - softSelection[index]);
+    const band = smoothStep(2, 52, edgeDistance) * (1 - smoothStep(154, 238, edgeDistance));
+    boundaryAlpha[index] = clampByte(band * 255);
+  }
+
+  return boundaryAlpha;
+};
+
+const buildBoundaryArtifactSuppression = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  matte: Uint8ClampedArray,
+  boundaryAlpha: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray => {
+  const longEdge = Math.max(width, height);
+  const candidates = new Uint8ClampedArray(matte.length);
+
+  for (let index = 0, pixel = 0; index < candidates.length; index += 1, pixel += 4) {
+    const boundary = boundaryAlpha[index] / 255;
+    if (boundary <= 0.03 || matte[index] < 10) continue;
+
+    const sourceLuma = getPixelLuminance(sourcePixels, pixel);
+    const editedLuma = getPixelLuminance(editedPixels, pixel);
+    const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
+    const lumaDelta = Math.abs(editedLuma - sourceLuma);
+    const darkDrop = sourceLuma - editedLuma;
+
+    const darkStroke = smoothStep(18, 54, darkDrop) * (1 - smoothStep(92, 138, editedLuma));
+    const hardTrace = smoothStep(58, 116, maxDelta) * smoothStep(18, 72, lumaDelta) * 0.48;
+    const artifactStrength = Math.max(darkStroke, hardTrace) * smoothStep(24, 62, maxDelta) * boundary;
+    candidates[index] = clampByte(artifactStrength * 255);
+  }
+
+  const densityRadius = Math.round(Math.min(7, Math.max(3, longEdge * 0.0018)));
+  const localDensity = blurAlpha(candidates, width, height, densityRadius);
+  const expanded = blurAlpha(candidates, width, height, 1);
+  const suppression = new Uint8ClampedArray(matte.length);
+
+  for (let index = 0; index < suppression.length; index += 1) {
+    const thinness = 1 - smoothStep(82, 168, localDensity[index]);
+    const strength = Math.max(candidates[index], expanded[index] * 0.72) * thinness;
+    suppression[index] = clampByte(strength);
+  }
+
+  return suppression;
 };
 
 const estimateSeamColorOffset = (
@@ -888,20 +966,32 @@ const compositeVisualEditResult = async (
       height,
       options.featherAmount ?? 55
     );
+    const boundaryAlpha = buildSelectionBoundaryAlpha(
+      selectionAlpha,
+      width,
+      height,
+      options.featherAmount ?? 55
+    );
     const seamOffset = estimateSeamColorOffset(sourceImageData.data, editedImageData.data, matte);
     const sourcePixels = sourceImageData.data;
     const editedPixels = editedImageData.data;
+    const boundaryArtifactSuppression = buildBoundaryArtifactSuppression(
+      sourcePixels,
+      editedPixels,
+      matte,
+      boundaryAlpha,
+      width,
+      height
+    );
 
     for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
       const matteValue = matte[index];
       if (matteValue < 8) continue;
-      const redDelta = Math.abs(editedPixels[pixel] - sourcePixels[pixel]);
-      const greenDelta = Math.abs(editedPixels[pixel + 1] - sourcePixels[pixel + 1]);
-      const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
-      const maxDelta = Math.max(redDelta, greenDelta, blueDelta, Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3));
-      if (matteValue < 180 && maxDelta < 26) continue;
-      const confidence = Math.max(smoothStep(18, 54, maxDelta), smoothStep(140, 240, matteValue));
-      const alpha = smoothStep(10, 245, matteValue) * confidence;
+      const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
+      if (matteValue < 160 && maxDelta < 22) continue;
+      const confidence = Math.max(smoothStep(14, 48, maxDelta), smoothStep(120, 232, matteValue));
+      const artifactSuppression = Math.min(0.96, boundaryArtifactSuppression[index] / 255);
+      const alpha = smoothStep(8, 245, matteValue) * confidence * (1 - artifactSuppression);
       if (alpha <= 0) continue;
       const inverse = 1 - alpha;
       const boundaryWeight = 1 - smoothStep(96, 220, matteValue);

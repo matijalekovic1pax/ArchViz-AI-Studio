@@ -2852,7 +2852,7 @@ function buildImageEditPrompt(request) {
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
 
-  const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary.';
+  const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary. The mask is only an instruction: never render, trace, darken, halo, or outline the lasso, selection edge, mask boundary, brush edge, or rectangular border.';
   let task = '';
   if (operation === 'replace_material' || operation === 'recolor') {
     task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
