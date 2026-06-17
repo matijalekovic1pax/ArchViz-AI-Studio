@@ -34,6 +34,7 @@ const LOG_JSON_MAX_ARRAY_ITEMS = 80;
 const LOG_JSON_MAX_OBJECT_KEYS = 100;
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
+const IMAGE_EDIT_TIMEOUT_MS = 10 * 60_000;
 const OPENAI_IMAGE_ALLOWED_SIZES = ['1024x1024', '1024x1536', '1536x1024', 'auto'] as const;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
@@ -280,6 +281,7 @@ const getGatewayLogRouteInfo = (path: string) => {
     const match = path.match(/^\/api\/gemini\/models\/([^:]+):([^?]+)/);
     return { provider: 'gemini', model: match?.[1], action: match?.[2] || 'request' };
   }
+  if (path.startsWith('/api/image-edits')) return { provider: 'openai', model: 'gpt-image-2', action: 'image-edit' };
   if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2', action: 'images' };
   if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/kling/')) return { provider: 'kling', action: path.split('/').pop() || 'request' };
@@ -720,6 +722,72 @@ export async function openAIImageRequest(
       msg = parsed.error?.message || parsed.error || msg;
     } catch {}
     throw new GatewayApiError(msg, resp.status, 'openai-image', details);
+  }
+  return resp.json();
+}
+
+export type ImageEditOperation =
+  | 'replace_material'
+  | 'recolor'
+  | 'add_people'
+  | 'remove_people'
+  | 'remove_object'
+  | 'custom';
+
+export interface GatewayImageEditImage {
+  base64: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  width?: number;
+  height?: number;
+}
+
+export interface GatewayImageEditRequest {
+  sourceImage: GatewayImageEditImage;
+  selectionMask: GatewayImageEditImage;
+  prompt: string;
+  operation: ImageEditOperation;
+  targetLabel?: string;
+  colorHex?: string;
+  materialDescription?: string;
+  originalGenerationPrompt?: string;
+  quality?: 'draft' | 'standard' | 'final';
+  variants?: number;
+  outputFormat?: 'png' | 'webp' | 'jpeg';
+  referenceImages?: GatewayImageEditImage[];
+}
+
+export interface GatewayImageEditVersion {
+  id: string;
+  imageUrl: string;
+  rawImageUrl?: string;
+  parentImageId?: string | null;
+  operation: ImageEditOperation;
+  prompt: string;
+  provider: 'openai';
+  model: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GatewayImageEditResponse {
+  editId: string;
+  status: 'completed';
+  versions: GatewayImageEditVersion[];
+  usage?: unknown;
+}
+
+export async function imageEditRequest(
+  body: GatewayImageEditRequest,
+  options?: { signal?: AbortSignal }
+): Promise<GatewayImageEditResponse> {
+  const resp = await gatewayFetch('/api/image-edits', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options?.signal,
+    timeoutMs: IMAGE_EDIT_TIMEOUT_MS,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: `Image edit failed (${resp.status})` }));
+    throw new GatewayApiError(err.error || `Image edit failed (${resp.status})`, resp.status, 'openai-image-edit', err);
   }
   return resp.json();
 }
