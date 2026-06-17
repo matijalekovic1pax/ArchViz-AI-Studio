@@ -31,6 +31,70 @@ const parseDataUrl = (dataUrl: string): GeneratedImage => {
   };
 };
 
+const parseAspectRatioValue = (aspectRatio: string): number | null => {
+  const [widthRaw, heightRaw] = aspectRatio.split(':').map(Number);
+  if (!Number.isFinite(widthRaw) || !Number.isFinite(heightRaw) || widthRaw <= 0 || heightRaw <= 0) {
+    return null;
+  }
+  return widthRaw / heightRaw;
+};
+
+export async function normalizeGeneratedImageAspectRatio(
+  image: GeneratedImage,
+  aspectRatio?: string | null,
+): Promise<GeneratedImage> {
+  const targetRatio = aspectRatio ? parseAspectRatioValue(aspectRatio) : null;
+  if (!targetRatio) return image;
+
+  const source = await loadImage(image.dataUrl);
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  if (!sourceWidth || !sourceHeight) return image;
+
+  const sourceRatio = sourceWidth / sourceHeight;
+  if (Math.abs(sourceRatio - targetRatio) < 0.01) return image;
+
+  let cropX = 0;
+  let cropY = 0;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+
+  if (sourceRatio > targetRatio) {
+    cropWidth = Math.round(sourceHeight * targetRatio);
+    cropX = Math.round((sourceWidth - cropWidth) / 2);
+  } else {
+    cropHeight = Math.round(sourceWidth / targetRatio);
+    cropY = Math.round((sourceHeight - cropHeight) / 2);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return image;
+
+  ctx.drawImage(
+    source,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight,
+  );
+  return parseDataUrl(canvas.toDataURL('image/png'));
+}
+
+export async function normalizeGeneratedImagesAspectRatio(
+  images: GeneratedImage[],
+  aspectRatio?: string | null,
+): Promise<GeneratedImage[]> {
+  if (!aspectRatio || images.length === 0) return images;
+  return Promise.all(images.map((image) => normalizeGeneratedImageAspectRatio(image, aspectRatio)));
+}
+
 const rgbToHsl = (r: number, g: number, b: number) => {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);

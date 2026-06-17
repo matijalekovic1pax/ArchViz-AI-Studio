@@ -40,7 +40,8 @@ import { initializeILoveApi, isILoveApiConfigured } from '../services/iLoveApiSe
 import { compressPdfBatch } from '../lib/pdfCompression';
 import { getMaterialById } from '../lib/materialCatalog';
 import {
-  applyVisualPostProduction
+  applyVisualPostProduction,
+  normalizeGeneratedImagesAspectRatio
 } from '../lib/visualPostProcessing';
 import { AI_SLOP_UPSCALER_SUGGESTION_EVENT } from '../lib/assistantEvents';
 import { nanoid } from 'nanoid';
@@ -576,6 +577,17 @@ export function useGeneration(): UseGenerationReturn {
   // No-op — API keys are managed server-side by the gateway
   const setApiKey = useCallback((_key: string) => {
     // No-op: gateway handles API keys server-side
+  }, []);
+
+  const normalizeResponseImagesToAspectRatio = useCallback(async (
+    response: GeminiResponse,
+    aspectRatio?: ImageConfig['aspectRatio'] | null
+  ): Promise<GeminiResponse> => {
+    if (!aspectRatio || response.images.length === 0) return response;
+    return {
+      ...response,
+      images: await normalizeGeneratedImagesAspectRatio(response.images, aspectRatio)
+    };
   }, []);
 
   /**
@@ -1709,8 +1721,12 @@ export function useGeneration(): UseGenerationReturn {
             imageGenerationModel: effectiveImageGenerationModel,
             ...promptPreparationFlags
           } as any);
-          updateProgress(result.images.length > 0 ? 95 : 85);
-          return result;
+          const normalizedResult = await normalizeResponseImagesToAspectRatio(
+            result,
+            request.generationConfig?.imageConfig?.aspectRatio
+          );
+          updateProgress(normalizedResult.images.length > 0 ? 95 : 85);
+          return normalizedResult;
         }
 
         let chunkCount = 0;
@@ -1753,7 +1769,10 @@ export function useGeneration(): UseGenerationReturn {
         }
 
         updateProgress(sawImage ? 95 : 85);
-        return { text, images: imagesOut, optimizedPrompt };
+        return normalizeResponseImagesToAspectRatio(
+          { text, images: imagesOut, optimizedPrompt },
+          request.generationConfig?.imageConfig?.aspectRatio
+        );
       };
 
       const verifyImageResult = async (
@@ -1812,10 +1831,14 @@ export function useGeneration(): UseGenerationReturn {
           if (attempt > 1) {
             resetImagePipelineProgress();
           }
-          const resultForAttempt = await runWithRetry(
+          const rawResultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
             () => generateAttempt(promptForAttempt, attempt > 1),
             generationRetryOptions
+          );
+          const resultForAttempt = await normalizeResponseImagesToAspectRatio(
+            rawResultForAttempt,
+            generationConfig?.imageConfig?.aspectRatio
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
           const hasGeneratedImage = resultForAttempt.images.length > 0;
@@ -1892,10 +1915,14 @@ export function useGeneration(): UseGenerationReturn {
           if (attempt > 1) {
             resetImagePipelineProgress();
           }
-          const resultForAttempt = await runWithRetry(
+          const rawResultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
             () => generateAttempt(promptForAttempt, attempt > 1),
             imageGenerationRetryOptions
+          );
+          const resultForAttempt = await normalizeResponseImagesToAspectRatio(
+            rawResultForAttempt,
+            generationConfig?.imageConfig?.aspectRatio
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
           const hasGeneratedImages = resultForAttempt.images.length > 0;
@@ -2508,20 +2535,25 @@ export function useGeneration(): UseGenerationReturn {
                 hasReferenceImages: false,
                 promptKind: 'edit'
               });
-              const upscaleResult = await runWithRetry(
+              const upscaleGenerationConfig = {
+                ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
+                abortSignal,
+                onProgress: updateImagePipelineProgress
+              };
+              const rawUpscaleResult = await runWithRetry(
                 'image upscale',
                 () => service.generateImages({
                   prompt: upscalePrompt,
                   images: [source],
                   imageGenerationModel: effectiveImageGenerationModel,
-                  generationConfig: {
-                    ...buildGenerationConfig(state, itemAspectRatio || inputAspectRatio || undefined),
-                    abortSignal,
-                    onProgress: updateImagePipelineProgress
-                  },
+                  generationConfig: upscaleGenerationConfig,
                   skipPromptOptimization: true
                 } as any),
                 { timeoutMs: REQUEST_TIMEOUT_MS, maxRetries: 0 }
+              );
+              const upscaleResult = await normalizeResponseImagesToAspectRatio(
+                rawUpscaleResult,
+                upscaleGenerationConfig.imageConfig?.aspectRatio
               );
 
               const finalUpscaleImage = pickFinalImage(upscaleResult.images);
@@ -2919,14 +2951,14 @@ export function useGeneration(): UseGenerationReturn {
               }),
               imageModelPrompt
             );
-        result = {
+        result = await normalizeResponseImagesToAspectRatio({
           text: batchResult.text,
           images: batchResult.images,
           optimizedPrompt: batchResult.optimizedPrompt,
           outputVerification: batchResult.outputVerification,
           outputVerifications: batchResult.outputVerifications,
           outputVerificationAttempts: batchResult.outputVerificationAttempts
-        };
+        }, generationConfig.imageConfig?.aspectRatio);
       } else {
         // Standard image generation
         result = excludesAiMiddleLayer
