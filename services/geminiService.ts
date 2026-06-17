@@ -177,6 +177,12 @@ export interface ImageOutputVerificationRequest {
   generatedImage: ImageData;
   referenceImages?: ImageData[];
   originalPrompt?: string;
+  mode?: 'full-image' | 'localized-edit';
+  localizedEdit?: {
+    operation?: string;
+    targetLabel?: string;
+    selectedRatio?: number | null;
+  };
   generationConfig?: GenerationConfig;
 }
 
@@ -1220,6 +1226,24 @@ export class GeminiService {
     const originalPromptLine = request.originalPrompt?.trim()
       ? `Original user/app prompt before middle-layer tuning:\n${this.truncatePromptForOptimizer(request.originalPrompt.trim(), 2000)}`
       : '';
+    const localizedEdit = request.mode === 'localized-edit';
+    const localizedEditLine = localizedEdit
+      ? [
+          'Localized edit verification mode:',
+          'This output may be a composited/inpainted edit where most of the frame is intentionally identical to the source image.',
+          'Do not fail because the generated output is mostly unchanged; that is expected for masked visual editing.',
+          'Evaluate the requested change inside the selected/masked region, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of unselected areas.',
+          'If a tiny selected detail is hard to inspect, pass when the localized result is coherent and there is no obvious wrong edit, patch edge, pasted/inlaid look, subject distortion, or unwanted change outside the selected area.',
+          referenceImageCount >= 2
+            ? 'For localized edits, attached image 1 is usually the source render and attached image 2 is usually the selection/mask guidance; later reference images may describe materials or style.'
+            : '',
+          request.localizedEdit?.operation ? `Localized operation: ${request.localizedEdit.operation}` : '',
+          request.localizedEdit?.targetLabel ? `Selected target: ${request.localizedEdit.targetLabel}` : '',
+          typeof request.localizedEdit?.selectedRatio === 'number'
+            ? `Approximate selected image area: ${(request.localizedEdit.selectedRatio * 100).toFixed(2)}%`
+            : '',
+        ].filter(Boolean).join('\n')
+      : '';
 
     return [
       'You are the output verification layer inside an architectural image generation app.',
@@ -1232,6 +1256,8 @@ export class GeminiService {
       'For architectural renders, pass if the source composition, major geometry, requested style/material/lighting intent, and important constraints are fairly represented. Fail only for meaningful objective misses such as wrong source relationship, wrong camera/composition, missing requested change, severe architectural drift, broken geometry, unwanted text changes, or obvious artifacts that undermine the requested result.',
       'Do not fail harmless variation when the prompt asks for a render variation.',
       '',
+      localizedEditLine,
+      localizedEditLine ? '' : '',
       'Also detect AI regeneration distortion separately from the passed decision.',
       'Mark aiSlopDetected true only when the generated output visibly contains AI degradation such as wavy or wiggly architectural lines, melted/smeared detail, haze or fog not requested, blotchy discoloration, warped signage/text, malformed repeated geometry, distorted people, or over-smoothed regenerated texture.',
       'Do not mark aiSlopDetected true for normal low resolution, intentional stylization, depth-of-field blur, natural atmospheric lighting, or minor compression.',

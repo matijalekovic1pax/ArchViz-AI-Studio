@@ -22,6 +22,7 @@ import {
   ImageConfig,
   TEXT_MODEL,
   type ImageGenerationProgress,
+  type ImageOutputVerificationRequest,
   type ImageOutputVerificationResult
 } from '../services/geminiService';
 import { getVideoGenerationService } from '../services/videoGenerationService';
@@ -497,6 +498,20 @@ const getAiSlopDetectionForVisibleResult = (result: GeminiResponse) => {
     .sort((a, b) => (b.aiSlopConfidence ?? 0) - (a.aiSlopConfidence ?? 0))[0] || null;
 };
 
+const normalizeAdvisoryVerification = (
+  verification: ImageOutputVerificationResult | null
+): ImageOutputVerificationResult | undefined => {
+  if (!verification) return undefined;
+  if (verification.passed) return verification;
+  return {
+    ...verification,
+    passed: true,
+    summary: `Localized edit accepted with advisory review note: ${verification.summary}`,
+    issues: verification.issues.map((issue) => `Advisory: ${issue}`),
+    revisedPrompt: undefined,
+  };
+};
+
 const suggestAiSlopUpscalerIfNeeded = (
   result: GeminiResponse,
   mode: GenerationMode,
@@ -543,6 +558,161 @@ const drawMaskImageData = (
   }
   ctx.putImageData(imageData, 0, 0);
   return canvas;
+};
+
+const clampByte = (value: number): number => Math.max(0, Math.min(255, Math.round(value)));
+
+const smoothStep = (edge0: number, edge1: number, value: number): number => {
+  if (edge0 === edge1) return value >= edge1 ? 1 : 0;
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+};
+
+const alphaToCanvas = (alpha: Uint8ClampedArray, width: number, height: number): HTMLCanvasElement | null => {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const imageData = ctx.createImageData(width, height);
+  const pixels = imageData.data;
+  for (let index = 0, pixel = 0; index < alpha.length; index += 1, pixel += 4) {
+    pixels[pixel] = 255;
+    pixels[pixel + 1] = 255;
+    pixels[pixel + 2] = 255;
+    pixels[pixel + 3] = alpha[index];
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+const blurAlpha = (
+  alpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number
+): Uint8ClampedArray => {
+  if (radius <= 0) return alpha;
+  const sourceCanvas = alphaToCanvas(alpha, width, height);
+  if (!sourceCanvas) return alpha;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return alpha;
+  ctx.clearRect(0, 0, width, height);
+  ctx.filter = `blur(${Math.max(0, Math.round(radius))}px)`;
+  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.filter = 'none';
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const out = new Uint8ClampedArray(width * height);
+  for (let index = 0, pixel = 0; index < out.length; index += 1, pixel += 4) {
+    out[index] = pixels[pixel + 3];
+  }
+  return out;
+};
+
+const getSelectionAlpha = (
+  mask: HTMLImageElement,
+  width: number,
+  height: number,
+  invert = false
+): Uint8ClampedArray | null => {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(mask, 0, 0, width, height);
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const alpha = new Uint8ClampedArray(width * height);
+  for (let index = 0, pixel = 0; index < alpha.length; index += 1, pixel += 4) {
+    const luminance = ((pixels[pixel] + pixels[pixel + 1] + pixels[pixel + 2]) / 3) * (pixels[pixel + 3] / 255);
+    alpha[index] = clampByte(invert ? 255 - luminance : luminance);
+  }
+  return alpha;
+};
+
+const buildSeamlessCompositeMatte = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  selectionAlpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+  featherAmount: number
+): Uint8ClampedArray => {
+  const longEdge = Math.max(width, height);
+  const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
+  const changeAlpha = new Uint8ClampedArray(width * height);
+  let selectedCount = 0;
+  let changedCount = 0;
+
+  for (let index = 0, pixel = 0; index < changeAlpha.length; index += 1, pixel += 4) {
+    const selection = selectionAlpha[index] / 255;
+    if (selection <= 0.01) continue;
+    selectedCount += 1;
+
+    const redDelta = Math.abs(editedPixels[pixel] - sourcePixels[pixel]);
+    const greenDelta = Math.abs(editedPixels[pixel + 1] - sourcePixels[pixel + 1]);
+    const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
+    const colorDistance = Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3);
+    const maxDelta = Math.max(redDelta, greenDelta, blueDelta, colorDistance);
+    const change = smoothStep(10, 42, maxDelta) * selection;
+    const value = clampByte(change * 255);
+    changeAlpha[index] = value;
+    if (value > 24) changedCount += 1;
+  }
+
+  const changeFeather = Math.round(Math.min(42, Math.max(7, longEdge * (0.003 + normalizedFeather * 0.008))));
+  const selectionFeather = Math.round(Math.min(80, Math.max(12, longEdge * (0.006 + normalizedFeather * 0.014))));
+  const expandedChange = blurAlpha(changeAlpha, width, height, changeFeather);
+  const softSelection = blurAlpha(selectionAlpha, width, height, selectionFeather);
+  const useSelectionFallback = changedCount < Math.max(48, selectedCount * 0.002);
+  const matte = new Uint8ClampedArray(width * height);
+
+  for (let index = 0; index < matte.length; index += 1) {
+    if (useSelectionFallback) {
+      matte[index] = softSelection[index];
+      continue;
+    }
+    const changed = Math.max(changeAlpha[index], Math.min(255, expandedChange[index] * 1.65));
+    matte[index] = clampByte(Math.min(softSelection[index], changed));
+  }
+
+  return matte;
+};
+
+const estimateSeamColorOffset = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  matte: Uint8ClampedArray
+): { red: number; green: number; blue: number } => {
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let weight = 0;
+  for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
+    const alpha = matte[index];
+    if (alpha < 10 || alpha > 150) continue;
+    const redDelta = Math.abs(editedPixels[pixel] - sourcePixels[pixel]);
+    const greenDelta = Math.abs(editedPixels[pixel + 1] - sourcePixels[pixel + 1]);
+    const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
+    const maxDelta = Math.max(redDelta, greenDelta, blueDelta);
+    if (maxDelta > 36) continue;
+    const sampleWeight = (1 - smoothStep(10, 150, alpha)) * (1 - smoothStep(16, 36, maxDelta));
+    if (sampleWeight <= 0) continue;
+    red += (sourcePixels[pixel] - editedPixels[pixel]) * sampleWeight;
+    green += (sourcePixels[pixel + 1] - editedPixels[pixel + 1]) * sampleWeight;
+    blue += (sourcePixels[pixel + 2] - editedPixels[pixel + 2]) * sampleWeight;
+    weight += sampleWeight;
+  }
+
+  if (weight < 80) return { red: 0, green: 0, blue: 0 };
+  return {
+    red: Math.max(-18, Math.min(18, red / weight)),
+    green: Math.max(-18, Math.min(18, green / weight)),
+    blue: Math.max(-18, Math.min(18, blue / weight)),
+  };
 };
 
 const getGuidanceMaskFeatherRadius = (width: number, height: number, featherAmount: number): number => {
@@ -671,7 +841,8 @@ const compositeVisualEditResult = async (
   sourceDataUrl: string,
   generated: GeneratedImage,
   selectedMaskDataUrl: string,
-  editOutsideSelection: boolean
+  editOutsideSelection: boolean,
+  options: { seamless?: boolean; featherAmount?: number } = {}
 ): Promise<GeneratedImage> => {
   const [source, generatedImage, selectedMask] = await Promise.all([
     loadCanvasImage(sourceDataUrl),
@@ -696,6 +867,41 @@ const compositeVisualEditResult = async (
   const editCtx = editCanvas.getContext('2d');
   if (!editCtx) return generated;
   editCtx.drawImage(generatedImage, 0, 0, width, height);
+
+  if (options.seamless) {
+    const selectionAlpha = getSelectionAlpha(selectedMask, width, height, editOutsideSelection);
+    if (!selectionAlpha) return generated;
+    const sourceImageData = ctx.getImageData(0, 0, width, height);
+    const editedImageData = editCtx.getImageData(0, 0, width, height);
+    const matte = buildSeamlessCompositeMatte(
+      sourceImageData.data,
+      editedImageData.data,
+      selectionAlpha,
+      width,
+      height,
+      options.featherAmount ?? 55
+    );
+    const seamOffset = estimateSeamColorOffset(sourceImageData.data, editedImageData.data, matte);
+    const sourcePixels = sourceImageData.data;
+    const editedPixels = editedImageData.data;
+
+    for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
+      const alpha = matte[index] / 255;
+      if (alpha <= 0) continue;
+      const inverse = 1 - alpha;
+      const boundaryWeight = 1 - smoothStep(96, 220, matte[index]);
+      const editedRed = editedPixels[pixel] + seamOffset.red * boundaryWeight;
+      const editedGreen = editedPixels[pixel + 1] + seamOffset.green * boundaryWeight;
+      const editedBlue = editedPixels[pixel + 2] + seamOffset.blue * boundaryWeight;
+      sourcePixels[pixel] = clampByte(sourcePixels[pixel] * inverse + editedRed * alpha);
+      sourcePixels[pixel + 1] = clampByte(sourcePixels[pixel + 1] * inverse + editedGreen * alpha);
+      sourcePixels[pixel + 2] = clampByte(sourcePixels[pixel + 2] * inverse + editedBlue * alpha);
+      sourcePixels[pixel + 3] = clampByte(sourcePixels[pixel + 3] * inverse + editedPixels[pixel + 3] * alpha);
+    }
+
+    ctx.putImageData(sourceImageData, 0, 0);
+    return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
+  }
 
   const maskCanvas = drawMaskImageData(selectedMask, width, height, {
     invert: editOutsideSelection,
@@ -1977,7 +2183,8 @@ export function useGeneration(): UseGenerationReturn {
         resultToVerify: GeminiResponse,
         promptForVerification: string,
         referenceImages?: ImageData[],
-        originalPromptForVerification?: string
+        originalPromptForVerification?: string,
+        verificationContext: Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'> = {}
       ): Promise<ImageOutputVerificationResult | null> => {
         const finalImage = pickFinalImage(resultToVerify.images);
         if (!finalImage) return null;
@@ -1992,6 +2199,7 @@ export function useGeneration(): UseGenerationReturn {
             originalPrompt: originalPromptForVerification || promptForVerification,
             referenceImages,
             generatedImage: finalImage,
+            ...verificationContext,
             generationConfig: {
               abortSignal: verificationSignal,
               onProgress: updateImagePipelineProgress
@@ -2015,8 +2223,19 @@ export function useGeneration(): UseGenerationReturn {
         referenceImages: ImageData[] | undefined,
         generateAttempt: (promptForAttempt: string, promptAlreadyOptimized: boolean) => Promise<GeminiResponse>,
         originalPromptForVerification = prompt,
-        generationRetryOptions: { timeoutMs?: number; maxRetries?: number } = imageGenerationRetryOptions
+        generationRetryOptions: {
+          timeoutMs?: number;
+          maxRetries?: number;
+          verificationPolicy?: 'blocking' | 'advisory';
+          verificationContext?: Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'>;
+        } = imageGenerationRetryOptions
       ): Promise<GeminiResponse> => {
+        const verificationPolicy = generationRetryOptions.verificationPolicy || 'blocking';
+        const verificationContext = generationRetryOptions.verificationContext || {};
+        const effectiveGenerationRetryOptions = {
+          timeoutMs: generationRetryOptions.timeoutMs ?? imageGenerationRetryOptions.timeoutMs,
+          maxRetries: generationRetryOptions.maxRetries ?? imageGenerationRetryOptions.maxRetries
+        };
         let promptForAttempt = prompt;
         let lastVerification: ImageOutputVerificationResult | null = null;
         let lastResultForAttempt: GeminiResponse | null = null;
@@ -2032,7 +2251,7 @@ export function useGeneration(): UseGenerationReturn {
           const rawResultForAttempt = await runWithRetry(
             attempt === 1 ? label : `${label} verification retry ${attempt}`,
             () => generateAttempt(promptForAttempt, attempt > 1),
-            generationRetryOptions
+            effectiveGenerationRetryOptions
           );
           const resultForAttempt = await normalizeResponseImagesToAspectRatio(
             rawResultForAttempt,
@@ -2048,7 +2267,8 @@ export function useGeneration(): UseGenerationReturn {
               resultForAttempt,
               promptUsed,
               referenceImages,
-              originalPromptForVerification
+              originalPromptForVerification,
+              verificationContext
             );
           } catch (error) {
             if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
@@ -2063,6 +2283,14 @@ export function useGeneration(): UseGenerationReturn {
               };
             }
             throw error;
+          }
+          if (hasGeneratedImage && verificationPolicy === 'advisory') {
+            return {
+              ...resultForAttempt,
+              optimizedPrompt: promptUsed,
+              outputVerification: normalizeAdvisoryVerification(verification),
+              outputVerificationAttempts: attempt
+            };
           }
           if (hasGeneratedImage && (!verification || verification.passed)) {
             return {
@@ -2949,6 +3177,8 @@ export function useGeneration(): UseGenerationReturn {
 
           if (canUsePreciseOpenAIEdit && selectedMaskDataUrl) {
             const preciseInputs = await preparePreciseEditInputs(sourceImageUrl!, selectedMaskDataUrl);
+            const preciseOperation = getPreciseEditOperation(activeVisualTool);
+            const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
             const materialDescription = materialReference
               ? [
                   materialReference.label,
@@ -2977,8 +3207,8 @@ export function useGeneration(): UseGenerationReturn {
                   selectionStats: preciseInputs.selectionStats,
                   referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
                   prompt: promptForAttempt,
-                  operation: getPreciseEditOperation(activeVisualTool),
-                  targetLabel: getPreciseEditTargetLabel(activeVisualTool),
+                  operation: preciseOperation,
+                  targetLabel: preciseTargetLabel,
                   colorHex: visualMaterial.colorTint && visualMaterial.colorTint !== '#ffffff'
                     ? visualMaterial.colorTint
                     : undefined,
@@ -2993,7 +3223,10 @@ export function useGeneration(): UseGenerationReturn {
                 const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                 const compositedImages = await Promise.all(
                   editedImages.map((image) =>
-                    compositeVisualEditResult(sourceImageUrl!, image, localSelectionMaskDataUrl || selectedMaskDataUrl, false)
+                    compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
+                      seamless: true,
+                      featherAmount: effectiveFeatherAmount
+                    })
                   )
                 );
                 return {
@@ -3002,7 +3235,18 @@ export function useGeneration(): UseGenerationReturn {
                   optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                 };
               },
-              basePrompt
+              basePrompt,
+              {
+                verificationPolicy: 'advisory',
+                verificationContext: {
+                  mode: 'localized-edit',
+                  localizedEdit: {
+                    operation: preciseOperation,
+                    targetLabel: preciseTargetLabel,
+                    selectedRatio: preciseInputs.selectionStats.selectedRatio
+                  }
+                }
+              }
             );
             visualMaskHandledLocally = true;
           } else {
