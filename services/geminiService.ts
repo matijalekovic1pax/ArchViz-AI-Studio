@@ -421,11 +421,6 @@ export class GeminiService {
   }
 
   async generateText(request: GeminiRequest): Promise<string> {
-    const parsed = await this.generateTextResponse(request);
-    return parsed.text || '';
-  }
-
-  private async generateTextResponse(request: GeminiRequest): Promise<GeminiResponse> {
     const contents = this.buildContents(request);
     const model = request.model || TEXT_MODEL;
     const { imageConfig: _ic, ...configWithoutImage } = request.generationConfig || {};
@@ -440,7 +435,8 @@ export class GeminiService {
       }, { signal: request.generationConfig?.abortSignal })
     );
 
-    return this.parseResponse(response);
+    const parsed = this.parseResponse(response);
+    return parsed.text || '';
   }
 
   async generateImages(request: GeminiRequest): Promise<GeminiResponse> {
@@ -1141,7 +1137,7 @@ export class GeminiService {
     }
 
     try {
-      const optimizedResponse = await this.generateTextResponse({
+      const optimized = await this.generateText({
         model: PROMPT_OPTIMIZER_MODEL,
         prompt: this.buildPromptOptimizerPrompt(prompt, images, context),
         images,
@@ -1155,12 +1151,7 @@ export class GeminiService {
         }
       });
 
-      if (this.isTokenLimitedFinishReason(optimizedResponse.finishReason)) {
-        console.warn('Prompt optimizer hit its output token limit; using the original image prompt.');
-        return prompt;
-      }
-
-      return this.cleanOptimizedPrompt(optimizedResponse.text || '', prompt);
+      return this.cleanOptimizedPrompt(optimized, prompt);
     } catch (error) {
       console.warn('Prompt optimizer failed; using the original image prompt.', error);
       return prompt;
@@ -1206,7 +1197,6 @@ export class GeminiService {
       '',
       'Rewrite goals:',
       '- Keep the essential user intent and the most important visual priorities.',
-      '- Never drop explicit user-requested changes, locked source constraints, named text/signage, or camera/composition constraints; condense them instead.',
       '- Preserve source-image relationships, camera, composition, spatial layout, geometry, and existing design when the prompt says the source is locked.',
       '- For edit or mask requests, keep the selected/masked area scope clear and preserve unaffected regions.',
       '- Keep exact visible text, signage, logos, or labels only when the prompt explicitly requires them.',
@@ -1219,9 +1209,7 @@ export class GeminiService {
       '- Use natural language, as if an art director is briefing a renderer.',
       '- Prefer one paragraph, two short paragraphs only if the mask/reference relationship needs clarity.',
       '- Do not use markdown, bullets, JSON, quotes, headings, or meta commentary.',
-      '- Return a complete prompt that ends cleanly; never stop mid-sentence, after a comma/colon/semicolon, or after an unfinished phrase.',
-      '- If space feels tight, shorten by removing lesser stylistic detail instead of trailing off.',
-      '- Target roughly 80-220 words, unless the request is extremely simple.',
+      '- Target roughly 60-180 words, unless the request is extremely simple.',
       '',
       'App-generated prompt to rewrite:',
       this.truncatePromptForOptimizer(appPrompt, PROMPT_OPTIMIZER_MAX_INPUT_CHARS)
@@ -1300,14 +1288,10 @@ export class GeminiService {
       .replace(/```(?:text|markdown|md)?\s*([\s\S]*?)```/gi, '$1')
       .replace(/^\s*(?:optimized prompt|rewritten prompt|final prompt)\s*:\s*/i, '')
       .trim();
-    const quoteStart = strippedFence[0];
-    const quoteEnd = strippedFence[strippedFence.length - 1];
-    const hasWrappingQuotes = Boolean(
-      quoteStart &&
-      quoteStart === quoteEnd &&
-      ['"', "'", '`'].includes(quoteStart)
-    );
-    const withoutWrappingQuotes = (hasWrappingQuotes ? strippedFence.slice(1, -1) : strippedFence).trim();
+    const withoutWrappingQuotes = strippedFence
+      .replace(/^["'`]+/, '')
+      .replace(/["'`]+$/, '')
+      .trim();
     const normalized = withoutWrappingQuotes.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     const refusalPattern = /\b(?:i can(?:not|'t)|i'm unable|i am unable|sorry)\b/i;
 
@@ -1315,49 +1299,7 @@ export class GeminiService {
       return fallbackPrompt;
     }
 
-    if (this.isIncompleteOptimizedPrompt(normalized)) {
-      console.warn('Prompt optimizer returned an incomplete prompt; using the original image prompt.');
-      return fallbackPrompt;
-    }
-
     return normalized;
-  }
-
-  private isTokenLimitedFinishReason(finishReason?: string): boolean {
-    if (typeof finishReason !== 'string') return false;
-
-    const normalized = finishReason.toLowerCase();
-    return (normalized.includes('max') && normalized.includes('token')) || normalized.includes('length');
-  }
-
-  private isIncompleteOptimizedPrompt(prompt: string): boolean {
-    const trimmed = prompt.trim();
-    if (!trimmed) return true;
-
-    if (/[,:;]$/.test(trimmed)) return true;
-    if (/(?:\.\.\.|[([{]|-|–|—)$/.test(trimmed)) return true;
-    if (this.hasUnbalancedDelimiters(trimmed, '(', ')')) return true;
-    if (this.hasUnbalancedDelimiters(trimmed, '[', ']')) return true;
-    if ((trimmed.match(/"/g) || []).length % 2 !== 0) return true;
-
-    const unfinishedEndingPattern =
-      /\b(?:and|or|but|with|without|while|including|such as|like|from|to|for|of|in|on|at|by|as|that|which|where|when|unless|except|because|plus|alongside|through|around|across|into|onto|between|among|using|showing|highlighting|matching|retaining|preserving|maintaining|keeping)\s*$/i;
-    const unfinishedVerbPhrasePattern =
-      /\b(?:keep|preserve|maintain|ensure|include|feature|highlight|match|retain|avoid|remove|add|adjust|refine|enhance|convert|transform)\s+(?:the\s+)?(?:same|all|any|every|existing|original|source|reference|selected|major|minor|structural|architectural|visual|material|lighting|style|camera|composition|geometry|spatial)?\s*$/i;
-
-    return unfinishedEndingPattern.test(trimmed) || unfinishedVerbPhrasePattern.test(trimmed);
-  }
-
-  private hasUnbalancedDelimiters(value: string, open: string, close: string): boolean {
-    let depth = 0;
-
-    for (const char of value) {
-      if (char === open) depth += 1;
-      if (char === close) depth -= 1;
-      if (depth < 0) return true;
-    }
-
-    return depth !== 0;
   }
 
   private parseOutputVerificationResult(
