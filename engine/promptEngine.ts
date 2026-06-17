@@ -504,7 +504,11 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
     ]);
   }
 
-  return compactItems([selectionSummary, workflow.visualPrompt ? `instruction ${workflow.visualPrompt}` : null]);
+  return compactItems([
+    selectionSummary,
+    workflow.visualReferenceImage ? 'general reference image attached' : null,
+    workflow.visualPrompt ? `instruction ${workflow.visualPrompt}` : null
+  ]);
 };
 
 const summarizeWorkflowSettings = (state: AppState): string[] => {
@@ -2728,6 +2732,9 @@ const generateVisualEditPrompt = (state: AppState): string => {
     }
     if (userPrompt) {
       selectParts.push(`Edit instruction: "${userPrompt}".`);
+    }
+    if (workflow.visualReferenceImage) {
+      selectParts.push('Reference relationship: an additional image is attached after the source image. Use it only as a visual reference for the requested object, material texture, finish, product, color, detail, or style named in the edit instruction. Keep the source image as the authority for camera, perspective, lighting context, placement, scale, and all unrelated scene content. Do not paste the reference image, copy its background, or replace the whole scene.');
     }
     selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
     selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');

@@ -296,6 +296,7 @@ export interface WorkflowSettings {
   // 4. Visual Edit
   activeTool: 'select' | 'material' | 'lighting' | 'object' | 'sky' | 'remove' | 'replace' | 'adjust' | 'extend' | 'background' | 'people';
   visualPrompt: string; // The specific prompt for the active operation
+  visualReferenceImage: string | null;
   visualSelection: {
     mode: 'rect' | 'brush' | 'lasso' | 'ai' | 'erase' | 'adjust';
     brushSize: number;

@@ -445,6 +445,7 @@ const initialWorkflow: WorkflowSettings = {
   // 4. Visual Edit
   activeTool: 'select',
   visualPrompt: '',
+  visualReferenceImage: null,
   visualSelection: {
     mode: 'rect',
     brushSize: 20,

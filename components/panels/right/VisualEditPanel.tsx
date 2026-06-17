@@ -1501,6 +1501,7 @@ export const VisualEditPanel = () => {
 
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const materialReferenceInputRef = useRef<HTMLInputElement>(null);
+  const visualReferenceInputRef = useRef<HTMLInputElement>(null);
   const autoSelectRequestIdRef = useRef(0);
 
   const updateWf = (payload: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
@@ -2002,6 +2003,25 @@ export const VisualEditPanel = () => {
   const handleRemoveMaterialReference = useCallback(() => {
     updateMaterial({ referenceImage: null });
   }, [updateMaterial]);
+
+  const handleVisualReferenceUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateWf({ visualReferenceImage: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+
+    if (visualReferenceInputRef.current) {
+      visualReferenceInputRef.current.value = '';
+    }
+  }, [updateWf]);
+
+  const handleRemoveVisualReference = useCallback(() => {
+    updateWf({ visualReferenceImage: null });
+  }, [updateWf]);
 
   const selectionIds = useMemo(() => wf.visualSelections.map((shape) => shape.id), [wf.visualSelections]);
   const selectionCount = selectionIds.length;
@@ -2529,6 +2549,73 @@ export const VisualEditPanel = () => {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground">Reference Image</label>
+                {wf.visualReferenceImage && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveVisualReference}
+                    className="text-[10px] text-foreground-muted hover:text-rose-500 transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <input
+                ref={visualReferenceInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleVisualReferenceUpload}
+                className="hidden"
+              />
+              {wf.visualReferenceImage ? (
+                <div className="relative h-28 overflow-hidden rounded-lg border border-border bg-surface-sunken group">
+                  <img
+                    src={wf.visualReferenceImage}
+                    alt="Edit reference"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
+                    <span className="truncate text-[10px] font-semibold text-white">Reference attached</span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => visualReferenceInputRef.current?.click()}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white transition-colors hover:bg-black/70"
+                        title="Replace reference"
+                      >
+                        <Upload size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVisualReference}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white transition-colors hover:bg-rose-500"
+                        title="Remove reference"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => visualReferenceInputRef.current?.click()}
+                  className="flex h-24 w-full items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-surface-sunken/60 text-left transition-all hover:border-accent/60 hover:bg-surface-elevated"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface-elevated text-foreground-muted">
+                    <ImageIcon size={18} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-foreground">Upload reference</span>
+                    <span className="mt-1 block text-[10px] text-foreground-muted">Object, texture, material, or style</span>
+                  </span>
+                </button>
               )}
             </div>
 

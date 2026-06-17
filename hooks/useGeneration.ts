@@ -643,11 +643,12 @@ const buildSeamlessCompositeMatte = (
 ): Uint8ClampedArray => {
   const longEdge = Math.max(width, height);
   const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
-  const changeAlpha = new Uint8ClampedArray(width * height);
+  const coreAlpha = new Uint8ClampedArray(width * height);
+  const transitionAlpha = new Uint8ClampedArray(width * height);
   let selectedCount = 0;
-  let changedCount = 0;
+  let coreCount = 0;
 
-  for (let index = 0, pixel = 0; index < changeAlpha.length; index += 1, pixel += 4) {
+  for (let index = 0, pixel = 0; index < coreAlpha.length; index += 1, pixel += 4) {
     const selection = selectionAlpha[index] / 255;
     if (selection <= 0.01) continue;
     selectedCount += 1;
@@ -657,17 +658,20 @@ const buildSeamlessCompositeMatte = (
     const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
     const colorDistance = Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3);
     const maxDelta = Math.max(redDelta, greenDelta, blueDelta, colorDistance);
-    const change = smoothStep(10, 42, maxDelta) * selection;
-    const value = clampByte(change * 255);
-    changeAlpha[index] = value;
-    if (value > 24) changedCount += 1;
+    const coreValue = clampByte(smoothStep(28, 74, maxDelta) * selection * 255);
+    const transitionValue = clampByte(smoothStep(16, 46, maxDelta) * selection * 255);
+    coreAlpha[index] = coreValue;
+    transitionAlpha[index] = transitionValue;
+    if (coreValue > 24) coreCount += 1;
   }
 
-  const changeFeather = Math.round(Math.min(42, Math.max(7, longEdge * (0.003 + normalizedFeather * 0.008))));
-  const selectionFeather = Math.round(Math.min(80, Math.max(12, longEdge * (0.006 + normalizedFeather * 0.014))));
-  const expandedChange = blurAlpha(changeAlpha, width, height, changeFeather);
+  const coreFeather = Math.round(Math.min(28, Math.max(5, longEdge * (0.002 + normalizedFeather * 0.005))));
+  const transitionFeather = Math.round(Math.min(42, Math.max(8, longEdge * (0.003 + normalizedFeather * 0.007))));
+  const selectionFeather = Math.round(Math.min(36, Math.max(6, longEdge * (0.0025 + normalizedFeather * 0.006))));
+  const softCore = blurAlpha(coreAlpha, width, height, coreFeather);
+  const outerCore = blurAlpha(coreAlpha, width, height, transitionFeather);
   const softSelection = blurAlpha(selectionAlpha, width, height, selectionFeather);
-  const useSelectionFallback = changedCount < Math.max(48, selectedCount * 0.002);
+  const useSelectionFallback = coreCount < Math.max(48, selectedCount * 0.002);
   const matte = new Uint8ClampedArray(width * height);
 
   for (let index = 0; index < matte.length; index += 1) {
@@ -675,8 +679,11 @@ const buildSeamlessCompositeMatte = (
       matte[index] = softSelection[index];
       continue;
     }
-    const changed = Math.max(changeAlpha[index], Math.min(255, expandedChange[index] * 1.65));
-    matte[index] = clampByte(Math.min(softSelection[index], changed));
+    const core = Math.max(coreAlpha[index], Math.min(255, softCore[index] * 1.2));
+    const transition = Math.min(transitionAlpha[index], Math.min(255, outerCore[index] * 1.1));
+    const selectionGuard = Math.min(255, Math.max(selectionAlpha[index], softSelection[index] * 0.55));
+    const value = Math.max(core, transition);
+    matte[index] = clampByte(Math.min(selectionGuard, value));
   }
 
   return matte;
@@ -886,10 +893,18 @@ const compositeVisualEditResult = async (
     const editedPixels = editedImageData.data;
 
     for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
-      const alpha = matte[index] / 255;
+      const matteValue = matte[index];
+      if (matteValue < 8) continue;
+      const redDelta = Math.abs(editedPixels[pixel] - sourcePixels[pixel]);
+      const greenDelta = Math.abs(editedPixels[pixel + 1] - sourcePixels[pixel + 1]);
+      const blueDelta = Math.abs(editedPixels[pixel + 2] - sourcePixels[pixel + 2]);
+      const maxDelta = Math.max(redDelta, greenDelta, blueDelta, Math.sqrt((redDelta * redDelta + greenDelta * greenDelta + blueDelta * blueDelta) / 3));
+      if (matteValue < 180 && maxDelta < 26) continue;
+      const confidence = Math.max(smoothStep(18, 54, maxDelta), smoothStep(140, 240, matteValue));
+      const alpha = smoothStep(10, 245, matteValue) * confidence;
       if (alpha <= 0) continue;
       const inverse = 1 - alpha;
-      const boundaryWeight = 1 - smoothStep(96, 220, matte[index]);
+      const boundaryWeight = 1 - smoothStep(96, 220, matteValue);
       const editedRed = editedPixels[pixel] + seamOffset.red * boundaryWeight;
       const editedGreen = editedPixels[pixel + 1] + seamOffset.green * boundaryWeight;
       const editedBlue = editedPixels[pixel + 2] + seamOffset.blue * boundaryWeight;
@@ -1711,6 +1726,17 @@ export function useGeneration(): UseGenerationReturn {
         const bgImgData = dataUrlToImageData(state.workflow.visualBackground.referenceImage);
         if (bgImgData) {
           images.push(bgImgData);
+        }
+      }
+
+      if (
+        state.mode === 'visual-edit' &&
+        state.workflow.activeTool === 'select' &&
+        state.workflow.visualReferenceImage
+      ) {
+        const refImgData = dataUrlToImageData(state.workflow.visualReferenceImage);
+        if (refImgData) {
+          images.push(refImgData);
         }
       }
 
