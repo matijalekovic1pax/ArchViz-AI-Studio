@@ -376,8 +376,7 @@ const renderOpenAIEditableMaskDataUrl = async (
     pixels[index] = 255;
     pixels[index + 1] = 255;
     pixels[index + 2] = 255;
-    // OpenAI edit masks use transparency for the editable region.
-    pixels[index + 3] = selected ? 0 : 255;
+    pixels[index + 3] = selected ? 255 : 0;
   }
   ctx.putImageData(imageData, 0, 0);
 
@@ -3309,11 +3308,10 @@ export function useGeneration(): UseGenerationReturn {
               : state.output.resolution === '720p'
                 ? 'draft'
                 : 'standard';
-            const preciseEditInstruction = (state.workflow.visualPrompt || explicitPrompt || options.prompt || '').trim() || basePrompt;
 
             result = await runVerifiedImageGeneration(
               'precise image edit',
-              preciseEditInstruction,
+              basePrompt,
               editReferenceImages,
               async (promptForAttempt) => {
                 updateGenerationStage('aiLayer');
@@ -3340,10 +3338,7 @@ export function useGeneration(): UseGenerationReturn {
                 const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                 const compositedImages = await Promise.all(
                   editedImages.map((image) =>
-                    compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
-                      seamless: true,
-                      featherAmount: effectiveFeatherAmount
-                    })
+                    compositeVisualEditResult(sourceImageUrl!, image, localSelectionMaskDataUrl || selectedMaskDataUrl, false)
                   )
                 );
                 return {
@@ -3352,18 +3347,7 @@ export function useGeneration(): UseGenerationReturn {
                   optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                 };
               },
-              basePrompt,
-              {
-                verificationPolicy: 'advisory',
-                verificationContext: {
-                  mode: 'localized-edit',
-                  localizedEdit: {
-                    operation: preciseOperation,
-                    targetLabel: preciseTargetLabel,
-                    selectedRatio: preciseInputs.selectionStats.selectedRatio
-                  }
-                }
-              }
+              basePrompt
             );
             visualMaskHandledLocally = true;
           } else {

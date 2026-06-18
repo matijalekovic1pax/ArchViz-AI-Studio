@@ -2708,10 +2708,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
   const userPrompt = workflow.visualPrompt?.trim();
   const selectionParts = buildSelectionContext(workflow, 'guide');
   const parts: string[] = [];
-  parts.push('Image editing framework: make the requested local edit while keeping the source image visually continuous.');
+  parts.push('Image editing framework: make only the requested change, then actively preserve everything else from the source image.');
   parts.push(buildSourceImageRelationship(
     'image being edited',
-    'The target/tool scope is the intended edit area; the result should match the surrounding image naturally.'
+    'The requested target/tool scope is the intended focus of change; all unrelated scene content stays locked while local blending may extend as needed.'
   ));
 
   // User's creative intent
@@ -2722,33 +2722,24 @@ const generateVisualEditPrompt = (state: AppState): string => {
     return '';
   };
 
-  const buildSelectedEditBrief = (prompt: string | undefined, isPersonTarget: boolean): string => {
-    const cleanPrompt = (prompt || 'edit the selected area').trim().replace(/[.!?]+$/, '');
-    const shirtMatch = cleanPrompt.match(/^(?:make|turn|change)\s+(his|her|their|the|this)?\s*shirt\s+(?:to\s+)?(.+)$/i);
-    if (shirtMatch) {
-      const owner = (shirtMatch[1] || 'the').toLowerCase();
-      const person = owner === 'his' ? 'man' : owner === 'her' ? 'woman' : 'person';
-      return `Change the selected ${person}'s shirt to ${shirtMatch[2].trim()}. Keep the same ${person}, pose, position, lighting, and surroundings. Do not change anything else.`;
-    }
-
-    const targetLine = isPersonTarget
-      ? 'Keep the same person in the same pose, position, scale, lighting, and perspective.'
-      : 'Keep the selected subject in the same position, lighting, and perspective.';
-    return `Make this selected edit: ${cleanPrompt}. ${targetLine} Match the surrounding image perfectly and do not change anything else.`;
-  };
-
   if (tool === 'select') {
     const selectParts: string[] = [];
     const basePrompt = state.prompt?.trim();
-    const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette|shirt|jacket|coat|pants|trousers|dress|clothing|outfit|his|her)\b/i.test(userPrompt || '');
-    selectParts.push(buildSelectedEditBrief(userPrompt, personTarget));
+    const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette)\b/i.test(userPrompt || '');
+    selectParts.push('Selection-guided target edit.');
     if (basePrompt) {
-      selectParts.push(`Scene context: "${basePrompt}".`);
+      selectParts.push(`Scene context only: "${basePrompt}".`);
     }
-    if (workflow.visualReferenceImage) {
-      selectParts.push('Use the reference only for the requested visual detail.');
+    if (userPrompt) {
+      selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
-    selectParts.push('The edited patch must blend cleanly with no visible mask, outline, halo, smudge, or pasted edge.');
+    selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
+    selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');
+    if (personTarget) {
+      selectParts.push('Person target rule: if the selection contains a plain white, clay, placeholder, silhouette, or low-quality 3D person, convert that exact selected figure into one realistic human. Preserve the original pose, scale, body orientation, ground contact, location, occlusion, and camera perspective. Match the existing scene lighting, shadow direction, color temperature, and render quality. Do not add any extra people, do not modify any other people, and do not change nearby architecture, signage, floor, furniture, vegetation, or background.');
+    }
+    selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the intended target, shadows, reflections, and overall composition.');
+    selectParts.push('Blend the selected edit naturally at the boundary without showing the mask, lasso shape, outline, white patch, smudge, or pasted edge.');
     return selectParts.filter(Boolean).join(' ');
   }
 

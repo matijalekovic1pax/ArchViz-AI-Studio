@@ -2844,18 +2844,6 @@ function getImageEditRadius(width, height, operation) {
   return { dilation, feather };
 }
 
-function buildSelectedEditBrief(userPrompt, targetLabel) {
-  const cleanPrompt = sanitizeText(userPrompt, 600).replace(/[.!?]+$/, '') || `edit the selected ${targetLabel}`;
-  const shirtMatch = cleanPrompt.match(/^(?:make|turn|change)\s+(his|her|their|the|this)?\s*shirt\s+(?:to\s+)?(.+)$/i);
-  if (shirtMatch) {
-    const owner = String(shirtMatch[1] || 'the').toLowerCase();
-    const person = owner === 'his' ? 'man' : owner === 'her' ? 'woman' : 'person';
-    return `Change the selected ${person}'s shirt to ${shirtMatch[2].trim()}. Keep the same ${person}, pose, position, lighting, and surroundings. Do not change anything else.`;
-  }
-
-  return `Make this selected edit: ${cleanPrompt}. Keep the same subject in the same position, pose, scale, lighting, shadows, background, and nearby people. Do not change anything else.`;
-}
-
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
   const userPrompt = sanitizeText(request.prompt, OPENAI_IMAGE_MAX_PROMPT_CHARS);
@@ -2864,18 +2852,20 @@ function buildImageEditPrompt(request) {
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
 
+  const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary.';
   let task = '';
   if (operation === 'replace_material' || operation === 'recolor') {
-    task = `Change only the selected ${targetLabel} to ${materialOrColor}. Keep the same shape, position, pose, folds, texture, lighting, shadows, and nearby surroundings. Do not alter anything else.`;
+    task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
   } else if (operation === 'add_people') {
-    task = `Add realistic people only inside the selected area: ${userPrompt || 'Add a small number of naturally integrated people.'} Match the scene perspective, scale, lighting, shadows, and reflections. Do not alter anything else.`;
+    task = `Add realistic people only inside the selected area according to this request: ${userPrompt || 'Add a small number of naturally integrated people.'} They should have correct architectural scale, believable posture, lighting, shadows, reflections, and perspective. Preserve the rest of the image unchanged.`;
   } else if (operation === 'remove_people' || operation === 'remove_object') {
-    task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'} and fill the area from the surrounding image so it looks untouched. Do not alter anything else.`;
+    task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'}. Reconstruct the background, furniture, floor, wall, and lighting behind them naturally as if they were never there. Preserve surrounding architecture, perspective, texture, shadows, and all unselected areas.`;
   } else {
-    task = buildSelectedEditBrief(userPrompt, targetLabel);
+    task = `Apply this edit only to the selected area: ${userPrompt}. Preserve the rest of the image unchanged.`;
   }
 
-  return [task, 'The patch must blend perfectly into the source image with no visible mask, outline, halo, smudge, or pasted edge.'].filter(Boolean).join(' ');
+  const context = sanitizeText(request.originalGenerationPrompt, 1600);
+  return [base, task, context ? `Original render description/context: ${context}` : ''].filter(Boolean).join('\n\n');
 }
 
 function decodeImageEditBase64Image(image, label) {

@@ -21,7 +21,7 @@ export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
 const PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES = 420;
 const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
-const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 2048;
+const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
 const OUTPUT_VERIFICATION_MAX_PROMPT_CHARS = 10000;
 const OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS = 900;
 
@@ -1188,7 +1188,7 @@ export class GeminiService {
 
     return [
       'You are the prompt optimization layer inside an architectural image generation app.',
-      'Your job is to read the app-generated prompt and inspect the attached images, infer what the user actually wants, then rewrite it as a short human brief for the final image model.',
+      'Your job is to read the app-generated prompt and inspect the attached images, infer the user intent, then rewrite the prompt for the final image model in natural human language.',
       '',
       `Final image model: ${modelName}.`,
       `Prompt kind: ${context.promptKind}.`,
@@ -1196,20 +1196,20 @@ export class GeminiService {
       originalUserLine,
       '',
       'Rewrite goals:',
-      '- Extract the core creative objective: what image should the customer get, and what is the main visual result they care about?',
-      '- Translate the app prompt into relaxed art-direction language, not a checklist or rule document.',
-      '- Keep only the decisive constraints: source/reference relationship, edit target, intended style, key lighting or atmosphere, and any central text/signage.',
-      '- If the source view is locked, say that once in plain language, such as keeping the same view and layout from the reference. Do not enumerate camera, horizon, scale, lens, geometry, and composition separately.',
-      '- For masked or localized edits, briefly name the selected target and requested change, then say the rest should stay natural and unchanged.',
-      '- For simple localized edits, prefer a direct sentence like: Change the selected person\'s shirt to yellow, keeping the same person and everything else unchanged.',
-      '- Drop repeated preservation rules, internal app labels, negative instruction stacks, priority systems, and micro-control that the image model cannot reliably follow.',
-      '- Do not add new design ideas. If a detail is not essential to the user intent, leave it out.',
+      '- Keep the essential user intent and the most important visual priorities.',
+      '- Preserve source-image relationships, camera, composition, spatial layout, geometry, and existing design when the prompt says the source is locked.',
+      '- For edit or mask requests, keep the selected/masked area scope clear and preserve unaffected regions.',
+      '- Keep exact visible text, signage, logos, or labels only when the prompt explicitly requires them.',
+      '- Keep the few most important material, style, lighting, atmosphere, and quality cues.',
+      '- Remove redundant rule lists, internal labels, priority systems, legalistic phrasing, excessive negative instructions, and over-specific micro-control.',
+      '- Do not invent new requirements, new objects, new camera moves, or new design changes.',
       '',
       'Output requirements:',
-      '- Return one short prompt only, written like a person briefing a renderer.',
-      '- Use one fluid paragraph. Avoid list-like phrasing and repeated "keep/preserve/do not" commands.',
+      '- Return one concise prompt only.',
+      '- Use natural language, as if an art director is briefing a renderer.',
+      '- Prefer one paragraph, two short paragraphs only if the mask/reference relationship needs clarity.',
       '- Do not use markdown, bullets, JSON, quotes, headings, or meta commentary.',
-      '- Target roughly 35-120 words, unless the user request genuinely needs a little more context.',
+      '- Target roughly 60-180 words, unless the request is extremely simple.',
       '',
       'App-generated prompt to rewrite:',
       this.truncatePromptForOptimizer(appPrompt, PROMPT_OPTIMIZER_MAX_INPUT_CHARS)
