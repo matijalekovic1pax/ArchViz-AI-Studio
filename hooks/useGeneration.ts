@@ -868,29 +868,68 @@ const buildMaskBoundaryTraceSuppression = (
   height: number
 ): Uint8ClampedArray => {
   const candidates = new Uint8ClampedArray(selectionAlpha.length);
+  const horizontalInsideBand = new Uint8ClampedArray(selectionAlpha.length);
+
+  const boostHorizontalInsideBand = (index: number, value: number) => {
+    horizontalInsideBand[index] = Math.max(horizontalInsideBand[index], clampByte(value));
+  };
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const index = y * width + x;
       const center = selectionAlpha[index];
       let neighborDelta = center > 0 && center < 255 ? 255 : 0;
+      let verticalNeighborDelta = neighborDelta;
 
       if (x > 0) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index - 1]));
       if (x < width - 1) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index + 1]));
-      if (y > 0) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index - width]));
-      if (y < height - 1) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index + width]));
+      if (y > 0) {
+        const topDelta = Math.abs(center - selectionAlpha[index - width]);
+        neighborDelta = Math.max(neighborDelta, topDelta);
+        verticalNeighborDelta = Math.max(verticalNeighborDelta, topDelta);
+      }
+      if (y < height - 1) {
+        const bottomDelta = Math.abs(center - selectionAlpha[index + width]);
+        neighborDelta = Math.max(neighborDelta, bottomDelta);
+        verticalNeighborDelta = Math.max(verticalNeighborDelta, bottomDelta);
+      }
 
       const boundaryStrength = smoothStep(24, 190, neighborDelta);
-      if (boundaryStrength <= 0) continue;
-      candidates[index] = clampByte(boundaryStrength * 255);
+      if (boundaryStrength > 0) {
+        candidates[index] = clampByte(boundaryStrength * 255);
+      }
+
+      const horizontalBoundaryStrength = smoothStep(24, 190, verticalNeighborDelta);
+      if (horizontalBoundaryStrength <= 0 || center <= 8) continue;
+
+      const edgeBoost = horizontalBoundaryStrength * 255;
+      if (y > 0 && selectionAlpha[index - width] + 16 < center) {
+        boostHorizontalInsideBand(index, edgeBoost);
+        if (y < height - 1 && selectionAlpha[index + width] > 8) {
+          boostHorizontalInsideBand(index + width, edgeBoost);
+        }
+      }
+      if (y < height - 1 && selectionAlpha[index + width] + 16 < center) {
+        boostHorizontalInsideBand(index, edgeBoost);
+        if (y > 0 && selectionAlpha[index - width] > 8) {
+          boostHorizontalInsideBand(index - width, edgeBoost);
+        }
+      }
     }
   }
 
   const tightBand = blurAlpha(candidates, width, height, 1);
   const softBand = blurAlpha(candidates, width, height, 2);
+  const horizontalSoftBand = blurAlpha(horizontalInsideBand, width, height, 1);
   const suppression = new Uint8ClampedArray(selectionAlpha.length);
   for (let index = 0; index < suppression.length; index += 1) {
-    suppression[index] = clampByte(Math.max(candidates[index], tightBand[index] * 0.92, softBand[index] * 0.45));
+    suppression[index] = clampByte(Math.max(
+      candidates[index],
+      tightBand[index] * 0.92,
+      softBand[index] * 0.45,
+      horizontalInsideBand[index],
+      horizontalSoftBand[index] * 0.56
+    ));
   }
   return suppression;
 };
@@ -1131,13 +1170,15 @@ const compositeVisualEditResult = async (
       const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
       if (matteValue < 160 && maxDelta < 22) continue;
       const confidence = Math.max(smoothStep(14, 48, maxDelta), smoothStep(120, 232, matteValue));
-      const artifactSuppression = Math.min(
-        0.985,
-        Math.max(
-          boundaryArtifactSuppression[index],
-          edgeRegistrationSuppression[index],
-          maskBoundaryTraceSuppression[index]
-        ) / 255
+      const artifactSuppression = Math.max(
+        Math.min(
+          0.985,
+          Math.max(
+            boundaryArtifactSuppression[index],
+            edgeRegistrationSuppression[index]
+          ) / 255
+        ),
+        Math.min(1, maskBoundaryTraceSuppression[index] / 255)
       );
       const alpha = smoothStep(8, 245, matteValue) * confidence * (1 - artifactSuppression);
       if (alpha <= 0) continue;
