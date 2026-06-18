@@ -2852,20 +2852,19 @@ function buildImageEditPrompt(request) {
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
 
-  const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary. The mask is only an instruction: never render, trace, darken, halo, or outline the lasso, selection edge, mask boundary, brush edge, or rectangular border.';
+  const base = 'Use the source image as the exact base. The edited result will be composited over the source, so the selected patch must align with the original image and blend perfectly with the surrounding pixels.';
   let task = '';
   if (operation === 'replace_material' || operation === 'recolor') {
-    task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
+    task = `Change only the selected ${targetLabel} to ${materialOrColor}. Keep the same shape, position, pose, folds, texture, lighting, shadows, and nearby surroundings. Do not alter anything else.`;
   } else if (operation === 'add_people') {
-    task = `Add realistic people only inside the selected area according to this request: ${userPrompt || 'Add a small number of naturally integrated people.'} They should have correct architectural scale, believable posture, lighting, shadows, reflections, and perspective. Preserve the rest of the image unchanged.`;
+    task = `Add realistic people only inside the selected area: ${userPrompt || 'Add a small number of naturally integrated people.'} Match the scene perspective, scale, lighting, shadows, and reflections. Do not alter anything else.`;
   } else if (operation === 'remove_people' || operation === 'remove_object') {
-    task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'}. Reconstruct the background, furniture, floor, wall, and lighting behind them naturally as if they were never there. Preserve surrounding architecture, perspective, texture, shadows, and all unselected areas.`;
+    task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'} and fill the area from the surrounding image so it looks untouched. Do not alter anything else.`;
   } else {
-    task = `Apply this edit only to the selected area: ${userPrompt}. Preserve the rest of the image unchanged.`;
+    task = `Make this exact selected edit: ${userPrompt}. Keep the same subject in the same position, pose, scale, lighting, shadows, background, and nearby people. Do not redraw the scene or alter anything else.`;
   }
 
-  const context = sanitizeText(request.originalGenerationPrompt, 1600);
-  return [base, task, context ? `Original render description/context: ${context}` : ''].filter(Boolean).join('\n\n');
+  return [base, task, 'Do not show the mask, lasso edge, outline, halo, smudge, or pasted patch edge.'].filter(Boolean).join(' ');
 }
 
 function decodeImageEditBase64Image(image, label) {

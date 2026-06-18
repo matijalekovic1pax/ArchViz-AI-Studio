@@ -2708,10 +2708,10 @@ const generateVisualEditPrompt = (state: AppState): string => {
   const userPrompt = workflow.visualPrompt?.trim();
   const selectionParts = buildSelectionContext(workflow, 'guide');
   const parts: string[] = [];
-  parts.push('Image editing framework: make only the requested change, then actively preserve everything else from the source image.');
+  parts.push('Image editing framework: make the requested local edit while keeping the source image visually continuous.');
   parts.push(buildSourceImageRelationship(
     'image being edited',
-    'The requested target/tool scope is the intended focus of change; all unrelated scene content stays locked while local blending may extend as needed.'
+    'The target/tool scope is the intended edit area; the result should match the surrounding image naturally.'
   ));
 
   // User's creative intent
@@ -2725,8 +2725,8 @@ const generateVisualEditPrompt = (state: AppState): string => {
   if (tool === 'select') {
     const selectParts: string[] = [];
     const basePrompt = state.prompt?.trim();
-    const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette)\b/i.test(userPrompt || '');
-    selectParts.push('Selection-guided target edit.');
+    const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette|shirt|jacket|coat|pants|trousers|dress|clothing|outfit|his|her)\b/i.test(userPrompt || '');
+    selectParts.push('Selection-guided local edit.');
     if (basePrompt) {
       selectParts.push(`Scene context only: "${basePrompt}".`);
     }
@@ -2734,15 +2734,14 @@ const generateVisualEditPrompt = (state: AppState): string => {
       selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
     if (workflow.visualReferenceImage) {
-      selectParts.push('Reference relationship: an additional image is attached after the source image. Use it only as a visual reference for the requested object, material texture, finish, product, color, detail, or style named in the edit instruction. Keep the source image as the authority for camera, perspective, lighting context, placement, scale, and all unrelated scene content. Do not paste the reference image, copy its background, or replace the whole scene.');
+      selectParts.push('Reference relationship: use the extra image only for the requested visual detail; keep the source image as the base.');
     }
-    selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
-    selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');
+    selectParts.push('Use the selection to identify the exact target, then regenerate that local patch so it blends perfectly into the source image.');
     if (personTarget) {
-      selectParts.push('Person target rule: if the selection contains a plain white, clay, placeholder, silhouette, or low-quality 3D person, convert that exact selected figure into one realistic human. Preserve the original pose, scale, body orientation, ground contact, location, occlusion, and camera perspective. Match the existing scene lighting, shadow direction, color temperature, and render quality. Do not add any extra people, do not modify any other people, and do not change nearby architecture, signage, floor, furniture, vegetation, or background.');
+      selectParts.push('For a selected person, keep the same figure in the same pose, scale, body orientation, location, ground contact, lighting, and perspective.');
     }
-    selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the intended target, shadows, reflections, and overall composition.');
-    selectParts.push('Blend the selected edit naturally at the boundary without showing the mask, lasso shape, outline, white patch, smudge, or pasted edge.');
+    selectParts.push('Only the requested target should change; the surrounding image and any other people should remain visually unchanged.');
+    selectParts.push('Do not show the mask, lasso shape, outline, halo, smudge, or pasted edge.');
     return selectParts.filter(Boolean).join(' ');
   }
 
