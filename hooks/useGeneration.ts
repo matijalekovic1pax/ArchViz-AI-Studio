@@ -862,6 +862,39 @@ const buildEdgeRegistrationSuppression = (
   return suppression;
 };
 
+const buildMaskBoundaryTraceSuppression = (
+  selectionAlpha: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray => {
+  const candidates = new Uint8ClampedArray(selectionAlpha.length);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const center = selectionAlpha[index];
+      let neighborDelta = center > 0 && center < 255 ? 255 : 0;
+
+      if (x > 0) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index - 1]));
+      if (x < width - 1) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index + 1]));
+      if (y > 0) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index - width]));
+      if (y < height - 1) neighborDelta = Math.max(neighborDelta, Math.abs(center - selectionAlpha[index + width]));
+
+      const boundaryStrength = smoothStep(24, 190, neighborDelta);
+      if (boundaryStrength <= 0) continue;
+      candidates[index] = clampByte(boundaryStrength * 255);
+    }
+  }
+
+  const tightBand = blurAlpha(candidates, width, height, 1);
+  const softBand = blurAlpha(candidates, width, height, 2);
+  const suppression = new Uint8ClampedArray(selectionAlpha.length);
+  for (let index = 0; index < suppression.length; index += 1) {
+    suppression[index] = clampByte(Math.max(candidates[index], tightBand[index] * 0.92, softBand[index] * 0.45));
+  }
+  return suppression;
+};
+
 const estimateSeamColorOffset = (
   sourcePixels: Uint8ClampedArray,
   editedPixels: Uint8ClampedArray,
@@ -1086,6 +1119,11 @@ const compositeVisualEditResult = async (
       width,
       height
     );
+    const maskBoundaryTraceSuppression = buildMaskBoundaryTraceSuppression(
+      selectionAlpha,
+      width,
+      height
+    );
 
     for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
       const matteValue = matte[index];
@@ -1094,8 +1132,12 @@ const compositeVisualEditResult = async (
       if (matteValue < 160 && maxDelta < 22) continue;
       const confidence = Math.max(smoothStep(14, 48, maxDelta), smoothStep(120, 232, matteValue));
       const artifactSuppression = Math.min(
-        0.96,
-        Math.max(boundaryArtifactSuppression[index], edgeRegistrationSuppression[index]) / 255
+        0.985,
+        Math.max(
+          boundaryArtifactSuppression[index],
+          edgeRegistrationSuppression[index],
+          maskBoundaryTraceSuppression[index]
+        ) / 255
       );
       const alpha = smoothStep(8, 245, matteValue) * confidence * (1 - artifactSuppression);
       if (alpha <= 0) continue;
