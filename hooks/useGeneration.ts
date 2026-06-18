@@ -324,6 +324,10 @@ const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
 const PRECISE_EDIT_MAX_LONG_EDGE = 2_048;
 const PRECISE_EDIT_MAX_PIXELS = 2_048 * 1_152;
 const PRECISE_EDIT_MIN_PIXELS = 655_360;
+const PRECISE_EDIT_SIZE_MULTIPLE = 16;
+
+const roundToPreciseEditMultiple = (value: number) =>
+  Math.max(PRECISE_EDIT_SIZE_MULTIPLE, Math.round(value / PRECISE_EDIT_SIZE_MULTIPLE) * PRECISE_EDIT_SIZE_MULTIPLE);
 
 const getPreciseEditSize = (width: number, height: number) => {
   if (!width || !height) return null;
@@ -341,12 +345,34 @@ const getPreciseEditSize = (width: number, height: number) => {
     scale = Math.sqrt(PRECISE_EDIT_MIN_PIXELS / Math.max(pixels, 1));
   }
 
-  const targetWidth = Math.max(16, Math.round((width * scale) / 16) * 16);
-  const targetHeight = Math.max(16, Math.round((height * scale) / 16) * 16);
-  return {
-    width: targetWidth,
-    height: targetHeight,
-  };
+  const rawWidth = width * scale;
+  const rawHeight = height * scale;
+  const baseWidth = roundToPreciseEditMultiple(rawWidth);
+  const baseHeight = roundToPreciseEditMultiple(rawHeight);
+  let best: { width: number; height: number; score: number } | null = null;
+
+  for (let widthStep = -4; widthStep <= 4; widthStep += 1) {
+    for (let heightStep = -4; heightStep <= 4; heightStep += 1) {
+      const candidateWidth = baseWidth + widthStep * PRECISE_EDIT_SIZE_MULTIPLE;
+      const candidateHeight = baseHeight + heightStep * PRECISE_EDIT_SIZE_MULTIPLE;
+      if (candidateWidth < PRECISE_EDIT_SIZE_MULTIPLE || candidateHeight < PRECISE_EDIT_SIZE_MULTIPLE) continue;
+      const candidatePixels = candidateWidth * candidateHeight;
+      const candidateLongEdge = Math.max(candidateWidth, candidateHeight);
+      if (candidateLongEdge > PRECISE_EDIT_MAX_LONG_EDGE || candidatePixels > PRECISE_EDIT_MAX_PIXELS) continue;
+      if (candidatePixels < PRECISE_EDIT_MIN_PIXELS) continue;
+
+      const ratioError = Math.abs(candidateWidth / candidateHeight - ratio) / ratio;
+      const sizeError = Math.abs(candidatePixels / Math.max(rawWidth * rawHeight, 1) - 1);
+      const score = ratioError * 100 + sizeError;
+      if (!best || score < best.score) {
+        best = { width: candidateWidth, height: candidateHeight, score };
+      }
+    }
+  }
+
+  return best
+    ? { width: best.width, height: best.height }
+    : { width: baseWidth, height: baseHeight };
 };
 
 const renderOpenAIEditableMaskDataUrl = async (
@@ -692,6 +718,35 @@ const buildSeamlessCompositeMatte = (
 const getPixelLuminance = (pixels: Uint8ClampedArray, pixel: number): number =>
   pixels[pixel] * 0.2126 + pixels[pixel + 1] * 0.7152 + pixels[pixel + 2] * 0.0722;
 
+const getPixelOffset = (x: number, y: number, width: number): number =>
+  (y * width + x) * 4;
+
+const getClampedLuminance = (
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number
+): number => {
+  const safeX = Math.min(width - 1, Math.max(0, x));
+  const safeY = Math.min(height - 1, Math.max(0, y));
+  return getPixelLuminance(pixels, getPixelOffset(safeX, safeY, width));
+};
+
+const getLuminanceEdgeStrength = (
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number
+): number => {
+  const horizontal = getClampedLuminance(pixels, width, height, x + 1, y) -
+    getClampedLuminance(pixels, width, height, x - 1, y);
+  const vertical = getClampedLuminance(pixels, width, height, x, y + 1) -
+    getClampedLuminance(pixels, width, height, x, y - 1);
+  return Math.hypot(horizontal, vertical) / Math.SQRT2;
+};
+
 const getPixelMaxDelta = (
   sourcePixels: Uint8ClampedArray,
   editedPixels: Uint8ClampedArray,
@@ -763,6 +818,47 @@ const buildBoundaryArtifactSuppression = (
     suppression[index] = clampByte(strength);
   }
 
+  return suppression;
+};
+
+const buildEdgeRegistrationSuppression = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  matte: Uint8ClampedArray,
+  selectionAlpha: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray => {
+  const candidates = new Uint8ClampedArray(matte.length);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const matteValue = matte[index];
+      if (matteValue < 12 || selectionAlpha[index] < 8) continue;
+
+      const pixel = getPixelOffset(x, y, width);
+      const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
+      if (maxDelta < 24) continue;
+
+      const sourceEdge = getLuminanceEdgeStrength(sourcePixels, width, height, x, y);
+      const editedEdge = getLuminanceEdgeStrength(editedPixels, width, height, x, y);
+      const newEditedEdge = smoothStep(18, 54, editedEdge) * (1 - smoothStep(10, 34, sourceEdge));
+      const lostSourceEdge = smoothStep(18, 54, sourceEdge) * (1 - smoothStep(10, 34, editedEdge));
+      const edgeMismatch = Math.max(newEditedEdge, lostSourceEdge);
+      if (edgeMismatch <= 0.02) continue;
+
+      const deltaWeight = smoothStep(24, 82, maxDelta);
+      const matteWeight = 1 - smoothStep(218, 255, matteValue);
+      candidates[index] = clampByte(edgeMismatch * deltaWeight * Math.max(0.35, matteWeight) * 255);
+    }
+  }
+
+  const expanded = blurAlpha(candidates, width, height, 1);
+  const suppression = new Uint8ClampedArray(matte.length);
+  for (let index = 0; index < suppression.length; index += 1) {
+    suppression[index] = clampByte(Math.max(candidates[index], expanded[index] * 0.58) * 0.84);
+  }
   return suppression;
 };
 
@@ -982,6 +1078,14 @@ const compositeVisualEditResult = async (
       width,
       height
     );
+    const edgeRegistrationSuppression = buildEdgeRegistrationSuppression(
+      sourcePixels,
+      editedPixels,
+      matte,
+      selectionAlpha,
+      width,
+      height
+    );
 
     for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
       const matteValue = matte[index];
@@ -989,7 +1093,10 @@ const compositeVisualEditResult = async (
       const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
       if (matteValue < 160 && maxDelta < 22) continue;
       const confidence = Math.max(smoothStep(14, 48, maxDelta), smoothStep(120, 232, matteValue));
-      const artifactSuppression = Math.min(0.96, boundaryArtifactSuppression[index] / 255);
+      const artifactSuppression = Math.min(
+        0.96,
+        Math.max(boundaryArtifactSuppression[index], edgeRegistrationSuppression[index]) / 255
+      );
       const alpha = smoothStep(8, 245, matteValue) * confidence * (1 - artifactSuppression);
       if (alpha <= 0) continue;
       const inverse = 1 - alpha;
