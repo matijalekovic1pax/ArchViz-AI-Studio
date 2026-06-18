@@ -2851,8 +2851,9 @@ function buildImageEditPrompt(request) {
   const materialDescription = sanitizeText(request.materialDescription, 500);
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
+  const restyleGeometryLock = 'Treat recolor, material, finish, and restyling requests as batch-edit variants of the existing source pixels, not as object generation. Preserve the exact original footprint, bounding box, silhouette, size, aspect ratio, perspective, scale, orientation, contact points, occlusion order, and placement of the selected target. Do not enlarge, shrink, stretch, move, duplicate, inflate, straighten, rotate, or redraw the selected object or surface. Change only visible color/material/finish while preserving original shading, highlights, texture, seams, folds, shadows, reflections, and surrounding geometry.';
 
-  const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary.';
+  const base = `Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary. ${restyleGeometryLock}`;
   let task = '';
   if (operation === 'replace_material' || operation === 'recolor') {
     task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
@@ -2861,7 +2862,7 @@ function buildImageEditPrompt(request) {
   } else if (operation === 'remove_people' || operation === 'remove_object') {
     task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'}. Reconstruct the background, furniture, floor, wall, and lighting behind them naturally as if they were never there. Preserve surrounding architecture, perspective, texture, shadows, and all unselected areas.`;
   } else {
-    task = `Apply this edit only to the selected area: ${userPrompt}. Preserve the rest of the image unchanged.`;
+    task = `Apply this edit only to the selected area: ${userPrompt}. If this is a color, material, finish, or style change, keep the selected target locked to its original size, ratio, silhouette, perspective, and placement; do not generate a replacement object. Preserve the rest of the image unchanged.`;
   }
 
   const context = sanitizeText(request.originalGenerationPrompt, 1600);

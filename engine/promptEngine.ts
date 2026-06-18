@@ -2701,6 +2701,9 @@ const buildRemoveSelectionTargeting = (workflow: AppState['workflow']) => {
   return parts;
 };
 
+const RESTYLE_GEOMETRY_LOCK =
+  'Restyling, recolor, material, finish, and batch-variant edits are edits to the existing pixels and surfaces, not object generation. Preserve the exact original target footprint, bounding box, silhouette, size, aspect ratio, perspective, scale, orientation, contact points, occlusion order, and placement. Do not enlarge, shrink, stretch, move, duplicate, inflate, straighten, rotate, or redraw the selected object or surface. Change only the visible color/material/finish while keeping original shading, highlights, texture, seams, folds, shadows, reflections, and surrounding geometry intact.';
+
 const generateVisualEditPrompt = (state: AppState): string => {
   const { workflow } = state;
   const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
@@ -2733,6 +2736,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
     if (userPrompt) {
       selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
+    selectParts.push(RESTYLE_GEOMETRY_LOCK);
     selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
     selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');
     if (personTarget) {
@@ -2745,6 +2749,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'material') {
     parts.push('Transform the surface materials indicated by the selection while preserving the underlying architectural form.');
+    parts.push(RESTYLE_GEOMETRY_LOCK);
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
