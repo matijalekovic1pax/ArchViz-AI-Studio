@@ -2854,8 +2854,10 @@ function buildImageEditPrompt(request) {
 
   const base = 'Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary. The mask is only an instruction: never render, trace, darken, halo, or outline the lasso, selection edge, mask boundary, brush edge, or rectangular border.';
   let task = '';
-  if (operation === 'replace_material' || operation === 'recolor') {
+  if (operation === 'replace_material') {
     task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
+  } else if (operation === 'recolor') {
+    task = `Surgically recolor only ${targetLabel} to ${materialOrColor}. Treat the mask as coarse target guidance, not as permission to regenerate the whole selected region. Preserve every non-target part of the selected subject exactly: identity, silhouette, pose, body parts, accessories, bags, luggage, surrounding surfaces, shadows, reflections, floor, walls, furniture, signage, and nearby people. Do not remove, fade, ghost, replace, redraw, move, resize, or inpaint the larger person/object. The finished image must show the same subject in the same position with only the named color/material changed.`;
   } else if (operation === 'add_people') {
     task = `Add realistic people only inside the selected area according to this request: ${userPrompt || 'Add a small number of naturally integrated people.'} They should have correct architectural scale, believable posture, lighting, shadows, reflections, and perspective. Preserve the rest of the image unchanged.`;
   } else if (operation === 'remove_people' || operation === 'remove_object') {

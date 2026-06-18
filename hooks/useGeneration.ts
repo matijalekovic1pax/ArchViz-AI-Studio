@@ -468,6 +468,108 @@ const getPreciseEditTargetLabel = (activeTool: string): string => {
   return labels[activeTool] || 'selected area';
 };
 
+type PreciseLocalizedEditIntent = {
+  operation?: ImageEditOperation;
+  targetLabel?: string;
+  materialDescription?: string;
+  prompt: string;
+  verificationPolicy?: 'blocking' | 'advisory';
+};
+
+const PRECISE_COLOR_TERMS = [
+  'dark blue',
+  'light blue',
+  'dark green',
+  'light green',
+  'dark gray',
+  'light gray',
+  'dark grey',
+  'light grey',
+  'yellow',
+  'red',
+  'blue',
+  'green',
+  'black',
+  'white',
+  'gray',
+  'grey',
+  'purple',
+  'violet',
+  'pink',
+  'orange',
+  'brown',
+  'beige',
+  'cream',
+  'gold',
+  'golden',
+  'silver',
+  'navy',
+  'teal',
+  'turquoise',
+  'cyan',
+  'magenta',
+  'maroon',
+  'burgundy',
+  'khaki',
+  'olive',
+  'lime',
+];
+
+const PRECISE_CLOTHING_TARGETS: Array<{ pattern: RegExp; label: string; preserve: string }> = [
+  { pattern: /\b(?:t[-\s]?shirt|tee\s?shirt|shirt|polo|top|upper\s+garment|blouse)\b/i, label: 'shirt/upper garment', preserve: 'pants, belt, backpack, bag, luggage, arms, hands, skin, head, hair, shoes' },
+  { pattern: /\b(?:jacket|coat|blazer|suit\s+jacket)\b/i, label: 'jacket/coat', preserve: 'shirt, pants, backpack, bag, luggage, arms, hands, skin, head, hair, shoes' },
+  { pattern: /\b(?:pants|trousers|jeans|shorts)\b/i, label: 'pants/trousers', preserve: 'shirt, jacket, backpack, bag, luggage, arms, hands, skin, head, hair, shoes' },
+  { pattern: /\b(?:dress|skirt)\b/i, label: 'dress/skirt', preserve: 'jacket, bag, luggage, arms, hands, skin, head, hair, shoes' },
+  { pattern: /\b(?:shoes|sneakers|boots|footwear)\b/i, label: 'shoes/footwear', preserve: 'shirt, pants, backpack, bag, luggage, body, pose, skin, head, hair' },
+  { pattern: /\b(?:tie|scarf|hat|cap|uniform)\b/i, label: 'named clothing/accessory item', preserve: 'all other clothing, body parts, backpack, bag, luggage, pose, silhouette' },
+];
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const findPreciseColorTerm = (prompt: string): string | null => {
+  for (const term of PRECISE_COLOR_TERMS) {
+    if (new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i').test(prompt)) {
+      return term.toLowerCase();
+    }
+  }
+  return null;
+};
+
+const getPreciseLocalizedEditIntent = (
+  activeTool: string,
+  userPrompt: string | undefined
+): PreciseLocalizedEditIntent | null => {
+  const prompt = userPrompt?.trim();
+  if (!prompt || activeTool !== 'select') return null;
+  const color = findPreciseColorTerm(prompt);
+  if (!color) return null;
+  const hasRecolorLanguage = /\b(?:make|change|turn|recolou?r|color|colour|paint|set|convert)\b/i.test(prompt);
+  if (!hasRecolorLanguage) return null;
+
+  const clothingTarget = PRECISE_CLOTHING_TARGETS.find((target) => target.pattern.test(prompt));
+  if (!clothingTarget) return null;
+
+  const targetLabel = `the ${clothingTarget.label} worn by the selected person`;
+  const surgicalPrompt = [
+    `Surgical localized recolor: change only ${targetLabel} to ${color}.`,
+    'Use the lasso/mask as coarse target guidance only; it is not permission to inpaint, replace, erase, or redraw the whole selected person.',
+    'Preserve the exact selected person: same body, pose, head, hair, arms, hands, skin, silhouette, scale, position, occlusion, lighting, contact shadows, and reflections.',
+    `Preserve ${clothingTarget.preserve} exactly unless that item is the named recolor target.`,
+    'Preserve surrounding floor, wall, seated people, signage, architecture, furniture, shadows, reflections, and all background pixels.',
+    'Do not remove, fade, ghost, replace, resize, move, rotate, or regenerate the person. Do not create a transparent silhouette, patch, halo, outline, lasso trace, or mask edge.',
+    `Final result must be the same person in the same place with only the ${clothingTarget.label} visibly ${color}.`,
+    `Original user instruction: "${prompt}".`,
+  ].join(' ');
+
+  return {
+    operation: 'recolor',
+    targetLabel,
+    materialDescription: `${color} color on the existing ${clothingTarget.label} only`,
+    prompt: surgicalPrompt,
+    verificationPolicy: 'blocking',
+  };
+};
+
 const withOutputVerificationSettings = (
   settings: Record<string, any> | undefined,
   result: GeminiResponse
@@ -3212,6 +3314,10 @@ export function useGeneration(): UseGenerationReturn {
         const effectiveFeatherAmount = state.workflow.visualSelection.featherEnabled
           ? state.workflow.visualSelection.featherAmount
           : 35;
+        const preciseLocalizedIntent = getPreciseLocalizedEditIntent(
+          activeVisualTool,
+          state.workflow.visualPrompt
+        );
         const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided'
           ? await createGuidanceMaskDataUrl(selectedMaskDataUrl, effectiveFeatherAmount)
           : selectedMaskDataUrl;
@@ -3293,9 +3399,9 @@ export function useGeneration(): UseGenerationReturn {
 
           if (canUsePreciseOpenAIEdit && selectedMaskDataUrl) {
             const preciseInputs = await preparePreciseEditInputs(sourceImageUrl!, selectedMaskDataUrl);
-            const preciseOperation = getPreciseEditOperation(activeVisualTool);
-            const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
-            const materialDescription = materialReference
+            const preciseOperation = preciseLocalizedIntent?.operation || getPreciseEditOperation(activeVisualTool);
+            const preciseTargetLabel = preciseLocalizedIntent?.targetLabel || getPreciseEditTargetLabel(activeVisualTool);
+            const materialDescription = preciseLocalizedIntent?.materialDescription || (materialReference
               ? [
                   materialReference.label,
                   visualMaterial.colorTint && visualMaterial.colorTint !== '#ffffff' ? `with tint ${visualMaterial.colorTint}` : null,
@@ -3303,26 +3409,30 @@ export function useGeneration(): UseGenerationReturn {
                 ].filter(Boolean).join(', ')
               : activeVisualTool === 'material'
                 ? state.workflow.visualPrompt
-                : undefined;
+                : undefined);
             const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
               ? 'final'
               : state.output.resolution === '720p'
                 ? 'draft'
                 : 'standard';
+            const precisePrompt = preciseLocalizedIntent?.prompt || basePrompt;
 
             result = await runVerifiedImageGeneration(
               'precise image edit',
-              basePrompt,
+              precisePrompt,
               editReferenceImages,
               async (promptForAttempt) => {
                 updateGenerationStage('aiLayer');
                 updateProgress(18);
+                const promptForEdit = preciseLocalizedIntent && promptForAttempt !== preciseLocalizedIntent.prompt
+                  ? `${preciseLocalizedIntent.prompt}\n\nVerification correction to satisfy while keeping every surgical constraint above: ${promptForAttempt}`
+                  : promptForAttempt;
                 const editResponse = await imageEditRequest({
                   sourceImage: preciseInputs.sourceImage,
                   selectionMask: preciseInputs.selectionMask,
                   selectionStats: preciseInputs.selectionStats,
                   referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-                  prompt: promptForAttempt,
+                  prompt: promptForEdit,
                   operation: preciseOperation,
                   targetLabel: preciseTargetLabel,
                   colorHex: visualMaterial.colorTint && visualMaterial.colorTint !== '#ffffff'
@@ -3348,12 +3458,12 @@ export function useGeneration(): UseGenerationReturn {
                 return {
                   text: null,
                   images: compositedImages,
-                  optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
+                  optimizedPrompt: editResponse.versions[0]?.prompt || promptForEdit
                 };
               },
-              basePrompt,
+              precisePrompt,
               {
-                verificationPolicy: 'advisory',
+                verificationPolicy: preciseLocalizedIntent?.verificationPolicy || 'advisory',
                 verificationContext: {
                   mode: 'localized-edit',
                   localizedEdit: {

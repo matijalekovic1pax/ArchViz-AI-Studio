@@ -1234,6 +1234,9 @@ export class GeminiService {
           'Do not fail because the generated output is mostly unchanged; that is expected for masked visual editing.',
           'Evaluate the requested change inside the selected/masked region, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of unselected areas.',
           'If a tiny selected detail is hard to inspect, pass when the localized result is coherent and there is no obvious wrong edit, patch edge, pasted/inlaid look, subject distortion, or unwanted change outside the selected area.',
+          request.localizedEdit?.operation === 'recolor'
+            ? 'For localized recolor edits, fail if the selected person/object is removed, faded, ghosted, made transparent, moved, resized, broadly regenerated, or if non-target clothing/accessories/background changed. Passing requires the same subject in the same place with only the named color/material visibly changed.'
+            : '',
           referenceImageCount >= 2
             ? 'For localized edits, attached image 1 is usually the source render and attached image 2 is usually the selection/mask guidance; later reference images may describe materials or style.'
             : '',
