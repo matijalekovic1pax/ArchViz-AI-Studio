@@ -3338,7 +3338,10 @@ export function useGeneration(): UseGenerationReturn {
                 const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                 const compositedImages = await Promise.all(
                   editedImages.map((image) =>
-                    compositeVisualEditResult(sourceImageUrl!, image, localSelectionMaskDataUrl || selectedMaskDataUrl, false)
+                    compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
+                      seamless: true,
+                      featherAmount: effectiveFeatherAmount,
+                    })
                   )
                 );
                 return {
