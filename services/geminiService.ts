@@ -1201,6 +1201,7 @@ export class GeminiService {
       '- Keep only the decisive constraints: source/reference relationship, edit target, intended style, key lighting or atmosphere, and any central text/signage.',
       '- If the source view is locked, say that once in plain language, such as keeping the same view and layout from the reference. Do not enumerate camera, horizon, scale, lens, geometry, and composition separately.',
       '- For masked or localized edits, briefly name the selected target and requested change, then say the rest should stay natural and unchanged.',
+      '- For simple localized edits, prefer a direct sentence like: Change the selected person\'s shirt to yellow, keeping the same person and everything else unchanged.',
       '- Drop repeated preservation rules, internal app labels, negative instruction stacks, priority systems, and micro-control that the image model cannot reliably follow.',
       '- Do not add new design ideas. If a detail is not essential to the user intent, leave it out.',
       '',

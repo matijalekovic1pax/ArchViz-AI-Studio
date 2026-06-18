@@ -2844,6 +2844,18 @@ function getImageEditRadius(width, height, operation) {
   return { dilation, feather };
 }
 
+function buildSelectedEditBrief(userPrompt, targetLabel) {
+  const cleanPrompt = sanitizeText(userPrompt, 600).replace(/[.!?]+$/, '') || `edit the selected ${targetLabel}`;
+  const shirtMatch = cleanPrompt.match(/^(?:make|turn|change)\s+(his|her|their|the|this)?\s*shirt\s+(?:to\s+)?(.+)$/i);
+  if (shirtMatch) {
+    const owner = String(shirtMatch[1] || 'the').toLowerCase();
+    const person = owner === 'his' ? 'man' : owner === 'her' ? 'woman' : 'person';
+    return `Change the selected ${person}'s shirt to ${shirtMatch[2].trim()}. Keep the same ${person}, pose, position, lighting, and surroundings. Do not change anything else.`;
+  }
+
+  return `Make this selected edit: ${cleanPrompt}. Keep the same subject in the same position, pose, scale, lighting, shadows, background, and nearby people. Do not change anything else.`;
+}
+
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
   const userPrompt = sanitizeText(request.prompt, OPENAI_IMAGE_MAX_PROMPT_CHARS);
@@ -2852,7 +2864,6 @@ function buildImageEditPrompt(request) {
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
 
-  const base = 'Use the source image as the exact base. The edited result will be composited over the source, so the selected patch must align with the original image and blend perfectly with the surrounding pixels.';
   let task = '';
   if (operation === 'replace_material' || operation === 'recolor') {
     task = `Change only the selected ${targetLabel} to ${materialOrColor}. Keep the same shape, position, pose, folds, texture, lighting, shadows, and nearby surroundings. Do not alter anything else.`;
@@ -2861,10 +2872,10 @@ function buildImageEditPrompt(request) {
   } else if (operation === 'remove_people' || operation === 'remove_object') {
     task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'} and fill the area from the surrounding image so it looks untouched. Do not alter anything else.`;
   } else {
-    task = `Make this exact selected edit: ${userPrompt}. Keep the same subject in the same position, pose, scale, lighting, shadows, background, and nearby people. Do not redraw the scene or alter anything else.`;
+    task = buildSelectedEditBrief(userPrompt, targetLabel);
   }
 
-  return [base, task, 'Do not show the mask, lasso edge, outline, halo, smudge, or pasted patch edge.'].filter(Boolean).join(' ');
+  return [task, 'The patch must blend perfectly into the source image with no visible mask, outline, halo, smudge, or pasted edge.'].filter(Boolean).join(' ');
 }
 
 function decodeImageEditBase64Image(image, label) {

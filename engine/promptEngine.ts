@@ -2722,26 +2722,33 @@ const generateVisualEditPrompt = (state: AppState): string => {
     return '';
   };
 
+  const buildSelectedEditBrief = (prompt: string | undefined, isPersonTarget: boolean): string => {
+    const cleanPrompt = (prompt || 'edit the selected area').trim().replace(/[.!?]+$/, '');
+    const shirtMatch = cleanPrompt.match(/^(?:make|turn|change)\s+(his|her|their|the|this)?\s*shirt\s+(?:to\s+)?(.+)$/i);
+    if (shirtMatch) {
+      const owner = (shirtMatch[1] || 'the').toLowerCase();
+      const person = owner === 'his' ? 'man' : owner === 'her' ? 'woman' : 'person';
+      return `Change the selected ${person}'s shirt to ${shirtMatch[2].trim()}. Keep the same ${person}, pose, position, lighting, and surroundings. Do not change anything else.`;
+    }
+
+    const targetLine = isPersonTarget
+      ? 'Keep the same person in the same pose, position, scale, lighting, and perspective.'
+      : 'Keep the selected subject in the same position, lighting, and perspective.';
+    return `Make this selected edit: ${cleanPrompt}. ${targetLine} Match the surrounding image perfectly and do not change anything else.`;
+  };
+
   if (tool === 'select') {
     const selectParts: string[] = [];
     const basePrompt = state.prompt?.trim();
     const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette|shirt|jacket|coat|pants|trousers|dress|clothing|outfit|his|her)\b/i.test(userPrompt || '');
-    selectParts.push('Selection-guided local edit.');
+    selectParts.push(buildSelectedEditBrief(userPrompt, personTarget));
     if (basePrompt) {
-      selectParts.push(`Scene context only: "${basePrompt}".`);
-    }
-    if (userPrompt) {
-      selectParts.push(`Edit instruction: "${userPrompt}".`);
+      selectParts.push(`Scene context: "${basePrompt}".`);
     }
     if (workflow.visualReferenceImage) {
-      selectParts.push('Reference relationship: use the extra image only for the requested visual detail; keep the source image as the base.');
+      selectParts.push('Use the reference only for the requested visual detail.');
     }
-    selectParts.push('Use the selection to identify the exact target, then regenerate that local patch so it blends perfectly into the source image.');
-    if (personTarget) {
-      selectParts.push('For a selected person, keep the same figure in the same pose, scale, body orientation, location, ground contact, lighting, and perspective.');
-    }
-    selectParts.push('Only the requested target should change; the surrounding image and any other people should remain visually unchanged.');
-    selectParts.push('Do not show the mask, lasso shape, outline, halo, smudge, or pasted edge.');
+    selectParts.push('The edited patch must blend cleanly with no visible mask, outline, halo, smudge, or pasted edge.');
     return selectParts.filter(Boolean).join(' ');
   }
 

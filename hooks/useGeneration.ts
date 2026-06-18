@@ -3309,10 +3309,11 @@ export function useGeneration(): UseGenerationReturn {
               : state.output.resolution === '720p'
                 ? 'draft'
                 : 'standard';
+            const preciseEditInstruction = (state.workflow.visualPrompt || explicitPrompt || options.prompt || '').trim() || basePrompt;
 
             result = await runVerifiedImageGeneration(
               'precise image edit',
-              basePrompt,
+              preciseEditInstruction,
               editReferenceImages,
               async (promptForAttempt) => {
                 updateGenerationStage('aiLayer');
