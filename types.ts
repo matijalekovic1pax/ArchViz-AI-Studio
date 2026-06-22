@@ -23,6 +23,7 @@ export type ImageGenerationModel = 'nano-banana' | 'chatgpt-image-generation-2';
 
 export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';
 export const AI_SLOP_UPSCALE_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-image-generation-2';
+export const VISUAL_EDIT_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-image-generation-2';
 
 export const IMAGE_GENERATION_MODELS: readonly ImageGenerationModel[] = [
   'nano-banana',

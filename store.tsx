@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -173,6 +173,12 @@ const updateWorkflow = (
 
 const shouldLockAiSlopModel = (mode: AppState['mode'], workflow: WorkflowSettings) =>
   mode === 'upscale' && workflow.upscaleMode === 'ai-slop';
+
+const getLockedImageGenerationModel = (mode: AppState['mode'], workflow: WorkflowSettings): ImageGenerationModel | null => {
+  if (mode === 'visual-edit') return VISUAL_EDIT_IMAGE_MODEL;
+  if (shouldLockAiSlopModel(mode, workflow)) return AI_SLOP_UPSCALE_IMAGE_MODEL;
+  return null;
+};
 
 const initialVideoState: VideoState = {
   inputMode: 'image-animate',
@@ -1039,16 +1045,12 @@ function appReducer(state: AppState, action: Action): AppState {
         mode: nextMode,
         activeRightTab: 'default',
         prompt: '',
-        imageGenerationModel: shouldLockAiSlopModel(nextMode, state.workflow)
-          ? AI_SLOP_UPSCALE_IMAGE_MODEL
-          : state.imageGenerationModel
+        imageGenerationModel: getLockedImageGenerationModel(nextMode, state.workflow) ?? state.imageGenerationModel
       };
     }
     case 'SET_IMAGE_GENERATION_MODEL': return {
       ...state,
-      imageGenerationModel: shouldLockAiSlopModel(state.mode, state.workflow)
-        ? AI_SLOP_UPSCALE_IMAGE_MODEL
-        : normalizeImageGenerationModel(action.payload)
+      imageGenerationModel: getLockedImageGenerationModel(state.mode, state.workflow) ?? normalizeImageGenerationModel(action.payload)
     };
     case 'SET_PROMPT': return { ...state, prompt: action.payload };
     case 'SET_STYLE': return {
@@ -1068,9 +1070,7 @@ function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         workflow,
-        imageGenerationModel: shouldLockAiSlopModel(state.mode, workflow)
-          ? AI_SLOP_UPSCALE_IMAGE_MODEL
-          : state.imageGenerationModel
+        imageGenerationModel: getLockedImageGenerationModel(state.mode, workflow) ?? state.imageGenerationModel
       };
     }
     
@@ -1118,9 +1118,7 @@ function appReducer(state: AppState, action: Action): AppState {
       const workflow = normalizeWorkflow(action.payload.workflow);
       return {
         ...action.payload,
-        imageGenerationModel: shouldLockAiSlopModel(action.payload.mode, workflow)
-          ? AI_SLOP_UPSCALE_IMAGE_MODEL
-          : normalizeImageGenerationModel(action.payload?.imageGenerationModel),
+        imageGenerationModel: getLockedImageGenerationModel(action.payload.mode, workflow) ?? normalizeImageGenerationModel(action.payload?.imageGenerationModel),
         workflow,
         sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,
         appAlert: action.payload?.appAlert ?? null

@@ -48,7 +48,7 @@ import {
 } from '../lib/visualPostProcessing';
 import { AI_SLOP_UPSCALER_SUGGESTION_EVENT } from '../lib/assistantEvents';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
@@ -1261,7 +1261,9 @@ export function useGeneration(): UseGenerationReturn {
 
   const isReady = ensureServiceInitialized();
   const effectiveImageGenerationModel =
-    state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop'
+    state.mode === 'visual-edit'
+      ? VISUAL_EDIT_IMAGE_MODEL
+      : state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop'
       ? AI_SLOP_UPSCALE_IMAGE_MODEL
       : state.imageGenerationModel;
 

@@ -12,7 +12,7 @@ import { MobilePanelType } from './mobile/MobilePanels';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, VISUAL_EDIT_IMAGE_MODEL, type ImageGenerationModel } from '../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
@@ -424,6 +424,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleModelChange = (model: ImageGenerationModel) => {
+    if (state.mode === 'visual-edit') {
+      dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: VISUAL_EDIT_IMAGE_MODEL });
+      setShowModelMenu(false);
+      return;
+    }
     if (state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop') {
       dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: AI_SLOP_UPSCALE_IMAGE_MODEL });
       setShowModelMenu(false);
@@ -632,10 +637,16 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   const activeLanguage = (i18n.language || 'en').split('-')[0];
 
+  const isVisualEditModelLocked = state.mode === 'visual-edit';
   const isAiSlopModelLocked = state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop';
-  const activeImageGenerationModel = isAiSlopModelLocked
+  const activeImageGenerationModel = isVisualEditModelLocked
+    ? VISUAL_EDIT_IMAGE_MODEL
+    : isAiSlopModelLocked
     ? AI_SLOP_UPSCALE_IMAGE_MODEL
     : state.imageGenerationModel || DEFAULT_IMAGE_GENERATION_MODEL;
+  const selectableImageGenerationModels: readonly ImageGenerationModel[] = isVisualEditModelLocked
+    ? [VISUAL_EDIT_IMAGE_MODEL]
+    : IMAGE_GENERATION_MODELS;
   const getModelCopy = (model: ImageGenerationModel) => {
     if (model === 'chatgpt-image-generation-2') {
       return {
@@ -694,7 +705,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             </div>
           </div>
           <div className="space-y-1">
-            {IMAGE_GENERATION_MODELS.map((model) => {
+            {selectableImageGenerationModels.map((model) => {
               const copy = getModelCopy(model);
               const selected = activeImageGenerationModel === model;
               const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
