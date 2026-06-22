@@ -64,6 +64,7 @@ import {
   AlertTriangle,
   Laptop,
   BookOpen,
+  ExternalLink,
   Upload,
   Eraser,
 } from 'lucide-react';
@@ -2625,6 +2626,27 @@ export const VisualEditPanel = () => {
         return (
           <div className="space-y-4 animate-fade-in">
             <SectionDesc>Replace surface materials and tune texture details.</SectionDesc>
+
+            <div className="rounded-lg border border-border-subtle bg-surface-sunken/50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-foreground">Material Bank</div>
+                  <p className="mt-0.5 text-[10px] leading-snug text-foreground-muted">
+                    Browse materials, screenshot the one you like, then upload it here as a reference.
+                  </p>
+                </div>
+                <a
+                  href="https://www.materialbank.eu/en/search"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 h-8 px-3 rounded-md border border-border bg-surface-elevated text-[10px] font-semibold text-foreground-muted hover:text-foreground hover:border-foreground-muted transition-colors inline-flex items-center gap-1.5"
+                  title="Open Material Bank"
+                >
+                  <ExternalLink size={12} />
+                  <span>Open</span>
+                </a>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
