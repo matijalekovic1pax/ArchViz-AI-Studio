@@ -397,12 +397,13 @@ const renderOpenAIEditableMaskDataUrl = async (
   let selectedPixels = 0;
   for (let index = 0; index < pixels.length; index += 4) {
     const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
-    const selected = value >= 12;
+    const alpha = clampByte(value <= 6 ? 0 : value);
+    const selected = alpha >= 12;
     if (selected) selectedPixels += 1;
     pixels[index] = 255;
     pixels[index + 1] = 255;
     pixels[index + 2] = 255;
-    pixels[index + 3] = selected ? 255 : 0;
+    pixels[index + 3] = alpha;
   }
   ctx.putImageData(imageData, 0, 0);
 
@@ -665,10 +666,12 @@ const buildSeamlessCompositeMatte = (
   selectionAlpha: Uint8ClampedArray,
   width: number,
   height: number,
-  featherAmount: number
+  featherAmount: number,
+  options: { allowOutsideSelectionExpansion?: boolean } = {}
 ): Uint8ClampedArray => {
   const longEdge = Math.max(width, height);
   const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
+  const allowOutsideSelectionExpansion = options.allowOutsideSelectionExpansion ?? true;
   const coreAlpha = new Uint8ClampedArray(width * height);
   const transitionAlpha = new Uint8ClampedArray(width * height);
   let selectedCount = 0;
@@ -702,12 +705,16 @@ const buildSeamlessCompositeMatte = (
 
   for (let index = 0; index < matte.length; index += 1) {
     if (useSelectionFallback) {
-      matte[index] = softSelection[index];
+      matte[index] = allowOutsideSelectionExpansion
+        ? softSelection[index]
+        : Math.min(selectionAlpha[index], softSelection[index]);
       continue;
     }
     const core = Math.max(coreAlpha[index], Math.min(255, softCore[index] * 1.2));
     const transition = Math.min(transitionAlpha[index], Math.min(255, outerCore[index] * 1.1));
-    const selectionGuard = Math.min(255, Math.max(selectionAlpha[index], softSelection[index] * 0.55));
+    const selectionGuard = allowOutsideSelectionExpansion
+      ? Math.min(255, Math.max(selectionAlpha[index], softSelection[index] * 0.55))
+      : selectionAlpha[index];
     const value = Math.max(core, transition);
     matte[index] = clampByte(Math.min(selectionGuard, value));
   }
@@ -934,6 +941,52 @@ const buildMaskBoundaryTraceSuppression = (
   return suppression;
 };
 
+const buildSourceStructureSuppression = (
+  sourcePixels: Uint8ClampedArray,
+  editedPixels: Uint8ClampedArray,
+  matte: Uint8ClampedArray,
+  selectionAlpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+  featherAmount: number
+): Uint8ClampedArray => {
+  const longEdge = Math.max(width, height);
+  const normalizedFeather = Math.min(100, Math.max(0, featherAmount)) / 100;
+  const candidates = new Uint8ClampedArray(matte.length);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (selectionAlpha[index] < 8 || matte[index] < 10) continue;
+
+      const pixel = getPixelOffset(x, y, width);
+      const maxDelta = getPixelMaxDelta(sourcePixels, editedPixels, pixel);
+      if (maxDelta < 18) continue;
+
+      const sourceEdge = getLuminanceEdgeStrength(sourcePixels, width, height, x, y);
+      const editedEdge = getLuminanceEdgeStrength(editedPixels, width, height, x, y);
+      const edgeMismatch = Math.abs(sourceEdge - editedEdge);
+      const sourceDetail = smoothStep(22, 74, sourceEdge);
+      const mismatchedDetail = smoothStep(18, 64, edgeMismatch);
+      const rawRedraw = smoothStep(28, 96, maxDelta);
+      const matteEdgeWeight = 1 - smoothStep(230, 255, matte[index]);
+      const strength = sourceDetail * Math.max(mismatchedDetail, rawRedraw * 0.42) * Math.max(0.32, matteEdgeWeight);
+
+      if (strength > 0.02) {
+        candidates[index] = clampByte(strength * 255);
+      }
+    }
+  }
+
+  const radius = Math.round(Math.min(8, Math.max(2, longEdge * (0.0015 + normalizedFeather * 0.003))));
+  const expanded = blurAlpha(candidates, width, height, radius);
+  const suppression = new Uint8ClampedArray(matte.length);
+  for (let index = 0; index < suppression.length; index += 1) {
+    suppression[index] = clampByte(Math.max(candidates[index], expanded[index] * 0.62) * 0.9);
+  }
+  return suppression;
+};
+
 const estimateSeamColorOffset = (
   sourcePixels: Uint8ClampedArray,
   editedPixels: Uint8ClampedArray,
@@ -1094,7 +1147,12 @@ const compositeVisualEditResult = async (
   generated: GeneratedImage,
   selectedMaskDataUrl: string,
   editOutsideSelection: boolean,
-  options: { seamless?: boolean; featherAmount?: number } = {}
+  options: {
+    seamless?: boolean;
+    featherAmount?: number;
+    containToSelection?: boolean;
+    preserveSourceStructure?: boolean;
+  } = {}
 ): Promise<GeneratedImage> => {
   const [source, generatedImage, selectedMask] = await Promise.all([
     loadCanvasImage(sourceDataUrl),
@@ -1123,6 +1181,7 @@ const compositeVisualEditResult = async (
   if (options.seamless) {
     const selectionAlpha = getSelectionAlpha(selectedMask, width, height, editOutsideSelection);
     if (!selectionAlpha) return generated;
+    const featherAmount = options.featherAmount ?? 55;
     const sourceImageData = ctx.getImageData(0, 0, width, height);
     const editedImageData = editCtx.getImageData(0, 0, width, height);
     const matte = buildSeamlessCompositeMatte(
@@ -1131,13 +1190,14 @@ const compositeVisualEditResult = async (
       selectionAlpha,
       width,
       height,
-      options.featherAmount ?? 55
+      featherAmount,
+      { allowOutsideSelectionExpansion: !options.containToSelection }
     );
     const boundaryAlpha = buildSelectionBoundaryAlpha(
       selectionAlpha,
       width,
       height,
-      options.featherAmount ?? 55
+      featherAmount
     );
     const seamOffset = estimateSeamColorOffset(sourceImageData.data, editedImageData.data, matte);
     const sourcePixels = sourceImageData.data;
@@ -1163,6 +1223,17 @@ const compositeVisualEditResult = async (
       width,
       height
     );
+    const sourceStructureSuppression = options.preserveSourceStructure
+      ? buildSourceStructureSuppression(
+          sourcePixels,
+          editedPixels,
+          matte,
+          selectionAlpha,
+          width,
+          height,
+          featherAmount
+        )
+      : null;
 
     for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
       const matteValue = matte[index];
@@ -1175,7 +1246,8 @@ const compositeVisualEditResult = async (
           0.985,
           Math.max(
             boundaryArtifactSuppression[index],
-            edgeRegistrationSuppression[index]
+            edgeRegistrationSuppression[index],
+            sourceStructureSuppression?.[index] ?? 0
           ) / 255
         ),
         Math.min(1, maskBoundaryTraceSuppression[index] / 255)
@@ -3533,6 +3605,8 @@ export function useGeneration(): UseGenerationReturn {
                     compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
                       seamless: true,
                       featherAmount: effectiveFeatherAmount,
+                      containToSelection: preciseOperation === 'replace_material' || preciseOperation === 'recolor',
+                      preserveSourceStructure: preciseOperation === 'replace_material' || preciseOperation === 'recolor',
                     })
                   )
                 );
