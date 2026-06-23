@@ -148,18 +148,22 @@ const autoSelectionTargetHints: Record<string, string> = {
 };
 
 const autoSelectionTargetHardRules: Record<string, string> = {
-  Floors: 'Floor polygons must cover only the visible horizontal floor/ground-plane surface. Never include ceilings, upper wall fields, screens/posters, columns, people, seating, plants, signage, or a whole room/side zone just because it sits near the floor. Split the floor into separate polygons around large occluders instead of drawing an enclosing hull.',
-  Ceilings: 'Ceiling polygons must cover only the visible overhead ceiling plane or soffit surface. Never include floors, walls, screens/posters, columns, lights unless the fixture itself is requested, or a whole room/side zone.',
-  Walls: 'Wall polygons must cover only vertical wall/partition planes. Never include floor, ceiling, furniture, people, plants, screens/posters unless the poster surface itself is the wall finish, or a whole room/side zone.',
-  Ground: 'Ground polygons must cover only visible exterior terrain, paving, plaza, sidewalk, road shoulder, grass, dirt, or hardscape ground. Do not include sky, facade, walls, vegetation masses, vehicles, or people.',
-  Roads: 'Road polygons must cover only drivable road/asphalt/taxiway/drive-lane surfaces. Do not include sidewalks, buildings, sky, vehicles, people, or planted areas.',
-  Platforms: 'Platform polygons must cover only raised walkable platform slab surfaces and their visible top/edge surfaces. Do not include trains, seating, signage, ceiling, walls, or people.',
-  Sky: 'Sky polygons must cover only sky pixels. Never include buildings, trees, facade, horizon objects, ground, or a rectangular upper frame if silhouettes cut through it.',
-  Water: 'Water polygons must cover only visible water surfaces. Do not include pool decks, boats, sky, reflections outside the water, vegetation, or surrounding architecture.',
+  Floors: 'Floor polygons are broad edit guidance. Cover the visible walkable floor/ground plane with a useful perspective shape, even when people, seating, plants, luggage, or columns occlude it. Do not return an empty result when the floor is clearly visible.',
+  Roof: 'Roof polygons are broad edit guidance. Cover the visible roof plane, canopy, or soffit region with a useful perspective shape. Do not fail because the roof is large, partially hidden, or needs a simple hull.',
+  Facade: 'Facade polygons are broad edit guidance. Cover the visible facade/cladding/glass field with useful regions, allowing minor occluders and edge context for blending.',
+  Ceilings: 'Ceiling polygons are broad edit guidance. Cover the visible overhead ceiling plane or soffit field with a useful perspective shape, including small fixtures or edge context when needed.',
+  Walls: 'Wall polygons are broad edit guidance. Cover the visible wall or partition plane with a useful region, allowing small attached/overlapping details when strict tracing would fail.',
+  Ground: 'Ground polygons are broad edit guidance. Cover visible terrain, paving, plaza, sidewalk, road shoulder, grass, dirt, or hardscape ground with a useful shape.',
+  Roads: 'Road polygons are broad edit guidance. Cover the visible drivable road/asphalt/taxiway/drive-lane surface with a useful perspective shape.',
+  Platforms: 'Platform polygons are broad edit guidance. Cover the visible raised walkable platform slab surface with a useful shape.',
+  Sky: 'Sky polygons should cover visible sky guidance. Exclude the main building mass where possible, but prefer a usable sky region over returning empty when sky is visible.',
+  Water: 'Water polygons should cover visible water-surface guidance. Prefer a usable water region over returning empty when water is visible.',
 };
 
 const autoSelectionTargetAliases: Record<string, string[]> = {
   Floors: ['floor', 'floors', 'flooring', 'floor plane', 'ground plane', 'walkable floor', 'concourse floor', 'paving'],
+  Roof: ['roof', 'roofs', 'roof plane', 'canopy', 'soffit'],
+  Facade: ['facade', 'façade', 'cladding', 'curtain wall', 'building envelope'],
   Ceilings: ['ceiling', 'ceilings', 'soffit', 'overhead plane', 'ceiling plane'],
   Walls: ['wall', 'walls', 'partition', 'wall plane'],
   Ground: ['ground', 'terrain', 'plaza', 'sidewalk', 'hardscape', 'paving'],
@@ -171,6 +175,8 @@ const autoSelectionTargetAliases: Record<string, string[]> = {
 
 const autoSelectionSurfaceTargets = new Set([
   'Floors',
+  'Roof',
+  'Facade',
   'Ceilings',
   'Walls',
   'Ground',
@@ -225,11 +231,11 @@ const getAutoSelectionTargetHardRules = (targets: string[]) =>
     .map((rule) => `- ${rule}`)
     .join('\n');
 
-const shouldRetryAutoSelectionStrictly = (targets: string[]) =>
+const shouldRetryAutoSelectionBroadly = (targets: string[]) =>
   targets.some((target) => autoSelectionSurfaceTargets.has(target));
 
 type AutoSelectionPromptOptions = {
-  strictRetry?: boolean;
+  broadRetry?: boolean;
 };
 
 const buildAutoSelectionPrompt = (
@@ -247,12 +253,24 @@ const buildAutoSelectionPrompt = (
   const hardRuleBlock = hardRuleLines
     ? `\nTarget-specific hard rules:\n${hardRuleLines}`
     : '';
-  const retryBlock = options.strictRetry
-    ? '\nRetry correction: the previous answer was rejected because it selected an enclosing scene region, mixed unrelated planes, used a rectangular/side-zone hull, or returned a label outside the requested targets. Return only the visible pixels belonging to the requested target categories.'
+  const hasBroadSurfaceTarget = targets.some((target) => autoSelectionSurfaceTargets.has(target));
+  const retryBlock = options.broadRetry
+    ? '\nRetry correction: the previous answer returned no usable polygons. For broad architectural surfaces, return a simple useful guidance polygon over the visible target instead of trying to be surgically exact. Do not return an empty polygon list if the requested surface is visible.'
     : '';
   const promptContext = editPrompt.trim()
     ? `\nUser edit intent for disambiguation only: ${editPrompt.trim().slice(0, 500)}`
     : '';
+  const surfaceGuidanceRules = hasBroadSurfaceTarget
+    ? [
+        '- For broad architectural surfaces, polygons are guidance masks, not surgical cutouts. Prefer a useful broad shape over returning no selection.',
+        '- A floor, roof, facade, wall, ceiling, road, platform, ground, sky, or water polygon may include small foreground occluders or context when that avoids broken fragmented selections.',
+        '- Use a simple 4 to 18 point perspective polygon when it describes a large visible surface better than many tiny fragments.'
+      ].join('\n')
+    : [
+        '- Every polygon must be mostly filled by the requested target pixels. Do not draw a broad bounding polygon around a room, half of the image, or an architectural bay when that hull contains large unrelated planes.',
+        '- For people, vehicles, aircraft, furniture, luggage carts, and removable objects, capture the complete visible subject including attached accessories and contact shadows/reflections when needed.',
+        '- Keep small object selections tighter than broad surface selections.'
+      ].join('\n');
 
   return [
     'You are an expert segmentation assistant for an architectural visual editor.',
@@ -267,13 +285,16 @@ const buildAutoSelectionPrompt = (
     '- Return JSON only. Do not include markdown, code fences, comments, prose, or explanations.',
     '- Use this exact schema: {"polygons":[{"label":"target label","confidence":0.0,"points":[{"x":0,"y":0}]}]}.',
     '- Coordinates must be integers from 0 to 1000. x=0 is left, y=0 is top.',
-    '- Every polygon must be mostly filled by the requested target pixels. Do not draw a broad bounding polygon around a room, half of the image, or an architectural bay when that hull contains large unrelated planes.',
+    surfaceGuidanceRules,
     '- Return one polygon per distinct visible target instance or one polygon per coherent continuous surface region.',
     '- Enclose the complete visible target with 8 to 24 points and a modest context margin for natural blending. Avoid razor-precise tracing unless the active tool is protecting a foreground/background boundary.',
-    '- Use rectangles only when the intended target area is genuinely rectangular. Do not use rectangles for floors, ceilings, walls, sky, roads, ground, water, or other broad perspective surfaces unless the surface itself is rectangular in the image.',
+    hasBroadSurfaceTarget
+      ? '- For broad surfaces, simple quadrilaterals and perspective polygons are acceptable when they capture the visible target well.'
+      : '- Use rectangles only when the intended target area is genuinely rectangular.',
     '- Include occluded visible portions as one polygon if they clearly belong to the same object. Do not invent hidden parts behind other objects.',
-    '- For people, vehicles, aircraft, furniture, luggage carts, and removable objects, capture the complete visible subject including attached accessories and contact shadows/reflections when needed.',
-    '- For surfaces such as walls, floors, ceilings, sky, roads, glass, facade, and background, trace the visible surface boundary and avoid unrelated foreground objects.',
+    hasBroadSurfaceTarget
+      ? '- For broad surfaces, do not reject the target because exact occlusion tracing is difficult. The downstream image edit will preserve unrelated source objects.'
+      : '- For surfaces in a non-surface request, avoid unrelated foreground objects.',
     '- Do not select the entire image unless the requested target genuinely occupies the full frame.',
     '- If no requested targets are clearly visible, return {"polygons":[]}.',
   ].join('\n');
@@ -1754,34 +1775,6 @@ export const VisualEditPanel = () => {
       return union > 0 ? intersection / union : 0;
     };
 
-    const requestedTargets = new Set(targets);
-    const hasRequestedTarget = (target: string) => requestedTargets.has(target);
-    const hasSurfaceTarget = targets.some((target) => autoSelectionSurfaceTargets.has(target));
-
-    const isLikelySceneZoneInsteadOfTarget = (bounds: ReturnType<typeof getBounds>, area: number) => {
-      if (!hasSurfaceTarget) return false;
-
-      const imageArea = Math.max(1, width * height);
-      const areaRatio = area / imageArea;
-      const boundsWidthRatio = Math.max(0, bounds.x2 - bounds.x1) / Math.max(1, width);
-      const boundsHeightRatio = Math.max(0, bounds.y2 - bounds.y1) / Math.max(1, height);
-      const touchesTop = bounds.y1 <= height * 0.035;
-      const touchesBottom = bounds.y2 >= height * 0.965;
-      const touchesLeft = bounds.x1 <= width * 0.035;
-      const touchesRight = bounds.x2 >= width * 0.965;
-      const verticalSideZone = touchesTop && touchesBottom && (touchesLeft || touchesRight) && boundsWidthRatio < 0.82;
-
-      if ((hasRequestedTarget('Floors') || hasRequestedTarget('Ceilings')) && verticalSideZone && areaRatio < 0.78) {
-        return true;
-      }
-
-      if (hasRequestedTarget('Sky') && touchesBottom && boundsHeightRatio > 0.72 && areaRatio < 0.86) {
-        return true;
-      }
-
-      return false;
-    };
-
     const normalizePoints = (points: unknown[]) => {
       const normalizedPoints: Array<{ x: number; y: number }> = points
         .map((point: any) => {
@@ -1915,7 +1908,6 @@ export const VisualEditPanel = () => {
       if (area < minArea) return;
       const bounds = getBounds(mapped);
       if (getBoundsArea(bounds) < minArea) return;
-      if (isLikelySceneZoneInsteadOfTarget(bounds, area)) return;
 
       candidates.push({
         shape: {
@@ -1993,20 +1985,20 @@ export const VisualEditPanel = () => {
         throw new Error('Failed to read image dimensions.');
       }
 
-      const requestSelection = (strictRetry = false) => getGeminiService().generateText({
+      const requestSelection = (broadRetry = false) => getGeminiService().generateText({
         prompt: buildAutoSelectionPrompt(
           targets,
           activeTool,
           imageSize.width,
           imageSize.height,
           wf.visualPrompt,
-          { strictRetry }
+          { broadRetry }
         ),
         images: [imageData],
         model: AUTO_SELECTION_MODEL,
         generationConfig: {
-          temperature: strictRetry ? 0 : 0.05,
-          topP: strictRetry ? 0.1 : 0.15,
+          temperature: broadRetry ? 0.1 : 0.05,
+          topP: broadRetry ? 0.25 : 0.15,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           thinkingConfig: { thinkingLevel: 'high' }
@@ -2021,8 +2013,8 @@ export const VisualEditPanel = () => {
       if (autoSelectRequestIdRef.current !== requestId) return;
 
       let shapes = buildSelectionShapes(responseText, imageSize.width, imageSize.height, targets);
-      if (!shapes.length && shouldRetryAutoSelectionStrictly(targets)) {
-        setAutoSelectMessage(`Refining ${targets.join(', ')} selection...`);
+      if (!shapes.length && shouldRetryAutoSelectionBroadly(targets)) {
+        setAutoSelectMessage(`Broadly selecting ${targets.join(', ')}...`);
         const retryResponseText = await requestSelection(true);
         if (autoSelectRequestIdRef.current !== requestId) return;
         shapes = buildSelectionShapes(retryResponseText, imageSize.width, imageSize.height, targets);

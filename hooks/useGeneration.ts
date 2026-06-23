@@ -494,6 +494,9 @@ const getPreciseEditTargetLabel = (activeTool: string): string => {
   return labels[activeTool] || 'selected area';
 };
 
+const PRECISE_OPENAI_EDIT_TOOLS = new Set(['people', 'remove', 'object', 'replace']);
+const PRECISE_OPENAI_MAX_SELECTED_RATIO = 0.24;
+
 const withOutputVerificationSettings = (
   settings: Record<string, any> | undefined,
   result: GeminiResponse
@@ -1209,34 +1212,6 @@ const compositeVisualEditResult = async (
   editCtx.drawImage(maskCanvas, 0, 0);
   ctx.drawImage(editCanvas, 0, 0);
 
-  return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
-};
-
-const resizeGeneratedImageToSourceSize = async (
-  sourceDataUrl: string,
-  generated: GeneratedImage
-): Promise<GeneratedImage> => {
-  const [source, generatedImage] = await Promise.all([
-    loadCanvasImage(sourceDataUrl),
-    loadCanvasImage(generated.dataUrl)
-  ]);
-
-  const width = source.naturalWidth || source.width;
-  const height = source.naturalHeight || source.height;
-  const generatedWidth = generatedImage.naturalWidth || generatedImage.width;
-  const generatedHeight = generatedImage.naturalHeight || generatedImage.height;
-  if (!width || !height || !generatedWidth || !generatedHeight) return generated;
-  if (width === generatedWidth && height === generatedHeight) return generated;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return generated;
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(generatedImage, 0, 0, width, height);
   return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
 };
 
@@ -3508,81 +3483,66 @@ export function useGeneration(): UseGenerationReturn {
             effectiveImageGenerationModel === 'chatgpt-image-generation-2' &&
             shouldUseSelectionMask &&
             selectedMaskDataUrl &&
+            PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
             activeVisualTool !== 'background' &&
             activeVisualTool !== 'extend'
           );
+          let usedPreciseOpenAIEdit = false;
 
           if (canUsePreciseOpenAIEdit && selectedMaskDataUrl) {
             const preciseInputs = await preparePreciseEditInputs(sourceImageUrl!, selectedMaskDataUrl);
-            const preciseOperation = getPreciseEditOperation(activeVisualTool);
-            const preciseTargetLabel = activeVisualTool === 'material'
-              ? `selected ${visualMaterial.category.toLowerCase()} surface`
-              : getPreciseEditTargetLabel(activeVisualTool);
-            const materialDescription = materialReference
-              ? [
-                  materialReference.label,
-                  visualMaterial.colorTint && visualMaterial.colorTint !== '#ffffff' ? `with tint ${visualMaterial.colorTint}` : null,
-                  `roughness ${visualMaterial.roughness}`,
-                ].filter(Boolean).join(', ')
-              : activeVisualTool === 'material'
-                ? state.workflow.visualPrompt
-                : undefined;
-            const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
-              ? 'final'
-              : state.output.resolution === '720p'
-                ? 'draft'
-                : 'standard';
+            const selectedRatio = preciseInputs.selectionStats.selectedRatio ?? 1;
+            if (selectedRatio <= PRECISE_OPENAI_MAX_SELECTED_RATIO) {
+              const preciseOperation = getPreciseEditOperation(activeVisualTool);
+              const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
+              const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
+                ? 'final'
+                : state.output.resolution === '720p'
+                  ? 'draft'
+                  : 'standard';
 
-            result = await runVerifiedImageGeneration(
-              'precise image edit',
-              basePrompt,
-              editReferenceImages,
-              async (promptForAttempt) => {
-                updateGenerationStage('aiLayer');
-                updateProgress(18);
-                const editResponse = await imageEditRequest({
-                  sourceImage: preciseInputs.sourceImage,
-                  selectionMask: preciseInputs.selectionMask,
-                  selectionStats: preciseInputs.selectionStats,
-                  referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-                  prompt: promptForAttempt,
-                  operation: preciseOperation,
-                  targetLabel: preciseTargetLabel,
-                  colorHex: visualMaterial.colorTint && visualMaterial.colorTint !== '#ffffff'
-                    ? visualMaterial.colorTint
-                    : undefined,
-                  materialDescription,
-                  originalGenerationPrompt: basePrompt,
-                  quality,
-                  variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
-                  outputFormat: 'png'
-                }, { signal: abortSignal });
-                updateGenerationStage('transfer');
-                updateProgress(88);
-                const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
-                const isSurfaceMaterialEdit = preciseOperation === 'replace_material' || preciseOperation === 'recolor';
-                const finalizedImages = await Promise.all(
-                  editedImages.map((image) =>
-                    isSurfaceMaterialEdit
-                      // GPT Image returns a complete edited image. For broad material/color edits,
-                      // a second hard mask pass can turn good inpainting into a pasted overlay.
-                      ? resizeGeneratedImageToSourceSize(sourceImageUrl!, image)
-                      : compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
-                          seamless: true,
-                          featherAmount: effectiveFeatherAmount,
-                        })
-                  )
-                );
-                return {
-                  text: null,
-                  images: finalizedImages,
-                  optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
-                };
-              },
-              basePrompt
-            );
-            visualMaskHandledLocally = true;
-          } else {
+              result = await runVerifiedImageGeneration(
+                'precise image edit',
+                basePrompt,
+                editReferenceImages,
+                async (promptForAttempt) => {
+                  updateGenerationStage('aiLayer');
+                  updateProgress(18);
+                  const editResponse = await imageEditRequest({
+                    sourceImage: preciseInputs.sourceImage,
+                    selectionMask: preciseInputs.selectionMask,
+                    selectionStats: preciseInputs.selectionStats,
+                    prompt: promptForAttempt,
+                    operation: preciseOperation,
+                    targetLabel: preciseTargetLabel,
+                    originalGenerationPrompt: basePrompt,
+                    quality,
+                    variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
+                    outputFormat: 'png'
+                  }, { signal: abortSignal });
+                  updateGenerationStage('transfer');
+                  updateProgress(88);
+                  const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
+                  const finalizedImages = await Promise.all(
+                    editedImages.map((image) => compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
+                      seamless: true,
+                      featherAmount: effectiveFeatherAmount,
+                    }))
+                  );
+                  return {
+                    text: null,
+                    images: finalizedImages,
+                    optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
+                  };
+                },
+                basePrompt
+              );
+              visualMaskHandledLocally = true;
+              usedPreciseOpenAIEdit = true;
+            }
+          }
+
+          if (!usedPreciseOpenAIEdit) {
             result = await runVerifiedImageGeneration(
               'image edit',
               basePrompt,
