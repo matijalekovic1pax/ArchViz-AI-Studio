@@ -147,6 +147,39 @@ const autoSelectionTargetHints: Record<string, string> = {
   Background: 'distant environment behind the main subject, including context buildings, landscape, horizon, and far scenery; exclude the main building or foreground subject unless selected separately',
 };
 
+const autoSelectionTargetHardRules: Record<string, string> = {
+  Floors: 'Floor polygons must cover only the visible horizontal floor/ground-plane surface. Never include ceilings, upper wall fields, screens/posters, columns, people, seating, plants, signage, or a whole room/side zone just because it sits near the floor. Split the floor into separate polygons around large occluders instead of drawing an enclosing hull.',
+  Ceilings: 'Ceiling polygons must cover only the visible overhead ceiling plane or soffit surface. Never include floors, walls, screens/posters, columns, lights unless the fixture itself is requested, or a whole room/side zone.',
+  Walls: 'Wall polygons must cover only vertical wall/partition planes. Never include floor, ceiling, furniture, people, plants, screens/posters unless the poster surface itself is the wall finish, or a whole room/side zone.',
+  Ground: 'Ground polygons must cover only visible exterior terrain, paving, plaza, sidewalk, road shoulder, grass, dirt, or hardscape ground. Do not include sky, facade, walls, vegetation masses, vehicles, or people.',
+  Roads: 'Road polygons must cover only drivable road/asphalt/taxiway/drive-lane surfaces. Do not include sidewalks, buildings, sky, vehicles, people, or planted areas.',
+  Platforms: 'Platform polygons must cover only raised walkable platform slab surfaces and their visible top/edge surfaces. Do not include trains, seating, signage, ceiling, walls, or people.',
+  Sky: 'Sky polygons must cover only sky pixels. Never include buildings, trees, facade, horizon objects, ground, or a rectangular upper frame if silhouettes cut through it.',
+  Water: 'Water polygons must cover only visible water surfaces. Do not include pool decks, boats, sky, reflections outside the water, vegetation, or surrounding architecture.',
+};
+
+const autoSelectionTargetAliases: Record<string, string[]> = {
+  Floors: ['floor', 'floors', 'flooring', 'floor plane', 'ground plane', 'walkable floor', 'concourse floor', 'paving'],
+  Ceilings: ['ceiling', 'ceilings', 'soffit', 'overhead plane', 'ceiling plane'],
+  Walls: ['wall', 'walls', 'partition', 'wall plane'],
+  Ground: ['ground', 'terrain', 'plaza', 'sidewalk', 'hardscape', 'paving'],
+  Roads: ['road', 'roads', 'driveway', 'lane', 'asphalt', 'taxiway'],
+  Platforms: ['platform', 'platforms', 'platform slab'],
+  Sky: ['sky', 'clouds'],
+  Water: ['water', 'pool', 'pond', 'canal', 'sea'],
+};
+
+const autoSelectionSurfaceTargets = new Set([
+  'Floors',
+  'Ceilings',
+  'Walls',
+  'Ground',
+  'Roads',
+  'Platforms',
+  'Sky',
+  'Water',
+]);
+
 const autoSelectionIntentRules: Record<string, string> = {
   select: 'The selection will guide the editable target. Prefer complete visible subjects with a small natural context margin over tiny fragments or razor-tight cutouts.',
   material: 'The selection will guide material replacement. Prefer continuous surface planes and material regions with enough edge context for blending; do not grab unrelated objects sitting on the surface.',
@@ -163,37 +196,84 @@ const autoSelectionIntentRules: Record<string, string> = {
 const getAutoSelectionIntentRule = (activeTool: string) =>
   autoSelectionIntentRules[activeTool] || autoSelectionIntentRules.select;
 
+const normalizeAutoSelectionText = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const getAutoSelectionLabel = (item: any) => {
+  const value = item?.label ?? item?.target ?? item?.category ?? item?.class ?? item?.name;
+  return typeof value === 'string' ? value : '';
+};
+
+const autoSelectionLabelMatchesTargets = (label: string, targets: string[]) => {
+  if (!label.trim() || targets.length === 0) return true;
+  const normalizedLabel = normalizeAutoSelectionText(label);
+  if (!normalizedLabel) return true;
+
+  return targets.some((target) => {
+    const aliases = [target, ...(autoSelectionTargetAliases[target] || [])].map(normalizeAutoSelectionText);
+    return aliases.some((alias) => (
+      alias &&
+      (normalizedLabel === alias || normalizedLabel.includes(alias) || alias.includes(normalizedLabel))
+    ));
+  });
+};
+
+const getAutoSelectionTargetHardRules = (targets: string[]) =>
+  targets
+    .map((target) => autoSelectionTargetHardRules[target])
+    .filter(Boolean)
+    .map((rule) => `- ${rule}`)
+    .join('\n');
+
+const shouldRetryAutoSelectionStrictly = (targets: string[]) =>
+  targets.some((target) => autoSelectionSurfaceTargets.has(target));
+
+type AutoSelectionPromptOptions = {
+  strictRetry?: boolean;
+};
+
 const buildAutoSelectionPrompt = (
   targets: string[],
   activeTool: string,
   width: number,
   height: number,
-  editPrompt: string
+  editPrompt: string,
+  options: AutoSelectionPromptOptions = {}
 ) => {
   const targetLines = targets
     .map((target) => `- ${target}: ${autoSelectionTargetHints[target] || 'the visible object or region named by this target'}`)
     .join('\n');
+  const hardRuleLines = getAutoSelectionTargetHardRules(targets);
+  const hardRuleBlock = hardRuleLines
+    ? `\nTarget-specific hard rules:\n${hardRuleLines}`
+    : '';
+  const retryBlock = options.strictRetry
+    ? '\nRetry correction: the previous answer was rejected because it selected an enclosing scene region, mixed unrelated planes, used a rectangular/side-zone hull, or returned a label outside the requested targets. Return only the visible pixels belonging to the requested target categories.'
+    : '';
   const promptContext = editPrompt.trim()
     ? `\nUser edit intent for disambiguation only: ${editPrompt.trim().slice(0, 500)}`
     : '';
 
   return [
     'You are an expert segmentation assistant for an architectural visual editor.',
-    `Image dimensions are ${width}x${height}, but all returned coordinates must use the normalized 0 to 1000 coordinate space.`,
+    `Image dimensions are ${width}x${height}. All returned coordinates must use normalized 0 to 1000 image coordinates, never screen coordinates and never pixel coordinates.`,
     `Active edit tool: ${activeTool}. ${getAutoSelectionIntentRule(activeTool)}`,
     'Detect only the requested target categories:',
     targetLines,
+    hardRuleBlock,
+    retryBlock,
     promptContext,
     'Output requirements:',
     '- Return JSON only. Do not include markdown, code fences, comments, prose, or explanations.',
     '- Use this exact schema: {"polygons":[{"label":"target label","confidence":0.0,"points":[{"x":0,"y":0}]}]}.',
     '- Coordinates must be integers from 0 to 1000. x=0 is left, y=0 is top.',
+    '- Every polygon must be mostly filled by the requested target pixels. Do not draw a broad bounding polygon around a room, half of the image, or an architectural bay when that hull contains large unrelated planes.',
     '- Return one polygon per distinct visible target instance or one polygon per coherent continuous surface region.',
     '- Enclose the complete visible target with 8 to 24 points and a modest context margin for natural blending. Avoid razor-precise tracing unless the active tool is protecting a foreground/background boundary.',
-    '- Use rectangles only when the intended target area is genuinely rectangular; otherwise use a simple polygon that reads as guidance, not a cutout stencil.',
+    '- Use rectangles only when the intended target area is genuinely rectangular. Do not use rectangles for floors, ceilings, walls, sky, roads, ground, water, or other broad perspective surfaces unless the surface itself is rectangular in the image.',
     '- Include occluded visible portions as one polygon if they clearly belong to the same object. Do not invent hidden parts behind other objects.',
     '- For people, vehicles, aircraft, furniture, luggage carts, and removable objects, capture the complete visible subject including attached accessories and contact shadows/reflections when needed.',
-    '- For surfaces such as walls, floors, ceilings, sky, roads, glass, facade, and background, return coherent regions and avoid unrelated foreground objects.',
+    '- For surfaces such as walls, floors, ceilings, sky, roads, glass, facade, and background, trace the visible surface boundary and avoid unrelated foreground objects.',
     '- Do not select the entire image unless the requested target genuinely occupies the full frame.',
     '- If no requested targets are clearly visible, return {"polygons":[]}.',
   ].join('\n');
@@ -1587,7 +1667,8 @@ export const VisualEditPanel = () => {
   const buildSelectionShapes = useCallback((
     payloadText: string,
     width: number,
-    height: number
+    height: number,
+    targets: string[] = []
   ): VisualSelectionShape[] => {
     const jsonText = extractJsonPayload(payloadText);
     if (!jsonText) return [];
@@ -1673,6 +1754,34 @@ export const VisualEditPanel = () => {
       return union > 0 ? intersection / union : 0;
     };
 
+    const requestedTargets = new Set(targets);
+    const hasRequestedTarget = (target: string) => requestedTargets.has(target);
+    const hasSurfaceTarget = targets.some((target) => autoSelectionSurfaceTargets.has(target));
+
+    const isLikelySceneZoneInsteadOfTarget = (bounds: ReturnType<typeof getBounds>, area: number) => {
+      if (!hasSurfaceTarget) return false;
+
+      const imageArea = Math.max(1, width * height);
+      const areaRatio = area / imageArea;
+      const boundsWidthRatio = Math.max(0, bounds.x2 - bounds.x1) / Math.max(1, width);
+      const boundsHeightRatio = Math.max(0, bounds.y2 - bounds.y1) / Math.max(1, height);
+      const touchesTop = bounds.y1 <= height * 0.035;
+      const touchesBottom = bounds.y2 >= height * 0.965;
+      const touchesLeft = bounds.x1 <= width * 0.035;
+      const touchesRight = bounds.x2 >= width * 0.965;
+      const verticalSideZone = touchesTop && touchesBottom && (touchesLeft || touchesRight) && boundsWidthRatio < 0.82;
+
+      if ((hasRequestedTarget('Floors') || hasRequestedTarget('Ceilings')) && verticalSideZone && areaRatio < 0.78) {
+        return true;
+      }
+
+      if (hasRequestedTarget('Sky') && touchesBottom && boundsHeightRatio > 0.72 && areaRatio < 0.86) {
+        return true;
+      }
+
+      return false;
+    };
+
     const normalizePoints = (points: unknown[]) => {
       const normalizedPoints: Array<{ x: number; y: number }> = points
         .map((point: any) => {
@@ -1735,6 +1844,11 @@ export const VisualEditPanel = () => {
     const minArea = Math.max(24, width * height * 0.00001);
 
     rawItems.forEach((item) => {
+      if (!Array.isArray(item)) {
+        const label = getAutoSelectionLabel(item);
+        if (!autoSelectionLabelMatchesTargets(label, targets)) return;
+      }
+
       let points: unknown[] | null = null;
       const pointSource =
         (Array.isArray(item) ? item : null) ||
@@ -1801,6 +1915,7 @@ export const VisualEditPanel = () => {
       if (area < minArea) return;
       const bounds = getBounds(mapped);
       if (getBoundsArea(bounds) < minArea) return;
+      if (isLikelySceneZoneInsteadOfTarget(bounds, area)) return;
 
       candidates.push({
         shape: {
@@ -1878,33 +1993,40 @@ export const VisualEditPanel = () => {
         throw new Error('Failed to read image dimensions.');
       }
 
-      const prompt = buildAutoSelectionPrompt(
-        targets,
-        activeTool,
-        imageSize.width,
-        imageSize.height,
-        wf.visualPrompt
-      );
-
-      const responseText = await getGeminiService().generateText({
-        prompt,
+      const requestSelection = (strictRetry = false) => getGeminiService().generateText({
+        prompt: buildAutoSelectionPrompt(
+          targets,
+          activeTool,
+          imageSize.width,
+          imageSize.height,
+          wf.visualPrompt,
+          { strictRetry }
+        ),
         images: [imageData],
         model: AUTO_SELECTION_MODEL,
         generationConfig: {
-          temperature: 0.1,
-          topP: 0.2,
+          temperature: strictRetry ? 0 : 0.05,
+          topP: strictRetry ? 0.1 : 0.15,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           thinkingConfig: { thinkingLevel: 'high' }
         }
       });
+
+      const responseText = await requestSelection(false);
       if (!responseText.trim()) {
         throw new Error('No text returned from auto-selection request.');
       }
 
       if (autoSelectRequestIdRef.current !== requestId) return;
 
-      const shapes = buildSelectionShapes(responseText, imageSize.width, imageSize.height);
+      let shapes = buildSelectionShapes(responseText, imageSize.width, imageSize.height, targets);
+      if (!shapes.length && shouldRetryAutoSelectionStrictly(targets)) {
+        setAutoSelectMessage(`Refining ${targets.join(', ')} selection...`);
+        const retryResponseText = await requestSelection(true);
+        if (autoSelectRequestIdRef.current !== requestId) return;
+        shapes = buildSelectionShapes(retryResponseText, imageSize.width, imageSize.height, targets);
+      }
       if (!shapes.length) {
         throw new Error('No selection polygons returned.');
       }

@@ -1212,6 +1212,34 @@ const compositeVisualEditResult = async (
   return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
 };
 
+const resizeGeneratedImageToSourceSize = async (
+  sourceDataUrl: string,
+  generated: GeneratedImage
+): Promise<GeneratedImage> => {
+  const [source, generatedImage] = await Promise.all([
+    loadCanvasImage(sourceDataUrl),
+    loadCanvasImage(generated.dataUrl)
+  ]);
+
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  const generatedWidth = generatedImage.naturalWidth || generatedImage.width;
+  const generatedHeight = generatedImage.naturalHeight || generatedImage.height;
+  if (!width || !height || !generatedWidth || !generatedHeight) return generated;
+  if (width === generatedWidth && height === generatedHeight) return generated;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return generated;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(generatedImage, 0, 0, width, height);
+  return generatedImageFromDataUrl(canvas.toDataURL('image/png'));
+};
+
 // Initialize Gemini service if gateway is authenticated
 const ensureServiceInitialized = (): boolean => {
   if (isGeminiServiceInitialized()) {
@@ -3533,10 +3561,12 @@ export function useGeneration(): UseGenerationReturn {
                 updateProgress(88);
                 const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                 const isSurfaceMaterialEdit = preciseOperation === 'replace_material' || preciseOperation === 'recolor';
-                const compositedImages = await Promise.all(
+                const finalizedImages = await Promise.all(
                   editedImages.map((image) =>
                     isSurfaceMaterialEdit
-                      ? compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false)
+                      // GPT Image returns a complete edited image. For broad material/color edits,
+                      // a second hard mask pass can turn good inpainting into a pasted overlay.
+                      ? resizeGeneratedImageToSourceSize(sourceImageUrl!, image)
                       : compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
                           seamless: true,
                           featherAmount: effectiveFeatherAmount,
@@ -3545,7 +3575,7 @@ export function useGeneration(): UseGenerationReturn {
                 );
                 return {
                   text: null,
-                  images: compositedImages,
+                  images: finalizedImages,
                   optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                 };
               },
