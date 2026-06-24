@@ -201,6 +201,11 @@ class CdpClient {
         pending.reject(new Error(`CDP connection closed before response ${id}.`));
       }
       this.pending.clear();
+      for (const waiter of this.eventWaiters) {
+        clearTimeout(waiter.timeout);
+        waiter.reject?.(new Error('CDP connection closed before event arrived.'));
+      }
+      this.eventWaiters = [];
     });
   }
 
@@ -230,7 +235,7 @@ class CdpClient {
   }
 
   send(method, params = {}) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.isOpen()) {
       throw new Error('CDP connection is not open.');
     }
     const id = this.nextId++;
@@ -248,6 +253,7 @@ class CdpClient {
         method,
         predicate,
         resolve,
+        reject,
         timeout: setTimeout(() => {
           this.eventWaiters = this.eventWaiters.filter((item) => item !== waiter);
           reject(new Error(`Timed out waiting for CDP event ${method}.`));
@@ -262,6 +268,10 @@ class CdpClient {
       this.ws.close();
     }
   }
+
+  isOpen() {
+    return Boolean(this.ws && this.ws.readyState === WebSocket.OPEN);
+  }
 }
 
 class ArchwizBrowserSession {
@@ -272,6 +282,7 @@ class ArchwizBrowserSession {
     this.pageTarget = null;
     this.appUrl = null;
     this.viewport = { width: 1440, height: 1000 };
+    this.headless = false;
     this.lastBrowserExit = null;
     this.lastBrowserStderr = '';
   }
@@ -279,6 +290,19 @@ class ArchwizBrowserSession {
   async launch({ appUrl = DEFAULT_APP_URL, headless = false, viewportWidth = 1440, viewportHeight = 1000 } = {}) {
     this.appUrl = normalizeAppUrl(appUrl);
     this.viewport = { width: viewportWidth, height: viewportHeight };
+    this.headless = headless;
+
+    if (this.pageClient && !this.pageClient.isOpen()) {
+      this.resetPageConnection();
+    }
+
+    if (this.browserBaseUrl) {
+      const version = await this.tryGetBrowserVersion();
+      if (!version) {
+        this.resetPageConnection();
+        this.browserBaseUrl = null;
+      }
+    }
 
     if (!this.browserBaseUrl) {
       const port = DEFAULT_DEBUG_PORT;
@@ -384,8 +408,15 @@ class ArchwizBrowserSession {
 
   async openPage(url) {
     if (this.pageClient) {
-      await this.navigate(url);
-      return;
+      try {
+        await this.navigate(url);
+        return;
+      } catch (error) {
+        this.resetPageConnection();
+        if (!String(error?.message || error).match(/CDP connection|closed|WebSocket/i)) {
+          throw error;
+        }
+      }
     }
 
     this.pageTarget = await this.createTarget(url);
@@ -414,8 +445,15 @@ class ArchwizBrowserSession {
   }
 
   async ensureReady() {
-    if (!this.pageClient) {
-      await this.launch();
+    const browserVersion = this.browserBaseUrl ? await this.tryGetBrowserVersion() : null;
+    if (!browserVersion || !this.pageClient?.isOpen()) {
+      this.resetPageConnection();
+      await this.launch({
+        appUrl: this.appUrl || DEFAULT_APP_URL,
+        headless: this.headless,
+        viewportWidth: this.viewport.width,
+        viewportHeight: this.viewport.height,
+      });
     }
   }
 
@@ -561,11 +599,28 @@ class ArchwizBrowserSession {
         images.find((item) => item.src?.startsWith('data:image/') && item.complete && item.naturalWidth > 0);
       if (!image) return null;
       const rect = image.getBoundingClientRect();
+      const imageAspect = image.naturalWidth / image.naturalHeight;
+      const elementAspect = rect.width / rect.height;
+      let renderedWidth = rect.width;
+      let renderedHeight = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (imageAspect > elementAspect) {
+        renderedHeight = rect.width / imageAspect;
+        offsetY = (rect.height - renderedHeight) / 2;
+      } else {
+        renderedWidth = rect.height * imageAspect;
+        offsetX = (rect.width - renderedWidth) / 2;
+      }
       return {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height,
+        left: rect.left + offsetX,
+        top: rect.top + offsetY,
+        width: renderedWidth,
+        height: renderedHeight,
+        elementLeft: rect.left,
+        elementTop: rect.top,
+        elementWidth: rect.width,
+        elementHeight: rect.height,
         naturalWidth: image.naturalWidth,
         naturalHeight: image.naturalHeight,
       };
@@ -587,14 +642,14 @@ class ArchwizBrowserSession {
     });
     const first = toScreen(points[0]);
     await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...first });
-    await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...first, button: 'left', clickCount: 1 });
+    await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...first, button: 'left', buttons: 1, clickCount: 1 });
     for (const point of points.slice(1)) {
       const screen = toScreen(point);
-      await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...screen, button: 'left' });
+      await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...screen, button: 'left', buttons: 1 });
       await delay(20);
     }
     const last = toScreen(points[points.length - 1]);
-    await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...last, button: 'left', clickCount: 1 });
+    await this.pageClient.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...last, button: 'left', buttons: 0, clickCount: 1 });
     await delay(250);
     return { rect, points: points.length };
   }
@@ -660,11 +715,19 @@ class ArchwizBrowserSession {
       browserConnected: Boolean(this.browserBaseUrl),
       browserBaseUrl: this.browserBaseUrl,
       browserManagedByMcp: Boolean(this.browserProcess),
-      pageConnected: Boolean(this.pageClient),
+      pageConnected: Boolean(this.pageClient?.isOpen()),
       pageTargetId: this.pageTarget?.id || null,
       appUrl: this.appUrl,
       viewport: this.viewport,
     };
+  }
+
+  resetPageConnection() {
+    if (this.pageClient) {
+      this.pageClient.close();
+    }
+    this.pageClient = null;
+    this.pageTarget = null;
   }
 
   async close() {

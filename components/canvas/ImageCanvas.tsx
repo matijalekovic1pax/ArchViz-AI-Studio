@@ -409,6 +409,8 @@ const StandardCanvas: React.FC = () => {
   const imageRef = useRef<HTMLImageElement>(null);
   const activeSelectionRef = useRef<SelectionShape | null>(null);
   const activeBoundaryRef = useRef<CanvasPoint[] | null>(null);
+  const isSelectingRef = useRef(false);
+  const isBoundarySelectingRef = useRef(false);
   const lastPointRef = useRef<CanvasPoint | null>(null);
   const pendingPointRef = useRef<CanvasPoint | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -441,7 +443,7 @@ const StandardCanvas: React.FC = () => {
   const isVideoLocked = isVideo && !state.workflow.videoState.accessUnlocked;
   const isVisualEdit = state.mode === 'visual-edit';
   const isSceneCompose = state.mode === 'scene-compose';
-  const isSelectTool = isVisualEdit && state.workflow.activeTool === 'select';
+  const isSelectTool = isVisualEdit && state.workflow.activeTool !== 'extend';
   const isSelectionAdjustMode = isSelectTool && state.workflow.visualSelection.mode === 'adjust';
   const isMasterplan = state.mode === 'masterplan';
   const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
@@ -489,21 +491,27 @@ const StandardCanvas: React.FC = () => {
   const updateActiveSelection = useCallback((
     next: SelectionShape | null | ((prev: SelectionShape | null) => SelectionShape | null)
   ) => {
-    setActiveSelection((prev) => {
-      const resolved = typeof next === 'function' ? next(prev) : next;
-      activeSelectionRef.current = resolved;
-      return resolved;
-    });
+    const resolved = typeof next === 'function' ? next(activeSelectionRef.current) : next;
+    activeSelectionRef.current = resolved;
+    setActiveSelection(resolved);
   }, []);
 
   const updateActiveBoundary = useCallback((
     next: CanvasPoint[] | null | ((prev: CanvasPoint[] | null) => CanvasPoint[] | null)
   ) => {
-    setActiveBoundary((prev) => {
-      const resolved = typeof next === 'function' ? next(prev) : next;
-      activeBoundaryRef.current = resolved;
-      return resolved;
-    });
+    const resolved = typeof next === 'function' ? next(activeBoundaryRef.current) : next;
+    activeBoundaryRef.current = resolved;
+    setActiveBoundary(resolved);
+  }, []);
+
+  const setSelectionInProgress = useCallback((next: boolean) => {
+    isSelectingRef.current = next;
+    setIsSelecting(next);
+  }, []);
+
+  const setBoundarySelectionInProgress = useCallback((next: boolean) => {
+    isBoundarySelectingRef.current = next;
+    setIsBoundarySelecting(next);
   }, []);
 
   const commitSelection = useCallback((shape: SelectionShape) => {
@@ -1365,18 +1373,18 @@ const StandardCanvas: React.FC = () => {
         undoApplied: false,
       };
       setSelectionAdjustHandle(target);
-      setIsSelecting(true);
+      setSelectionInProgress(true);
       return;
     }
     if (selectionMode === 'erase') {
       resetEraseState();
-      setIsSelecting(true);
+      setSelectionInProgress(true);
       applySelectionEraseAtPoint(point);
       return;
     }
     const drawMode = selectionMode === 'ai' ? 'rect' : selectionMode;
 
-    setIsSelecting(true);
+    setSelectionInProgress(true);
 
     if (drawMode === 'rect') {
       updateActiveSelection({ id: 'active', type: 'rect', start: point, end: point });
@@ -1411,6 +1419,7 @@ const StandardCanvas: React.FC = () => {
     projectPointOntoSegment,
     resetEraseState,
     selectionMode,
+    setSelectionInProgress,
     state.canvas.zoom,
     state.uploadedImage,
     state.workflow.visualSelection.brushSize,
@@ -1427,12 +1436,12 @@ const StandardCanvas: React.FC = () => {
     boundaryPendingPointRef.current = null;
     const point = getSelectionPoint(e);
     if (!point) return;
-    setIsBoundarySelecting(true);
+    setBoundarySelectionInProgress(true);
     boundaryLastPointRef.current = point;
     boundaryPreviewLastPointRef.current = point;
     boundaryFullPointsRef.current = [point];
     updateActiveBoundary([point]);
-  }, [getSelectionPoint, state.uploadedImage, updateActiveBoundary]);
+  }, [getSelectionPoint, setBoundarySelectionInProgress, state.uploadedImage, updateActiveBoundary]);
 
   const updateSelectionPath = useCallback((e: React.MouseEvent) => {
     const point = getSelectionPoint(e, true);
@@ -1592,12 +1601,30 @@ const StandardCanvas: React.FC = () => {
   }, [getSelectionPoint, updateActiveBoundary]);
 
   const finishSelection = useCallback(() => {
-    setIsSelecting(false);
+    setSelectionInProgress(false);
+    const latestPendingPoint = pendingPointRef.current;
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
     pendingPointRef.current = null;
+    if (latestPendingPoint) {
+      if (selectionMode === 'erase') {
+        applySelectionEraseAtPoint(latestPendingPoint);
+      } else if (selectionMode !== 'adjust') {
+        const current = activeSelectionRef.current;
+        if (current?.type === 'rect') {
+          activeSelectionRef.current = { ...current, end: latestPendingPoint };
+          setActiveSelection(activeSelectionRef.current);
+        } else if (current && current.type !== 'rect') {
+          const lastFull = selectionFullPointsRef.current[selectionFullPointsRef.current.length - 1];
+          const fullMin = minPointDistanceRef.current;
+          if (!lastFull || Math.hypot(latestPendingPoint.x - lastFull.x, latestPendingPoint.y - lastFull.y) >= fullMin) {
+            selectionFullPointsRef.current = [...selectionFullPointsRef.current, latestPendingPoint];
+          }
+        }
+      }
+    }
     lastPointRef.current = null;
     selectionPreviewLastPointRef.current = null;
     if (selectionMode === 'adjust') {
@@ -1638,15 +1665,23 @@ const StandardCanvas: React.FC = () => {
     }
     selectionFullPointsRef.current = [];
     updateActiveSelection(null);
-  }, [commitSelection, getImageBrushSize, resetEraseState, selectionMode, updateActiveSelection]);
+  }, [applySelectionEraseAtPoint, commitSelection, getImageBrushSize, resetEraseState, selectionMode, setSelectionInProgress, updateActiveSelection]);
 
   const finishBoundarySelection = useCallback(() => {
-    setIsBoundarySelecting(false);
+    setBoundarySelectionInProgress(false);
+    const latestPendingPoint = boundaryPendingPointRef.current;
     if (boundaryRafRef.current !== null) {
       cancelAnimationFrame(boundaryRafRef.current);
       boundaryRafRef.current = null;
     }
     boundaryPendingPointRef.current = null;
+    if (latestPendingPoint) {
+      const lastFull = boundaryFullPointsRef.current[boundaryFullPointsRef.current.length - 1];
+      const fullMin = boundaryMinPointDistanceRef.current;
+      if (!lastFull || Math.hypot(latestPendingPoint.x - lastFull.x, latestPendingPoint.y - lastFull.y) >= fullMin) {
+        boundaryFullPointsRef.current = [...boundaryFullPointsRef.current, latestPendingPoint];
+      }
+    }
     boundaryLastPointRef.current = null;
     boundaryPreviewLastPointRef.current = null;
     const finalBoundary = boundaryFullPointsRef.current.length > 2
@@ -1657,7 +1692,7 @@ const StandardCanvas: React.FC = () => {
     }
     boundaryFullPointsRef.current = [];
     updateActiveBoundary(null);
-  }, [commitBoundary, updateActiveBoundary]);
+  }, [commitBoundary, setBoundarySelectionInProgress, updateActiveBoundary]);
 
   const handleFitToScreen = useCallback((e?: React.MouseEvent) => {
      if (e) {
@@ -1817,13 +1852,13 @@ const StandardCanvas: React.FC = () => {
       return;
     }
     if (isBoundaryTool) {
-      if (isBoundarySelecting) {
+      if (isBoundarySelectingRef.current) {
         updateBoundaryPath(e);
       }
       return;
     }
     if (isSelectTool) {
-      if (isSelecting) {
+      if (isSelectingRef.current) {
         updateSelectionPath(e);
       } else if (selectionMode === 'adjust') {
         updateSelectionAdjustHover(e);
@@ -1836,10 +1871,10 @@ const StandardCanvas: React.FC = () => {
   };
 
   const handleCanvasMouseUp = () => {
-    if (isBoundaryTool && isBoundarySelecting) {
+    if (isBoundaryTool && isBoundarySelectingRef.current) {
       finishBoundarySelection();
     }
-    if (isSelectTool && isSelecting) {
+    if (isSelectTool && isSelectingRef.current) {
       finishSelection();
     }
     if (selectionMode === 'adjust') {
@@ -1850,10 +1885,10 @@ const StandardCanvas: React.FC = () => {
 
   const handleCanvasMouseLeave = () => {
     setBrushPreviewPoint(null);
-    if (isBoundaryTool && isBoundarySelecting) {
+    if (isBoundaryTool && isBoundarySelectingRef.current) {
       finishBoundarySelection();
     }
-    if (isSelectTool && isSelecting) {
+    if (isSelectTool && isSelectingRef.current) {
       finishSelection();
     }
     if (selectionMode === 'adjust') {
@@ -1981,7 +2016,7 @@ const StandardCanvas: React.FC = () => {
 
   useEffect(() => {
     if (!isMasterplan || state.workflow.mpBoundary.mode !== 'custom') {
-      setIsBoundarySelecting(false);
+      setBoundarySelectionInProgress(false);
       updateActiveBoundary(null);
       boundaryLastPointRef.current = null;
       boundaryPendingPointRef.current = null;
@@ -1992,7 +2027,7 @@ const StandardCanvas: React.FC = () => {
         boundaryRafRef.current = null;
       }
     }
-  }, [isMasterplan, state.workflow.mpBoundary.mode, updateActiveBoundary]);
+  }, [isMasterplan, setBoundarySelectionInProgress, state.workflow.mpBoundary.mode, updateActiveBoundary]);
 
   useEffect(() => {
     if (!state.uploadedImage || state.workflow.visualSelections.length === 0) return;
@@ -2092,21 +2127,31 @@ const StandardCanvas: React.FC = () => {
 
     const mask = buildSelectionMask(state.workflow.visualSelections);
     if (!mask) return;
-    if (
+    const maskIsCurrent =
       state.workflow.visualSelectionMask === mask.dataUrl &&
       state.workflow.visualSelectionMaskSize?.width === mask.width &&
-      state.workflow.visualSelectionMaskSize?.height === mask.height
-    ) {
+      state.workflow.visualSelectionMaskSize?.height === mask.height;
+    const compositeIsCurrent =
+      maskIsCurrent &&
+      Boolean(state.workflow.visualSelectionComposite) &&
+      state.workflow.visualSelectionCompositeSize?.width === mask.width &&
+      state.workflow.visualSelectionCompositeSize?.height === mask.height;
+
+    if (compositeIsCurrent) {
       return;
     }
 
-    dispatch({
-      type: 'UPDATE_WORKFLOW',
-      payload: {
-        visualSelectionMask: mask.dataUrl,
-        visualSelectionMaskSize: { width: mask.width, height: mask.height },
-      },
-    });
+    if (!maskIsCurrent) {
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualSelectionMask: mask.dataUrl,
+          visualSelectionMaskSize: { width: mask.width, height: mask.height },
+          visualSelectionComposite: null,
+          visualSelectionCompositeSize: null,
+        },
+      });
+    }
 
     let canceled = false;
     buildSelectionComposite(state.workflow.visualSelections, state.uploadedImage).then((composite) => {

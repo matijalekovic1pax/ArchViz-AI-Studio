@@ -24,6 +24,10 @@ const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
 const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
 const OUTPUT_VERIFICATION_MAX_PROMPT_CHARS = 10000;
 const OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS = 900;
+const OPENAI_IMAGE_SIZE_MULTIPLE = 16;
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
 
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -131,6 +135,7 @@ export interface GenerationConfig {
   };
   openAI?: {
     background?: 'transparent' | 'opaque' | 'auto';
+    size?: string;
   };
   onProgress?: ImageGenerationProgressCallback;
 }
@@ -181,7 +186,14 @@ export interface ImageOutputVerificationRequest {
   localizedEdit?: {
     operation?: string;
     targetLabel?: string;
+    editableTargetLabel?: string;
+    protectedTargetLabel?: string;
+    maskPolarity?: 'selected-area-editable' | 'outside-selection-editable';
     selectedRatio?: number | null;
+    changeProofMap?: boolean;
+    insideChangedRatio?: number | null;
+    outsideChangedRatio?: number | null;
+    outsideChangedPixels?: number | null;
   };
   generationConfig?: GenerationConfig;
 }
@@ -235,6 +247,153 @@ export class GeminiError extends Error {
 // Image Utilities
 // ============================================================================
 
+const readUint16BE = (bytes: Uint8Array, offset: number): number =>
+  (bytes[offset] << 8) | bytes[offset + 1];
+
+const readUint32BE = (bytes: Uint8Array, offset: number): number =>
+  ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+
+const readUint24LE = (bytes: Uint8Array, offset: number): number =>
+  bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+
+const readUint16LE = (bytes: Uint8Array, offset: number): number =>
+  bytes[offset] | (bytes[offset + 1] << 8);
+
+const decodeBase64Prefix = (base64: string, maxBytes: number): Uint8Array | null => {
+  const clean = base64.replace(/\s/g, '');
+  const charCount = Math.min(clean.length, Math.ceil(maxBytes / 3) * 4);
+  const alignedCharCount = charCount - (charCount % 4);
+  if (alignedCharCount <= 0) return null;
+
+  try {
+    const binary = atob(clean.slice(0, alignedCharCount));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+};
+
+const readImageDimensionsFromBase64 = (
+  base64: string,
+  mimeType: string
+): Pick<ImageData, 'width' | 'height'> => {
+  const normalizedMimeType = mimeType.toLowerCase().replace('image/jpg', 'image/jpeg');
+  const bytes = decodeBase64Prefix(base64, 96 * 1024);
+  if (!bytes) return {};
+
+  if (
+    normalizedMimeType === 'image/png' &&
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return {
+      width: readUint32BE(bytes, 16),
+      height: readUint32BE(bytes, 20),
+    };
+  }
+
+  if (
+    normalizedMimeType === 'image/gif' &&
+    bytes.length >= 10 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46
+  ) {
+    return {
+      width: readUint16LE(bytes, 6),
+      height: readUint16LE(bytes, 8),
+    };
+  }
+
+  if (
+    normalizedMimeType === 'image/webp' &&
+    bytes.length >= 30 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    const chunk = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+    if (chunk === 'VP8X' && bytes.length >= 30) {
+      return {
+        width: readUint24LE(bytes, 24) + 1,
+        height: readUint24LE(bytes, 27) + 1,
+      };
+    }
+    if (chunk === 'VP8L' && bytes.length >= 25) {
+      const value = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
+      return {
+        width: (value & 0x3fff) + 1,
+        height: ((value >> 14) & 0x3fff) + 1,
+      };
+    }
+    if (chunk === 'VP8 ' && bytes.length >= 30) {
+      return {
+        width: readUint16LE(bytes, 26) & 0x3fff,
+        height: readUint16LE(bytes, 28) & 0x3fff,
+      };
+    }
+  }
+
+  if (
+    normalizedMimeType === 'image/jpeg' &&
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8
+  ) {
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      while (bytes[offset] === 0xff && offset < bytes.length) offset += 1;
+      const marker = bytes[offset];
+      offset += 1;
+      if (marker === 0xda || marker === 0xd9) break;
+      if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) continue;
+      if (offset + 2 > bytes.length) break;
+      const segmentLength = readUint16BE(bytes, offset);
+      if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+      const isStartOfFrame = (
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf)
+      );
+      if (isStartOfFrame && segmentLength >= 7) {
+        return {
+          width: readUint16BE(bytes, offset + 5),
+          height: readUint16BE(bytes, offset + 3),
+        };
+      }
+      offset += segmentLength;
+    }
+  }
+
+  return {};
+};
+
+const isValidOpenAIImageSize = (width?: number, height?: number): boolean => {
+  if (!width || !height || width <= 0 || height <= 0) return false;
+  if (width % OPENAI_IMAGE_SIZE_MULTIPLE !== 0 || height % OPENAI_IMAGE_SIZE_MULTIPLE !== 0) return false;
+  if (Math.max(width, height) > OPENAI_IMAGE_MAX_EDGE) return false;
+  if (Math.max(width, height) / Math.max(1, Math.min(width, height)) > 3) return false;
+  const pixels = width * height;
+  return pixels >= OPENAI_IMAGE_MIN_PIXELS && pixels <= OPENAI_IMAGE_MAX_PIXELS;
+};
+
 export class ImageUtils {
   static async fileToImageData(file: File): Promise<ImageData> {
     return new Promise((resolve, reject) => {
@@ -266,9 +425,12 @@ export class ImageUtils {
     if (!matches) {
       throw new Error('Invalid data URL format');
     }
+    const mimeType = matches[1] as ImageMimeType;
+    const dimensions = readImageDimensionsFromBase64(matches[2], mimeType);
     return {
       base64: matches[2],
-      mimeType: matches[1] as ImageMimeType
+      mimeType,
+      ...dimensions
     };
   }
 
@@ -708,6 +870,38 @@ export class GeminiService {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
         ? await ImageUtils.convertImageFormat(request.sourceImage, request.maskImage.mimeType)
         : request.sourceImage;
+      const strictMaskImage = maskMode === 'strict' ? request.maskImage : undefined;
+      if (strictMaskImage) {
+        if (strictMaskImage.mimeType !== 'image/png' || openAISourceImage.mimeType !== 'image/png') {
+          throw new Error('GPT Image 2 strict masked edits require PNG source and mask images with an alpha channel.');
+        }
+        const dimensionsKnown = Boolean(
+          openAISourceImage.width &&
+          openAISourceImage.height &&
+          strictMaskImage.width &&
+          strictMaskImage.height
+        );
+        if (
+          dimensionsKnown &&
+          (openAISourceImage.width !== strictMaskImage.width || openAISourceImage.height !== strictMaskImage.height)
+        ) {
+          throw new Error('GPT Image 2 strict masked edits require the source image and mask to have the same dimensions.');
+        }
+      }
+      const strictMaskSizeOverride = strictMaskImage &&
+        !request.generationConfig?.openAI?.size &&
+        isValidOpenAIImageSize(openAISourceImage.width, openAISourceImage.height)
+        ? `${openAISourceImage.width}x${openAISourceImage.height}`
+        : null;
+      const openAIGenerationConfig = strictMaskSizeOverride
+        ? {
+            ...request.generationConfig,
+            openAI: {
+              ...request.generationConfig?.openAI,
+              size: strictMaskSizeOverride,
+            },
+          }
+        : request.generationConfig;
       const openAIImages = [openAISourceImage];
       if (request.maskImage && maskMode === 'guided') openAIImages.push(request.maskImage);
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
@@ -715,9 +909,9 @@ export class GeminiService {
       const result = await this.generateOpenAIImages({
         prompt: optimizedEditPrompt,
         images: openAIImages,
-        maskImage: maskMode === 'strict' ? request.maskImage : undefined,
+        maskImage: strictMaskImage,
         imageGenerationModel: request.imageGenerationModel,
-        generationConfig: request.generationConfig,
+        generationConfig: openAIGenerationConfig,
       });
       return optimizedEditPrompt !== adaptedEditPrompt
         ? { ...result, optimizedPrompt: optimizedEditPrompt }
@@ -1227,20 +1421,55 @@ export class GeminiService {
       ? `Original user/app prompt before middle-layer tuning:\n${this.truncatePromptForOptimizer(request.originalPrompt.trim(), 2000)}`
       : '';
     const localizedEdit = request.mode === 'localized-edit';
+    const maskPolarity = request.localizedEdit?.maskPolarity || 'selected-area-editable';
+    const editUsesOutsideSelection = maskPolarity === 'outside-selection-editable';
+    const editableRegionLabel = editUsesOutsideSelection
+      ? 'editable outside-selection/background region'
+      : 'selected/masked editable region';
+    const protectedRegionLabel = request.localizedEdit?.protectedTargetLabel || (
+      editUsesOutsideSelection
+        ? 'the originally selected foreground/subject'
+        : 'unselected areas outside the edit mask'
+    );
+    const localizedEditProofLine = localizedEdit && request.localizedEdit?.changeProofMap
+      ? [
+          'The final reference image before the generated output is an automatic localized-edit proof map.',
+          editUsesOutsideSelection
+            ? 'In that proof map, green marks the editable outside-selection/background region; the originally selected foreground/subject is protected. Magenta marks changed pixels in the editable outside region, and amber marks changed pixels in the protected foreground/subject.'
+            : 'In that proof map, green marks the selected/editable region, magenta marks pixels that changed inside the selected region, and amber marks pixels that changed outside it.',
+          `Use the proof map as evidence, not as an artistic reference. Amber change in ${protectedRegionLabel} is acceptable only for tiny antialiasing, physical shadows/reflections, or boundary blending that is clearly necessary.`,
+          typeof request.localizedEdit?.insideChangedRatio === 'number'
+            ? `Measured changed pixels in ${editableRegionLabel}: ${(request.localizedEdit.insideChangedRatio * 100).toFixed(2)}% of editable pixels.`
+            : '',
+          typeof request.localizedEdit?.outsideChangedRatio === 'number'
+            ? `Measured changed pixels in ${protectedRegionLabel}: ${(request.localizedEdit.outsideChangedRatio * 100).toFixed(4)}% of protected pixels.`
+            : '',
+          typeof request.localizedEdit?.outsideChangedPixels === 'number'
+            ? `Measured protected-region changed pixels: ${Math.round(request.localizedEdit.outsideChangedPixels)}.`
+            : '',
+        ].filter(Boolean).join('\n')
+      : '';
     const localizedEditLine = localizedEdit
       ? [
           'Localized edit verification mode:',
           'This output may be a composited/inpainted edit where most of the frame is intentionally identical to the source image.',
           'Do not fail because the generated output is mostly unchanged; that is expected for masked visual editing.',
-          'Evaluate the requested change inside the selected/masked region, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of unselected areas.',
+          editUsesOutsideSelection
+            ? 'Mask polarity: the editable region is outside the original user selection. The originally selected foreground/subject is protected and should remain visually identical except for unavoidable edge blending.'
+            : 'Mask polarity: the selected/masked region is the editable target. Areas outside it are protected and should remain visually identical except for unavoidable edge blending.',
+          `Evaluate the requested change in ${editableRegionLabel}, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of ${protectedRegionLabel}.`,
           'If a tiny selected detail is hard to inspect, pass when the localized result is coherent and there is no obvious wrong edit, patch edge, pasted/inlaid look, subject distortion, or unwanted change outside the selected area.',
+          `Fail localized edits when the requested editable target is not changed, the edit lands on the wrong object or surface, ${protectedRegionLabel} noticeably drifts, or the selection/mask itself appears in the output.`,
           referenceImageCount >= 2
             ? 'For localized edits, attached image 1 is usually the source render and attached image 2 is usually the selection/mask guidance; later reference images may describe materials or style.'
             : '',
+          localizedEditProofLine,
           request.localizedEdit?.operation ? `Localized operation: ${request.localizedEdit.operation}` : '',
-          request.localizedEdit?.targetLabel ? `Selected target: ${request.localizedEdit.targetLabel}` : '',
+          request.localizedEdit?.targetLabel ? `Requested editable target: ${request.localizedEdit.targetLabel}` : '',
+          request.localizedEdit?.editableTargetLabel ? `Editable region label: ${request.localizedEdit.editableTargetLabel}` : '',
+          `Protected region label: ${protectedRegionLabel}`,
           typeof request.localizedEdit?.selectedRatio === 'number'
-            ? `Approximate selected image area: ${(request.localizedEdit.selectedRatio * 100).toFixed(2)}%`
+            ? `Approximate editable image area: ${(request.localizedEdit.selectedRatio * 100).toFixed(2)}%`
             : '',
         ].filter(Boolean).join('\n')
       : '';
@@ -1551,13 +1780,12 @@ export class GeminiService {
       if ('thinkingBudget' in thinkingConfig) {
         delete (thinkingConfig as { thinkingBudget?: number }).thinkingBudget;
       }
-      const normalizedThinkingLevel = typeof thinkingConfig.thinkingLevel === 'string'
-        ? thinkingConfig.thinkingLevel.toLowerCase()
-        : '';
       if (
         !thinkingConfig.thinkingLevel ||
-        normalizedThinkingLevel === 'minimal' ||
-        normalizedThinkingLevel === 'low'
+        thinkingConfig.thinkingLevel === 'minimal' ||
+        thinkingConfig.thinkingLevel === 'low' ||
+        thinkingConfig.thinkingLevel === 'MINIMAL' ||
+        thinkingConfig.thinkingLevel === 'LOW'
       ) {
         thinkingConfig.thinkingLevel = 'medium';
       }

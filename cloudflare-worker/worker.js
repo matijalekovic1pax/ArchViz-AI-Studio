@@ -38,6 +38,7 @@ const GEMINI_API_BASE_V1 = 'https://generativelanguage.googleapis.com/v1';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
+const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
 const CONVERTAPI_BASE = 'https://v2.convertapi.com';
 const ILOVEPDF_BASE   = 'https://api.ilovepdf.com/v1';
@@ -2359,6 +2360,10 @@ const OPENAI_IMAGE_MAX_PROMPT_CHARS = 32_000;
 const OPENAI_IMAGE_MAX_INPUT_IMAGES = 16;
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
 const OPENAI_IMAGE_ALLOWED_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024', 'auto']);
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
+const OPENAI_IMAGE_SIZE_MULTIPLE = 16;
 
 function parseAspectRatio(aspectRatio) {
   if (typeof aspectRatio !== 'string') return 16 / 9;
@@ -2380,14 +2385,24 @@ function normalizeOpenAISize(aspectRatio, imageSize) {
   return '1024x1024';
 }
 
-function normalizeOpenAISizeValue(size) {
+function normalizeOpenAISizeValue(size, fallback = 'auto') {
   if (OPENAI_IMAGE_ALLOWED_SIZES.has(size)) return size;
-  if (typeof size !== 'string') return 'auto';
+  if (typeof size !== 'string') return fallback;
 
   const match = size.match(/^(\d+)x(\d+)$/);
-  if (!match) return 'auto';
+  if (!match) return fallback;
 
-  return normalizeOpenAISize(`${match[1]}:${match[2]}`, undefined);
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return fallback;
+  if (width % OPENAI_IMAGE_SIZE_MULTIPLE !== 0 || height % OPENAI_IMAGE_SIZE_MULTIPLE !== 0) return fallback;
+  if (Math.max(width, height) > OPENAI_IMAGE_MAX_EDGE) return fallback;
+  if (Math.max(width, height) / Math.max(1, Math.min(width, height)) > 3) return fallback;
+
+  const pixels = width * height;
+  if (pixels < OPENAI_IMAGE_MIN_PIXELS || pixels > OPENAI_IMAGE_MAX_PIXELS) return fallback;
+
+  return `${width}x${height}`;
 }
 
 function normalizeOpenAIQuality(imageSize) {
@@ -2409,16 +2424,16 @@ function normalizeOpenAIOutputFormat(value) {
 }
 
 function normalizeOpenAIBackground(value) {
-  return value === 'transparent' || value === 'opaque' || value === 'auto'
-    ? value
-    : 'auto';
+  if (value === 'transparent') return 'opaque';
+  return value === 'opaque' || value === 'auto' ? value : 'auto';
 }
 
 function getOpenAIImageOptions(generationConfig = {}) {
   const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
   const background = generationConfig.openAI?.background || imageConfig.background;
   return {
-    size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
+    size: normalizeOpenAISizeValue(generationConfig.openAI?.size, null) ||
+      normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
     background: normalizeOpenAIBackground(background),
@@ -2438,6 +2453,8 @@ function decodeBase64Image(image, index) {
   const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
   return {
     blob: new Blob([bytes], { type: mimeType }),
+    bytes,
+    mimeType,
     filename: `input-${index + 1}.${ext}`,
   };
 }
@@ -2500,6 +2517,38 @@ function readUint32(bytes, offset) {
     (bytes[offset + 2] << 8) |
     bytes[offset + 3]
   ) >>> 0;
+}
+
+function readPngDimensions(bytes, label = 'PNG image') {
+  for (let index = 0; index < PNG_SIGNATURE.length; index += 1) {
+    if (bytes[index] !== PNG_SIGNATURE[index]) {
+      throw new Error(`${label} must be a valid PNG image.`);
+    }
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  while (offset + 8 <= bytes.length) {
+    const length = readUint32(bytes, offset);
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (dataEnd + 4 > bytes.length) throw new Error(`${label} has invalid PNG data.`);
+    const data = bytes.subarray(dataStart, dataEnd);
+
+    if (type === 'IHDR') {
+      return {
+        width: readUint32(data, 0),
+        height: readUint32(data, 4),
+        bitDepth: data[8],
+        colorType: data[9],
+        interlace: data[12],
+      };
+    }
+
+    offset = dataEnd + 4;
+  }
+
+  throw new Error(`${label} is missing PNG dimensions.`);
 }
 
 function writeUint32(bytes, offset, value) {
@@ -2721,7 +2770,7 @@ function rgbaToSelectionAlpha(maskPng) {
 function alphaStats(alpha) {
   let selected = 0;
   for (let index = 0; index < alpha.length; index += 1) {
-    if (alpha[index] >= 16) selected += 1;
+    if (alpha[index] >= OPENAI_SELECTION_ALPHA_THRESHOLD) selected += 1;
   }
   return { selected, ratio: selected / Math.max(alpha.length, 1) };
 }
@@ -2730,7 +2779,7 @@ function dilateAlpha(alpha, width, height, radius) {
   if (radius <= 0) return alpha;
   const binary = new Uint8Array(alpha.length);
   for (let index = 0; index < alpha.length; index += 1) {
-    binary[index] = alpha[index] >= 16 ? 1 : 0;
+    binary[index] = alpha[index] >= OPENAI_SELECTION_ALPHA_THRESHOLD ? 1 : 0;
   }
   const stride = width + 1;
   const integral = new Uint32Array((width + 1) * (height + 1));
@@ -2791,14 +2840,13 @@ function boxBlurAlpha(alpha, width, height, radius) {
   return out;
 }
 
-function buildOpenAIAlphaMaskPng(width, height, selectedAlpha) {
+function buildOpenAISelectionMaskPng(width, height, selectedAlpha) {
   const rgba = new Uint8Array(width * height * 4);
   for (let index = 0, pixel = 0; index < selectedAlpha.length; index += 1, pixel += 4) {
     rgba[pixel] = 255;
     rgba[pixel + 1] = 255;
     rgba[pixel + 2] = 255;
-    // OpenAI image edit masks use transparent pixels as the editable area.
-    rgba[pixel + 3] = 255 - selectedAlpha[index];
+    rgba[pixel + 3] = selectedAlpha[index];
   }
   return encodePngRgba(width, height, rgba);
 }
@@ -2923,6 +2971,57 @@ function appendOpenAIFormFile(form, key, value, fallbackName) {
   form.append(key, value, filename);
 }
 
+function getOpenAIUploadBlob(upload) {
+  if (upload instanceof Blob) return upload;
+  if (upload?.blob instanceof Blob) return upload.blob;
+  return null;
+}
+
+function getOpenAIUploadMimeType(upload) {
+  const mimeType = (typeof upload?.mimeType === 'string' ? upload.mimeType : upload?.type || '')
+    .toLowerCase()
+    .replace('image/jpg', 'image/jpeg');
+  return mimeType;
+}
+
+async function readOpenAIUploadPngDimensions(upload, label) {
+  const blob = getOpenAIUploadBlob(upload);
+  if (!blob) throw new Error(`${label} must be a PNG file.`);
+
+  const mimeType = getOpenAIUploadMimeType(upload);
+  if (mimeType && mimeType !== 'application/octet-stream' && mimeType !== 'image/png') {
+    throw new Error(`${label} must be a PNG image for masked GPT Image 2 edits.`);
+  }
+
+  const bytes = upload?.bytes instanceof Uint8Array
+    ? upload.bytes
+    : new Uint8Array(await blob.arrayBuffer());
+  return readPngDimensions(bytes, label);
+}
+
+async function validateOpenAIMaskedEditUploads(origin, images, maskUpload) {
+  if (!maskUpload) return null;
+  if (!Array.isArray(images) || images.length === 0) {
+    return badRequest(origin, 'Missing source image for masked edit.');
+  }
+
+  try {
+    const sourcePng = await readOpenAIUploadPngDimensions(images[0], 'Source image');
+    const maskPng = await readOpenAIUploadPngDimensions(maskUpload, 'Mask image');
+
+    if (maskPng.colorType !== 4 && maskPng.colorType !== 6) {
+      return badRequest(origin, 'Mask PNG must include an alpha channel.');
+    }
+    if (sourcePng.width !== maskPng.width || sourcePng.height !== maskPng.height) {
+      return badRequest(origin, 'Source image and mask must be the same PNG size for masked GPT Image 2 edits.');
+    }
+  } catch (err) {
+    return badRequest(origin, err?.message || 'Invalid source image or mask for masked GPT Image 2 edit.');
+  }
+
+  return null;
+}
+
 async function handleOpenAIMultipartImages(request, env, origin) {
   const incoming = await request.formData();
   const prompt = sanitizeText(String(incoming.get('prompt') || ''), OPENAI_IMAGE_MAX_PROMPT_CHARS);
@@ -2949,10 +3048,14 @@ async function handleOpenAIMultipartImages(request, env, origin) {
     ...incoming.getAll('image'),
   ].slice(0, OPENAI_IMAGE_MAX_INPUT_IMAGES);
   if (images.length === 0) return badRequest(origin, 'Missing image');
+  const mask = incoming.get('mask');
+  const maskValidationError = await validateOpenAIMaskedEditUploads(origin, images, mask);
+  if (maskValidationError) return maskValidationError;
+
   images.forEach((image, index) => {
     appendOpenAIFormFile(form, 'image[]', image, `input-${index + 1}.png`);
   });
-  appendOpenAIFormFile(form, 'mask', incoming.get('mask'), 'mask.png');
+  appendOpenAIFormFile(form, 'mask', mask, 'mask.png');
 
   const upstreamResp = await fetchWithRetry((signal) =>
     fetch(`${OPENAI_API_BASE}/images/edits`, {
@@ -3008,27 +3111,42 @@ async function handleImageEdit(request, env, user) {
       return badRequest(origin, 'The image size is outside GPT Image edit limits.');
     }
 
-    const selectedPixels = clampNumber(body.selectionStats?.selectedPixels, 0, totalPixels, null);
-    const selectedRatio = clampNumber(
+    const clientSelectedPixels = clampNumber(body.selectionStats?.selectedPixels, 0, totalPixels, null);
+    const clientSelectedRatio = clampNumber(
       body.selectionStats?.selectedRatio,
       0,
       1,
-      selectedPixels == null ? null : selectedPixels / Math.max(totalPixels, 1)
+      clientSelectedPixels == null ? null : clientSelectedPixels / Math.max(totalPixels, 1)
     );
-    if (selectedRatio != null) {
-      if (selectedRatio <= 0) {
-        return badRequest(origin, 'Please select an area to edit.');
-      }
-      if (selectedRatio < 0.0025) {
-        return badRequest(origin, 'The selected area is too small.');
-      }
-      if (operation !== 'custom' && selectedRatio > 0.7) {
-        return badRequest(origin, 'The selected area is too large for this edit. Try a smaller mask or use a custom edit.');
-      }
-    }
-
     const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image');
     const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
+    const sourcePng = readPngDimensions(sourceInput.bytes, 'Source image');
+    const maskPng = await decodePngRgba(maskInput.bytes);
+    if (sourcePng.width !== sourceSize.width || sourcePng.height !== sourceSize.height) {
+      return badRequest(origin, 'Declared source image dimensions do not match the PNG.');
+    }
+    if (maskPng.width !== maskSize.width || maskPng.height !== maskSize.height) {
+      return badRequest(origin, 'Declared selection mask dimensions do not match the PNG.');
+    }
+    if (sourcePng.width !== maskPng.width || sourcePng.height !== maskPng.height) {
+      return badRequest(origin, 'Selection mask PNG dimensions must match the source image PNG.');
+    }
+
+    const selectionAlpha = rgbaToSelectionAlpha(maskPng);
+    const serverSelectionStats = alphaStats(selectionAlpha);
+    const selectedPixels = serverSelectionStats.selected;
+    const selectedRatio = serverSelectionStats.ratio;
+    if (selectedRatio <= 0) {
+      return badRequest(origin, 'Please select an area to edit.');
+    }
+    if (selectedRatio < 0.0025) {
+      return badRequest(origin, 'The selected area is too small.');
+    }
+    if (operation !== 'custom' && selectedRatio > 0.7) {
+      return badRequest(origin, 'The selected area is too large for this edit. Try a smaller mask or use a custom edit.');
+    }
+
+    const normalizedMaskBytes = await buildOpenAISelectionMaskPng(maskPng.width, maskPng.height, selectionAlpha);
     const outputFormat = normalizeOpenAIOutputFormat(body.outputFormat);
     const outputMimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
 
@@ -3041,7 +3159,7 @@ async function handleImageEdit(request, env, user) {
     form.append('quality', mapImageEditQualityToOpenAI(quality));
     form.append('output_format', outputFormat);
     form.append('image[]', new Blob([sourceInput.bytes], { type: sourceInput.mimeType }), 'source.png');
-    form.append('mask', new Blob([maskInput.bytes], { type: maskInput.mimeType }), 'mask.png');
+    form.append('mask', new Blob([normalizedMaskBytes], { type: 'image/png' }), 'mask.png');
 
     const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.slice(0, 4) : [];
     referenceImages.forEach((image, index) => {
@@ -3100,7 +3218,9 @@ async function handleImageEdit(request, env, user) {
             outputFormat,
             width: sourceSize.width,
             height: sourceSize.height,
+            selectedPixels,
             selectedRatio,
+            clientSelectedRatio,
             requestId,
             usage: data?.usage || null,
           },
@@ -3120,11 +3240,13 @@ async function handleImageEdit(request, env, user) {
     });
   } catch (err) {
     const timedOut = err?.name === 'AbortError';
+    const message = err?.message || 'The edit failed. Try expanding the selected area slightly or simplifying the instruction.';
+    const badInput = /\b(PNG|mask|source image|selection|selected area|dimensions?|unsupported|interlaced|invalid)\b/i.test(message);
     return corsResponse(origin, {
       error: timedOut
         ? 'The edit failed because the image service timed out. Try a smaller selected area or lower quality.'
-        : err.message || 'The edit failed. Try expanding the selected area slightly or simplifying the instruction.',
-    }, { status: timedOut ? 504 : 500 });
+        : message,
+    }, { status: timedOut ? 504 : badInput ? 400 : 500 });
   }
 }
 
@@ -3154,6 +3276,9 @@ async function handleOpenAIImages(request, env) {
     ));
     const { size, quality, outputFormat, background } = getOpenAIImageOptions(body.generationConfig);
     const model = body.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL;
+    if (maskImage && images.length === 0) {
+      return badRequest(origin, 'Missing source image for masked edit.');
+    }
 
     let upstreamResp;
     if (images.length > 0) {
@@ -3172,6 +3297,8 @@ async function handleOpenAIImages(request, env) {
         form.append('image[]', image.blob, image.filename);
       });
       if (maskImage) {
+        const maskValidationError = await validateOpenAIMaskedEditUploads(origin, images, maskImage);
+        if (maskValidationError) return maskValidationError;
         form.append('mask', maskImage.blob, `mask-${maskImage.filename}`);
       }
 

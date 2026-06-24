@@ -321,8 +321,18 @@ const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
   return images[images.length - 1];
 };
 
-const PRECISE_EDIT_MAX_LONG_EDGE = 2_048;
-const PRECISE_EDIT_MAX_PIXELS = 2_048 * 1_152;
+type ImageOutputVerificationContext = Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'>;
+
+interface LocalizedEditDiffStats {
+  insideChangedRatio: number;
+  outsideChangedRatio: number;
+  outsideChangedPixels: number;
+}
+
+const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
+const LOCALIZED_EDIT_CHANGE_THRESHOLD = 24;
+const PRECISE_EDIT_MAX_LONG_EDGE = 3_840;
+const PRECISE_EDIT_MAX_PIXELS = 8_294_400;
 const PRECISE_EDIT_MIN_PIXELS = 655_360;
 const PRECISE_EDIT_SIZE_MULTIPLE = 16;
 
@@ -349,6 +359,16 @@ const getPreciseEditSize = (width: number, height: number) => {
   const rawHeight = height * scale;
   const baseWidth = roundToPreciseEditMultiple(rawWidth);
   const baseHeight = roundToPreciseEditMultiple(rawHeight);
+  const basePixels = baseWidth * baseHeight;
+  const baseLongEdge = Math.max(baseWidth, baseHeight);
+  if (
+    baseLongEdge <= PRECISE_EDIT_MAX_LONG_EDGE &&
+    basePixels <= PRECISE_EDIT_MAX_PIXELS &&
+    basePixels >= PRECISE_EDIT_MIN_PIXELS
+  ) {
+    return { width: baseWidth, height: baseHeight };
+  }
+
   let best: { width: number; height: number; score: number } | null = null;
 
   for (let widthStep = -4; widthStep <= 4; widthStep += 1) {
@@ -372,14 +392,21 @@ const getPreciseEditSize = (width: number, height: number) => {
 
   return best
     ? { width: best.width, height: best.height }
-    : { width: baseWidth, height: baseHeight };
+    : null;
 };
 
 const renderOpenAIEditableMaskDataUrl = async (
   imageSrc: string,
   width: number,
-  height: number
-): Promise<{ dataUrl: string; selectedPixels: number; selectedRatio: number }> => {
+  height: number,
+  invert = false
+): Promise<{
+  dataUrl: string;
+  selectedPixels: number;
+  selectedRatio: number;
+  sourceSelectedPixels: number;
+  sourceSelectedRatio: number;
+}> => {
   const image = await loadCanvasImage(imageSrc);
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -395,10 +422,14 @@ const renderOpenAIEditableMaskDataUrl = async (
   const imageData = ctx.getImageData(0, 0, width, height);
   const pixels = imageData.data;
   let selectedPixels = 0;
+  let sourceSelectedPixels = 0;
   for (let index = 0; index < pixels.length; index += 4) {
     const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
-    const selectedAlpha = clampByte(value <= 6 ? 0 : value);
-    const selected = selectedAlpha >= 12;
+    const sourceSelectedAlpha = clampByte(value <= 6 ? 0 : value);
+    const selectedAlpha = invert ? 255 - sourceSelectedAlpha : sourceSelectedAlpha;
+    const sourceSelected = sourceSelectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD;
+    const selected = selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD;
+    if (sourceSelected) sourceSelectedPixels += 1;
     if (selected) selectedPixels += 1;
     pixels[index] = 255;
     pixels[index + 1] = 255;
@@ -411,6 +442,155 @@ const renderOpenAIEditableMaskDataUrl = async (
     dataUrl: canvas.toDataURL('image/png'),
     selectedPixels,
     selectedRatio: selectedPixels / Math.max(width * height, 1),
+    sourceSelectedPixels,
+    sourceSelectedRatio: sourceSelectedPixels / Math.max(width * height, 1),
+  };
+};
+
+const readSelectionMaskStats = async (
+  maskDataUrl: string,
+  invert = false
+): Promise<{ selectedPixels: number; selectedRatio: number } | null> => {
+  const mask = await loadCanvasImage(maskDataUrl);
+  const width = mask.naturalWidth || mask.width;
+  const height = mask.naturalHeight || mask.height;
+  if (!width || !height) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.drawImage(mask, 0, 0, width, height);
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  let selectedPixels = 0;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
+    const sourceSelectedAlpha = clampByte(value <= 6 ? 0 : value);
+    const selectedAlpha = invert ? 255 - sourceSelectedAlpha : sourceSelectedAlpha;
+    if (selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD) selectedPixels += 1;
+  }
+
+  return {
+    selectedPixels,
+    selectedRatio: selectedPixels / Math.max(width * height, 1),
+  };
+};
+
+const buildLocalizedEditProofMap = async (
+  sourceDataUrl: string,
+  generated: GeneratedImage,
+  selectedMaskDataUrl: string,
+  editOutsideSelection: boolean
+): Promise<{ image: ImageData; stats: LocalizedEditDiffStats } | null> => {
+  const [source, generatedImage, selectedMask] = await Promise.all([
+    loadCanvasImage(sourceDataUrl),
+    loadCanvasImage(generated.dataUrl),
+    loadCanvasImage(selectedMaskDataUrl)
+  ]);
+
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  if (!sourceWidth || !sourceHeight) return null;
+
+  const maxEdge = 1024;
+  const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = width;
+  sourceCanvas.height = height;
+  const sourceCtx = sourceCanvas.getContext('2d');
+  if (!sourceCtx) return null;
+  sourceCtx.drawImage(source, 0, 0, width, height);
+  const sourceImageData = sourceCtx.getImageData(0, 0, width, height);
+
+  const generatedCanvas = document.createElement('canvas');
+  generatedCanvas.width = width;
+  generatedCanvas.height = height;
+  const generatedCtx = generatedCanvas.getContext('2d');
+  if (!generatedCtx) return null;
+  generatedCtx.drawImage(generatedImage, 0, 0, width, height);
+  const generatedImageData = generatedCtx.getImageData(0, 0, width, height);
+
+  const selectionAlpha = getSelectionAlpha(selectedMask, width, height, editOutsideSelection);
+  if (!selectionAlpha) return null;
+
+  const proofCanvas = document.createElement('canvas');
+  proofCanvas.width = width;
+  proofCanvas.height = height;
+  const proofCtx = proofCanvas.getContext('2d');
+  if (!proofCtx) return null;
+  const proofImageData = proofCtx.createImageData(width, height);
+  const proofPixels = proofImageData.data;
+  const sourcePixels = sourceImageData.data;
+  const generatedPixels = generatedImageData.data;
+  let insidePixels = 0;
+  let outsidePixels = 0;
+  let insideChangedPixels = 0;
+  let outsideChangedPixels = 0;
+
+  for (let index = 0, pixel = 0; index < selectionAlpha.length; index += 1, pixel += 4) {
+    const selection = selectionAlpha[index];
+    const insideSelection = selection >= OPENAI_SELECTION_ALPHA_THRESHOLD;
+    const maxDelta = getPixelMaxDelta(sourcePixels, generatedPixels, pixel);
+    const changed = maxDelta >= LOCALIZED_EDIT_CHANGE_THRESHOLD;
+    if (insideSelection) {
+      insidePixels += 1;
+      if (changed) insideChangedPixels += 1;
+    } else {
+      outsidePixels += 1;
+      if (changed) outsideChangedPixels += 1;
+    }
+
+    const luminance = getPixelLuminance(sourcePixels, pixel);
+    let red = luminance * 0.78;
+    let green = luminance * 0.78;
+    let blue = luminance * 0.78;
+
+    if (selection > 8) {
+      const selectionStrength = Math.min(0.52, selection / 255 * 0.42);
+      red = red * (1 - selectionStrength) + 45 * selectionStrength;
+      green = green * (1 - selectionStrength) + 220 * selectionStrength;
+      blue = blue * (1 - selectionStrength) + 125 * selectionStrength;
+    }
+
+    if (changed && insideSelection) {
+      const changeStrength = smoothStep(24, 88, maxDelta) * 0.82;
+      red = red * (1 - changeStrength) + 232 * changeStrength;
+      green = green * (1 - changeStrength) + 58 * changeStrength;
+      blue = blue * (1 - changeStrength) + 190 * changeStrength;
+    } else if (changed) {
+      const changeStrength = smoothStep(24, 88, maxDelta) * 0.88;
+      red = red * (1 - changeStrength) + 255 * changeStrength;
+      green = green * (1 - changeStrength) + 176 * changeStrength;
+      blue = blue * (1 - changeStrength) + 38 * changeStrength;
+    }
+
+    proofPixels[pixel] = clampByte(red);
+    proofPixels[pixel + 1] = clampByte(green);
+    proofPixels[pixel + 2] = clampByte(blue);
+    proofPixels[pixel + 3] = 255;
+  }
+
+  proofCtx.putImageData(proofImageData, 0, 0);
+  const imageData = ImageUtils.dataUrlToImageData(proofCanvas.toDataURL('image/png'));
+  if (!imageData) return null;
+
+  return {
+    image: {
+      ...imageData,
+      mimeType: 'image/png',
+      width,
+      height,
+    },
+    stats: {
+      insideChangedRatio: insideChangedPixels / Math.max(insidePixels, 1),
+      outsideChangedRatio: outsideChangedPixels / Math.max(outsidePixels, 1),
+      outsideChangedPixels,
+    },
   };
 };
 
@@ -435,7 +615,11 @@ const renderImageToPngDataUrl = async (
   return canvas.toDataURL('image/png');
 };
 
-const preparePreciseEditInputs = async (sourceDataUrl: string, selectionMaskDataUrl: string) => {
+const preparePreciseEditInputs = async (
+  sourceDataUrl: string,
+  selectionMaskDataUrl: string,
+  editOutsideSelection = false
+) => {
   const sourceImage = await loadCanvasImage(sourceDataUrl);
   const width = sourceImage.naturalWidth || sourceImage.width;
   const height = sourceImage.naturalHeight || sourceImage.height;
@@ -445,7 +629,12 @@ const preparePreciseEditInputs = async (sourceDataUrl: string, selectionMaskData
   }
 
   const sourcePng = await renderImageToPngDataUrl(sourceDataUrl, size.width, size.height);
-  const maskPng = await renderOpenAIEditableMaskDataUrl(selectionMaskDataUrl, size.width, size.height);
+  const maskPng = await renderOpenAIEditableMaskDataUrl(
+    selectionMaskDataUrl,
+    size.width,
+    size.height,
+    editOutsideSelection
+  );
   const sourceImageData = ImageUtils.dataUrlToImageData(sourcePng);
   const selectionMaskData = ImageUtils.dataUrlToImageData(maskPng.dataUrl);
   if (!sourceImageData || !selectionMaskData) {
@@ -469,6 +658,72 @@ const preparePreciseEditInputs = async (sourceDataUrl: string, selectionMaskData
       selectedPixels: maskPng.selectedPixels,
       selectedRatio: maskPng.selectedRatio,
     },
+    sourceSelectionStats: {
+      selectedPixels: maskPng.sourceSelectedPixels,
+      selectedRatio: maskPng.sourceSelectedRatio,
+    },
+  };
+};
+
+const renderPngDataUrlAtSize = async (
+  imageDataUrl: string,
+  width: number,
+  height: number,
+  options: { fill?: string } = {}
+): Promise<string> => {
+  const image = await loadCanvasImage(imageDataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to prepare image for GPT Image 2 edit.');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  if (options.fill) {
+    ctx.fillStyle = options.fill;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
+  ctx.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL('image/png');
+};
+
+const prepareGenericOpenAIEditInputs = async (
+  sourceDataUrl: string,
+  editableMaskDataUrl: string
+) => {
+  const sourceImage = await loadCanvasImage(sourceDataUrl);
+  const width = sourceImage.naturalWidth || sourceImage.width;
+  const height = sourceImage.naturalHeight || sourceImage.height;
+  const size = getPreciseEditSize(width, height);
+  if (!size) {
+    throw new Error('The image aspect ratio is too extreme for GPT Image 2 editing.');
+  }
+
+  const sourcePng = await renderPngDataUrlAtSize(sourceDataUrl, size.width, size.height, { fill: '#ffffff' });
+  const maskPng = await renderPngDataUrlAtSize(editableMaskDataUrl, size.width, size.height);
+  const sourceImageData = ImageUtils.dataUrlToImageData(sourcePng);
+  const maskImageData = ImageUtils.dataUrlToImageData(maskPng);
+  if (!sourceImageData || !maskImageData) {
+    throw new Error('Failed to prepare source image and selection mask for GPT Image 2 edit.');
+  }
+
+  return {
+    sourceImage: {
+      base64: sourceImageData.base64,
+      mimeType: 'image/png' as const,
+      width: size.width,
+      height: size.height,
+    },
+    maskImage: {
+      base64: maskImageData.base64,
+      mimeType: 'image/png' as const,
+      width: size.width,
+      height: size.height,
+    },
   };
 };
 
@@ -489,13 +744,66 @@ const getPreciseEditTargetLabel = (activeTool: string): string => {
     replace: 'selected object',
     sky: 'selected sky',
     lighting: 'selected lighting area',
+    background: 'background outside the selected area',
     select: 'selected area',
   };
   return labels[activeTool] || 'selected area';
 };
 
-const PRECISE_OPENAI_EDIT_TOOLS = new Set(['people', 'remove', 'object', 'replace']);
-const PRECISE_OPENAI_MAX_SELECTED_RATIO = 0.24;
+const PRECISE_OPENAI_EDIT_TOOLS = new Set([
+  'select',
+  'material',
+  'lighting',
+  'object',
+  'people',
+  'sky',
+  'remove',
+  'replace',
+  'background',
+]);
+const PRECISE_OPENAI_SELECTED_RATIO_LIMITS: Record<string, number> = {
+  people: 0.35,
+  remove: 0.35,
+  object: 0.45,
+  replace: 0.45,
+  select: 0.7,
+  material: 0.7,
+  lighting: 0.7,
+  sky: 0.7,
+  background: 0.995,
+};
+
+const getPreciseOpenAISelectedRatioLimit = (activeTool: string): number =>
+  PRECISE_OPENAI_SELECTED_RATIO_LIMITS[activeTool] ?? 0.45;
+
+const buildLocalizedEditVerificationContext = (
+  operation: string,
+  targetLabel: string,
+  selectedRatio: number | null | undefined,
+  diffStats?: LocalizedEditDiffStats | null,
+  options: {
+    editOutsideSelection?: boolean;
+    protectedTargetLabel?: string;
+  } = {}
+): ImageOutputVerificationContext => ({
+  mode: 'localized-edit',
+  localizedEdit: {
+    operation,
+    targetLabel,
+    editableTargetLabel: targetLabel,
+    protectedTargetLabel: options.protectedTargetLabel || (
+      options.editOutsideSelection
+        ? 'originally selected foreground or subject'
+        : 'unselected areas outside the edit mask'
+    ),
+    maskPolarity: options.editOutsideSelection ? 'outside-selection-editable' : 'selected-area-editable',
+    selectedRatio: typeof selectedRatio === 'number' ? selectedRatio : null,
+    changeProofMap: Boolean(diffStats),
+    insideChangedRatio: diffStats?.insideChangedRatio ?? null,
+    outsideChangedRatio: diffStats?.outsideChangedRatio ?? null,
+    outsideChangedPixels: diffStats?.outsideChangedPixels ?? null,
+  },
+});
 
 const withOutputVerificationSettings = (
   settings: Record<string, any> | undefined,
@@ -2496,7 +2804,7 @@ export function useGeneration(): UseGenerationReturn {
         promptForVerification: string,
         referenceImages?: ImageData[],
         originalPromptForVerification?: string,
-        verificationContext: Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'> = {}
+        verificationContext: ImageOutputVerificationContext = {}
       ): Promise<ImageOutputVerificationResult | null> => {
         const finalImage = pickFinalImage(resultToVerify.images);
         if (!finalImage) return null;
@@ -2539,7 +2847,15 @@ export function useGeneration(): UseGenerationReturn {
           timeoutMs?: number;
           maxRetries?: number;
           verificationPolicy?: 'blocking' | 'advisory';
-          verificationContext?: Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'>;
+          verificationContext?: ImageOutputVerificationContext;
+          prepareVerification?: (
+            resultForAttempt: GeminiResponse,
+            referenceImagesForAttempt?: ImageData[],
+            verificationContextForAttempt?: ImageOutputVerificationContext
+          ) => Promise<{
+            referenceImages?: ImageData[];
+            verificationContext?: ImageOutputVerificationContext;
+          }>;
         } = imageGenerationRetryOptions
       ): Promise<GeminiResponse> => {
         const verificationPolicy = generationRetryOptions.verificationPolicy || 'blocking';
@@ -2567,20 +2883,31 @@ export function useGeneration(): UseGenerationReturn {
           );
           const resultForAttempt = await normalizeResponseImagesToAspectRatio(
             rawResultForAttempt,
-            generationConfig?.imageConfig?.aspectRatio
+            state.mode === 'visual-edit' ? null : generationConfig?.imageConfig?.aspectRatio
           );
           const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
           const hasGeneratedImage = resultForAttempt.images.length > 0;
           lastResultForAttempt = resultForAttempt;
           lastPromptUsed = promptUsed;
+          let referenceImagesForVerification = referenceImages;
+          let verificationContextForAttempt = verificationContext;
+          if (hasGeneratedImage && generationRetryOptions.prepareVerification) {
+            const preparedVerification = await generationRetryOptions.prepareVerification(
+              resultForAttempt,
+              referenceImages,
+              verificationContext
+            );
+            referenceImagesForVerification = preparedVerification.referenceImages || referenceImages;
+            verificationContextForAttempt = preparedVerification.verificationContext || verificationContext;
+          }
           let verification: ImageOutputVerificationResult | null = null;
           try {
             verification = await verifyImageResult(
               resultForAttempt,
               promptUsed,
-              referenceImages,
+              referenceImagesForVerification,
               originalPromptForVerification,
-              verificationContext
+              verificationContextForAttempt
             );
           } catch (error) {
             if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
@@ -3453,6 +3780,96 @@ export function useGeneration(): UseGenerationReturn {
                 materialReference.fallbackPreviewUrl
               )
             : null;
+        const selectionStats = shouldUseSelectionMask && selectedMaskDataUrl
+          ? await readSelectionMaskStats(selectedMaskDataUrl, editOutsideSelection).catch(() => null)
+          : null;
+        const localizedVerificationContext = shouldUseSelectionMask
+          ? buildLocalizedEditVerificationContext(
+              editType,
+              getPreciseEditTargetLabel(activeVisualTool),
+              selectionStats?.selectedRatio ?? null,
+              null,
+              {
+                editOutsideSelection,
+                protectedTargetLabel: editOutsideSelection
+                  ? 'originally selected foreground or subject'
+                  : 'unselected areas outside the selected edit target',
+              }
+            )
+          : undefined;
+        const createLocalizedVerificationPreparation = (
+          operation: string,
+          targetLabel: string,
+          selectedRatio: number | null | undefined
+        ) => {
+          if (!shouldUseSelectionMask || !selectedMaskDataUrl || !sourceImageUrl) return undefined;
+          return async (
+            resultForAttempt: GeminiResponse,
+            referenceImagesForAttempt?: ImageData[]
+          ) => {
+            const finalImage = pickFinalImage(resultForAttempt.images);
+            if (!finalImage) {
+              return {
+                referenceImages: referenceImagesForAttempt,
+                verificationContext: buildLocalizedEditVerificationContext(
+                  operation,
+                  targetLabel,
+                  selectedRatio,
+                  null,
+                  {
+                    editOutsideSelection,
+                    protectedTargetLabel: editOutsideSelection
+                      ? 'originally selected foreground or subject'
+                      : 'unselected areas outside the selected edit target',
+                  }
+                ),
+              };
+            }
+
+            const proof = await buildLocalizedEditProofMap(
+              sourceImageUrl,
+              finalImage,
+              selectedMaskDataUrl,
+              editOutsideSelection
+            ).catch(() => null);
+            if (!proof) {
+              return {
+                referenceImages: referenceImagesForAttempt,
+                verificationContext: buildLocalizedEditVerificationContext(
+                  operation,
+                  targetLabel,
+                  selectedRatio,
+                  null,
+                  {
+                    editOutsideSelection,
+                    protectedTargetLabel: editOutsideSelection
+                      ? 'originally selected foreground or subject'
+                      : 'unselected areas outside the selected edit target',
+                  }
+                ),
+              };
+            }
+
+            return {
+              referenceImages: [
+                ...(referenceImagesForAttempt || []),
+                proof.image,
+              ],
+              verificationContext: buildLocalizedEditVerificationContext(
+                operation,
+                targetLabel,
+                selectedRatio,
+                proof.stats,
+                {
+                  editOutsideSelection,
+                  protectedTargetLabel: editOutsideSelection
+                    ? 'originally selected foreground or subject'
+                    : 'unselected areas outside the selected edit target',
+                }
+              ),
+            };
+          };
+        };
 
         const adjust = state.workflow.visualAdjust;
         const hasAdjustGeometryChange = activeVisualTool === 'adjust' && (
@@ -3484,17 +3901,51 @@ export function useGeneration(): UseGenerationReturn {
             shouldUseSelectionMask &&
             selectedMaskDataUrl &&
             PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
-            activeVisualTool !== 'background' &&
             activeVisualTool !== 'extend'
           );
           let usedPreciseOpenAIEdit = false;
+          let normalizedInputsForMaskedOpenAIEdit: { sourceImage: ImageData; maskImage: ImageData } | null = null;
+          const getInputsForGenericEdit = async (): Promise<{ sourceImage: ImageData; maskImage: ImageData | null }> => {
+            if (effectiveImageGenerationModel !== 'chatgpt-image-generation-2' || !maskImage || !editableMaskDataUrl) {
+              return { sourceImage, maskImage: maskImage || null };
+            }
+            if (normalizedInputsForMaskedOpenAIEdit) {
+              return normalizedInputsForMaskedOpenAIEdit;
+            }
+
+            normalizedInputsForMaskedOpenAIEdit = await prepareGenericOpenAIEditInputs(
+              sourceImageUrl!,
+              editableMaskDataUrl
+            );
+            return normalizedInputsForMaskedOpenAIEdit;
+          };
 
           if (canUsePreciseOpenAIEdit && selectedMaskDataUrl) {
-            const preciseInputs = await preparePreciseEditInputs(sourceImageUrl!, selectedMaskDataUrl);
+            const preciseInputs = await preparePreciseEditInputs(
+              sourceImageUrl!,
+              selectedMaskDataUrl,
+              editOutsideSelection
+            );
             const selectedRatio = preciseInputs.selectionStats.selectedRatio ?? 1;
-            if (selectedRatio <= PRECISE_OPENAI_MAX_SELECTED_RATIO) {
+            const sourceSelectedRatio = preciseInputs.sourceSelectionStats.selectedRatio ?? 0;
+            if (editOutsideSelection && sourceSelectedRatio < 0.0025) {
+              throw new Error('Select the foreground or subject you want to keep before editing the background.');
+            }
+            if (selectedRatio <= getPreciseOpenAISelectedRatioLimit(activeVisualTool)) {
               const preciseOperation = getPreciseEditOperation(activeVisualTool);
               const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
+              const preciseVerificationContext = buildLocalizedEditVerificationContext(
+                preciseOperation,
+                preciseTargetLabel,
+                selectedRatio,
+                null,
+                {
+                  editOutsideSelection,
+                  protectedTargetLabel: editOutsideSelection
+                    ? 'originally selected foreground or subject'
+                    : 'unselected areas outside the selected edit target',
+                }
+              );
               const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
                 ? 'final'
                 : state.output.resolution === '720p'
@@ -3518,14 +3969,15 @@ export function useGeneration(): UseGenerationReturn {
                     originalGenerationPrompt: basePrompt,
                     quality,
                     variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
-                    outputFormat: 'png'
+                    outputFormat: 'png',
+                    referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
                   }, { signal: abortSignal });
                   updateGenerationStage('transfer');
                   updateProgress(88);
                   const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                   const finalizedImages = await Promise.all(
-                    editedImages.map((image) => compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, false, {
-                      seamless: true,
+                    editedImages.map((image) => compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection, {
+                      seamless: !editOutsideSelection,
                       featherAmount: effectiveFeatherAmount,
                     }))
                   );
@@ -3535,7 +3987,15 @@ export function useGeneration(): UseGenerationReturn {
                     optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                   };
                 },
-                basePrompt
+                basePrompt,
+                {
+                  verificationContext: preciseVerificationContext,
+                  prepareVerification: createLocalizedVerificationPreparation(
+                    preciseOperation,
+                    preciseTargetLabel,
+                    selectedRatio
+                  ),
+                }
               );
               visualMaskHandledLocally = true;
               usedPreciseOpenAIEdit = true;
@@ -3543,23 +4003,72 @@ export function useGeneration(): UseGenerationReturn {
           }
 
           if (!usedPreciseOpenAIEdit) {
+            let nonPreciseEditComposited = false;
             result = await runVerifiedImageGeneration(
               'image edit',
               basePrompt,
               editReferenceImages,
-              (promptForAttempt) => service.editImage({
-                sourceImage,
-                maskImage: maskImage || undefined,
-                maskMode,
-                referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-                prompt: promptForAttempt,
-                editType,
-                activeTool: activeVisualTool,
-                imageGenerationModel: effectiveImageGenerationModel,
-                generationConfig: generationConfigWithAbort
-              }),
-              basePrompt
+              async (promptForAttempt) => {
+                const editInputs = await getInputsForGenericEdit();
+                const editSourceImage = editInputs.sourceImage;
+                const editMaskImage = editInputs.maskImage;
+                const openAISizeOverride = effectiveImageGenerationModel === 'chatgpt-image-generation-2' &&
+                  editMaskImage &&
+                  editSourceImage.width &&
+                  editSourceImage.height
+                  ? `${editSourceImage.width}x${editSourceImage.height}`
+                  : null;
+                const editResult = await service.editImage({
+                  sourceImage: editSourceImage,
+                  maskImage: editMaskImage || undefined,
+                  maskMode,
+                  referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
+                  prompt: promptForAttempt,
+                  editType,
+                  activeTool: activeVisualTool,
+                  imageGenerationModel: effectiveImageGenerationModel,
+                  generationConfig: openAISizeOverride
+                    ? {
+                        ...generationConfigWithAbort,
+                        openAI: {
+                          ...generationConfigWithAbort.openAI,
+                          size: openAISizeOverride,
+                        },
+                      }
+                    : generationConfigWithAbort
+                });
+
+                if (!shouldUseSelectionMask || !selectedMaskDataUrl || !editResult.images?.length || activeVisualTool === 'extend') {
+                  return editResult;
+                }
+
+                const finalizedImages = await Promise.all(
+                  editResult.images.map((image) =>
+                    compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection, {
+                      seamless: !editOutsideSelection,
+                      featherAmount: effectiveFeatherAmount,
+                    })
+                  )
+                );
+                nonPreciseEditComposited = true;
+                return {
+                  ...editResult,
+                  images: finalizedImages,
+                };
+              },
+              basePrompt,
+              localizedVerificationContext
+                ? {
+                    verificationContext: localizedVerificationContext,
+                    prepareVerification: createLocalizedVerificationPreparation(
+                      editType,
+                      getPreciseEditTargetLabel(activeVisualTool),
+                      selectionStats?.selectedRatio ?? null
+                    ),
+                  }
+                : undefined
             );
+            visualMaskHandledLocally = visualMaskHandledLocally || nonPreciseEditComposited;
           }
         }
 

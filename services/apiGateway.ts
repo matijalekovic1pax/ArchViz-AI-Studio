@@ -36,6 +36,10 @@ const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
 const IMAGE_EDIT_TIMEOUT_MS = 10 * 60_000;
 const OPENAI_IMAGE_ALLOWED_SIZES = ['1024x1024', '1024x1536', '1536x1024', 'auto'] as const;
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
+const OPENAI_IMAGE_SIZE_MULTIPLE = 16;
 
 const JWT_SESSION_KEY = 'archviz_jwt';
 
@@ -626,6 +630,26 @@ const normalizeOpenAISize = (aspectRatio: unknown, imageSize: unknown): string =
   return '1024x1024';
 };
 
+const normalizeOpenAISizeOverride = (size: unknown): string | null => {
+  if (OPENAI_IMAGE_ALLOWED_SIZES.includes(size as any)) return size as string;
+  if (typeof size !== 'string') return null;
+
+  const match = size.match(/^(\d+)x(\d+)$/);
+  if (!match) return null;
+
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  if (width % OPENAI_IMAGE_SIZE_MULTIPLE !== 0 || height % OPENAI_IMAGE_SIZE_MULTIPLE !== 0) return null;
+  if (Math.max(width, height) > OPENAI_IMAGE_MAX_EDGE) return null;
+  if (Math.max(width, height) / Math.max(1, Math.min(width, height)) > 3) return null;
+
+  const pixels = width * height;
+  if (pixels < OPENAI_IMAGE_MIN_PIXELS || pixels > OPENAI_IMAGE_MAX_PIXELS) return null;
+
+  return `${width}x${height}`;
+};
+
 const normalizeOpenAIQuality = (imageSize: unknown): string => {
   if (imageSize === '4K') return 'high';
   if (imageSize === '1K') return 'low';
@@ -635,11 +659,16 @@ const normalizeOpenAIQuality = (imageSize: unknown): string => {
 const getOpenAIImageOptions = (generationConfig: any = {}) => {
   const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
   const background = generationConfig.openAI?.background || imageConfig.background;
+  const normalizedBackground = background === 'transparent' || background === 'opaque' || background === 'auto'
+    ? background
+    : 'auto';
   return {
-    size: normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
+    size: normalizeOpenAISizeOverride(generationConfig.openAI?.size) ||
+      normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
-    background: background === 'transparent' || background === 'opaque' || background === 'auto' ? background : 'auto',
+    // GPT Image 2 currently does not support transparent backgrounds.
+    background: normalizedBackground === 'transparent' ? 'opaque' : normalizedBackground,
   };
 };
 

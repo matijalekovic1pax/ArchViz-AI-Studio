@@ -11,7 +11,9 @@
     "setup:appwrite-feedback": "node scripts/setup-appwrite-feedback.mjs",
     "mcp:feedback": "node mcp/feedback-mcp-server.mjs",
     "mcp:test": "node mcp/archwiz-test-mcp-server.mjs",
-    "verify:assistant": "node scripts/verify-assistant-integration.mjs"
+    "verify:assistant": "node scripts/verify-assistant-integration.mjs",
+    "verify:image-edit": "node scripts/verify-image-edit-pipeline.mjs",
+    "verify:image-edit:live": "node scripts/verify-openai-image-edit-live.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
