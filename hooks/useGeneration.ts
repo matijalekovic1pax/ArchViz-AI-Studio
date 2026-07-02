@@ -395,7 +395,7 @@ const getPreciseEditSize = (width: number, height: number) => {
     : null;
 };
 
-const renderOpenAIEditableMaskDataUrl = async (
+const renderSelectionAlphaMaskDataUrl = async (
   imageSrc: string,
   width: number,
   height: number,
@@ -629,7 +629,7 @@ const preparePreciseEditInputs = async (
   }
 
   const sourcePng = await renderImageToPngDataUrl(sourceDataUrl, size.width, size.height);
-  const maskPng = await renderOpenAIEditableMaskDataUrl(
+  const maskPng = await renderSelectionAlphaMaskDataUrl(
     selectionMaskDataUrl,
     size.width,
     size.height,
@@ -751,26 +751,16 @@ const getPreciseEditTargetLabel = (activeTool: string): string => {
 };
 
 const PRECISE_OPENAI_EDIT_TOOLS = new Set([
-  'select',
-  'material',
-  'lighting',
   'object',
   'people',
-  'sky',
   'remove',
   'replace',
-  'background',
 ]);
 const PRECISE_OPENAI_SELECTED_RATIO_LIMITS: Record<string, number> = {
   people: 0.35,
   remove: 0.35,
   object: 0.45,
   replace: 0.45,
-  select: 0.7,
-  material: 0.7,
-  lighting: 0.7,
-  sky: 0.7,
-  background: 0.995,
 };
 
 const getPreciseOpenAISelectedRatioLimit = (activeTool: string): number =>
@@ -1318,6 +1308,40 @@ const createEditableMaskDataUrl = async (maskDataUrl: string, invert: boolean, a
   const height = mask.naturalHeight || mask.height;
   if (!width || !height) return maskDataUrl;
   return drawMaskImageData(mask, width, height, { invert, alphaMask })?.toDataURL('image/png') || maskDataUrl;
+};
+
+const createOpenAIEditableMaskDataUrl = async (
+  maskDataUrl: string,
+  editOutsideSelection: boolean
+): Promise<string> => {
+  const mask = await loadCanvasImage(maskDataUrl);
+  const width = mask.naturalWidth || mask.width;
+  const height = mask.naturalHeight || mask.height;
+  if (!width || !height) return maskDataUrl;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return maskDataUrl;
+
+  ctx.drawImage(mask, 0, 0, width, height);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const luminance = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
+    const selectedAlpha = clampByte(luminance <= 6 ? 0 : luminance);
+    const protectedAlpha = editOutsideSelection
+      ? selectedAlpha
+      : 255 - selectedAlpha;
+    pixels[index] = 255;
+    pixels[index + 1] = 255;
+    pixels[index + 2] = 255;
+    pixels[index + 3] = protectedAlpha;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return canvas.toDataURL('image/png');
 };
 
 const createSceneComposePlacementGuideDataUrl = async (
@@ -3731,6 +3755,7 @@ export function useGeneration(): UseGenerationReturn {
           activeVisualTool !== 'extend' &&
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
+        const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-image-generation-2';
         const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
         const effectiveFeatherAmount = state.workflow.visualSelection.featherEnabled
           ? state.workflow.visualSelection.featherAmount
@@ -3739,11 +3764,9 @@ export function useGeneration(): UseGenerationReturn {
           ? await createGuidanceMaskDataUrl(selectedMaskDataUrl, effectiveFeatherAmount)
           : selectedMaskDataUrl;
         const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl
-          ? await createEditableMaskDataUrl(
-              guidanceMaskDataUrl,
-              editOutsideSelection,
-              effectiveImageGenerationModel === 'chatgpt-image-generation-2' && maskMode === 'strict'
-            )
+          ? isOpenAIVisualEdit
+            ? await createOpenAIEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
+            : await createEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
           : null;
         const maskImage = editableMaskDataUrl
           ? dataUrlToImageData(editableMaskDataUrl)
@@ -3891,13 +3914,14 @@ export function useGeneration(): UseGenerationReturn {
           visualMaskHandledLocally = shouldUseSelectionMask;
           updateProgress(90);
         } else {
+          const includeMaskAsReferenceImage = !isOpenAIVisualEdit;
           const editReferenceImages = [
             sourceImage,
-            ...(maskImage ? [maskImage] : []),
+            ...(includeMaskAsReferenceImage && maskImage ? [maskImage] : []),
             ...(materialReferenceImage ? [materialReferenceImage] : [])
           ];
           const canUsePreciseOpenAIEdit = Boolean(
-            effectiveImageGenerationModel === 'chatgpt-image-generation-2' &&
+            isOpenAIVisualEdit &&
             shouldUseSelectionMask &&
             selectedMaskDataUrl &&
             PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
@@ -4012,7 +4036,7 @@ export function useGeneration(): UseGenerationReturn {
                 const editInputs = await getInputsForGenericEdit();
                 const editSourceImage = editInputs.sourceImage;
                 const editMaskImage = editInputs.maskImage;
-                const openAISizeOverride = effectiveImageGenerationModel === 'chatgpt-image-generation-2' &&
+                const openAISizeOverride = isOpenAIVisualEdit &&
                   editMaskImage &&
                   editSourceImage.width &&
                   editSourceImage.height
@@ -4038,7 +4062,13 @@ export function useGeneration(): UseGenerationReturn {
                     : generationConfigWithAbort
                 });
 
-                if (!shouldUseSelectionMask || !selectedMaskDataUrl || !editResult.images?.length || activeVisualTool === 'extend') {
+                if (
+                  isOpenAIVisualEdit ||
+                  !shouldUseSelectionMask ||
+                  !selectedMaskDataUrl ||
+                  !editResult.images?.length ||
+                  activeVisualTool === 'extend'
+                ) {
                   return editResult;
                 }
 
@@ -4072,7 +4102,14 @@ export function useGeneration(): UseGenerationReturn {
           }
         }
 
-        if (!visualMaskHandledLocally && shouldUseSelectionMask && maskMode === 'strict' && selectedMaskDataUrl && result.images?.length) {
+        if (
+          !isOpenAIVisualEdit &&
+          !visualMaskHandledLocally &&
+          shouldUseSelectionMask &&
+          maskMode === 'strict' &&
+          selectedMaskDataUrl &&
+          result.images?.length
+        ) {
           result = {
             ...result,
             images: await Promise.all(

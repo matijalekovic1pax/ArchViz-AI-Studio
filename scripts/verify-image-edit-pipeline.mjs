@@ -43,8 +43,7 @@ function extractConstSource(source, name, nextName) {
 
 function assertSourceContract() {
   const maskBuilder = extractFunctionSource(workerSource, 'buildOpenAISelectionMaskPng');
-  assert.match(maskBuilder, /rgba\[pixel \+ 3\] = selectedAlpha\[index\];/, 'worker must preserve selected pixels in mask alpha');
-  assert.doesNotMatch(maskBuilder, /255\s*-\s*selectedAlpha\[index\]/, 'worker must not invert OpenAI edit mask alpha');
+  assert.match(maskBuilder, /rgba\[pixel \+ 3\] = 255 - selectedAlpha\[index\];/, 'worker must convert app-selected pixels to OpenAI transparent editable mask alpha');
   assert.match(workerSource, /const selectionAlpha = rgbaToSelectionAlpha\(maskPng\);/);
   assert.match(workerSource, /const serverSelectionStats = alphaStats\(selectionAlpha\);/);
   assert.match(workerSource, /const normalizedMaskBytes = await buildOpenAISelectionMaskPng\(maskPng\.width, maskPng\.height, selectionAlpha\);/);
@@ -60,23 +59,32 @@ function assertSourceContract() {
   assert.match(generationHookSource, /const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;/);
   assert.match(generationHookSource, /const selectedAlpha = invert \? 255 - sourceSelectedAlpha : sourceSelectedAlpha;/, 'client must support intentionally inverted editable masks for background edits');
   assert.match(generationHookSource, /pixels\[index \+ 3\] = selectedAlpha;/, 'client mask PNG must carry selection in alpha');
+  assert.match(generationHookSource, /const createOpenAIEditableMaskDataUrl = async/, 'client must build a dedicated OpenAI alpha mask instead of reusing the visible selection mask');
+  assert.match(generationHookSource, /const protectedAlpha = editOutsideSelection[\s\S]*\? selectedAlpha[\s\S]*: 255 - selectedAlpha;/, 'client OpenAI mask must make selected pixels transparent for normal edits and protected for background edits');
   assert.match(generationHookSource, /state\.mode === 'visual-edit' \? null : generationConfig\?\.imageConfig\?\.aspectRatio/);
   assert.match(generationHookSource, /prepareVerification: createLocalizedVerificationPreparation/);
   assert.match(generationHookSource, /buildLocalizedEditProofMap/);
-  assert.match(generationHookSource, /PRECISE_OPENAI_EDIT_TOOLS[\s\S]*'background'/, 'background edits must use the precise OpenAI edit route');
-  assert.match(generationHookSource, /background: 0\.995/, 'background edits must allow large outside-selection editable masks');
+  const preciseToolsStart = generationHookSource.indexOf('const PRECISE_OPENAI_EDIT_TOOLS');
+  const preciseToolsEnd = generationHookSource.indexOf('const PRECISE_OPENAI_SELECTED_RATIO_LIMITS');
+  assert.notEqual(preciseToolsStart, -1, 'client must define precise OpenAI edit tools');
+  assert.notEqual(preciseToolsEnd, -1, 'client must define precise OpenAI ratio limits');
+  const preciseToolsSource = generationHookSource.slice(preciseToolsStart, preciseToolsEnd);
+  assert.match(preciseToolsSource, /'people'/, 'people edits should keep the precise OpenAI path');
+  assert.match(preciseToolsSource, /'object'/, 'object edits should keep the precise OpenAI path');
+  assert.match(preciseToolsSource, /'remove'/, 'remove edits should keep the precise OpenAI path');
+  assert.doesNotMatch(preciseToolsSource, /'select'|'material'|'lighting'|'sky'|'background'/, 'broad surface and background edits must not use the precise local-composite path');
   assert.match(generationHookSource, /preparePreciseEditInputs\(\s*sourceImageUrl!,\s*selectedMaskDataUrl,\s*editOutsideSelection\s*\)/, 'precise edit inputs must receive mask orientation');
-  assert.doesNotMatch(generationHookSource, /activeVisualTool !== 'background'/, 'background edits must not be excluded from precise OpenAI edits');
   assert.match(generationHookSource, /sourceSelectionStats/, 'precise background edits must keep original selection stats for blank-selection guards');
   assert.match(generationHookSource, /compositeVisualEditResult\(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection/, 'precise edits must composite using the active mask orientation');
+  assert.match(generationHookSource, /isOpenAIVisualEdit \|\|[\s\S]*!shouldUseSelectionMask/, 'generic GPT Image visual edits must return the provider frame instead of local mask-compositing broad selections');
   assert.match(generationHookSource, /maskPolarity: options\.editOutsideSelection \? 'outside-selection-editable' : 'selected-area-editable'/, 'verification context must carry explicit mask polarity');
   assert.match(generationHookSource, /protectedTargetLabel: editOutsideSelection[\s\S]*originally selected foreground or subject/, 'background verification must label the protected foreground/subject');
   assert.match(generationHookSource, /const prepareGenericOpenAIEditInputs = async/, 'non-precise masked OpenAI fallback must normalize edit inputs before gateway upload');
   assert.match(generationHookSource, /const size = getPreciseEditSize\(width, height\);[\s\S]*renderPngDataUrlAtSize\(sourceDataUrl, size\.width, size\.height/, 'masked OpenAI fallback source PNG must use a legal GPT Image 2 edit size');
   assert.match(generationHookSource, /renderPngDataUrlAtSize\(editableMaskDataUrl, size\.width, size\.height\)/, 'masked OpenAI fallback mask PNG must match the legal source size');
   assert.match(generationHookSource, /sourceImage: editSourceImage/, 'generic edit fallback must send the normalized OpenAI source image');
-  assert.match(generationHookSource, /maskImage: editMaskImage \|\| undefined/, 'generic edit fallback must send the normalized OpenAI mask/reference image');
-  assert.match(generationHookSource, /size: openAISizeOverride/, 'generic masked OpenAI fallback must request source-sized output for compositing');
+  assert.match(generationHookSource, /maskImage: editMaskImage \|\| undefined/, 'generic edit fallback must send the normalized OpenAI alpha mask');
+  assert.match(generationHookSource, /size: openAISizeOverride/, 'generic masked OpenAI fallback must request source-sized output');
   const visualComposite = extractConstSource(generationHookSource, 'compositeVisualEditResult', 'ensureServiceInitialized');
   assert.match(visualComposite, /const width = source\.naturalWidth \|\| source\.width;/, 'final composite must use original source width');
   assert.match(visualComposite, /const height = source\.naturalHeight \|\| source\.height;/, 'final composite must use original source height');
@@ -93,8 +101,11 @@ function assertSourceContract() {
   assert.match(verifierSource, /const readImageDimensionsFromBase64 = /, 'image data utility must preserve dimensions parsed from data URLs');
   assert.match(verifierSource, /width: readUint32BE\(bytes, 16\),[\s\S]*height: readUint32BE\(bytes, 20\),/, 'PNG data URL dimensions must be parsed without async image loading');
   assert.match(verifierSource, /normalizedMimeType === 'image\/jpeg'/, 'JPEG data URL dimensions must be parsed for uploaded photos');
-  assert.match(verifierSource, /const strictMaskSizeOverride = strictMaskImage[\s\S]*isValidOpenAIImageSize\(openAISourceImage\.width, openAISourceImage\.height\)/, 'strict GPT Image 2 masks must derive a source-sized output override when dimensions are legal');
-  assert.match(verifierSource, /size: strictMaskSizeOverride/, 'strict GPT Image 2 mask size override must be passed through generationConfig');
+  assert.match(verifierSource, /const usesOpenAIAlphaMask = request\.imageGenerationModel === 'chatgpt-image-generation-2' && Boolean\(request\.maskImage\)/, 'GPT Image 2 edits must treat the mask as an alpha mask, not an ordinary reference image');
+  assert.match(verifierSource, /const maskedEditSizeOverride = openAIMaskImage[\s\S]*isValidOpenAIImageSize\(openAISourceImage\.width, openAISourceImage\.height\)/, 'masked GPT Image 2 edits must derive a source-sized output override when dimensions are legal');
+  assert.match(verifierSource, /size: maskedEditSizeOverride/, 'masked GPT Image 2 mask size override must be passed through generationConfig');
+  assert.doesNotMatch(verifierSource, /openAIImages\.push\(request\.maskImage\)/, 'GPT Image 2 must not append masks as normal image inputs');
+  assert.match(verifierSource, /maskImage: openAIMaskImage/, 'GPT Image 2 must send selection masks through the dedicated mask field');
 
   const selectionMaskBuilder = extractConstSource(imageCanvasSource, 'buildSelectionMask', 'buildSelectionComposite');
   assert.match(selectionMaskBuilder, /img\.naturalWidth/, 'visual overlay mask must use source image natural width');
@@ -468,7 +479,7 @@ function buildOpenAISelectionMaskPng(width, height, selectedAlpha) {
     rgba[pixel] = 255;
     rgba[pixel + 1] = 255;
     rgba[pixel + 2] = 255;
-    rgba[pixel + 3] = selectedAlpha[index];
+    rgba[pixel + 3] = 255 - selectedAlpha[index];
   }
   return encodePngRgba(width, height, rgba);
 }
@@ -706,11 +717,11 @@ async function verifyWorkerImageEditRoute() {
     assert.equal(forwardedMask.data[insidePixel * 4], 255);
     assert.equal(forwardedMask.data[insidePixel * 4 + 1], 255);
     assert.equal(forwardedMask.data[insidePixel * 4 + 2], 255);
-    assert.equal(forwardedMask.data[insidePixel * 4 + 3], 255);
+    assert.equal(forwardedMask.data[insidePixel * 4 + 3], 0, 'selected app pixels must be transparent/editable in the OpenAI mask');
     assert.equal(forwardedMask.data[outsidePixel * 4], 255);
     assert.equal(forwardedMask.data[outsidePixel * 4 + 1], 255);
     assert.equal(forwardedMask.data[outsidePixel * 4 + 2], 255);
-    assert.equal(forwardedMask.data[outsidePixel * 4 + 3], 0);
+    assert.equal(forwardedMask.data[outsidePixel * 4 + 3], 255, 'unselected app pixels must be opaque/protected in the OpenAI mask');
     const metadata = json.versions[0].metadata;
     assert.equal(metadata.selectedPixels, expectedStats.selected);
     assert.ok(Math.abs(metadata.selectedRatio - expectedStats.ratio) < 1e-12);
@@ -749,8 +760,8 @@ async function verifyWorkerImageEditRoute() {
     const backgroundMaskBlob = backgroundForm.get('mask');
     assert.ok(backgroundMaskBlob instanceof Blob, 'background edit must forward a normalized mask blob');
     const backgroundForwardedMask = decodePngRgba(new Uint8Array(await backgroundMaskBlob.arrayBuffer()));
-    assert.equal(backgroundForwardedMask.data[insidePixel * 4 + 3], 0, 'background edit must protect the originally selected foreground');
-    assert.equal(backgroundForwardedMask.data[outsidePixel * 4 + 3], 255, 'background edit must make the outside background editable');
+    assert.equal(backgroundForwardedMask.data[insidePixel * 4 + 3], 255, 'background edit must protect the originally selected foreground');
+    assert.equal(backgroundForwardedMask.data[outsidePixel * 4 + 3], 0, 'background edit must make the outside background editable');
     assert.equal(backgroundJson.versions[0].metadata.selectedPixels, backgroundExpectedStats.selected);
     assert.ok(Math.abs(backgroundJson.versions[0].metadata.selectedRatio - backgroundExpectedStats.ratio) < 1e-12);
 
@@ -884,32 +895,38 @@ const source = makeSourceRgba(WIDTH, HEIGHT);
 const selectedAlpha = makeSelectedAlpha(WIDTH, HEIGHT);
 const maskBytes = buildOpenAISelectionMaskPng(WIDTH, HEIGHT, selectedAlpha);
 const decodedMask = decodePngRgba(maskBytes);
-const normalizedAlpha = rgbaToSelectionAlpha(decodedMask);
-const stats = alphaStats(normalizedAlpha);
+const protectedAlpha = rgbaToSelectionAlpha(decodedMask);
+const editableAlpha = invertAlpha(protectedAlpha);
+const stats = alphaStats(editableAlpha);
 
 assert.equal(decodedMask.width, WIDTH);
 assert.equal(decodedMask.height, HEIGHT);
-assert.equal(normalizedAlpha[SELECT_Y1 * WIDTH + SELECT_X1], 255, 'selected mask alpha must remain selected');
-assert.equal(normalizedAlpha[0], 0, 'unselected mask alpha must remain locked');
+assert.equal(protectedAlpha[SELECT_Y1 * WIDTH + SELECT_X1], 0, 'selected OpenAI mask alpha must be transparent/editable');
+assert.equal(protectedAlpha[0], 255, 'unselected OpenAI mask alpha must be opaque/protected');
+assert.equal(editableAlpha[SELECT_Y1 * WIDTH + SELECT_X1], 255, 'selected editable alpha must remain selected');
+assert.equal(editableAlpha[0], 0, 'unselected editable alpha must remain locked');
 assert.equal(stats.selected, (SELECT_X2 - SELECT_X1) * (SELECT_Y2 - SELECT_Y1));
 assert.ok(stats.ratio > 0.15 && stats.ratio < 0.16, `unexpected selected ratio ${stats.ratio}`);
 
 const backgroundEditableAlpha = invertAlpha(selectedAlpha);
 const backgroundMaskBytes = buildOpenAISelectionMaskPng(WIDTH, HEIGHT, backgroundEditableAlpha);
 const backgroundDecodedMask = decodePngRgba(backgroundMaskBytes);
-const backgroundNormalizedAlpha = rgbaToSelectionAlpha(backgroundDecodedMask);
-const backgroundStats = alphaStats(backgroundNormalizedAlpha);
-assert.equal(backgroundNormalizedAlpha[SELECT_Y1 * WIDTH + SELECT_X1], 0, 'background mask must lock the originally selected foreground');
-assert.equal(backgroundNormalizedAlpha[0], 255, 'background mask must edit outside the original selection');
+const backgroundProtectedAlpha = rgbaToSelectionAlpha(backgroundDecodedMask);
+const backgroundEditableFromMask = invertAlpha(backgroundProtectedAlpha);
+const backgroundStats = alphaStats(backgroundEditableFromMask);
+assert.equal(backgroundProtectedAlpha[SELECT_Y1 * WIDTH + SELECT_X1], 255, 'background OpenAI mask must protect the originally selected foreground');
+assert.equal(backgroundProtectedAlpha[0], 0, 'background OpenAI mask must make the outside original background transparent/editable');
+assert.equal(backgroundEditableFromMask[SELECT_Y1 * WIDTH + SELECT_X1], 0, 'background editable alpha must lock the originally selected foreground');
+assert.equal(backgroundEditableFromMask[0], 255, 'background editable alpha must edit outside the original selection');
 assert.ok(backgroundStats.ratio > 0.84 && backgroundStats.ratio < 0.85, `unexpected background editable ratio ${backgroundStats.ratio}`);
 
-const generatedWithDrift = makeGeneratedRgba(source, normalizedAlpha, { outsideDrift: true });
-const rawDiff = localizedDiffStats(source, generatedWithDrift, normalizedAlpha);
+const generatedWithDrift = makeGeneratedRgba(source, editableAlpha, { outsideDrift: true });
+const rawDiff = localizedDiffStats(source, generatedWithDrift, editableAlpha);
 assert.ok(rawDiff.insideChangedRatio > 0.99, 'raw generated edit should change the selected region');
 assert.ok(rawDiff.outsideChangedRatio > 0, 'raw generated drift should be visible to proof-map stats');
 
-const composited = compositeStrict(source, generatedWithDrift, normalizedAlpha);
-const compositedDiff = localizedDiffStats(source, composited, normalizedAlpha);
+const composited = compositeStrict(source, generatedWithDrift, editableAlpha);
+const compositedDiff = localizedDiffStats(source, composited, editableAlpha);
 assert.ok(compositedDiff.insideChangedRatio > 0.99, 'composited edit should keep the selected change');
 assert.equal(compositedDiff.outsideChangedPixels, 0, 'composited edit must preserve unselected pixels exactly');
 
@@ -920,9 +937,9 @@ const insideIndex = (SELECT_Y1 + 10) * WIDTH + SELECT_X1 + 10;
 const insidePixel = insideIndex * 4;
 assert.ok(maxDelta(source, composited, insidePixel) >= 24, 'inside sample pixel must be edited');
 
-const backgroundGenerated = makeGeneratedRgba(source, backgroundNormalizedAlpha);
-const backgroundComposited = compositeStrict(source, backgroundGenerated, backgroundNormalizedAlpha);
-const backgroundCompositedDiff = localizedDiffStats(source, backgroundComposited, backgroundNormalizedAlpha);
+const backgroundGenerated = makeGeneratedRgba(source, backgroundEditableFromMask);
+const backgroundComposited = compositeStrict(source, backgroundGenerated, backgroundEditableFromMask);
+const backgroundCompositedDiff = localizedDiffStats(source, backgroundComposited, backgroundEditableFromMask);
 assert.ok(backgroundCompositedDiff.insideChangedRatio > 0.99, 'background composite should edit the outside background');
 assert.equal(maxDelta(source, backgroundComposited, insidePixel), 0, 'background composite must preserve the protected foreground exactly');
 assert.ok(maxDelta(source, backgroundComposited, outsidePixel) >= 24, 'background outside sample pixel must be edited');

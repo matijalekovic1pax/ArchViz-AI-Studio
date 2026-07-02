@@ -733,15 +733,29 @@ export class GeminiService {
     let editPrompt = request.prompt;
     const referenceCount = request.referenceImages?.length || 0;
     const maskMode = request.maskMode ?? 'guided';
+    const usesOpenAIAlphaMask = request.imageGenerationModel === 'chatgpt-image-generation-2' && Boolean(request.maskImage);
     const referenceInstructions = referenceCount > 0
-      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage ? ' and selection guidance' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
+      ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage && !usesOpenAIAlphaMask ? ' and selection guidance' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
       : '';
     const cameraAndTextLock = [
       'Preserve the original camera position, field of view, horizon, crop, perspective, and aspect ratio unless the edit type explicitly changes the canvas.',
       'Preserve existing text, signage, numbers, logos, labels, UI marks, and graphic blocks as source-faithful shapes. Do not translate, rewrite, correct, invent, blur, or remove text unless the edit prompt explicitly requests text editing.',
       'All unaffected regions must remain visually identical in layout, object count, geometry, material boundaries, shadows, reflections, and scale relationships.'
     ].join(' ');
-    const maskScopeInstructions = maskMode === 'guided'
+    const maskScopeInstructions = usesOpenAIAlphaMask
+      ? maskMode === 'guided'
+        ? [
+            'Use the attached alpha mask as editable-region guidance: transparent or low-alpha pixels mark the user-selected target focus, and opaque pixels protect the source image.',
+            'The transparent region is a pointer to the intended object, surface, or area. If that target naturally continues slightly beyond the low-alpha pixels, refine and blend nearby connected pixels as needed.',
+            'You may naturally reconstruct and blend nearby pixels only where required for texture continuation, material falloff, shadows, reflections, occlusion, or cleanup.',
+            'Preserve unrelated architecture, materials, people, signage, camera, perspective, and overall composition.',
+            'Never draw, expose, fill, or preserve the mask itself in the final image; no black bands, white blobs, blank patches, outlines, labels, or visible mask artifacts.'
+          ].join(' ')
+        : [
+            'Use the attached alpha mask as the edit boundary: transparent pixels are editable, and opaque pixels are locked to the original source image.',
+            'Never draw, expose, fill, or preserve the mask itself in the final image; no black bands, white blobs, blank patches, outlines, labels, or visible mask artifacts.'
+          ].join(' ')
+      : maskMode === 'guided'
       ? [
           'Use the bright selection pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout, clipping stencil, or alpha edge.',
           'The selected shape is a pointer to the intended object, surface, or area. If that target naturally continues slightly beyond the bright pixels, refine and blend those nearby connected pixels as needed.',
@@ -754,20 +768,33 @@ export class GeminiService {
           'Never draw, expose, fill, or preserve the black-and-white mask itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
         ].join(' ');
     const maskInstructions = request.maskImage
-      ? [
-          referenceCount > 0
-            ? 'You are given input images in this exact order:'
-            : 'You are given two input images in this exact order:',
-          '1. The original source image.',
-          maskMode === 'guided'
-            ? '2. A soft selection guidance map with the same framing as the source image; bright areas mark the intended target focus.'
-            : '2. A black-and-white selection mask with the same framing as the source image.',
-          cameraAndTextLock,
-          maskScopeInstructions,
-          'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
-          referenceInstructions
-        ].join(' ')
+      ? usesOpenAIAlphaMask
+        ? [
+            'You are given the original source image plus an attached same-size alpha mask.',
+            maskMode === 'guided'
+              ? 'The transparent or low-alpha area marks the intended target focus for a seamless localized edit.'
+              : 'The transparent area is the editable region; opaque pixels are protected.',
+            cameraAndTextLock,
+            maskScopeInstructions,
+            'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
+            referenceInstructions
+          ].join(' ')
+        : [
+            referenceCount > 0
+              ? 'You are given input images in this exact order:'
+              : 'You are given two input images in this exact order:',
+            '1. The original source image.',
+            maskMode === 'guided'
+              ? '2. A soft selection guidance map with the same framing as the source image; bright areas mark the intended target focus.'
+              : '2. A black-and-white selection mask with the same framing as the source image.',
+            cameraAndTextLock,
+            maskScopeInstructions,
+            'Return a complete edited image with the same camera, framing, perspective, and aspect ratio as the source image.',
+            referenceInstructions
+          ].join(' ')
       : `Return a complete edited image. ${cameraAndTextLock}${referenceInstructions}`;
+    const editGuidanceLabel = usesOpenAIAlphaMask ? 'alpha mask' : 'selection guidance';
+    const editGuidanceAreaLabel = usesOpenAIAlphaMask ? 'transparent editable area' : 'bright guidance area';
     const highFidelityEnhanceInstructions = [
       'Perform a conservative restoration and quality pass, not a redraw or redesign.',
       'Treat the source image as the exact visual blueprint: same object count, same object positions, same silhouettes, same scale relationships, same crop, same camera, and same perspective.',
@@ -778,9 +805,9 @@ export class GeminiService {
       'For blurry, tiny, distant, or ambiguous areas, keep the same shapes and approximate detail rather than inventing new content. When enhancement conflicts with preservation, preserve.'
     ].join(' ');
     const guidedRemoveTargetInstructions = [
-      'For removal requests, treat the selection guidance as target guidance for the complete subject centered inside the selected area, not as a request to remove only small high-contrast fragments.',
+      `For removal requests, treat the ${editGuidanceLabel} as target guidance for the complete subject centered inside the selected area, not as a request to remove only small high-contrast fragments.`,
       'If the centered target is a person, remove the entire person silhouette: head, torso, limbs, clothing, hair, hands, feet, carried bags, wheeled luggage, straps, personal items, contact shadows, and reflections.',
-      'If the whole person or object extends slightly beyond the bright guidance area, remove those connected parts too when needed so no body, accessory, shadow, or ghosted remnant remains.',
+      `If the whole person or object extends slightly beyond the ${editGuidanceAreaLabel}, remove those connected parts too when needed so no body, accessory, shadow, or ghosted remnant remains.`,
       'Do not remove only luggage, bags, shadows, or accessories while leaving the selected person or main object visible.',
       'Treat selected floor, wall, kiosk, ceiling, sign, and architectural pixels as reconstruction context unless they are clearly the central selected subject.'
     ].join(' ');
@@ -793,7 +820,7 @@ export class GeminiService {
     switch (request.editType) {
       case 'inpaint':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Apply the requested edit to the target indicated by the selection guidance: ${request.prompt}. Keep the edit focused on the intended selected target while allowing seamless reconstruction beyond the guidance edge when visually necessary.`
+          ? `${maskInstructions} Apply the requested edit to the target indicated by the ${editGuidanceLabel}: ${request.prompt}. Keep the edit focused on the intended selected target while allowing seamless reconstruction beyond the guidance edge when visually necessary.`
           : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
@@ -801,27 +828,27 @@ export class GeminiService {
         break;
       case 'style-transfer':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Transform the existing target surface or object finish indicated by the selection guidance: ${request.prompt}. This is a material/color/finish edit only, not object generation. Re-render the finish physically into the existing scene; do not paste, tile, or overlay the material/reference image as a flat texture. Treat the selection as a pointer to the intended material or object, not as the exact visible boundary of the final change. If the same selected surface or object continues slightly beyond the bright guidance area, continue the finish naturally across the connected visible target where needed for a seamless result. Preserve the source image composition, camera, geometry, object count, object positions, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface or object and leave uncertain areas unchanged.`
+          ? `${maskInstructions} Transform the existing target surface or object finish indicated by the ${editGuidanceLabel}: ${request.prompt}. This is a material/color/finish edit only, not object generation. Re-render the finish physically into the existing scene; do not paste, tile, or overlay the material/reference image as a flat texture. Treat the selection as a pointer to the intended material or object, not as the exact visible boundary of the final change. If the same selected surface or object continues slightly beyond the ${editGuidanceAreaLabel}, continue the finish naturally across the connected visible target where needed for a seamless result. Preserve the source image composition, camera, geometry, object count, object positions, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface or object and leave uncertain areas unchanged.`
           : `${maskInstructions} Transform only the existing target surface or object finish requested here: ${request.prompt}. This is a material/color/finish edit only, not object generation. Re-render the finish physically into the existing scene; do not paste, tile, or overlay the material/reference image as a flat texture. Preserve the source image composition, camera, geometry, object count, object positions, silhouettes, edges, seams, signage, people, floors, walls, ceilings, furniture, belts, posts, counters, and all unrelated materials. Do not add, remove, duplicate, enlarge, replace, or rearrange any elements. If a target is ambiguous, edit only the clearly matching existing surface and leave uncertain areas unchanged.`;
         break;
       case 'enhance':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Apply the enhancement primarily to the target indicated by the selection guidance. ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`
+          ? `${maskInstructions} Apply the enhancement primarily to the target indicated by the ${editGuidanceLabel}. ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`
           : `${maskInstructions} ${highFidelityEnhanceInstructions} User enhancement request: ${request.prompt}.`;
         break;
       case 'remove':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} ${guidedRemoveTargetInstructions} Remove the unwanted content indicated by the selection guidance as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
+          ? `${maskInstructions} ${guidedRemoveTargetInstructions} Remove the unwanted content indicated by the ${editGuidanceLabel} as requested: ${request.prompt}. Reconstruct the revealed floor, reflections, shadows, texture, and perspective from surrounding context so the object looks like it was never there. Do not leave a flat blank, white patch, masked silhouette, or smudged hole.`
           : `${maskInstructions} ${strictRemoveTargetInstructions} Remove only the content inside the allowed masked area as requested: ${request.prompt}. Fill naturally using the surrounding context while preserving every locked pixel.`;
         break;
       case 'replace':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Replace the target indicated by the selection guidance with: ${request.prompt}. Keep the replacement anchored to the selected target while allowing natural blending, contact shadows, reflections, and occlusion beyond the guidance edge where necessary.`
+          ? `${maskInstructions} Replace the target indicated by the ${editGuidanceLabel} with: ${request.prompt}. Keep the replacement anchored to the selected target while allowing natural blending, contact shadows, reflections, and occlusion beyond the guidance edge where necessary.`
           : `${maskInstructions} Replace only the allowed masked area with: ${request.prompt}. Blend seamlessly at the boundary and preserve every locked pixel.`;
         break;
       case 'people':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Edit, add, replace, or refine human figures and their immediate personal accessories indicated by the selection guidance according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. When the instruction asks for automatic repopulation or new people, selected non-person pixels may guide plausible people placement; otherwise replace or refine targeted people only. Preserve architecture, floors, furniture, signage, lighting, camera, and perspective. Selected non-person pixels are context and must be naturally reconstructed around the people, not filled with text, white shapes, or decorative marks.`
+          ? `${maskInstructions} Edit, add, replace, or refine human figures and their immediate personal accessories indicated by the ${editGuidanceLabel} according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. When the instruction asks for automatic repopulation or new people, selected non-person pixels may guide plausible people placement; otherwise replace or refine targeted people only. Preserve architecture, floors, furniture, signage, lighting, camera, and perspective. Selected non-person pixels are context and must be naturally reconstructed around the people, not filled with text, white shapes, or decorative marks.`
           : `${maskInstructions} Edit, add, replace, or refine human figures and their immediate personal accessories according to this instruction: ${request.prompt}. Do not render any part of the instruction as visible text, captions, labels, handwriting, signage, UI, or graphic overlays. When the instruction asks for automatic repopulation or new people, place them only in plausible walkable, queuing, standing, or seated areas; otherwise target existing people only. Preserve architecture, floors, furniture, signage, lighting, camera, perspective, and all unrelated pixels. Non-person pixels are placement and reconstruction context, not targets for unrelated changes.`;
         break;
     }
@@ -870,46 +897,45 @@ export class GeminiService {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
         ? await ImageUtils.convertImageFormat(request.sourceImage, request.maskImage.mimeType)
         : request.sourceImage;
-      const strictMaskImage = maskMode === 'strict' ? request.maskImage : undefined;
-      if (strictMaskImage) {
-        if (strictMaskImage.mimeType !== 'image/png' || openAISourceImage.mimeType !== 'image/png') {
-          throw new Error('GPT Image 2 strict masked edits require PNG source and mask images with an alpha channel.');
+      const openAIMaskImage = request.maskImage;
+      if (openAIMaskImage) {
+        if (openAIMaskImage.mimeType !== 'image/png' || openAISourceImage.mimeType !== 'image/png') {
+          throw new Error('GPT Image 2 masked edits require PNG source and mask images with an alpha channel.');
         }
         const dimensionsKnown = Boolean(
           openAISourceImage.width &&
           openAISourceImage.height &&
-          strictMaskImage.width &&
-          strictMaskImage.height
+          openAIMaskImage.width &&
+          openAIMaskImage.height
         );
         if (
           dimensionsKnown &&
-          (openAISourceImage.width !== strictMaskImage.width || openAISourceImage.height !== strictMaskImage.height)
+          (openAISourceImage.width !== openAIMaskImage.width || openAISourceImage.height !== openAIMaskImage.height)
         ) {
-          throw new Error('GPT Image 2 strict masked edits require the source image and mask to have the same dimensions.');
+          throw new Error('GPT Image 2 masked edits require the source image and mask to have the same dimensions.');
         }
       }
-      const strictMaskSizeOverride = strictMaskImage &&
+      const maskedEditSizeOverride = openAIMaskImage &&
         !request.generationConfig?.openAI?.size &&
         isValidOpenAIImageSize(openAISourceImage.width, openAISourceImage.height)
         ? `${openAISourceImage.width}x${openAISourceImage.height}`
         : null;
-      const openAIGenerationConfig = strictMaskSizeOverride
+      const openAIGenerationConfig = maskedEditSizeOverride
         ? {
             ...request.generationConfig,
             openAI: {
               ...request.generationConfig?.openAI,
-              size: strictMaskSizeOverride,
+              size: maskedEditSizeOverride,
             },
           }
         : request.generationConfig;
       const openAIImages = [openAISourceImage];
-      if (request.maskImage && maskMode === 'guided') openAIImages.push(request.maskImage);
       if (request.referenceImages?.length) openAIImages.push(...request.referenceImages);
 
       const result = await this.generateOpenAIImages({
         prompt: optimizedEditPrompt,
         images: openAIImages,
-        maskImage: strictMaskImage,
+        maskImage: openAIMaskImage,
         imageGenerationModel: request.imageGenerationModel,
         generationConfig: openAIGenerationConfig,
       });
@@ -1458,10 +1484,11 @@ export class GeminiService {
             ? 'Mask polarity: the editable region is outside the original user selection. The originally selected foreground/subject is protected and should remain visually identical except for unavoidable edge blending.'
             : 'Mask polarity: the selected/masked region is the editable target. Areas outside it are protected and should remain visually identical except for unavoidable edge blending.',
           `Evaluate the requested change in ${editableRegionLabel}, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of ${protectedRegionLabel}.`,
+          'Fail localized edits when the output introduces black bars, blank/solid color bands, visible alpha/checkerboard regions, copied mask silhouettes, selection overlays, mismatched crop, shifted framing, or any large empty area not present in the source image.',
           'If a tiny selected detail is hard to inspect, pass when the localized result is coherent and there is no obvious wrong edit, patch edge, pasted/inlaid look, subject distortion, or unwanted change outside the selected area.',
           `Fail localized edits when the requested editable target is not changed, the edit lands on the wrong object or surface, ${protectedRegionLabel} noticeably drifts, or the selection/mask itself appears in the output.`,
           referenceImageCount >= 2
-            ? 'For localized edits, attached image 1 is usually the source render and attached image 2 is usually the selection/mask guidance; later reference images may describe materials or style.'
+            ? 'For localized edits, attached image 1 is usually the source render; additional reference images may describe materials, style, selection guidance, or an automatic proof map as described here.'
             : '',
           localizedEditProofLine,
           request.localizedEdit?.operation ? `Localized operation: ${request.localizedEdit.operation}` : '',

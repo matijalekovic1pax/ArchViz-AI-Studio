@@ -2846,7 +2846,8 @@ function buildOpenAISelectionMaskPng(width, height, selectedAlpha) {
     rgba[pixel] = 255;
     rgba[pixel + 1] = 255;
     rgba[pixel + 2] = 255;
-    rgba[pixel + 3] = selectedAlpha[index];
+    // OpenAI edits the transparent part of the mask; the app stores selected pixels as opaque white.
+    rgba[pixel + 3] = 255 - selectedAlpha[index];
   }
   return encodePngRgba(width, height, rgba);
 }
