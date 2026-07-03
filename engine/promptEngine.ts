@@ -86,9 +86,9 @@ const getPromptIntent = (mode?: string, activeTool?: ImagePromptTool): PromptInt
       },
       extend: {
         artifact: 'outpainted image',
-        task: 'Extend the canvas in the requested direction.',
-        keep: 'Keep original source pixels and source camera logic unchanged.',
-        change: 'Paint only the new canvas area, continuing perspective, materials, light, shadows, reflections, and context.',
+        task: 'Extend the canvas as a continuous camera/viewpoint expansion in the requested direction.',
+        keep: 'Keep original source pixels and source camera logic unchanged except for a tiny boundary blend if needed.',
+        change: 'Paint the new canvas area as newly revealed scene content, continuing perspective, vanishing lines, materials, light, shadows, reflections, and context.',
         textRule: 'Continue existing text/signage shapes only when physically present at the extension edge; do not invent new text.'
       },
       background: {
@@ -3267,7 +3267,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
   }
 
   if (tool === 'extend') {
-    parts.push('Extend this image beyond its current boundaries, seamlessly continuing the scene.');
+    parts.push('Extend this image beyond its current boundaries as if the same camera/viewpoint naturally sees farther in the requested direction.');
     parts.push(...selectionParts);
     parts.push(describeUserIntent(userPrompt));
 
@@ -3293,7 +3293,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     const amountDesc = extend.amount > 75 ? 'significantly' :
       extend.amount > 40 ? 'moderately' : 'slightly';
-    parts.push(`Extend the canvas ${amountDesc} ${directionDesc[extend.direction] || extend.direction}.`);
+    parts.push(`Extend the canvas ${amountDesc} ${directionDesc[extend.direction] || extend.direction}. Infer the newly visible architecture, surfaces, ceiling/floor/wall structure, and depth from the existing perspective instead of moving or replacing the source frame.`);
 
     if (extend.targetAspectRatio !== 'custom') {
       parts.push(`Target a ${extend.targetAspectRatio} aspect ratio.`);
@@ -3301,7 +3301,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
       parts.push(`Target a ${extend.customRatio.width}:${extend.customRatio.height} aspect ratio.`);
     }
 
-    parts.push('Outpaint lock: preserve the original image area unchanged. Paint only the new canvas space, continuing perspective, horizon, materials, lighting, shadows, reflections, and edge text/signage shapes naturally.');
+    parts.push('Outpaint lock: preserve the original image area unchanged except for a tiny seamless boundary blend. Paint the new canvas space as continuous scene content, continuing perspective, horizon, vanishing lines, materials, lighting, shadows, reflections, scale, and edge text/signage shapes naturally. Do not duplicate, mirror, tile, stretch, shift, or paste a second copy of the source image; do not attach an unrelated crop or change the camera perspective at the boundary.');
     return parts.filter(Boolean).join(' ');
   }
 

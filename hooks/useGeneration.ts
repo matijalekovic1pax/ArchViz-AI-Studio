@@ -324,6 +324,9 @@ const PRECISE_EDIT_MAX_LONG_EDGE = 3_840;
 const PRECISE_EDIT_MAX_PIXELS = 8_294_400;
 const PRECISE_EDIT_MIN_PIXELS = 655_360;
 const PRECISE_EDIT_SIZE_MULTIPLE = 16;
+const VISUAL_EXTEND_SEAM_MIN_PX = 18;
+const VISUAL_EXTEND_SEAM_MAX_PX = 96;
+const VISUAL_EXTEND_SEAM_RATIO = 0.018;
 
 const roundToPreciseEditMultiple = (value: number) =>
   Math.max(PRECISE_EDIT_SIZE_MULTIPLE, Math.round(value / PRECISE_EDIT_SIZE_MULTIPLE) * PRECISE_EDIT_SIZE_MULTIPLE);
@@ -585,16 +588,38 @@ const getVisualExtendMaskDataUrl = (
   const sourceY1 = layout.offsetY;
   const sourceX2 = layout.offsetX + layout.sourceWidth;
   const sourceY2 = layout.offsetY + layout.sourceHeight;
+  const seamWidth = openAIAlphaMask ? getVisualExtendSeamWidth(layout.sourceWidth, layout.sourceHeight) : 0;
+  const hasLeftExtension = sourceX1 > 0;
+  const hasRightExtension = sourceX2 < layout.targetWidth;
+  const hasTopExtension = sourceY1 > 0;
+  const hasBottomExtension = sourceY2 < layout.targetHeight;
 
   for (let y = 0; y < layout.targetHeight; y += 1) {
     for (let x = 0; x < layout.targetWidth; x += 1) {
       const insideSource = x >= sourceX1 && x < sourceX2 && y >= sourceY1 && y < sourceY2;
       const pixel = (y * layout.targetWidth + x) * 4;
       if (openAIAlphaMask) {
+        const seamDistance = insideSource
+          ? getVisualExtendSourceEdgeDistance(x, y, {
+              sourceX1,
+              sourceY1,
+              sourceX2,
+              sourceY2,
+              hasLeftExtension,
+              hasRightExtension,
+              hasTopExtension,
+              hasBottomExtension,
+            })
+          : 0;
+        const protectedAlpha = insideSource && seamDistance < seamWidth
+          ? clampByte(smoothStep(0, seamWidth, seamDistance) * 255)
+          : insideSource
+            ? 255
+            : 0;
         pixels[pixel] = 255;
         pixels[pixel + 1] = 255;
         pixels[pixel + 2] = 255;
-        pixels[pixel + 3] = insideSource ? 255 : 0;
+        pixels[pixel + 3] = protectedAlpha;
       } else {
         const value = insideSource ? 0 : 255;
         pixels[pixel] = value;
@@ -607,6 +632,38 @@ const getVisualExtendMaskDataUrl = (
 
   ctx.putImageData(imageData, 0, 0);
   return canvas.toDataURL('image/png');
+};
+
+const getVisualExtendSeamWidth = (sourceWidth: number, sourceHeight: number): number =>
+  Math.round(Math.min(
+    VISUAL_EXTEND_SEAM_MAX_PX,
+    Math.max(
+      VISUAL_EXTEND_SEAM_MIN_PX,
+      Math.max(sourceWidth, sourceHeight) * VISUAL_EXTEND_SEAM_RATIO
+    ),
+    Math.max(1, Math.min(sourceWidth, sourceHeight) * 0.16)
+  ));
+
+const getVisualExtendSourceEdgeDistance = (
+  x: number,
+  y: number,
+  edges: {
+    sourceX1: number;
+    sourceY1: number;
+    sourceX2: number;
+    sourceY2: number;
+    hasLeftExtension: boolean;
+    hasRightExtension: boolean;
+    hasTopExtension: boolean;
+    hasBottomExtension: boolean;
+  }
+): number => {
+  let distance = Number.POSITIVE_INFINITY;
+  if (edges.hasLeftExtension) distance = Math.min(distance, x - edges.sourceX1);
+  if (edges.hasRightExtension) distance = Math.min(distance, edges.sourceX2 - 1 - x);
+  if (edges.hasTopExtension) distance = Math.min(distance, y - edges.sourceY1);
+  if (edges.hasBottomExtension) distance = Math.min(distance, edges.sourceY2 - 1 - y);
+  return distance;
 };
 
 const prepareVisualExtendOutpaintInputs = async (
@@ -699,13 +756,37 @@ const compositeVisualExtendResult = async (
   ctx.drawImage(generatedImage, 0, 0, width, height);
   const scaleX = width / Math.max(layout.targetWidth, 1);
   const scaleY = height / Math.max(layout.targetHeight, 1);
-  ctx.drawImage(
+  const sourceX = Math.round(layout.offsetX * scaleX);
+  const sourceY = Math.round(layout.offsetY * scaleY);
+  const sourceWidth = Math.round(layout.sourceWidth * scaleX);
+  const sourceHeight = Math.round(layout.sourceHeight * scaleY);
+  const sourceLayer = document.createElement('canvas');
+  sourceLayer.width = width;
+  sourceLayer.height = height;
+  const sourceCtx = sourceLayer.getContext('2d');
+  if (!sourceCtx) return generated;
+
+  sourceCtx.imageSmoothingEnabled = true;
+  sourceCtx.imageSmoothingQuality = 'high';
+  sourceCtx.drawImage(
     source,
-    Math.round(layout.offsetX * scaleX),
-    Math.round(layout.offsetY * scaleY),
-    Math.round(layout.sourceWidth * scaleX),
-    Math.round(layout.sourceHeight * scaleY)
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight
   );
+  const restoreMask = getVisualExtendSourceRestoreMask(width, height, {
+    x: sourceX,
+    y: sourceY,
+    width: sourceWidth,
+    height: sourceHeight,
+  });
+  if (restoreMask) {
+    sourceCtx.globalCompositeOperation = 'destination-in';
+    sourceCtx.drawImage(restoreMask, 0, 0);
+    sourceCtx.globalCompositeOperation = 'source-over';
+  }
+  ctx.drawImage(sourceLayer, 0, 0);
 
   const dataUrl = canvas.toDataURL('image/png');
   const imageData = ImageUtils.dataUrlToImageData(dataUrl);
@@ -716,6 +797,58 @@ const compositeVisualExtendResult = async (
         dataUrl,
       }
     : generated;
+};
+
+const getVisualExtendSourceRestoreMask = (
+  canvasWidth: number,
+  canvasHeight: number,
+  sourceRect: { x: number; y: number; width: number; height: number }
+): HTMLCanvasElement | null => {
+  if (sourceRect.width <= 0 || sourceRect.height <= 0) return null;
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = canvasWidth;
+  maskCanvas.height = canvasHeight;
+  const maskCtx = maskCanvas.getContext('2d');
+  if (!maskCtx) return null;
+
+  const sourceX1 = Math.max(0, sourceRect.x);
+  const sourceY1 = Math.max(0, sourceRect.y);
+  const sourceX2 = Math.min(canvasWidth, sourceRect.x + sourceRect.width);
+  const sourceY2 = Math.min(canvasHeight, sourceRect.y + sourceRect.height);
+  const hasLeftExtension = sourceX1 > 0;
+  const hasRightExtension = sourceX2 < canvasWidth;
+  const hasTopExtension = sourceY1 > 0;
+  const hasBottomExtension = sourceY2 < canvasHeight;
+  const seamWidth = getVisualExtendSeamWidth(sourceX2 - sourceX1, sourceY2 - sourceY1);
+  const imageData = maskCtx.createImageData(canvasWidth, canvasHeight);
+  const pixels = imageData.data;
+
+  for (let y = sourceY1; y < sourceY2; y += 1) {
+    for (let x = sourceX1; x < sourceX2; x += 1) {
+      const seamDistance = getVisualExtendSourceEdgeDistance(x, y, {
+        sourceX1,
+        sourceY1,
+        sourceX2,
+        sourceY2,
+        hasLeftExtension,
+        hasRightExtension,
+        hasTopExtension,
+        hasBottomExtension,
+      });
+      const restoreAlpha = seamDistance < seamWidth
+        ? clampByte(smoothStep(0, seamWidth, seamDistance) * 255)
+        : 255;
+      const pixel = (y * canvasWidth + x) * 4;
+      pixels[pixel] = 255;
+      pixels[pixel + 1] = 255;
+      pixels[pixel + 2] = 255;
+      pixels[pixel + 3] = restoreAlpha;
+    }
+  }
+
+  maskCtx.putImageData(imageData, 0, 0);
+  return maskCanvas;
 };
 
 const getPreciseEditOperation = (activeTool: string): ImageEditOperation => {
@@ -2712,10 +2845,14 @@ export function useGeneration(): UseGenerationReturn {
           () => generateAttempt(prompt, false),
           effectiveGenerationRetryOptions
         );
-        return normalizeResponseImagesToAspectRatio(
+        const normalizedResult = await normalizeResponseImagesToAspectRatio(
           rawResult,
           state.mode === 'visual-edit' ? null : generationConfig?.imageConfig?.aspectRatio
         );
+        return {
+          ...normalizedResult,
+          optimizedPrompt: normalizedResult.optimizedPrompt || prompt
+        };
       };
 
       const runBatchImageGeneration = async (
@@ -2733,10 +2870,14 @@ export function useGeneration(): UseGenerationReturn {
           () => generateAttempt(prompt, false),
           imageGenerationRetryOptions
         );
-        return normalizeResponseImagesToAspectRatio(
+        const normalizedResult = await normalizeResponseImagesToAspectRatio(
           rawResult,
           generationConfig?.imageConfig?.aspectRatio
         );
+        return {
+          ...normalizedResult,
+          optimizedPrompt: normalizedResult.optimizedPrompt || prompt
+        };
       };
 
       // Build generation config
@@ -3483,7 +3624,9 @@ export function useGeneration(): UseGenerationReturn {
           const includeMaskAsReferenceImage = !isOpenAIVisualEdit;
           const requestSourceImage = visualExtendOutpaintInputs?.sourceImage || sourceImage;
           const requestMaskImage = visualExtendOutpaintInputs?.maskImage || maskImage;
-          const requestMaskMode: ImageEditRequest['maskMode'] = visualExtendOutpaintInputs ? 'strict' : maskMode;
+          const requestMaskMode: ImageEditRequest['maskMode'] = visualExtendOutpaintInputs
+            ? isOpenAIVisualEdit ? 'guided' : 'strict'
+            : maskMode;
           const visualExtendAspectRatio = visualExtendOutpaintInputs &&
             state.workflow.visualExtend.targetAspectRatio !== 'custom'
               ? state.workflow.visualExtend.targetAspectRatio as ImageConfig['aspectRatio']

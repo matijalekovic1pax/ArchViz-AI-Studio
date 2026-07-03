@@ -1600,9 +1600,9 @@ const StandardCanvas: React.FC = () => {
     });
   }, [getSelectionPoint, updateActiveBoundary]);
 
-  const finishSelection = useCallback(() => {
+  const finishSelection = useCallback((finalPointOverride?: CanvasPoint | null) => {
     setSelectionInProgress(false);
-    const latestPendingPoint = pendingPointRef.current;
+    const latestPendingPoint = finalPointOverride || pendingPointRef.current;
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -1841,6 +1841,10 @@ const StandardCanvas: React.FC = () => {
       return;
     }
     if (isSelectTool) {
+      if (selectionMode === 'lasso' && isSelectingRef.current) {
+        finishSelection(getSelectionPoint(e, true));
+        return;
+      }
       startSelection(e);
       return;
     }
@@ -1874,7 +1878,7 @@ const StandardCanvas: React.FC = () => {
     if (isBoundaryTool && isBoundarySelectingRef.current) {
       finishBoundarySelection();
     }
-    if (isSelectTool && isSelectingRef.current) {
+    if (isSelectTool && isSelectingRef.current && selectionMode !== 'lasso') {
       finishSelection();
     }
     if (selectionMode === 'adjust') {
@@ -1888,7 +1892,7 @@ const StandardCanvas: React.FC = () => {
     if (isBoundaryTool && isBoundarySelectingRef.current) {
       finishBoundarySelection();
     }
-    if (isSelectTool && isSelectingRef.current) {
+    if (isSelectTool && isSelectingRef.current && selectionMode !== 'lasso') {
       finishSelection();
     }
     if (selectionMode === 'adjust') {
@@ -1993,9 +1997,33 @@ const StandardCanvas: React.FC = () => {
   }, [isSelectTool, selectionMode, state.uploadedImage]);
 
   useEffect(() => {
+    if (isSelectTool && selectionMode === 'lasso') return;
+    if (!isSelectingRef.current || activeSelectionRef.current?.type !== 'lasso') return;
+    setSelectionInProgress(false);
+    updateActiveSelection(null);
+    pendingPointRef.current = null;
+    lastPointRef.current = null;
+    selectionPreviewLastPointRef.current = null;
+    selectionFullPointsRef.current = [];
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, [isSelectTool, selectionMode, setSelectionInProgress, updateActiveSelection]);
+
+  useEffect(() => {
     if (!state.uploadedImage) {
+      setSelectionInProgress(false);
       updateActiveSelection(null);
       updateActiveBoundary(null);
+      pendingPointRef.current = null;
+      lastPointRef.current = null;
+      selectionPreviewLastPointRef.current = null;
+      selectionFullPointsRef.current = [];
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       if (state.workflow.visualSelections.length > 0) {
         dispatch({
           type: 'UPDATE_WORKFLOW',
@@ -2012,7 +2040,14 @@ const StandardCanvas: React.FC = () => {
         });
       }
     }
-  }, [dispatch, state.uploadedImage, state.workflow.visualSelections.length, updateActiveBoundary, updateActiveSelection]);
+  }, [
+    dispatch,
+    setSelectionInProgress,
+    state.uploadedImage,
+    state.workflow.visualSelections.length,
+    updateActiveBoundary,
+    updateActiveSelection
+  ]);
 
   useEffect(() => {
     if (!isMasterplan || state.workflow.mpBoundary.mode !== 'custom') {
