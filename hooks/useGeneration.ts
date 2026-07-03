@@ -21,9 +21,7 @@ import {
   GenerationConfig,
   ImageConfig,
   TEXT_MODEL,
-  type ImageGenerationProgress,
-  type ImageOutputVerificationRequest,
-  type ImageOutputVerificationResult
+  type ImageGenerationProgress
 } from '../services/geminiService';
 import { getVideoGenerationService } from '../services/videoGenerationService';
 import { classifyDocumentRole } from '../services/materialValidationPipeline';
@@ -46,7 +44,11 @@ import {
   applyVisualPostProduction,
   normalizeGeneratedImagesAspectRatio
 } from '../lib/visualPostProcessing';
-import { AI_SLOP_UPSCALER_SUGGESTION_EVENT } from '../lib/assistantEvents';
+import {
+  getVisualExtendCanvasLayout,
+  scaleVisualExtendCanvasLayout,
+  type VisualExtendCanvasLayout
+} from '../lib/visualExtend';
 import { nanoid } from 'nanoid';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
 
@@ -66,8 +68,6 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
 ];
 const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
 const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-sketch'];
-const OUTPUT_VERIFICATION_MAX_ATTEMPTS = 3;
-const OUTPUT_VERIFICATION_TIMEOUT_MS = 90 * 1000;
 const TEMPORARY_AI_SERVICE_STATUSES = new Set([500, 502, 503, 504]);
 
 const estimateBase64Bytes = (base64: string): number => {
@@ -208,7 +208,6 @@ const IMAGE_PIPELINE_PROGRESS_RANGES: Record<ImageGenerationProgress['phase'], [
   'ai-middle-layer': [3, 28],
   generation: [28, 84],
   'image-transfer': [84, 90],
-  verification: [90, 98],
   complete: [98, 98],
 };
 
@@ -216,7 +215,6 @@ const IMAGE_PIPELINE_STAGES: Record<ImageGenerationProgress['phase'], Generation
   'ai-middle-layer': 'aiLayer',
   generation: 'generation',
   'image-transfer': 'transfer',
-  verification: 'aiLayer',
   complete: 'finalizing',
 };
 
@@ -321,16 +319,7 @@ const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
   return images[images.length - 1];
 };
 
-type ImageOutputVerificationContext = Pick<ImageOutputVerificationRequest, 'mode' | 'localizedEdit'>;
-
-interface LocalizedEditDiffStats {
-  insideChangedRatio: number;
-  outsideChangedRatio: number;
-  outsideChangedPixels: number;
-}
-
 const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
-const LOCALIZED_EDIT_CHANGE_THRESHOLD = 24;
 const PRECISE_EDIT_MAX_LONG_EDGE = 3_840;
 const PRECISE_EDIT_MAX_PIXELS = 8_294_400;
 const PRECISE_EDIT_MIN_PIXELS = 655_360;
@@ -444,153 +433,6 @@ const renderSelectionAlphaMaskDataUrl = async (
     selectedRatio: selectedPixels / Math.max(width * height, 1),
     sourceSelectedPixels,
     sourceSelectedRatio: sourceSelectedPixels / Math.max(width * height, 1),
-  };
-};
-
-const readSelectionMaskStats = async (
-  maskDataUrl: string,
-  invert = false
-): Promise<{ selectedPixels: number; selectedRatio: number } | null> => {
-  const mask = await loadCanvasImage(maskDataUrl);
-  const width = mask.naturalWidth || mask.width;
-  const height = mask.naturalHeight || mask.height;
-  if (!width || !height) return null;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.drawImage(mask, 0, 0, width, height);
-  const pixels = ctx.getImageData(0, 0, width, height).data;
-  let selectedPixels = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
-    const sourceSelectedAlpha = clampByte(value <= 6 ? 0 : value);
-    const selectedAlpha = invert ? 255 - sourceSelectedAlpha : sourceSelectedAlpha;
-    if (selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD) selectedPixels += 1;
-  }
-
-  return {
-    selectedPixels,
-    selectedRatio: selectedPixels / Math.max(width * height, 1),
-  };
-};
-
-const buildLocalizedEditProofMap = async (
-  sourceDataUrl: string,
-  generated: GeneratedImage,
-  selectedMaskDataUrl: string,
-  editOutsideSelection: boolean
-): Promise<{ image: ImageData; stats: LocalizedEditDiffStats } | null> => {
-  const [source, generatedImage, selectedMask] = await Promise.all([
-    loadCanvasImage(sourceDataUrl),
-    loadCanvasImage(generated.dataUrl),
-    loadCanvasImage(selectedMaskDataUrl)
-  ]);
-
-  const sourceWidth = source.naturalWidth || source.width;
-  const sourceHeight = source.naturalHeight || source.height;
-  if (!sourceWidth || !sourceHeight) return null;
-
-  const maxEdge = 1024;
-  const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-
-  const sourceCanvas = document.createElement('canvas');
-  sourceCanvas.width = width;
-  sourceCanvas.height = height;
-  const sourceCtx = sourceCanvas.getContext('2d');
-  if (!sourceCtx) return null;
-  sourceCtx.drawImage(source, 0, 0, width, height);
-  const sourceImageData = sourceCtx.getImageData(0, 0, width, height);
-
-  const generatedCanvas = document.createElement('canvas');
-  generatedCanvas.width = width;
-  generatedCanvas.height = height;
-  const generatedCtx = generatedCanvas.getContext('2d');
-  if (!generatedCtx) return null;
-  generatedCtx.drawImage(generatedImage, 0, 0, width, height);
-  const generatedImageData = generatedCtx.getImageData(0, 0, width, height);
-
-  const selectionAlpha = getSelectionAlpha(selectedMask, width, height, editOutsideSelection);
-  if (!selectionAlpha) return null;
-
-  const proofCanvas = document.createElement('canvas');
-  proofCanvas.width = width;
-  proofCanvas.height = height;
-  const proofCtx = proofCanvas.getContext('2d');
-  if (!proofCtx) return null;
-  const proofImageData = proofCtx.createImageData(width, height);
-  const proofPixels = proofImageData.data;
-  const sourcePixels = sourceImageData.data;
-  const generatedPixels = generatedImageData.data;
-  let insidePixels = 0;
-  let outsidePixels = 0;
-  let insideChangedPixels = 0;
-  let outsideChangedPixels = 0;
-
-  for (let index = 0, pixel = 0; index < selectionAlpha.length; index += 1, pixel += 4) {
-    const selection = selectionAlpha[index];
-    const insideSelection = selection >= OPENAI_SELECTION_ALPHA_THRESHOLD;
-    const maxDelta = getPixelMaxDelta(sourcePixels, generatedPixels, pixel);
-    const changed = maxDelta >= LOCALIZED_EDIT_CHANGE_THRESHOLD;
-    if (insideSelection) {
-      insidePixels += 1;
-      if (changed) insideChangedPixels += 1;
-    } else {
-      outsidePixels += 1;
-      if (changed) outsideChangedPixels += 1;
-    }
-
-    const luminance = getPixelLuminance(sourcePixels, pixel);
-    let red = luminance * 0.78;
-    let green = luminance * 0.78;
-    let blue = luminance * 0.78;
-
-    if (selection > 8) {
-      const selectionStrength = Math.min(0.52, selection / 255 * 0.42);
-      red = red * (1 - selectionStrength) + 45 * selectionStrength;
-      green = green * (1 - selectionStrength) + 220 * selectionStrength;
-      blue = blue * (1 - selectionStrength) + 125 * selectionStrength;
-    }
-
-    if (changed && insideSelection) {
-      const changeStrength = smoothStep(24, 88, maxDelta) * 0.82;
-      red = red * (1 - changeStrength) + 232 * changeStrength;
-      green = green * (1 - changeStrength) + 58 * changeStrength;
-      blue = blue * (1 - changeStrength) + 190 * changeStrength;
-    } else if (changed) {
-      const changeStrength = smoothStep(24, 88, maxDelta) * 0.88;
-      red = red * (1 - changeStrength) + 255 * changeStrength;
-      green = green * (1 - changeStrength) + 176 * changeStrength;
-      blue = blue * (1 - changeStrength) + 38 * changeStrength;
-    }
-
-    proofPixels[pixel] = clampByte(red);
-    proofPixels[pixel + 1] = clampByte(green);
-    proofPixels[pixel + 2] = clampByte(blue);
-    proofPixels[pixel + 3] = 255;
-  }
-
-  proofCtx.putImageData(proofImageData, 0, 0);
-  const imageData = ImageUtils.dataUrlToImageData(proofCanvas.toDataURL('image/png'));
-  if (!imageData) return null;
-
-  return {
-    image: {
-      ...imageData,
-      mimeType: 'image/png',
-      width,
-      height,
-    },
-    stats: {
-      insideChangedRatio: insideChangedPixels / Math.max(insidePixels, 1),
-      outsideChangedRatio: outsideChangedPixels / Math.max(outsidePixels, 1),
-      outsideChangedPixels,
-    },
   };
 };
 
@@ -727,6 +569,155 @@ const prepareGenericOpenAIEditInputs = async (
   };
 };
 
+const getVisualExtendMaskDataUrl = (
+  layout: VisualExtendCanvasLayout,
+  openAIAlphaMask: boolean
+): string => {
+  const canvas = document.createElement('canvas');
+  canvas.width = layout.targetWidth;
+  canvas.height = layout.targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to prepare outpaint mask.');
+
+  const imageData = ctx.createImageData(layout.targetWidth, layout.targetHeight);
+  const pixels = imageData.data;
+  const sourceX1 = layout.offsetX;
+  const sourceY1 = layout.offsetY;
+  const sourceX2 = layout.offsetX + layout.sourceWidth;
+  const sourceY2 = layout.offsetY + layout.sourceHeight;
+
+  for (let y = 0; y < layout.targetHeight; y += 1) {
+    for (let x = 0; x < layout.targetWidth; x += 1) {
+      const insideSource = x >= sourceX1 && x < sourceX2 && y >= sourceY1 && y < sourceY2;
+      const pixel = (y * layout.targetWidth + x) * 4;
+      if (openAIAlphaMask) {
+        pixels[pixel] = 255;
+        pixels[pixel + 1] = 255;
+        pixels[pixel + 2] = 255;
+        pixels[pixel + 3] = insideSource ? 255 : 0;
+      } else {
+        const value = insideSource ? 0 : 255;
+        pixels[pixel] = value;
+        pixels[pixel + 1] = value;
+        pixels[pixel + 2] = value;
+        pixels[pixel + 3] = 255;
+      }
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/png');
+};
+
+const prepareVisualExtendOutpaintInputs = async (
+  sourceDataUrl: string,
+  extend: AppState['workflow']['visualExtend'],
+  imageGenerationModel: AppState['imageGenerationModel']
+): Promise<{ sourceImage: ImageData; maskImage: ImageData; layout: VisualExtendCanvasLayout }> => {
+  const source = await loadCanvasImage(sourceDataUrl);
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error('Failed to read the source image size for extension.');
+  }
+
+  let layout = getVisualExtendCanvasLayout(extend, { width: sourceWidth, height: sourceHeight });
+  if (!layout.extended) {
+    throw new Error('Choose an extension direction or target ratio before generating.');
+  }
+
+  if (imageGenerationModel === 'chatgpt-image-generation-2') {
+    const preciseSize = getPreciseEditSize(layout.targetWidth, layout.targetHeight);
+    if (!preciseSize) {
+      throw new Error('This extension is too wide or tall for GPT Image 2. Reduce the amount or switch Extend to Nano Banana.');
+    }
+    layout = scaleVisualExtendCanvasLayout(layout, preciseSize.width, preciseSize.height);
+  }
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = layout.targetWidth;
+  sourceCanvas.height = layout.targetHeight;
+  const sourceCtx = sourceCanvas.getContext('2d');
+  if (!sourceCtx) throw new Error('Failed to prepare outpaint source canvas.');
+
+  sourceCtx.clearRect(0, 0, layout.targetWidth, layout.targetHeight);
+  sourceCtx.imageSmoothingEnabled = true;
+  sourceCtx.imageSmoothingQuality = 'high';
+  sourceCtx.drawImage(
+    source,
+    layout.offsetX,
+    layout.offsetY,
+    layout.sourceWidth,
+    layout.sourceHeight
+  );
+
+  const sourceImageData = ImageUtils.dataUrlToImageData(sourceCanvas.toDataURL('image/png'));
+  const maskImageData = ImageUtils.dataUrlToImageData(
+    getVisualExtendMaskDataUrl(layout, imageGenerationModel === 'chatgpt-image-generation-2')
+  );
+  if (!sourceImageData || !maskImageData) {
+    throw new Error('Failed to prepare outpaint source and mask images.');
+  }
+
+  return {
+    sourceImage: {
+      ...sourceImageData,
+      mimeType: 'image/png',
+      width: layout.targetWidth,
+      height: layout.targetHeight,
+    },
+    maskImage: {
+      ...maskImageData,
+      mimeType: 'image/png',
+      width: layout.targetWidth,
+      height: layout.targetHeight,
+    },
+    layout,
+  };
+};
+
+const compositeVisualExtendResult = async (
+  sourceDataUrl: string,
+  generated: GeneratedImage,
+  layout: VisualExtendCanvasLayout
+): Promise<GeneratedImage> => {
+  const [source, generatedImage] = await Promise.all([
+    loadCanvasImage(sourceDataUrl),
+    loadCanvasImage(generated.dataUrl)
+  ]);
+
+  const width = generatedImage.naturalWidth || generatedImage.width;
+  const height = generatedImage.naturalHeight || generatedImage.height;
+  if (!width || !height) return generated;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return generated;
+
+  ctx.drawImage(generatedImage, 0, 0, width, height);
+  const scaleX = width / Math.max(layout.targetWidth, 1);
+  const scaleY = height / Math.max(layout.targetHeight, 1);
+  ctx.drawImage(
+    source,
+    Math.round(layout.offsetX * scaleX),
+    Math.round(layout.offsetY * scaleY),
+    Math.round(layout.sourceWidth * scaleX),
+    Math.round(layout.sourceHeight * scaleY)
+  );
+
+  const dataUrl = canvas.toDataURL('image/png');
+  const imageData = ImageUtils.dataUrlToImageData(dataUrl);
+  return imageData
+    ? {
+        ...imageData,
+        mimeType: 'image/png',
+        dataUrl,
+      }
+    : generated;
+};
+
 const getPreciseEditOperation = (activeTool: string): ImageEditOperation => {
   if (activeTool === 'material') return 'replace_material';
   if (activeTool === 'people') return 'add_people';
@@ -765,101 +756,6 @@ const PRECISE_OPENAI_SELECTED_RATIO_LIMITS: Record<string, number> = {
 
 const getPreciseOpenAISelectedRatioLimit = (activeTool: string): number =>
   PRECISE_OPENAI_SELECTED_RATIO_LIMITS[activeTool] ?? 0.45;
-
-const buildLocalizedEditVerificationContext = (
-  operation: string,
-  targetLabel: string,
-  selectedRatio: number | null | undefined,
-  diffStats?: LocalizedEditDiffStats | null,
-  options: {
-    editOutsideSelection?: boolean;
-    protectedTargetLabel?: string;
-  } = {}
-): ImageOutputVerificationContext => ({
-  mode: 'localized-edit',
-  localizedEdit: {
-    operation,
-    targetLabel,
-    editableTargetLabel: targetLabel,
-    protectedTargetLabel: options.protectedTargetLabel || (
-      options.editOutsideSelection
-        ? 'originally selected foreground or subject'
-        : 'unselected areas outside the edit mask'
-    ),
-    maskPolarity: options.editOutsideSelection ? 'outside-selection-editable' : 'selected-area-editable',
-    selectedRatio: typeof selectedRatio === 'number' ? selectedRatio : null,
-    changeProofMap: Boolean(diffStats),
-    insideChangedRatio: diffStats?.insideChangedRatio ?? null,
-    outsideChangedRatio: diffStats?.outsideChangedRatio ?? null,
-    outsideChangedPixels: diffStats?.outsideChangedPixels ?? null,
-  },
-});
-
-const withOutputVerificationSettings = (
-  settings: Record<string, any> | undefined,
-  result: GeminiResponse
-) => {
-  if (!result.outputVerification) return settings;
-  return {
-    ...(settings || {}),
-    outputVerification: {
-      passed: result.outputVerification.passed,
-      summary: result.outputVerification.summary,
-      issues: result.outputVerification.issues,
-      attempts: result.outputVerificationAttempts ?? 1,
-      aiSlopDetected: result.outputVerification.aiSlopDetected || undefined,
-      aiSlopConfidence: result.outputVerification.aiSlopConfidence,
-      aiSlopIndicators: result.outputVerification.aiSlopIndicators,
-      aiSlopSuggestion: result.outputVerification.aiSlopSuggestion
-    }
-  };
-};
-
-const getAiSlopDetectionForVisibleResult = (result: GeminiResponse) => {
-  const verifications = [
-    result.outputVerification,
-    ...(result.outputVerifications || [])
-  ].filter((verification): verification is ImageOutputVerificationResult => Boolean(verification));
-
-  return verifications
-    .filter((verification) => verification.aiSlopDetected)
-    .sort((a, b) => (b.aiSlopConfidence ?? 0) - (a.aiSlopConfidence ?? 0))[0] || null;
-};
-
-const normalizeAdvisoryVerification = (
-  verification: ImageOutputVerificationResult | null
-): ImageOutputVerificationResult | undefined => {
-  if (!verification) return undefined;
-  if (verification.passed) return verification;
-  return {
-    ...verification,
-    passed: true,
-    summary: `Localized edit accepted with advisory review note: ${verification.summary}`,
-    issues: verification.issues.map((issue) => `Advisory: ${issue}`),
-    revisedPrompt: undefined,
-  };
-};
-
-const suggestAiSlopUpscalerIfNeeded = (
-  result: GeminiResponse,
-  mode: GenerationMode,
-  upscaleMode: AppState['workflow']['upscaleMode']
-) => {
-  if (typeof window === 'undefined') return;
-  if (mode === 'upscale' && upscaleMode === 'ai-slop') return;
-
-  const detection = getAiSlopDetectionForVisibleResult(result);
-  if (!detection) return;
-
-  window.dispatchEvent(new CustomEvent(AI_SLOP_UPSCALER_SUGGESTION_EVENT, {
-    detail: {
-      id: nanoid(),
-      score: detection.aiSlopConfidence,
-      summary: detection.aiSlopSuggestion || detection.summary,
-      indicators: detection.aiSlopIndicators || []
-    }
-  }));
-};
 
 const drawMaskImageData = (
   mask: HTMLImageElement,
@@ -1599,7 +1495,9 @@ export function useGeneration(): UseGenerationReturn {
   const isReady = ensureServiceInitialized();
   const effectiveImageGenerationModel =
     state.mode === 'visual-edit'
-      ? VISUAL_EDIT_IMAGE_MODEL
+      ? state.workflow.activeTool === 'extend'
+        ? state.workflow.visualExtend.imageGenerationModel
+        : VISUAL_EDIT_IMAGE_MODEL
       : state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop'
       ? AI_SLOP_UPSCALE_IMAGE_MODEL
       : state.imageGenerationModel;
@@ -2115,37 +2013,6 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_PROGRESS', payload: next });
       }
     };
-    const resetImagePipelineProgress = () => {
-      if (isMaterialValidationMode) return;
-      lastProgress = 0;
-      lastGenerationStage = null;
-      dispatch({ type: 'SET_PROGRESS', payload: 0 });
-      updateGenerationStage('preparing');
-      updateProgress(2);
-    };
-    const clearGenerationRetryNotice = () => {
-      dispatch({ type: 'SET_GENERATION_RETRY_NOTICE', payload: null });
-    };
-    const showUnsatisfactoryRetryNotice = (nextAttempt: number) => {
-      if (isMaterialValidationMode) return;
-      dispatch({
-        type: 'SET_GENERATION_RETRY_NOTICE',
-        payload: {
-          reason: 'unsatisfactory-result',
-          attempt: nextAttempt
-        }
-      });
-    };
-    const showVerificationFallbackNotice = (attempts: number) => {
-      if (isMaterialValidationMode) return;
-      dispatch({
-        type: 'SET_GENERATION_RETRY_NOTICE',
-        payload: {
-          reason: 'verification-fallback',
-          attempts
-        }
-      });
-    };
     const updateImagePipelineProgress = (progress: ImageGenerationProgress) => {
       const range = IMAGE_PIPELINE_PROGRESS_RANGES[progress.phase];
       const stage = IMAGE_PIPELINE_STAGES[progress.phase];
@@ -2155,7 +2022,6 @@ export function useGeneration(): UseGenerationReturn {
       updateProgress(start + ((end - start) * progress.progress) / 100);
     };
 
-    clearGenerationRetryNotice();
     dispatch({ type: 'SET_GENERATING', payload: true });
     let multiAngleHistoryHandled = false;
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
@@ -2823,266 +2689,54 @@ export function useGeneration(): UseGenerationReturn {
         );
       };
 
-      const verifyImageResult = async (
-        resultToVerify: GeminiResponse,
-        promptForVerification: string,
-        referenceImages?: ImageData[],
-        originalPromptForVerification?: string,
-        verificationContext: ImageOutputVerificationContext = {}
-      ): Promise<ImageOutputVerificationResult | null> => {
-        const finalImage = pickFinalImage(resultToVerify.images);
-        if (!finalImage) return null;
+      const runImageGeneration = async (
+        label: string,
+        prompt: string,
+        _referenceImages: ImageData[] | undefined,
+        generateAttempt: (promptForAttempt: string, promptAlreadyOptimized: boolean) => Promise<GeminiResponse>,
+        _originalPrompt = prompt,
+        generationOptions: {
+          timeoutMs?: number;
+          maxRetries?: number;
+        } = imageGenerationRetryOptions
+      ): Promise<GeminiResponse> => {
+        const effectiveGenerationRetryOptions = {
+          timeoutMs: generationOptions.timeoutMs ?? imageGenerationRetryOptions.timeoutMs,
+          maxRetries: generationOptions.maxRetries ?? imageGenerationRetryOptions.maxRetries
+        };
         if (abortSignal.aborted) {
           throw new DOMException('Request aborted', 'AbortError');
         }
-        return runAbortableWithTimeout(
-          'AI output verification',
-          OUTPUT_VERIFICATION_TIMEOUT_MS,
-          (verificationSignal) => service.verifyImageOutput({
-            prompt: resultToVerify.optimizedPrompt || promptForVerification,
-            originalPrompt: originalPromptForVerification || promptForVerification,
-            referenceImages,
-            generatedImage: finalImage,
-            ...verificationContext,
-            generationConfig: {
-              abortSignal: verificationSignal,
-              onProgress: updateImagePipelineProgress
-            }
-          })
+        const rawResult = await runWithRetry(
+          label,
+          () => generateAttempt(prompt, false),
+          effectiveGenerationRetryOptions
+        );
+        return normalizeResponseImagesToAspectRatio(
+          rawResult,
+          state.mode === 'visual-edit' ? null : generationConfig?.imageConfig?.aspectRatio
         );
       };
 
-      const formatVerificationFailure = (
-        label: string,
-        verification: ImageOutputVerificationResult | null,
-        attempts: number
-      ) => {
-        const issue = verification?.issues?.[0] || verification?.summary || 'The output did not match the prompt closely enough.';
-        return `${label} was not approved by AI output verification after ${attempts} attempts. ${issue}`;
-      };
-
-      const runVerifiedImageGeneration = async (
+      const runBatchImageGeneration = async (
         label: string,
         prompt: string,
-        referenceImages: ImageData[] | undefined,
+        _referenceImages: ImageData[] | undefined,
         generateAttempt: (promptForAttempt: string, promptAlreadyOptimized: boolean) => Promise<GeminiResponse>,
-        originalPromptForVerification = prompt,
-        generationRetryOptions: {
-          timeoutMs?: number;
-          maxRetries?: number;
-          verificationPolicy?: 'blocking' | 'advisory';
-          verificationContext?: ImageOutputVerificationContext;
-          prepareVerification?: (
-            resultForAttempt: GeminiResponse,
-            referenceImagesForAttempt?: ImageData[],
-            verificationContextForAttempt?: ImageOutputVerificationContext
-          ) => Promise<{
-            referenceImages?: ImageData[];
-            verificationContext?: ImageOutputVerificationContext;
-          }>;
-        } = imageGenerationRetryOptions
+        _originalPrompt = prompt
       ): Promise<GeminiResponse> => {
-        const verificationPolicy = generationRetryOptions.verificationPolicy || 'blocking';
-        const verificationContext = generationRetryOptions.verificationContext || {};
-        const effectiveGenerationRetryOptions = {
-          timeoutMs: generationRetryOptions.timeoutMs ?? imageGenerationRetryOptions.timeoutMs,
-          maxRetries: generationRetryOptions.maxRetries ?? imageGenerationRetryOptions.maxRetries
-        };
-        let promptForAttempt = prompt;
-        let lastVerification: ImageOutputVerificationResult | null = null;
-        let lastResultForAttempt: GeminiResponse | null = null;
-        let lastPromptUsed = prompt;
-
-        for (let attempt = 1; attempt <= OUTPUT_VERIFICATION_MAX_ATTEMPTS; attempt += 1) {
-          if (abortSignal.aborted) {
-            throw new DOMException('Request aborted', 'AbortError');
-          }
-          if (attempt > 1) {
-            resetImagePipelineProgress();
-          }
-          const rawResultForAttempt = await runWithRetry(
-            attempt === 1 ? label : `${label} verification retry ${attempt}`,
-            () => generateAttempt(promptForAttempt, attempt > 1),
-            effectiveGenerationRetryOptions
-          );
-          const resultForAttempt = await normalizeResponseImagesToAspectRatio(
-            rawResultForAttempt,
-            state.mode === 'visual-edit' ? null : generationConfig?.imageConfig?.aspectRatio
-          );
-          const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
-          const hasGeneratedImage = resultForAttempt.images.length > 0;
-          lastResultForAttempt = resultForAttempt;
-          lastPromptUsed = promptUsed;
-          let referenceImagesForVerification = referenceImages;
-          let verificationContextForAttempt = verificationContext;
-          if (hasGeneratedImage && generationRetryOptions.prepareVerification) {
-            const preparedVerification = await generationRetryOptions.prepareVerification(
-              resultForAttempt,
-              referenceImages,
-              verificationContext
-            );
-            referenceImagesForVerification = preparedVerification.referenceImages || referenceImages;
-            verificationContextForAttempt = preparedVerification.verificationContext || verificationContext;
-          }
-          let verification: ImageOutputVerificationResult | null = null;
-          try {
-            verification = await verifyImageResult(
-              resultForAttempt,
-              promptUsed,
-              referenceImagesForVerification,
-              originalPromptForVerification,
-              verificationContextForAttempt
-            );
-          } catch (error) {
-            if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
-              throw error;
-            }
-            if (hasGeneratedImage) {
-              showVerificationFallbackNotice(attempt);
-              return {
-                ...resultForAttempt,
-                optimizedPrompt: promptUsed,
-                outputVerificationAttempts: attempt
-              };
-            }
-            throw error;
-          }
-          if (hasGeneratedImage && verificationPolicy === 'advisory') {
-            return {
-              ...resultForAttempt,
-              optimizedPrompt: promptUsed,
-              outputVerification: normalizeAdvisoryVerification(verification),
-              outputVerificationAttempts: attempt
-            };
-          }
-          if (hasGeneratedImage && (!verification || verification.passed)) {
-            return {
-              ...resultForAttempt,
-              optimizedPrompt: promptUsed,
-              outputVerification: verification || undefined,
-              outputVerificationAttempts: attempt
-            };
-          }
-
-          lastVerification = verification;
-          promptForAttempt = verification.revisedPrompt?.trim() || promptUsed;
-          if (attempt < OUTPUT_VERIFICATION_MAX_ATTEMPTS) {
-            showUnsatisfactoryRetryNotice(attempt + 1);
-          }
+        if (abortSignal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError');
         }
-
-        if (lastResultForAttempt?.images.length) {
-          showVerificationFallbackNotice(OUTPUT_VERIFICATION_MAX_ATTEMPTS);
-          return {
-            ...lastResultForAttempt,
-            optimizedPrompt: lastPromptUsed,
-            outputVerification: lastVerification || undefined,
-            outputVerificationAttempts: OUTPUT_VERIFICATION_MAX_ATTEMPTS
-          };
-        }
-
-        throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
-      };
-
-      const runVerifiedBatchImageGeneration = async (
-        label: string,
-        prompt: string,
-        referenceImages: ImageData[] | undefined,
-        generateAttempt: (promptForAttempt: string, promptAlreadyOptimized: boolean) => Promise<GeminiResponse>,
-        originalPromptForVerification = prompt
-      ): Promise<GeminiResponse> => {
-        let promptForAttempt = prompt;
-        let lastVerification: ImageOutputVerificationResult | null = null;
-        let lastVerifications: ImageOutputVerificationResult[] = [];
-        let lastResultForAttempt: GeminiResponse | null = null;
-        let lastPromptUsed = prompt;
-
-        for (let attempt = 1; attempt <= OUTPUT_VERIFICATION_MAX_ATTEMPTS; attempt += 1) {
-          if (abortSignal.aborted) {
-            throw new DOMException('Request aborted', 'AbortError');
-          }
-          if (attempt > 1) {
-            resetImagePipelineProgress();
-          }
-          const rawResultForAttempt = await runWithRetry(
-            attempt === 1 ? label : `${label} verification retry ${attempt}`,
-            () => generateAttempt(promptForAttempt, attempt > 1),
-            imageGenerationRetryOptions
-          );
-          const resultForAttempt = await normalizeResponseImagesToAspectRatio(
-            rawResultForAttempt,
-            generationConfig?.imageConfig?.aspectRatio
-          );
-          const promptUsed = resultForAttempt.optimizedPrompt || promptForAttempt;
-          const hasGeneratedImages = resultForAttempt.images.length > 0;
-          lastResultForAttempt = resultForAttempt;
-          lastPromptUsed = promptUsed;
-          let verifications: ImageOutputVerificationResult[] = [];
-          try {
-            verifications = await Promise.all(
-              resultForAttempt.images.map((image) =>
-                runAbortableWithTimeout(
-                  'AI output verification',
-                  OUTPUT_VERIFICATION_TIMEOUT_MS,
-                  (verificationSignal) => service.verifyImageOutput({
-                    prompt: promptUsed,
-                    originalPrompt: originalPromptForVerification,
-                    referenceImages,
-                    generatedImage: image,
-                    generationConfig: {
-                      abortSignal: verificationSignal,
-                      onProgress: updateImagePipelineProgress
-                    }
-                  })
-                )
-              )
-            );
-          } catch (error) {
-            if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
-              throw error;
-            }
-            if (hasGeneratedImages) {
-              showVerificationFallbackNotice(attempt);
-              return {
-                ...resultForAttempt,
-                optimizedPrompt: promptUsed,
-                outputVerificationAttempts: attempt
-              };
-            }
-            throw error;
-          }
-          lastVerifications = verifications;
-
-          const failed = verifications.filter((verification) => !verification.passed);
-          if (hasGeneratedImages && failed.length === 0) {
-            return {
-              ...resultForAttempt,
-              optimizedPrompt: promptUsed,
-              outputVerification: verifications[verifications.length - 1],
-              outputVerifications: verifications,
-              outputVerificationAttempts: attempt
-            };
-          }
-
-          lastVerification = failed[0] || null;
-          promptForAttempt = lastVerification?.revisedPrompt?.trim() || promptUsed;
-          if (attempt < OUTPUT_VERIFICATION_MAX_ATTEMPTS) {
-            showUnsatisfactoryRetryNotice(attempt + 1);
-          }
-        }
-
-        if (lastResultForAttempt?.images.length) {
-          showVerificationFallbackNotice(OUTPUT_VERIFICATION_MAX_ATTEMPTS);
-          return {
-            ...lastResultForAttempt,
-            optimizedPrompt: lastPromptUsed,
-            outputVerification: lastVerification || lastVerifications[lastVerifications.length - 1],
-            outputVerifications: lastVerifications.length ? lastVerifications : undefined,
-            outputVerificationAttempts: OUTPUT_VERIFICATION_MAX_ATTEMPTS
-          };
-        }
-
-        throw new Error(formatVerificationFailure(label, lastVerification, OUTPUT_VERIFICATION_MAX_ATTEMPTS));
+        const rawResult = await runWithRetry(
+          label,
+          () => generateAttempt(prompt, false),
+          imageGenerationRetryOptions
+        );
+        return normalizeResponseImagesToAspectRatio(
+          rawResult,
+          generationConfig?.imageConfig?.aspectRatio
+        );
       };
 
       // Build generation config
@@ -3456,7 +3110,7 @@ export function useGeneration(): UseGenerationReturn {
         };
 
         // Generate the grid image
-        const gridResult = await runVerifiedImageGeneration(
+        const gridResult = await runImageGeneration(
           'multi-angle grid',
           gridPromptForModel,
           images.length > 0 ? images : undefined,
@@ -3501,10 +3155,10 @@ export function useGeneration(): UseGenerationReturn {
             modelPrompt: gridResult.optimizedPrompt,
             attachments: attachmentUrls,
             mode: state.mode,
-            settings: withOutputVerificationSettings({
+            settings: {
               kind: 'multi-angle',
               gridLayout: `${gridRows}x${gridCols}`
-            }, gridResult)
+            }
           }
         });
 
@@ -3670,7 +3324,7 @@ export function useGeneration(): UseGenerationReturn {
                       modelPrompt: upscaleResult.optimizedPrompt,
                       attachments: attachmentUrls,
                       mode: state.mode,
-                      settings: withOutputVerificationSettings(undefined, upscaleResult)
+                      settings: undefined
                     }
                   });
                   completedIds.add(item.id);
@@ -3690,10 +3344,6 @@ export function useGeneration(): UseGenerationReturn {
               if ((error as DOMException)?.name === 'AbortError') {
                 throw error;
               }
-              if (lastError.message?.includes('AI output verification')) {
-                break;
-              }
-
               const isTimeout = lastError.message?.includes('timed out');
               // If we have more retries left, wait before retrying
               // Shorter delay for timeouts since we already waited
@@ -3803,97 +3453,13 @@ export function useGeneration(): UseGenerationReturn {
                 materialReference.fallbackPreviewUrl
               )
             : null;
-        const selectionStats = shouldUseSelectionMask && selectedMaskDataUrl
-          ? await readSelectionMaskStats(selectedMaskDataUrl, editOutsideSelection).catch(() => null)
-          : null;
-        const localizedVerificationContext = shouldUseSelectionMask
-          ? buildLocalizedEditVerificationContext(
-              editType,
-              getPreciseEditTargetLabel(activeVisualTool),
-              selectionStats?.selectedRatio ?? null,
-              null,
-              {
-                editOutsideSelection,
-                protectedTargetLabel: editOutsideSelection
-                  ? 'originally selected foreground or subject'
-                  : 'unselected areas outside the selected edit target',
-              }
+        const visualExtendOutpaintInputs = activeVisualTool === 'extend'
+          ? await prepareVisualExtendOutpaintInputs(
+              sourceImageUrl!,
+              state.workflow.visualExtend,
+              effectiveImageGenerationModel
             )
-          : undefined;
-        const createLocalizedVerificationPreparation = (
-          operation: string,
-          targetLabel: string,
-          selectedRatio: number | null | undefined
-        ) => {
-          if (!shouldUseSelectionMask || !selectedMaskDataUrl || !sourceImageUrl) return undefined;
-          return async (
-            resultForAttempt: GeminiResponse,
-            referenceImagesForAttempt?: ImageData[]
-          ) => {
-            const finalImage = pickFinalImage(resultForAttempt.images);
-            if (!finalImage) {
-              return {
-                referenceImages: referenceImagesForAttempt,
-                verificationContext: buildLocalizedEditVerificationContext(
-                  operation,
-                  targetLabel,
-                  selectedRatio,
-                  null,
-                  {
-                    editOutsideSelection,
-                    protectedTargetLabel: editOutsideSelection
-                      ? 'originally selected foreground or subject'
-                      : 'unselected areas outside the selected edit target',
-                  }
-                ),
-              };
-            }
-
-            const proof = await buildLocalizedEditProofMap(
-              sourceImageUrl,
-              finalImage,
-              selectedMaskDataUrl,
-              editOutsideSelection
-            ).catch(() => null);
-            if (!proof) {
-              return {
-                referenceImages: referenceImagesForAttempt,
-                verificationContext: buildLocalizedEditVerificationContext(
-                  operation,
-                  targetLabel,
-                  selectedRatio,
-                  null,
-                  {
-                    editOutsideSelection,
-                    protectedTargetLabel: editOutsideSelection
-                      ? 'originally selected foreground or subject'
-                      : 'unselected areas outside the selected edit target',
-                  }
-                ),
-              };
-            }
-
-            return {
-              referenceImages: [
-                ...(referenceImagesForAttempt || []),
-                proof.image,
-              ],
-              verificationContext: buildLocalizedEditVerificationContext(
-                operation,
-                targetLabel,
-                selectedRatio,
-                proof.stats,
-                {
-                  editOutsideSelection,
-                  protectedTargetLabel: editOutsideSelection
-                    ? 'originally selected foreground or subject'
-                    : 'unselected areas outside the selected edit target',
-                }
-              ),
-            };
-          };
-        };
-
+          : null;
         const adjust = state.workflow.visualAdjust;
         const hasAdjustGeometryChange = activeVisualTool === 'adjust' && (
           adjust.aspectRatio !== 'same' ||
@@ -3915,9 +3481,25 @@ export function useGeneration(): UseGenerationReturn {
           updateProgress(90);
         } else {
           const includeMaskAsReferenceImage = !isOpenAIVisualEdit;
+          const requestSourceImage = visualExtendOutpaintInputs?.sourceImage || sourceImage;
+          const requestMaskImage = visualExtendOutpaintInputs?.maskImage || maskImage;
+          const requestMaskMode: ImageEditRequest['maskMode'] = visualExtendOutpaintInputs ? 'strict' : maskMode;
+          const visualExtendAspectRatio = visualExtendOutpaintInputs &&
+            state.workflow.visualExtend.targetAspectRatio !== 'custom'
+              ? state.workflow.visualExtend.targetAspectRatio as ImageConfig['aspectRatio']
+              : undefined;
+          const visualEditGenerationConfig = visualExtendAspectRatio
+            ? {
+                ...generationConfigWithAbort,
+                imageConfig: {
+                  ...generationConfigWithAbort.imageConfig,
+                  aspectRatio: visualExtendAspectRatio,
+                },
+              }
+            : generationConfigWithAbort;
           const editReferenceImages = [
-            sourceImage,
-            ...(includeMaskAsReferenceImage && maskImage ? [maskImage] : []),
+            requestSourceImage,
+            ...(includeMaskAsReferenceImage && requestMaskImage ? [requestMaskImage] : []),
             ...(materialReferenceImage ? [materialReferenceImage] : [])
           ];
           const canUsePreciseOpenAIEdit = Boolean(
@@ -3930,8 +3512,14 @@ export function useGeneration(): UseGenerationReturn {
           let usedPreciseOpenAIEdit = false;
           let normalizedInputsForMaskedOpenAIEdit: { sourceImage: ImageData; maskImage: ImageData } | null = null;
           const getInputsForGenericEdit = async (): Promise<{ sourceImage: ImageData; maskImage: ImageData | null }> => {
-            if (effectiveImageGenerationModel !== 'chatgpt-image-generation-2' || !maskImage || !editableMaskDataUrl) {
-              return { sourceImage, maskImage: maskImage || null };
+            if (visualExtendOutpaintInputs) {
+              return {
+                sourceImage: visualExtendOutpaintInputs.sourceImage,
+                maskImage: visualExtendOutpaintInputs.maskImage,
+              };
+            }
+            if (effectiveImageGenerationModel !== 'chatgpt-image-generation-2' || !requestMaskImage || !editableMaskDataUrl) {
+              return { sourceImage: requestSourceImage, maskImage: requestMaskImage || null };
             }
             if (normalizedInputsForMaskedOpenAIEdit) {
               return normalizedInputsForMaskedOpenAIEdit;
@@ -3958,25 +3546,13 @@ export function useGeneration(): UseGenerationReturn {
             if (selectedRatio <= getPreciseOpenAISelectedRatioLimit(activeVisualTool)) {
               const preciseOperation = getPreciseEditOperation(activeVisualTool);
               const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
-              const preciseVerificationContext = buildLocalizedEditVerificationContext(
-                preciseOperation,
-                preciseTargetLabel,
-                selectedRatio,
-                null,
-                {
-                  editOutsideSelection,
-                  protectedTargetLabel: editOutsideSelection
-                    ? 'originally selected foreground or subject'
-                    : 'unselected areas outside the selected edit target',
-                }
-              );
               const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
                 ? 'final'
                 : state.output.resolution === '720p'
                   ? 'draft'
                   : 'standard';
 
-              result = await runVerifiedImageGeneration(
+              result = await runImageGeneration(
                 'precise image edit',
                 basePrompt,
                 editReferenceImages,
@@ -4011,15 +3587,7 @@ export function useGeneration(): UseGenerationReturn {
                     optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
                   };
                 },
-                basePrompt,
-                {
-                  verificationContext: preciseVerificationContext,
-                  prepareVerification: createLocalizedVerificationPreparation(
-                    preciseOperation,
-                    preciseTargetLabel,
-                    selectedRatio
-                  ),
-                }
+                basePrompt
               );
               visualMaskHandledLocally = true;
               usedPreciseOpenAIEdit = true;
@@ -4028,7 +3596,7 @@ export function useGeneration(): UseGenerationReturn {
 
           if (!usedPreciseOpenAIEdit) {
             let nonPreciseEditComposited = false;
-            result = await runVerifiedImageGeneration(
+            result = await runImageGeneration(
               'image edit',
               basePrompt,
               editReferenceImages,
@@ -4045,7 +3613,7 @@ export function useGeneration(): UseGenerationReturn {
                 const editResult = await service.editImage({
                   sourceImage: editSourceImage,
                   maskImage: editMaskImage || undefined,
-                  maskMode,
+                  maskMode: requestMaskMode,
                   referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
                   prompt: promptForAttempt,
                   editType,
@@ -4053,14 +3621,25 @@ export function useGeneration(): UseGenerationReturn {
                   imageGenerationModel: effectiveImageGenerationModel,
                   generationConfig: openAISizeOverride
                     ? {
-                        ...generationConfigWithAbort,
+                        ...visualEditGenerationConfig,
                         openAI: {
-                          ...generationConfigWithAbort.openAI,
+                          ...visualEditGenerationConfig.openAI,
                           size: openAISizeOverride,
                         },
                       }
-                    : generationConfigWithAbort
+                    : visualEditGenerationConfig
                 });
+
+                if (visualExtendOutpaintInputs && editResult.images?.length) {
+                  return {
+                    ...editResult,
+                    images: await Promise.all(
+                      editResult.images.map((image) =>
+                        compositeVisualExtendResult(sourceImageUrl!, image, visualExtendOutpaintInputs.layout)
+                      )
+                    ),
+                  };
+                }
 
                 if (
                   isOpenAIVisualEdit ||
@@ -4086,17 +3665,7 @@ export function useGeneration(): UseGenerationReturn {
                   images: finalizedImages,
                 };
               },
-              basePrompt,
-              localizedVerificationContext
-                ? {
-                    verificationContext: localizedVerificationContext,
-                    prepareVerification: createLocalizedVerificationPreparation(
-                      editType,
-                      getPreciseEditTargetLabel(activeVisualTool),
-                      selectionStats?.selectedRatio ?? null
-                    ),
-                  }
-                : undefined
+              basePrompt
             );
             visualMaskHandledLocally = visualMaskHandledLocally || nonPreciseEditComposited;
           }
@@ -4148,7 +3717,7 @@ export function useGeneration(): UseGenerationReturn {
           ...sceneReferenceImages
         ];
 
-        result = await runVerifiedImageGeneration(
+        result = await runImageGeneration(
           'scene composition edit',
           fullPrompt,
           editReferenceImages,
@@ -4329,7 +3898,7 @@ export function useGeneration(): UseGenerationReturn {
               }),
               imageGenerationRetryOptions
             )
-          : await runVerifiedBatchImageGeneration(
+          : await runBatchImageGeneration(
               'batch image generation',
               imageModelPrompt,
               images.length > 0 ? images : undefined,
@@ -4349,10 +3918,7 @@ export function useGeneration(): UseGenerationReturn {
         result = await normalizeResponseImagesToAspectRatio({
           text: batchResult.text,
           images: batchResult.images,
-          optimizedPrompt: batchResult.optimizedPrompt,
-          outputVerification: batchResult.outputVerification,
-          outputVerifications: batchResult.outputVerifications,
-          outputVerificationAttempts: batchResult.outputVerificationAttempts
+          optimizedPrompt: batchResult.optimizedPrompt
         }, generationConfig.imageConfig?.aspectRatio);
       } else {
         // Standard image generation
@@ -4367,7 +3933,7 @@ export function useGeneration(): UseGenerationReturn {
               }),
               imageGenerationRetryOptions
             )
-          : await runVerifiedImageGeneration(
+          : await runImageGeneration(
               'image generation',
               imageModelPrompt,
               images.length > 0 ? images : undefined,
@@ -4412,8 +3978,6 @@ export function useGeneration(): UseGenerationReturn {
         dispatch({ type: 'SET_IMAGE', payload: generatedImageUrl });
         dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
         dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
-        suggestAiSlopUpscalerIfNeeded(result, state.mode, state.workflow.upscaleMode);
-
         if (isVisualEditMode) {
           dispatch({
             type: 'UPDATE_WORKFLOW',
@@ -4469,13 +4033,13 @@ export function useGeneration(): UseGenerationReturn {
             modelPrompt: result.optimizedPrompt,
             attachments: attachmentUrls,
             mode: state.mode,
-            settings: withOutputVerificationSettings(isAngleChangeMode
+            settings: isAngleChangeMode
               ? {
                   kind: 'angle-change',
                   angleDeg: state.workflow.angleChangeDegrees,
                   tiltDeg: state.workflow.angleChangePitch
                 }
-              : undefined, result)
+              : undefined
           }
         });
 
@@ -4595,23 +4159,6 @@ export function useGeneration(): UseGenerationReturn {
           imageCount: result.images?.length || 0,
           textChars: result.text?.length || 0,
           optimizedPromptChars: result.optimizedPrompt?.length || 0,
-          outputVerificationAttempts: result.outputVerificationAttempts || null,
-          outputVerification: result.outputVerification
-            ? {
-                passed: result.outputVerification.passed,
-                summary: result.outputVerification.summary,
-                issues: result.outputVerification.issues,
-                aiSlopDetected: result.outputVerification.aiSlopDetected || false,
-                aiSlopConfidence: result.outputVerification.aiSlopConfidence || null,
-              }
-            : null,
-          outputVerifications: result.outputVerifications?.map((verification) => ({
-            passed: verification.passed,
-            summary: verification.summary,
-            issues: verification.issues,
-            aiSlopDetected: verification.aiSlopDetected || false,
-            aiSlopConfidence: verification.aiSlopConfidence || null,
-          })) || null,
         },
       });
       dispatch({ type: 'SET_GENERATING', payload: false });
@@ -4651,7 +4198,6 @@ export function useGeneration(): UseGenerationReturn {
             payload: { isRunning: false, error: 'Validation canceled.' }
           });
         }
-        clearGenerationRetryNotice();
         dispatch({ type: 'SET_GENERATING', payload: false });
         dispatch({ type: 'SET_PROGRESS', payload: 0 });
         dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
@@ -4711,7 +4257,6 @@ export function useGeneration(): UseGenerationReturn {
           }
         });
       }
-      clearGenerationRetryNotice();
       dispatch({ type: 'SET_GENERATING', payload: false });
       dispatch({ type: 'SET_PROGRESS', payload: 0 });
       dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
@@ -4764,7 +4309,6 @@ export function useGeneration(): UseGenerationReturn {
     dispatch({ type: 'SET_GENERATING', payload: false });
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
     dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
-    dispatch({ type: 'SET_GENERATION_RETRY_NOTICE', payload: null });
   }, [dispatch, state.mode]);
 
   return {

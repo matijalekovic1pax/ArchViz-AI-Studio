@@ -113,7 +113,6 @@ const createTestSnapshot = (state: AppState) => ({
   isGenerating: state.isGenerating,
   progress: state.progress,
   generationStage: state.generationStage,
-  generationRetryNotice: state.generationRetryNotice,
   uploadedImage: summarizeDataUrl(state.uploadedImage),
   sourceImage: summarizeDataUrl(state.sourceImage),
   canvas: state.canvas,
@@ -164,6 +163,12 @@ const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
   render3dSourceMode: normalizeRender3DSourceMode(workflow.render3dSourceMode),
   renderMode: normalizeRenderMode(workflow.renderMode),
   upscaleMode: workflow.upscaleMode === 'ai-slop' ? 'ai-slop' : 'resolution',
+  visualExtend: workflow.visualExtend
+    ? {
+        ...workflow.visualExtend,
+        imageGenerationModel: normalizeImageGenerationModel(workflow.visualExtend.imageGenerationModel),
+      }
+    : workflow.visualExtend,
 });
 
 const updateWorkflow = (
@@ -175,7 +180,7 @@ const shouldLockAiSlopModel = (mode: AppState['mode'], workflow: WorkflowSetting
   mode === 'upscale' && workflow.upscaleMode === 'ai-slop';
 
 const getLockedImageGenerationModel = (mode: AppState['mode'], workflow: WorkflowSettings): ImageGenerationModel | null => {
-  if (mode === 'visual-edit') return VISUAL_EDIT_IMAGE_MODEL;
+  if (mode === 'visual-edit' && workflow.activeTool !== 'extend') return VISUAL_EDIT_IMAGE_MODEL;
   if (shouldLockAiSlopModel(mode, workflow)) return AI_SLOP_UPSCALE_IMAGE_MODEL;
   return null;
 };
@@ -654,6 +659,7 @@ const initialWorkflow: WorkflowSettings = {
     amount: 50,
     targetAspectRatio: '16:9',
     customRatio: { width: 16, height: 9 },
+    imageGenerationModel: DEFAULT_IMAGE_GENERATION_MODEL,
   },
   visualBackground: {
     mode: 'image',
@@ -1009,7 +1015,6 @@ const initialState: AppState = {
   isGenerating: false,
   progress: 0,
   generationStage: null,
-  generationRetryNotice: null,
   prompt: '',
   workflow: initialWorkflow,
   materialValidation: initialMaterialValidation,
@@ -1064,7 +1069,6 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'SET_GENERATION_STAGE': return { ...state, generationStage: action.payload };
-    case 'SET_GENERATION_RETRY_NOTICE': return { ...state, generationRetryNotice: action.payload };
     case 'UPDATE_WORKFLOW': {
       const workflow = updateWorkflow(state.workflow, action.payload);
       return {

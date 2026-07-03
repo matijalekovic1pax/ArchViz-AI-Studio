@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store';
-import type { VisualSelectionPoint, VisualSelectionShape } from '../../../types';
+import type { ImageGenerationModel, VisualSelectionPoint, VisualSelectionShape } from '../../../types';
 import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SectionDesc, SliderControl, SunPositionWidget, ColorPicker } from './SharedRightComponents';
@@ -8,6 +8,7 @@ import { AUTO_SELECTION_MODEL, ImageUtils, getGeminiService, initGeminiService, 
 import { isGatewayAuthenticated } from '../../../services/apiGateway';
 import { nanoid } from 'nanoid';
 import { MATERIAL_CATEGORIES, MATERIAL_SWATCHES, getMaterialById } from '../../../lib/materialCatalog';
+import { getVisualExtendCanvasLayout } from '../../../lib/visualExtend';
 import {
   Image as ImageIcon,
   Palette,
@@ -4082,75 +4083,44 @@ export const VisualEditPanel = () => {
         );
       case 'extend':
         {
-          const ratioMap: Record<string, number> = {
-            '16:9': 16 / 9,
-            '21:9': 21 / 9,
-            '4:3': 4 / 3,
-            '1:1': 1,
-            '9:16': 9 / 16,
-          };
           const baseSize = extendBaseSize;
           const baseWidth = baseSize?.width ?? 1920;
           const baseHeight = baseSize?.height ?? 1080;
-          const baseRatio = baseWidth / baseHeight;
-          const customRatioValue =
-            wf.visualExtend.customRatio.width > 0 && wf.visualExtend.customRatio.height > 0
-              ? wf.visualExtend.customRatio.width / wf.visualExtend.customRatio.height
-              : baseRatio;
-          const resolveRatioValue = (ratioKey: string) =>
-            ratioKey === 'custom' ? customRatioValue : ratioMap[ratioKey] ?? baseRatio;
-
-          const computeTargetSize = (ratioKey: string, amount: number) => {
-            const ratioValue = resolveRatioValue(ratioKey);
-            let width = baseWidth;
-            let height = baseHeight;
-
-            if (ratioKey === 'custom') {
-              const scale = 1 + amount / 100;
-              width = Math.round(baseWidth * scale);
-              height = Math.round(baseHeight * scale);
-              if (ratioValue) {
-                if (ratioValue > baseRatio) {
-                  width = Math.round(height * ratioValue);
-                } else {
-                  height = Math.round(width / ratioValue);
-                }
-              }
-            } else if (ratioValue) {
-              if (ratioValue > baseRatio) {
-                width = Math.round(baseHeight * ratioValue);
-              } else if (ratioValue < baseRatio) {
-                height = Math.round(baseWidth / ratioValue);
-              }
-            }
-
-            return { width, height, ratioValue };
-          };
-
-          const targetSize = computeTargetSize(
-            wf.visualExtend.targetAspectRatio,
-            wf.visualExtend.amount
-          );
-          const extensionPx = Math.max(targetSize.width - baseWidth, targetSize.height - baseHeight, 0);
-          const extensionDenom =
-            targetSize.ratioValue && targetSize.ratioValue > baseRatio ? baseWidth : baseHeight;
-          const extensionPct = extensionDenom ? Math.round((extensionPx / extensionDenom) * 100) : 0;
+          const targetLayout = getVisualExtendCanvasLayout(wf.visualExtend, { width: baseWidth, height: baseHeight });
 
           const handleRatioChange = (value: string) => {
             if (value === 'custom') {
               updateExtend({ targetAspectRatio: value });
               return;
             }
-            const nextTarget = computeTargetSize(value, wf.visualExtend.amount);
-            const nextExtensionPx = Math.max(nextTarget.width - baseWidth, nextTarget.height - baseHeight, 0);
-            const denom = nextTarget.ratioValue && nextTarget.ratioValue > baseRatio ? baseWidth : baseHeight;
-            const derivedAmount = denom ? Math.max(10, Math.round((nextExtensionPx / denom) * 100)) : wf.visualExtend.amount;
+            const nextLayout = getVisualExtendCanvasLayout(
+              { ...wf.visualExtend, targetAspectRatio: value as any },
+              { width: baseWidth, height: baseHeight }
+            );
+            const derivedAmount = nextLayout.extended
+              ? Math.max(10, nextLayout.extensionPct)
+              : wf.visualExtend.amount;
             updateExtend({ targetAspectRatio: value as any, amount: derivedAmount });
           };
 
           return (
             <div className="space-y-4 animate-fade-in">
               <SectionDesc>Extend your image. AI automatically continues the scene.</SectionDesc>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-2 block">Image Model</label>
+                <SegmentedControl
+                  value={wf.visualExtend.imageGenerationModel}
+                  options={[
+                    { label: 'Nano Banana', value: 'nano-banana' },
+                    { label: 'GPT Image 2', value: 'chatgpt-image-generation-2' },
+                  ]}
+                  onChange={(value) => updateExtend({ imageGenerationModel: value as ImageGenerationModel })}
+                />
+                <div className="mt-2 text-[10px] text-foreground-muted leading-relaxed">
+                  Nano Banana is available for natural scene continuation. GPT Image 2 remains available for precise masked outpainting.
+                </div>
+              </div>
 
               <div>
                 <label className="text-xs font-medium text-foreground mb-2 block">Direction</label>
@@ -4213,13 +4183,13 @@ export const VisualEditPanel = () => {
                 <div className="flex justify-between">
                   <span>Result</span>
                   <span className="font-mono">
-                    {baseSize ? `${targetSize.width} × ${targetSize.height}` : '--'}
+                    {baseSize ? `${targetLayout.targetWidth} × ${targetLayout.targetHeight}` : '--'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Extension</span>
                   <span className="font-mono">
-                    {baseSize ? `+${extensionPx}px (${extensionPct}%)` : '--'}
+                    {baseSize ? `+${targetLayout.extensionPx}px (${targetLayout.extensionPct}%)` : '--'}
                   </span>
                 </div>
               </div>

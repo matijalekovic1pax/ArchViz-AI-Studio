@@ -424,6 +424,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   const handleModelChange = (model: ImageGenerationModel) => {
+    if (state.mode === 'visual-edit' && state.workflow.activeTool === 'extend') {
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualExtend: {
+            ...state.workflow.visualExtend,
+            imageGenerationModel: model
+          }
+        }
+      });
+      setShowModelMenu(false);
+      return;
+    }
     if (state.mode === 'visual-edit') {
       dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: VISUAL_EDIT_IMAGE_MODEL });
       setShowModelMenu(false);
@@ -637,9 +650,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   const activeLanguage = (i18n.language || 'en').split('-')[0];
 
-  const isVisualEditModelLocked = state.mode === 'visual-edit';
+  const isVisualEditModelLocked = state.mode === 'visual-edit' && state.workflow.activeTool !== 'extend';
   const isAiSlopModelLocked = state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop';
-  const activeImageGenerationModel = isVisualEditModelLocked
+  const activeImageGenerationModel = state.mode === 'visual-edit' && state.workflow.activeTool === 'extend'
+    ? state.workflow.visualExtend.imageGenerationModel
+    : isVisualEditModelLocked
     ? VISUAL_EDIT_IMAGE_MODEL
     : isAiSlopModelLocked
     ? AI_SLOP_UPSCALE_IMAGE_MODEL

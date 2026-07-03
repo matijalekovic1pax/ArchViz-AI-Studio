@@ -77,10 +77,6 @@
       "finalizing": "Finalizing",
       "complete": "Complete"
     },
-    "retryNotice": {
-      "unsatisfactory": "Result was unsatisfactory. Regenerating...",
-      "fallback": "AI review did not approve this after retries. Showing the latest result."
-    },
     "generateMasterplan": "Generate Masterplan",
     "generateExplodedView": "Generate Exploded View",
     "generateSection": "Generate Section",

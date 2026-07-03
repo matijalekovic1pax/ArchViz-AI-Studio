@@ -22,8 +22,6 @@ const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana 
 const PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES = 420;
 const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
 const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
-const OUTPUT_VERIFICATION_MAX_PROMPT_CHARS = 10000;
-const OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS = 900;
 const OPENAI_IMAGE_SIZE_MULTIPLE = 16;
 const OPENAI_IMAGE_MAX_EDGE = 3840;
 const OPENAI_IMAGE_MIN_PIXELS = 655_360;
@@ -64,7 +62,7 @@ interface InternalGeminiRequest extends GeminiRequest {
 }
 
 type ImagePromptKind = 'generation' | 'batch' | 'edit' | 'grid';
-export type ImageGenerationProgressPhase = 'ai-middle-layer' | 'generation' | 'image-transfer' | 'verification' | 'complete';
+export type ImageGenerationProgressPhase = 'ai-middle-layer' | 'generation' | 'image-transfer' | 'complete';
 
 export interface ImageGenerationProgress {
   phase: ImageGenerationProgressPhase;
@@ -145,9 +143,6 @@ export interface GeminiResponse {
   images: GeneratedImage[];
   finishReason?: string;
   optimizedPrompt?: string;
-  outputVerification?: ImageOutputVerificationResult;
-  outputVerifications?: ImageOutputVerificationResult[];
-  outputVerificationAttempts?: number;
 }
 
 export interface GeneratedImage {
@@ -173,40 +168,6 @@ export interface BatchImageResponse {
   images: GeneratedImage[];
   text: string | null;
   optimizedPrompt?: string;
-  outputVerifications?: ImageOutputVerificationResult[];
-  outputVerificationAttempts?: number;
-}
-
-export interface ImageOutputVerificationRequest {
-  prompt: string;
-  generatedImage: ImageData;
-  referenceImages?: ImageData[];
-  originalPrompt?: string;
-  mode?: 'full-image' | 'localized-edit';
-  localizedEdit?: {
-    operation?: string;
-    targetLabel?: string;
-    editableTargetLabel?: string;
-    protectedTargetLabel?: string;
-    maskPolarity?: 'selected-area-editable' | 'outside-selection-editable';
-    selectedRatio?: number | null;
-    changeProofMap?: boolean;
-    insideChangedRatio?: number | null;
-    outsideChangedRatio?: number | null;
-    outsideChangedPixels?: number | null;
-  };
-  generationConfig?: GenerationConfig;
-}
-
-export interface ImageOutputVerificationResult {
-  passed: boolean;
-  summary: string;
-  issues: string[];
-  revisedPrompt?: string;
-  aiSlopDetected?: boolean;
-  aiSlopConfidence?: number;
-  aiSlopIndicators?: string[];
-  aiSlopSuggestion?: string;
 }
 
 export interface BatchTextResult {
@@ -824,7 +785,9 @@ export class GeminiService {
           : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
-        editPrompt = `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Continue the source perspective lines, horizon, lighting direction, materials, shadows, reflections, and visible text/signage shapes into the new canvas area. Do not change existing source pixels unless needed only at the extension seam.`;
+        editPrompt = request.maskImage
+          ? `${maskInstructions} Extend this image by generating new content only in the editable new canvas area: ${request.prompt}. The protected source-image area is the original image and must remain unchanged. Match the existing style seamlessly. Continue the source perspective lines, horizon, lighting direction, materials, shadows, reflections, and visible text/signage shapes into the new canvas area. Do not change existing source pixels unless needed only at the extension seam.`
+          : `Extend this image by adding: ${request.prompt}. Match the existing style seamlessly. Continue the source perspective lines, horizon, lighting direction, materials, shadows, reflections, and visible text/signage shapes into the new canvas area. Do not change existing source pixels unless needed only at the extension seam.`;
         break;
       case 'style-transfer':
         editPrompt = maskMode === 'guided'
@@ -956,29 +919,6 @@ export class GeminiService {
 
   async generateBatchImagesParallel(request: BatchImageRequest): Promise<BatchImageResponse> {
     return this.generateBatchImages(request);
-  }
-
-  async verifyImageOutput(request: ImageOutputVerificationRequest): Promise<ImageOutputVerificationResult> {
-    const referenceImages = request.referenceImages || [];
-    const images = [...referenceImages, request.generatedImage];
-
-    this.emitProgress(request.generationConfig, 'verification', 8, 'Checking generated image...');
-    const raw = await this.generateText({
-      model: PROMPT_OPTIMIZER_MODEL,
-      prompt: this.buildOutputVerificationPrompt(request, referenceImages.length),
-      images,
-      generationConfig: {
-        temperature: 0.05,
-        topP: 0.8,
-        maxOutputTokens: OUTPUT_VERIFICATION_MAX_OUTPUT_TOKENS,
-        responseModalities: ['TEXT'],
-        thinkingConfig: { thinkingLevel: 'high' },
-        abortSignal: request.generationConfig?.abortSignal
-      }
-    });
-    this.emitProgress(request.generationConfig, 'verification', 100, 'Output verification complete.');
-
-    return this.parseOutputVerificationResult(raw, request.prompt);
   }
 
   // --------------------------------------------------------------------------
@@ -1436,102 +1376,6 @@ export class GeminiService {
     ].filter(Boolean).join('\n');
   }
 
-  private buildOutputVerificationPrompt(
-    request: ImageOutputVerificationRequest,
-    referenceImageCount: number
-  ): string {
-    const imageRelationship = referenceImageCount === 0
-      ? 'Attached image 1 is the generated output to evaluate.'
-      : `Attached images 1-${referenceImageCount} are the source/reference inputs. Attached image ${referenceImageCount + 1} is the generated output to evaluate.`;
-    const originalPromptLine = request.originalPrompt?.trim()
-      ? `Original user/app prompt before middle-layer tuning:\n${this.truncatePromptForOptimizer(request.originalPrompt.trim(), 2000)}`
-      : '';
-    const localizedEdit = request.mode === 'localized-edit';
-    const maskPolarity = request.localizedEdit?.maskPolarity || 'selected-area-editable';
-    const editUsesOutsideSelection = maskPolarity === 'outside-selection-editable';
-    const editableRegionLabel = editUsesOutsideSelection
-      ? 'editable outside-selection/background region'
-      : 'selected/masked editable region';
-    const protectedRegionLabel = request.localizedEdit?.protectedTargetLabel || (
-      editUsesOutsideSelection
-        ? 'the originally selected foreground/subject'
-        : 'unselected areas outside the edit mask'
-    );
-    const localizedEditProofLine = localizedEdit && request.localizedEdit?.changeProofMap
-      ? [
-          'The final reference image before the generated output is an automatic localized-edit proof map.',
-          editUsesOutsideSelection
-            ? 'In that proof map, green marks the editable outside-selection/background region; the originally selected foreground/subject is protected. Magenta marks changed pixels in the editable outside region, and amber marks changed pixels in the protected foreground/subject.'
-            : 'In that proof map, green marks the selected/editable region, magenta marks pixels that changed inside the selected region, and amber marks pixels that changed outside it.',
-          `Use the proof map as evidence, not as an artistic reference. Amber change in ${protectedRegionLabel} is acceptable only for tiny antialiasing, physical shadows/reflections, or boundary blending that is clearly necessary.`,
-          typeof request.localizedEdit?.insideChangedRatio === 'number'
-            ? `Measured changed pixels in ${editableRegionLabel}: ${(request.localizedEdit.insideChangedRatio * 100).toFixed(2)}% of editable pixels.`
-            : '',
-          typeof request.localizedEdit?.outsideChangedRatio === 'number'
-            ? `Measured changed pixels in ${protectedRegionLabel}: ${(request.localizedEdit.outsideChangedRatio * 100).toFixed(4)}% of protected pixels.`
-            : '',
-          typeof request.localizedEdit?.outsideChangedPixels === 'number'
-            ? `Measured protected-region changed pixels: ${Math.round(request.localizedEdit.outsideChangedPixels)}.`
-            : '',
-        ].filter(Boolean).join('\n')
-      : '';
-    const localizedEditLine = localizedEdit
-      ? [
-          'Localized edit verification mode:',
-          'This output may be a composited/inpainted edit where most of the frame is intentionally identical to the source image.',
-          'Do not fail because the generated output is mostly unchanged; that is expected for masked visual editing.',
-          editUsesOutsideSelection
-            ? 'Mask polarity: the editable region is outside the original user selection. The originally selected foreground/subject is protected and should remain visually identical except for unavoidable edge blending.'
-            : 'Mask polarity: the selected/masked region is the editable target. Areas outside it are protected and should remain visually identical except for unavoidable edge blending.',
-          `Evaluate the requested change in ${editableRegionLabel}, the naturalness of the insertion or inpaint, mask boundary quality, and preservation of ${protectedRegionLabel}.`,
-          'Fail localized edits when the output introduces black bars, blank/solid color bands, visible alpha/checkerboard regions, copied mask silhouettes, selection overlays, mismatched crop, shifted framing, or any large empty area not present in the source image.',
-          'If a tiny selected detail is hard to inspect, pass when the localized result is coherent and there is no obvious wrong edit, patch edge, pasted/inlaid look, subject distortion, or unwanted change outside the selected area.',
-          `Fail localized edits when the requested editable target is not changed, the edit lands on the wrong object or surface, ${protectedRegionLabel} noticeably drifts, or the selection/mask itself appears in the output.`,
-          referenceImageCount >= 2
-            ? 'For localized edits, attached image 1 is usually the source render; additional reference images may describe materials, style, selection guidance, or an automatic proof map as described here.'
-            : '',
-          localizedEditProofLine,
-          request.localizedEdit?.operation ? `Localized operation: ${request.localizedEdit.operation}` : '',
-          request.localizedEdit?.targetLabel ? `Requested editable target: ${request.localizedEdit.targetLabel}` : '',
-          request.localizedEdit?.editableTargetLabel ? `Editable region label: ${request.localizedEdit.editableTargetLabel}` : '',
-          `Protected region label: ${protectedRegionLabel}`,
-          typeof request.localizedEdit?.selectedRatio === 'number'
-            ? `Approximate editable image area: ${(request.localizedEdit.selectedRatio * 100).toFixed(2)}%`
-            : '',
-        ].filter(Boolean).join('\n')
-      : '';
-
-    return [
-      'You are the output verification layer inside an architectural image generation app.',
-      'Evaluate whether the generated output image satisfies the prompt and respects the attached source/reference images.',
-      imageRelationship,
-      '',
-      'Make a binary decision: passed true means the prompt objective was delivered in a fair, usable way; passed false means the core objective was not delivered well enough and the image should be regenerated.',
-      'Do not require perfection, exact photographic spot-on precision, or tiny-detail compliance. The output only needs to be objectively okay for the user request.',
-      'Judge the main requested outcome concretely. For example, if the task was to change the selected person\'s blue shirt to yellow, pass only if that same shirt is now clearly yellow while the rest of the image is reasonably preserved.',
-      'For architectural renders, pass if the source composition, major geometry, requested style/material/lighting intent, and important constraints are fairly represented. Fail only for meaningful objective misses such as wrong source relationship, wrong camera/composition, missing requested change, severe architectural drift, broken geometry, unwanted text changes, or obvious artifacts that undermine the requested result.',
-      'Do not fail harmless variation when the prompt asks for a render variation.',
-      '',
-      localizedEditLine,
-      localizedEditLine ? '' : '',
-      'Also detect AI regeneration distortion separately from the passed decision.',
-      'Mark aiSlopDetected true only when the generated output visibly contains AI degradation such as wavy or wiggly architectural lines, melted/smeared detail, haze or fog not requested, blotchy discoloration, warped signage/text, malformed repeated geometry, distorted people, or over-smoothed regenerated texture.',
-      'Do not mark aiSlopDetected true for normal low resolution, intentional stylization, depth-of-field blur, natural atmospheric lighting, or minor compression.',
-      'If detected, list the clearest visual indicators and write one short suggestion that this image would benefit from AI Slop upscaling/restoration.',
-      '',
-      'If passed is false, write a revised prompt that can be sent directly to the image model with the same reference images. The revised prompt should be natural, concise, and focused on correcting the observed issue while preserving the original intent.',
-      'If passed is true, revisedPrompt must be an empty string.',
-      '',
-      originalPromptLine,
-      '',
-      'Prompt used for the generated output:',
-      this.truncatePromptForOptimizer(request.prompt, OUTPUT_VERIFICATION_MAX_PROMPT_CHARS),
-      '',
-      'Return only valid JSON with this exact shape:',
-      '{"passed": boolean, "summary": "one sentence", "issues": ["issue 1"], "revisedPrompt": "prompt or empty string", "aiSlopDetected": boolean, "aiSlopConfidence": number, "aiSlopIndicators": ["indicator"], "aiSlopSuggestion": "short suggestion or empty string"}'
-    ].filter(Boolean).join('\n');
-  }
-
   private truncatePromptForOptimizer(prompt: string, maxChars: number): string {
     if (prompt.length <= maxChars) return prompt;
     const headLength = Math.floor(maxChars * 0.68);
@@ -1556,82 +1400,6 @@ export class GeminiService {
     }
 
     return normalized;
-  }
-
-  private parseOutputVerificationResult(
-    raw: string,
-    fallbackPrompt: string
-  ): ImageOutputVerificationResult {
-    const normalized = raw
-      .replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1')
-      .trim();
-    const jsonText = normalized.match(/\{[\s\S]*\}/)?.[0] || normalized;
-
-    try {
-      const parsed = JSON.parse(jsonText) as {
-        passed?: unknown;
-        acceptable?: unknown;
-        ok?: unknown;
-        summary?: unknown;
-        issues?: unknown;
-        revisedPrompt?: unknown;
-        aiSlopDetected?: unknown;
-        aiSlopConfidence?: unknown;
-        aiSlopIndicators?: unknown;
-        aiSlopSuggestion?: unknown;
-      };
-      const decisionValue = parsed.passed ?? parsed.acceptable ?? parsed.ok;
-      const passed =
-        decisionValue === true ||
-        (typeof decisionValue === 'string' && ['true', 'yes', 'pass', 'passed', 'acceptable', 'ok'].includes(decisionValue.trim().toLowerCase()));
-      const aiSlopConfidence = Math.max(0, Math.min(100, Math.round(Number(parsed.aiSlopConfidence))));
-      const validAiSlopConfidence = Number.isFinite(aiSlopConfidence) ? aiSlopConfidence : undefined;
-      const issues = Array.isArray(parsed.issues)
-        ? parsed.issues
-            .map((issue) => typeof issue === 'string' ? issue.trim() : '')
-            .filter(Boolean)
-            .slice(0, 6)
-        : [];
-      const aiSlopIndicators = Array.isArray(parsed.aiSlopIndicators)
-        ? parsed.aiSlopIndicators
-            .map((indicator) => typeof indicator === 'string' ? indicator.trim() : '')
-            .filter(Boolean)
-            .slice(0, 5)
-        : [];
-      const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
-        ? parsed.summary.trim()
-        : passed
-          ? 'The generated image satisfies the prompt.'
-          : 'The generated image does not deliver the prompt objective well enough.';
-      const revisedPrompt = typeof parsed.revisedPrompt === 'string'
-        ? this.cleanOptimizedPrompt(parsed.revisedPrompt, fallbackPrompt)
-        : fallbackPrompt;
-      const aiSlopDetected =
-        parsed.aiSlopDetected === true ||
-        (typeof parsed.aiSlopDetected === 'string' && ['true', 'yes'].includes(parsed.aiSlopDetected.trim().toLowerCase()));
-      const aiSlopSuggestion = typeof parsed.aiSlopSuggestion === 'string'
-        ? parsed.aiSlopSuggestion.trim()
-        : '';
-
-      return {
-        passed,
-        summary,
-        issues,
-        revisedPrompt: passed ? undefined : revisedPrompt,
-        aiSlopDetected,
-        aiSlopConfidence: validAiSlopConfidence,
-        aiSlopIndicators,
-        aiSlopSuggestion: aiSlopDetected && aiSlopSuggestion ? aiSlopSuggestion : undefined
-      };
-    } catch {
-      return {
-        passed: false,
-        summary: 'Output verification returned an unreadable response.',
-        issues: ['The verifier could not produce a valid accept/retry decision for the generated image.'],
-        revisedPrompt: fallbackPrompt,
-        aiSlopDetected: false
-      };
-    }
   }
 
   private isOpenAIImageRequest(request: GeminiRequest): boolean {

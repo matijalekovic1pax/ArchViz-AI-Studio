@@ -77,10 +77,6 @@
       "finalizing": "Finalisation",
       "complete": "Terminé"
     },
-    "retryNotice": {
-      "unsatisfactory": "Le résultat n'est pas satisfaisant. Régénération...",
-      "fallback": "La vérification IA ne l'a pas approuvé après plusieurs essais. Affichage du dernier résultat."
-    },
     "generateMasterplan": "Générer le Plan Directeur",
     "generateExplodedView": "Générer la Vue Éclatée",
     "generateSection": "Générer la Section",
