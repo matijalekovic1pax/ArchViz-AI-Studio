@@ -4,7 +4,7 @@ import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { FileText, UploadCloud, Languages, ChevronDown, X } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import type { DocumentTranslateDocument } from '../../../types';
+import { DOCUMENT_TRANSLATION_MODELS, type DocumentTranslateDocument, type DocumentTranslationModel } from '../../../types';
 import { nanoid } from 'nanoid';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -33,6 +33,15 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ar', labelKey: 'documentTranslate.languages.ar' },
   { code: 'ru', labelKey: 'documentTranslate.languages.ru' },
   { code: 'sr', labelKey: 'documentTranslate.languages.sr' },
+];
+
+const TRANSLATION_MODEL_OPTIONS: Array<{
+  model: DocumentTranslationModel;
+  label: string;
+  provider: string;
+}> = [
+  { model: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', provider: 'OpenAI' },
+  { model: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', provider: 'Google' },
 ];
 
 export const LeftDocumentTranslatePanel: React.FC = () => {
@@ -105,6 +114,22 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
   const updateLanguage = useCallback(
     (field: 'sourceLanguage' | 'targetLanguage', value: string) => {
       dispatch({ type: 'UPDATE_DOCUMENT_TRANSLATE', payload: { [field]: value } });
+    },
+    [dispatch]
+  );
+
+  const updateTranslationModel = useCallback(
+    (model: DocumentTranslationModel) => {
+      dispatch({
+        type: 'UPDATE_DOCUMENT_TRANSLATE',
+        payload: {
+          translationModel: model,
+          translatedDocumentUrl: null,
+          warnings: null,
+          xlsxStats: null,
+          error: null,
+        },
+      });
     },
     [dispatch]
   );
@@ -235,6 +260,38 @@ export const LeftDocumentTranslatePanel: React.FC = () => {
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none"
               />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Model Selection */}
+      <div>
+        <SectionHeader title={t('documentTranslate.modelTitle')} />
+        <div>
+          <label className="text-xs text-foreground-muted mb-1.5 block">
+            {t('documentTranslate.translationModel')}
+          </label>
+          <div className="relative">
+            <select
+              value={docTranslate.translationModel}
+              onChange={(e) => {
+                const nextModel = e.target.value as DocumentTranslationModel;
+                if (DOCUMENT_TRANSLATION_MODELS.includes(nextModel)) {
+                  updateTranslationModel(nextModel);
+                }
+              }}
+              className="w-full appearance-none bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              {TRANSLATION_MODEL_OPTIONS.map((option) => (
+                <option key={option.model} value={option.model}>
+                  {option.label} ({option.provider})
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none"
+            />
           </div>
         </div>
       </div>

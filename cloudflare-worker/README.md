@@ -60,7 +60,7 @@ wrangler secret put APPWRITE_ADMINS_COLLECTION_ID
 wrangler secret put APPWRITE_SNAPSHOTS_BUCKET_ID
 ```
 
-`OPENAI_API_KEY` enables the ChatGPT Image Generation 2 option.
+`OPENAI_API_KEY` enables GPT document translation and the ChatGPT Image Generation 2 option.
 
 ## Appwrite feedback backend
 

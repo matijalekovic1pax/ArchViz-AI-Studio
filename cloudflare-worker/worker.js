@@ -36,6 +36,10 @@ const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_API_BASE_V1 = 'https://generativelanguage.googleapis.com/v1';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
+const OPENAI_TEXT_DEFAULT_MODEL = 'gpt-5.4-mini';
+const OPENAI_TEXT_UPSTREAM_TIMEOUT_MS = 3 * 60 * 1000;
+const OPENAI_TEXT_MAX_INPUT_CHARS = 80_000;
+const OPENAI_TEXT_MAX_OUTPUT_TOKENS = 32_000;
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
 const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
@@ -2471,6 +2475,101 @@ function extractOpenAIError(data, fallback) {
   if (data?.error?.message) return data.error.message;
   if (typeof data?.error === 'string') return data.error;
   return fallback;
+}
+
+function extractOpenAIResponseText(data) {
+  if (typeof data?.output_text === 'string') return data.output_text;
+
+  const textParts = [];
+  const output = Array.isArray(data?.output) ? data.output : [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part?.text === 'string') {
+        textParts.push(part.text);
+      }
+    }
+  }
+
+  return textParts.join('');
+}
+
+function normalizeOpenAITextResponse(data, model) {
+  return {
+    text: extractOpenAIResponseText(data),
+    model: data?.model || model,
+    usage: data?.usage || null,
+    id: data?.id || null,
+  };
+}
+
+async function handleOpenAIResponses(request, env) {
+  const origin = request.headers.get('Origin') || '';
+
+  if (!env.OPENAI_API_KEY) {
+    return corsResponse(origin, {
+      error: 'OPENAI_API_KEY is not configured. Add it with `wrangler secret put OPENAI_API_KEY` after enabling OpenAI billing.',
+    }, { status: 500 });
+  }
+
+  try {
+    const body = await request.json();
+    const model = sanitizeText(body?.model, 160) || OPENAI_TEXT_DEFAULT_MODEL;
+    const input = sanitizeText(body?.input, OPENAI_TEXT_MAX_INPUT_CHARS);
+    if (!input) {
+      return badRequest(origin, 'OpenAI text request requires a non-empty input.');
+    }
+
+    const payload = {
+      model,
+      input,
+      store: false,
+    };
+
+    const temperature = clampNumber(body?.temperature, 0, 2, null);
+    if (temperature !== null) payload.temperature = temperature;
+
+    const maxOutputTokens = clampNumber(
+      body?.maxOutputTokens ?? body?.max_output_tokens,
+      1,
+      OPENAI_TEXT_MAX_OUTPUT_TOKENS,
+      null
+    );
+    if (maxOutputTokens !== null) payload.max_output_tokens = Math.floor(maxOutputTokens);
+
+    const upstreamResp = await fetchWithRetry(
+      (signal) => fetch(`${OPENAI_API_BASE}/responses`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal,
+      }),
+      { maxRetries: 0, timeoutMs: OPENAI_TEXT_UPSTREAM_TIMEOUT_MS, label: 'OpenAI text response' }
+    );
+
+    const data = await upstreamResp.json().catch(() => null);
+    if (!upstreamResp.ok) {
+      const message = extractOpenAIError(data, `OpenAI text API error (${upstreamResp.status})`);
+      return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+    }
+
+    const normalized = normalizeOpenAITextResponse(data, model);
+    if (!normalized.text) {
+      return corsResponse(origin, { error: 'OpenAI text API returned no text.' }, { status: 502 });
+    }
+
+    return corsResponse(origin, normalized);
+  } catch (err) {
+    const timedOut = err?.name === 'AbortError';
+    return corsResponse(origin, {
+      error: timedOut
+        ? 'OpenAI text request timed out before a response was returned.'
+        : err.message || 'OpenAI text request failed.',
+    }, { status: timedOut ? 504 : 500 });
+  }
 }
 
 function normalizeOpenAIImageResponse(data) {
@@ -5214,6 +5313,17 @@ export default {
     }
 
     // OpenAI Image API
+    if (path === '/api/openai/responses' && request.method === 'POST') {
+      return withLoggedGatewayRequest(
+        request,
+        env,
+        ctx,
+        user,
+        { provider: 'openai', action: 'responses', route: '/api/openai/responses' },
+        () => handleOpenAIResponses(request, env)
+      );
+    }
+
     if (path === '/api/openai/images' && request.method === 'POST') {
       return withLoggedGatewayRequest(
         request,

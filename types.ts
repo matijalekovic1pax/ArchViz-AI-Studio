@@ -30,6 +30,15 @@ export const IMAGE_GENERATION_MODELS: readonly ImageGenerationModel[] = [
   'chatgpt-image-generation-2',
 ] as const;
 
+export const DOCUMENT_TRANSLATION_MODELS = [
+  'gpt-5.4-mini',
+  'gemini-3.5-flash',
+] as const;
+
+export type DocumentTranslationModel = typeof DOCUMENT_TRANSLATION_MODELS[number];
+
+export const DEFAULT_DOCUMENT_TRANSLATION_MODEL: DocumentTranslationModel = 'gpt-5.4-mini';
+
 export interface StyleConfiguration {
   id: string;
   name: string;
@@ -1174,6 +1183,7 @@ export interface DocumentTranslateState {
   sourceDocument: DocumentTranslateDocument | null;
   sourceLanguage: string;
   targetLanguage: string;
+  translationModel: DocumentTranslationModel;
   translateHeaders: boolean;
   translateFootnotes: boolean;
   progress: TranslationProgress;

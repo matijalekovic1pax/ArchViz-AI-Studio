@@ -2977,6 +2977,7 @@ export function useGeneration(): UseGenerationReturn {
                 sourceDocument: docTranslate.sourceDocument,
                 sourceLanguage: docTranslate.sourceLanguage,
                 targetLanguage: docTranslate.targetLanguage,
+                translationModel: docTranslate.translationModel,
                 translateHeaders: docTranslate.translateHeaders,
                 translateFootnotes: docTranslate.translateFootnotes,
                 onProgress: (progress: TranslationProgress) => {

@@ -308,6 +308,8 @@
     "languagesTitle": "Langues",
     "sourceLanguage": "De",
     "targetLanguage": "Vers",
+    "modelTitle": "Modèle",
+    "translationModel": "Modèle de traduction",
     "preservesFormatting": "Conservation de la Structure",
     "formattingNote": "Les en-têtes, pieds de page, images et tableaux resteront en place. Seul le contenu textuel est traduit.",
     "translationComplete": "Traduction Terminée!",

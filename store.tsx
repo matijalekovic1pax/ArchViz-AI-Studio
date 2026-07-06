@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_DOCUMENT_TRANSLATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -266,6 +266,7 @@ const initialDocumentTranslate: DocumentTranslateState = {
   sourceDocument: null,
   sourceLanguage: 'auto',
   targetLanguage: 'en',
+  translationModel: DEFAULT_DOCUMENT_TRANSLATION_MODEL,
   translateHeaders: true,
   translateFootnotes: true,
   progress: {

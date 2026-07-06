@@ -60,7 +60,7 @@ Prerequisites: Node.js and Wrangler for the Cloudflare gateway.
    wrangler secret put GEMINI_API_KEY
    wrangler secret put OPENAI_API_KEY
    ```
-   Optional gateway secrets include `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_PROJECT_ID`, Kling provider keys, `CONVERTAPI_SECRET`, `ILOVEPDF_PUBLIC_KEY`, and Appwrite feedback secrets.
+   Optional gateway secrets include `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_PROJECT_ID`, Kling provider keys, `CONVERTAPI_SECRET`, `ILOVEPDF_PUBLIC_KEY`, and Appwrite feedback secrets. `OPENAI_API_KEY` also powers GPT document translation.
    Use `npm run setup:appwrite-feedback` with `.env.appwrite` to create the Appwrite feedback database, collections, indexes, admin seed, and snapshot bucket before setting the Worker `APPWRITE_*` secrets.
 4. Run the gateway:
    ```bash

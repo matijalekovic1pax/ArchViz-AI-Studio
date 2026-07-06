@@ -309,6 +309,8 @@
     "languagesTitle": "Idiomas",
     "sourceLanguage": "De",
     "targetLanguage": "A",
+    "modelTitle": "Modelo",
+    "translationModel": "Modelo de traducción",
     "preservesFormatting": "Conservación de Estructura",
     "formattingNote": "Encabezados, pies de página, imágenes y tablas permanecerán en su lugar. Solo se traduce el contenido de texto.",
     "translationComplete": "¡Traducción Completa!",

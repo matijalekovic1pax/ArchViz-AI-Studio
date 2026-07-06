@@ -309,6 +309,8 @@
     "languagesTitle": "语言",
     "sourceLanguage": "从",
     "targetLanguage": "到",
+    "modelTitle": "模型",
+    "translationModel": "翻译模型",
     "preservesFormatting": "结构保留",
     "formattingNote": "页眉、页脚、图像和表格会保持原位。只翻译文本内容。",
     "translationComplete": "翻译完成！",

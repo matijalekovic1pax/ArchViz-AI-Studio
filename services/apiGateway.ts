@@ -24,6 +24,7 @@ const DEFAULT_GATEWAY_URL = import.meta.env.PROD
   : 'http://localhost:8787';
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
+const OPENAI_TEXT_TIMEOUT_MS = 180_000;
 const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
 const GEMINI_PRO_IMAGE_TIMEOUT_MS = 10 * 60_000;
 const LOG_EVENT_TIMEOUT_MS = 15_000;
@@ -286,6 +287,7 @@ const getGatewayLogRouteInfo = (path: string) => {
     return { provider: 'gemini', model: match?.[1], action: match?.[2] || 'request' };
   }
   if (path.startsWith('/api/image-edits')) return { provider: 'openai', model: 'gpt-image-2', action: 'image-edit' };
+  if (path.startsWith('/api/openai/responses')) return { provider: 'openai', action: 'responses' };
   if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2', action: 'images' };
   if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/kling/')) return { provider: 'kling', action: path.split('/').pop() || 'request' };
@@ -607,6 +609,39 @@ export async function geminiStreamRequest(
 export async function geminiGetOperation(operationName: string): Promise<any> {
   const resp = await gatewayFetch(`/api/gemini/${operationName}`, { timeoutMs: 15_000 });
   if (!resp.ok) throw new Error(`Operation poll failed (${resp.status})`);
+  return resp.json();
+}
+
+// ─── OpenAI Text API ────────────────────────────────────────────────────────
+
+export interface OpenAITextRequest {
+  model: string;
+  input: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}
+
+export interface OpenAITextResponse {
+  text: string;
+  model?: string;
+  usage?: unknown;
+  raw?: unknown;
+}
+
+export async function openAITextRequest(
+  body: OpenAITextRequest,
+  options?: { signal?: AbortSignal }
+): Promise<OpenAITextResponse> {
+  const resp = await gatewayFetch('/api/openai/responses', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options?.signal,
+    timeoutMs: OPENAI_TEXT_TIMEOUT_MS,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: `OpenAI text API error (${resp.status})` }));
+    throw new GatewayApiError(err.error || `OpenAI text API error (${resp.status})`, resp.status, 'openai', err);
+  }
   return resp.json();
 }
 

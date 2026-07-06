@@ -1,6 +1,6 @@
 /**
  * Document Translation Service
- * Orchestrates document parsing, translation via Gemini, and rebuilding.
+ * Orchestrates document parsing, translation via the selected AI model, and rebuilding.
  * For PDFs: Uses ConvertAPI to convert PDF→DOCX, then translates and returns as DOCX.
  * For XLSX: Parses cells, translates, and rebuilds as XLSX.
  * For PPTX: Parses slide text, translates, and rebuilds as PPTX.
@@ -10,6 +10,7 @@
  */
 
 import { getGeminiService, isGeminiServiceInitialized } from './geminiService';
+import { openAITextRequest } from './apiGateway';
 import { parseDocx } from './docxParserService';
 import { rebuildDocx } from './docxRebuilderService';
 import { parseXlsx } from './xlsxParserService';
@@ -17,6 +18,7 @@ import { rebuildXlsx } from './xlsxRebuilderService';
 import { parsePptx } from './pptxParserService';
 import { rebuildPptx } from './pptxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
+import { DEFAULT_DOCUMENT_TRANSLATION_MODEL } from '../types';
 import type {
   DocumentTranslateDocument,
   DocumentTranslationResult,
@@ -27,10 +29,10 @@ import type {
   ParsedPptx,
   XlsxSkippedCell,
   XlsxTranslationStats,
+  DocumentTranslationModel,
 } from '../types';
 
 // Translation settings
-const TRANSLATION_MODEL = 'gemini-3.5-flash';
 const BATCH_SIZE = 20;
 const MAX_CHARS_PER_BATCH = 12000;
 const MAX_CONCURRENT_BATCHES = 3;
@@ -41,6 +43,7 @@ export interface TranslationOptions {
   sourceDocument: DocumentTranslateDocument;
   sourceLanguage: string;
   targetLanguage: string;
+  translationModel?: DocumentTranslationModel;
   translateHeaders?: boolean;
   translateFootnotes?: boolean;
   onProgress: (progress: TranslationProgress) => void;
@@ -66,6 +69,7 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     translateHeaders = true,
     translateFootnotes = true,
   } = options;
+  const translationModel = resolveTranslationModel(options.translationModel);
 
   if (!isGeminiServiceInitialized()) {
     throw new Error('Not authenticated. Please sign in to use document translation.');
@@ -76,12 +80,12 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
 
   // Route to xlsx-specific pipeline
   if (isXlsx) {
-    return translateXlsxDocument(options);
+    return translateXlsxDocument({ ...options, translationModel });
   }
 
   // Route to pptx-specific pipeline
   if (isPptx) {
-    return translatePptxDocument(options);
+    return translatePptxDocument({ ...options, translationModel });
   }
 
   const isPdf = sourceDocument.mimeType.includes('pdf');
@@ -154,6 +158,7 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     allSegments,
     sourceLanguage,
     targetLanguage,
+    translationModel,
     onProgress,
     abortSignal
   );
@@ -198,6 +203,7 @@ async function translatePptxDocument(options: TranslationOptions): Promise<Docum
     sourceDocument,
     sourceLanguage,
     targetLanguage,
+    translationModel = DEFAULT_DOCUMENT_TRANSLATION_MODEL,
     onProgress,
     abortSignal,
   } = options;
@@ -226,6 +232,7 @@ async function translatePptxDocument(options: TranslationOptions): Promise<Docum
     segmentsToTranslate,
     sourceLanguage,
     targetLanguage,
+    translationModel,
     onProgress,
     abortSignal
   );
@@ -271,6 +278,7 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<Docum
     sourceDocument,
     sourceLanguage,
     targetLanguage,
+    translationModel = DEFAULT_DOCUMENT_TRANSLATION_MODEL,
     onProgress,
     abortSignal,
   } = options;
@@ -328,6 +336,7 @@ async function translateXlsxDocument(options: TranslationOptions): Promise<Docum
     safeSegments,
     sourceLanguage,
     targetLanguage,
+    translationModel,
     onProgress,
     abortSignal
   );
@@ -379,12 +388,10 @@ async function runTranslationPipeline(
   allSegments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
+  translationModel: DocumentTranslationModel,
   onProgress: (progress: TranslationProgress) => void,
   abortSignal?: AbortSignal
 ): Promise<Map<string, string>> {
-  const service = getGeminiService();
-  const translationModel = TRANSLATION_MODEL;
-
   // Analyze document context (sample first 15 segments)
   onProgress({
     phase: 'parsing',
@@ -398,7 +405,6 @@ async function runTranslationPipeline(
   if (abortSignal?.aborted) throw new DOMException('Translation cancelled', 'AbortError');
 
   const documentContext = await analyzeDocumentContext(
-    service,
     segmentsToTranslate,
     sourceLanguage,
     targetLanguage,
@@ -431,7 +437,6 @@ async function runTranslationPipeline(
     const batchPromises = batchGroup.map(async (batch) => {
       try {
         const batchTranslations = await translateBatch(
-          service,
           batch.segments,
           sourceLanguage,
           targetLanguage,
@@ -538,11 +543,10 @@ function createBatches(segments: TextSegment[]): InternalBatch[] {
 // ============================================================================
 
 async function analyzeDocumentContext(
-  service: ReturnType<typeof getGeminiService>,
   segments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
-  model: string,
+  model: DocumentTranslationModel,
   abortSignal?: AbortSignal
 ): Promise<string> {
   // Sample first 15 segments for context analysis
@@ -568,14 +572,12 @@ Return a JSON object with these fields:
 Return ONLY the JSON:`;
 
   try {
-    const response = await service.generateText({
+    const response = await generateTextWithTranslationModel({
       prompt,
       model,
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 500,
-        abortSignal,
-      },
+      temperature: 0.3,
+      maxOutputTokens: 500,
+      abortSignal,
     });
 
     // Try to parse JSON context; fall back to using raw text as context
@@ -596,12 +598,11 @@ Return ONLY the JSON:`;
 // ============================================================================
 
 async function translateBatch(
-  service: ReturnType<typeof getGeminiService>,
   segments: TextSegment[],
   sourceLanguage: string,
   targetLanguage: string,
   documentContext: string,
-  model: string,
+  model: DocumentTranslationModel,
   abortSignal?: AbortSignal
 ): Promise<string[]> {
   const texts = segments.map((s) => s.text);
@@ -641,17 +642,54 @@ Required JSON response format:
 
 Return the JSON now:`;
 
-  const response = await service.generateText({
+  const response = await generateTextWithTranslationModel({
     prompt,
     model,
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 16384,
-      abortSignal,
-    },
+    temperature: 0.4,
+    maxOutputTokens: 16384,
+    abortSignal,
   });
 
   return parseTranslationResponse(response, texts);
+}
+
+function resolveTranslationModel(model?: DocumentTranslationModel): DocumentTranslationModel {
+  return model || DEFAULT_DOCUMENT_TRANSLATION_MODEL;
+}
+
+function isOpenAITranslationModel(model: DocumentTranslationModel): boolean {
+  return model.startsWith('gpt-');
+}
+
+async function generateTextWithTranslationModel(options: {
+  prompt: string;
+  model: DocumentTranslationModel;
+  temperature: number;
+  maxOutputTokens: number;
+  abortSignal?: AbortSignal;
+}): Promise<string> {
+  const { prompt, model, temperature, maxOutputTokens, abortSignal } = options;
+
+  if (isOpenAITranslationModel(model)) {
+    const response = await openAITextRequest({
+      model,
+      input: prompt,
+      temperature,
+      maxOutputTokens,
+    }, { signal: abortSignal });
+    return response.text || '';
+  }
+
+  const service = getGeminiService();
+  return service.generateText({
+    prompt,
+    model,
+    generationConfig: {
+      temperature,
+      maxOutputTokens,
+      abortSignal,
+    },
+  });
 }
 
 // ============================================================================
