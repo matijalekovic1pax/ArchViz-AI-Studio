@@ -679,6 +679,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     };
   };
   const activeModelCopy = getModelCopy(activeImageGenerationModel);
+  const showTopBarImageModelSelector = state.mode !== 'document-translate';
   const renderModelSelector = (menuPositionClassName = 'left-0 origin-top-left') => (
     <div className="relative shrink-0">
       <button
@@ -1255,10 +1256,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           </div>
         ) : (
           <div className="relative pointer-events-auto">
-            {/* Model Selector */}
-            <div className="absolute right-full top-1/2 mr-2 min-[1120px]:mr-3 -translate-y-1/2">
-              {renderModelSelector()}
-            </div>
+            {showTopBarImageModelSelector && (
+              <div className="absolute right-full top-1/2 mr-2 min-[1120px]:mr-3 -translate-y-1/2">
+                {renderModelSelector()}
+              </div>
+            )}
 
             <div className="relative">
               <button
