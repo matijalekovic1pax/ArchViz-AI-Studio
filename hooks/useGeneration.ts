@@ -3786,7 +3786,6 @@ export function useGeneration(): UseGenerationReturn {
                 }
 
                 if (
-                  isOpenAIVisualEdit ||
                   !shouldUseSelectionMask ||
                   !selectedMaskDataUrl ||
                   !editResult.images?.length ||

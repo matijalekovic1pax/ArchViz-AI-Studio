@@ -80,7 +80,8 @@ function assertSourceContract() {
   assert.match(generationHookSource, /preparePreciseEditInputs\(\s*sourceImageUrl!,\s*selectedMaskDataUrl,\s*editOutsideSelection\s*\)/, 'precise edit inputs must receive mask orientation');
   assert.match(generationHookSource, /sourceSelectionStats/, 'precise background edits must keep original selection stats for blank-selection guards');
   assert.match(generationHookSource, /compositeVisualEditResult\(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection/, 'precise edits must composite using the active mask orientation');
-  assert.match(generationHookSource, /isOpenAIVisualEdit \|\|[\s\S]*!shouldUseSelectionMask/, 'generic GPT Image visual edits must return the provider frame instead of local mask-compositing broad selections');
+  assert.doesNotMatch(generationHookSource, /isOpenAIVisualEdit\s*\|\|[\s\S]{0,160}!shouldUseSelectionMask/, 'generic GPT Image selected edits must not skip local preservation compositing');
+  assert.match(generationHookSource, /const finalizedImages = await Promise\.all\([\s\S]*compositeVisualEditResult\(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection/, 'generic selected edits must composite model output through the active selection mask');
   assert.doesNotMatch(generationHookSource, /buildLocalizedEditVerificationContext|localizedVerificationContext|createLocalizedVerificationPreparation/, 'generation hook must not build output verification context');
   assert.match(generationHookSource, /const prepareGenericOpenAIEditInputs = async/, 'non-precise masked OpenAI fallback must normalize edit inputs before gateway upload');
   assert.match(generationHookSource, /const size = getPreciseEditSize\(width, height\);[\s\S]*renderPngDataUrlAtSize\(sourceDataUrl, size\.width, size\.height/, 'masked OpenAI fallback source PNG must use a legal GPT Image 2 edit size');
@@ -148,8 +149,8 @@ function assertSourceContract() {
   assert.match(imageCanvasSource, /isSelectingRef\.current = next;[\s\S]*setIsSelecting\(next\);/, 'selection drag state must update synchronously so fast drags reach mousemove and mouseup handlers');
   assert.match(imageCanvasSource, /isBoundarySelectingRef\.current = next;[\s\S]*setIsBoundarySelecting\(next\);/, 'boundary drag state must update synchronously so fast drags reach mousemove and mouseup handlers');
   assert.match(imageCanvasSource, /if \(isSelectingRef\.current\) \{[\s\S]*updateSelectionPath\(e\);/, 'selection movement must use synchronous drag state');
-  assert.match(imageCanvasSource, /if \(isSelectTool && isSelectingRef\.current\) \{[\s\S]*finishSelection\(\);/, 'selection mouseup must use synchronous drag state');
-  assert.match(imageCanvasSource, /const latestPendingPoint = pendingPointRef\.current;[\s\S]*activeSelectionRef\.current = \{ \.\.\.current, end: latestPendingPoint \};/, 'selection mouseup must flush the final pending point before canceling requestAnimationFrame');
+  assert.match(imageCanvasSource, /if \(isSelectTool && isSelectingRef\.current(?: && selectionMode !== 'lasso')?\) \{[\s\S]*finishSelection\(\);/, 'selection mouseup must use synchronous drag state');
+  assert.match(imageCanvasSource, /const latestPendingPoint = (?:finalPointOverride \|\| )?pendingPointRef\.current;[\s\S]*activeSelectionRef\.current = \{ \.\.\.current, end: latestPendingPoint \};/, 'selection mouseup must flush the final pending point before canceling requestAnimationFrame');
   assert.match(imageCanvasSource, /const latestPendingPoint = boundaryPendingPointRef\.current;[\s\S]*boundaryFullPointsRef\.current = \[\.\.\.boundaryFullPointsRef\.current, latestPendingPoint\];/, 'boundary mouseup must flush the final pending point before canceling requestAnimationFrame');
   assert.match(imageCanvasSource, /className="absolute inset-0 pointer-events-none"[\s\S]*<svg className="w-full h-full">/, 'visible selection overlay must be image-aligned and pointer-transparent');
   assert.match(mcpHarnessSource, /const imageAspect = image\.naturalWidth \/ image\.naturalHeight;/, 'browser overlay harness must account for object-contain image aspect');
