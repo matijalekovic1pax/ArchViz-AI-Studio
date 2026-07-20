@@ -20,7 +20,7 @@ const PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships
 const DEFAULT_BATCH_SIZE = 20;
 const DEFAULT_MAX_CHARS = 12000;
 
-const MAX_FILE_SIZE_MB = 50;
+const MAX_FILE_SIZE_MB = 200;
 const MAX_ZIP_ENTRIES = 1500;
 const MAX_DECOMPRESSED_SIZE_MB = 200;
 const MAX_COMPRESSION_RATIO = 150;
@@ -498,4 +498,3 @@ export function getXlsxSummary(parseResult: ParsedXlsx): {
     skippedCells: parseResult.skippedCells.length,
   };
 }
-

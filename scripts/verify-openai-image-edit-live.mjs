@@ -287,7 +287,8 @@ function createMaskPng() {
       rgba[pixel] = 255;
       rgba[pixel + 1] = 255;
       rgba[pixel + 2] = 255;
-      rgba[pixel + 3] = editable ? 255 : 0;
+      // OpenAI edits transparent pixels and protects opaque pixels.
+      rgba[pixel + 3] = editable ? 0 : 255;
     }
   }
   return encodePngRgba(WIDTH, HEIGHT, rgba);
@@ -359,7 +360,8 @@ async function main() {
     throw new Error(`OpenAI image edit output dimensions were ${generatedImage.width}x${generatedImage.height}, expected ${WIDTH}x${HEIGHT}.`);
   }
 
-  const selectionAlpha = getSelectionAlpha(maskImage);
+  const protectedAlpha = getSelectionAlpha(maskImage);
+  const selectionAlpha = Uint8Array.from(protectedAlpha, (value) => 255 - value);
   const rawStats = localizedDiffStats(sourceImage, generatedImage, selectionAlpha);
   if (rawStats.insideChangedRatio < 0.02) {
     throw new Error(`OpenAI image edit did not materially change the masked area. Inside changed ratio: ${rawStats.insideChangedRatio}.`);

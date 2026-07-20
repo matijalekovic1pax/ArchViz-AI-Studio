@@ -14,6 +14,7 @@ import { FeedbackReportDialog } from '../modals/FeedbackReportDialog';
 import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, VISUAL_EDIT_IMAGE_MODEL, type ImageGenerationModel } from '../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
+import { hasUsableVisualSelection, visualEditRequiresSelection } from '../../lib/visualEditPolicy';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'generate-text': 'workflows.generateText',
@@ -78,11 +79,13 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const boundaryUndoStack = state.workflow.mpBoundaryUndoStack;
   const boundaryRedoStack = state.workflow.mpBoundaryRedoStack;
   const isMasterplanBoundary = state.mode === 'masterplan' && state.workflow.mpBoundary.mode === 'custom';
+  const visualSelectionLocked = state.mode === 'visual-edit' &&
+    (state.isGenerating || state.workflow.visualAutoSelecting);
   const canUndoSelection =
-    (state.mode === 'visual-edit' && selectionUndoStack.length > 0) ||
+    (state.mode === 'visual-edit' && !visualSelectionLocked && selectionUndoStack.length > 0) ||
     (isMasterplanBoundary && boundaryUndoStack.length > 0);
   const canRedoSelection =
-    (state.mode === 'visual-edit' && selectionRedoStack.length > 0) ||
+    (state.mode === 'visual-edit' && !visualSelectionLocked && selectionRedoStack.length > 0) ||
     (isMasterplanBoundary && boundaryRedoStack.length > 0);
 
   const handleUndoSelection = () => {
@@ -154,6 +157,10 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const pdfQueueReady = state.workflow.pdfCompression.queue.length > 0;
   const videoUnlocked = !isVideoMode || state.workflow.videoState.accessUnlocked;
   const canUseDownloadControls = Boolean(state.uploadedImage) && !state.isGenerating;
+  const visualEditNeedsSelection = state.mode === 'visual-edit' &&
+    visualEditRequiresSelection(state.workflow.activeTool) &&
+    !hasUsableVisualSelection(state.workflow.visualSelections);
+  const visualEditBusy = state.mode === 'visual-edit' && state.workflow.visualAutoSelecting;
 
   const handleDocsNavigation = () => {
     try {
@@ -188,7 +195,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           ? !upscaleReady
           : isVideoMode
             ? !videoReady || !videoUnlocked
-            : !state.uploadedImage;
+            : !state.uploadedImage || visualEditNeedsSelection || visualEditBusy;
   const resolutionOptions: Array<{ value: '2k' | '4k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
@@ -262,7 +269,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       await generate();
       return;
     }
-    if (!state.uploadedImage) return;
+    if (!state.uploadedImage || visualEditNeedsSelection || visualEditBusy) return;
     await generate();
   };
 
@@ -1025,7 +1032,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             <Minimize2 size={14} />
           </button>
 
-          {!isVideoMode && (
+          {!isVideoMode && state.mode !== 'visual-edit' && (
             <button
                onClick={handleToggleSplit}
                disabled={!state.uploadedImage}
@@ -1158,7 +1165,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                     <Minimize2 size={13} />
                     <span className="text-[7.5px] font-medium uppercase tracking-wide">Fit</span>
                   </button>
-                  {!isVideoMode && (
+                  {!isVideoMode && state.mode !== 'visual-edit' && (
                     <button
                       onClick={handleToggleSplit}
                       disabled={!state.uploadedImage}

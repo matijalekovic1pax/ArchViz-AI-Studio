@@ -1,6 +1,7 @@
 
 import { AppState, DEFAULT_RENDER3D_SOURCE_MODE, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
+import { buildLocalizedVisualEditContract } from '../lib/visualEditPolicy';
 
 type ImagePromptMode = AppState['mode'];
 type ImagePromptTool = AppState['workflow']['activeTool'] | string | undefined;
@@ -282,7 +283,7 @@ const summarizeVisualEditSettings = (state: AppState): string[] => {
   const { workflow } = state;
   const rawTool = workflow.activeTool;
   const tool = rawTool === 'replace' ? 'object' : rawTool;
-  const selectionSummary = workflow.visualSelections.length > 0 || workflow.visualSelectionMask
+  const selectionSummary = workflow.visualSelections.length > 0
     ? `selection-guided ${workflow.visualSelection.mode} edit`
     : 'no explicit selection; infer target conservatively';
   const selectionControls = compactItems([
@@ -839,8 +840,8 @@ const getModelSpecificGuidance = (
 
   const gptToolGuidance: Record<string, string[]> = {
     select: [
-      'The selection/mask identifies the intended target; use it as guidance, not as a hard clipping boundary.',
-      'Blend naturally beyond the drawn edge when needed and never draw mask edges, outlines, or white patches.'
+      'Treat the selection/mask as a search region for the target named by the user, not permission to redraw every enclosed pixel.',
+      'Follow real target edges inside the selection, preserve enclosed non-target content, and never draw mask edges, outlines, or white patches.'
     ],
     material: [
       'Treat material edits as surface-finish replacement on existing geometry: color, grain, texture scale, roughness, and reflectivity only.',
@@ -2632,7 +2633,7 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
     if (role === 'preserve') {
       parts.push(`The user has carefully selected ${summaryParts.join(' and ')} to define the protected region that must remain unchanged. Apply edits only outside this selected region, respecting its exact boundaries rather than using a simplified bounding box.`);
     } else if (role === 'guide') {
-      parts.push(`The user has selected ${summaryParts.join(' and ')} as spatial guidance for the primary target area. Use the selection to identify where the edit belongs, but do not treat the boundary as a hard cutout or paste edge; allow natural reconstruction and blending slightly beyond it when needed.`);
+      parts.push(`The user has selected ${summaryParts.join(' and ')} as a search region for the named target. Change only the target pixels inside this region; preserve unrelated objects and surfaces even when they are also enclosed by the selection.`);
     } else {
       parts.push(`The user has selected ${summaryParts.join(' and ')} to indicate the intended target area. Use the selection to identify what should change, but do not treat its outline as a literal cut line; allow natural reconstruction and blending slightly beyond it when needed.`);
     }
@@ -2643,7 +2644,7 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
           ? 'A selection mask is provided to identify the protected selected region; the app may invert it before editing so only unselected pixels are changed.'
           : role === 'guide'
             ? 'A selection mask is provided as target guidance. White areas indicate the user intended focus area, but the final edit must blend naturally and must not show the mask, a white patch, an outline, or a hard-edged silhouette.'
-          : 'A selection mask is provided as target guidance. White areas indicate the intended focus area, but they are not a hard output boundary and must not appear as a visible edge.'
+          : 'A selection mask is provided as a target search region. White areas may contain both target and context pixels; modify only the target named in the instruction and preserve the enclosed context.'
       );
     }
 
@@ -2651,10 +2652,10 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
     if (bounds.length > 0) {
       parts.push(
         role === 'guide'
-          ? `Selection geometry summary in normalized image coordinates for reference only; use it as target guidance rather than a literal output boundary: ${JSON.stringify(bounds)}.`
+          ? `Selection geometry summary in normalized image coordinates for reference only; find the named target inside this region and preserve enclosed non-target content: ${JSON.stringify(bounds)}.`
           : role === 'preserve'
             ? `Selection geometry summary in normalized image coordinates for reference only; the protected mask remains authoritative: ${JSON.stringify(bounds)}.`
-            : `Selection geometry summary in normalized image coordinates for reference only; use it as target guidance rather than a literal output boundary: ${JSON.stringify(bounds)}.`
+            : `Selection geometry summary in normalized image coordinates for reference only; find the named target inside this region and preserve enclosed non-target content: ${JSON.stringify(bounds)}.`
       );
     }
   }
@@ -2677,15 +2678,15 @@ const buildSelectionContext = (workflow: AppState['workflow'], role: SelectionCo
     role === 'preserve'
       ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Preserve every pixel inside the selected region exactly. Confine modifications strictly to the unselected background/tool scope and blend naturally at the selection edge.'
       : role === 'guide'
-        ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep edits focused on the selected target area while preserving unrelated architecture, layout, materials, people, and signage. Natural texture continuation, cleanup, reflections, contact shadows, and occlusion may extend slightly beyond the selection only when required for a seamless result.'
-      : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep modifications focused on the intended selected target or tool scope while leaving unrelated architectural elements, layout, people, signage, and materials untouched. Let edges blend seamlessly and naturally into the surrounding image instead of following the drawn selection outline.'
+        ? 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep edits limited to the named target inside the selected region. Preserve unrelated architecture, layout, materials, people, signage, text, shadows, and reflections, including unrelated content enclosed by a broad rectangle or lasso.'
+      : 'Fundamental constraints: maintain the original camera angle, perspective, and overall composition. Keep modifications limited to the named selected target while leaving unrelated architectural elements, layout, people, signage, and materials untouched.'
   );
 
   return parts;
 };
 
 const buildRemoveSelectionTargeting = (workflow: AppState['workflow']) => {
-  const hasSelection = workflow.visualSelections.length > 0 || Boolean(workflow.visualSelectionMask);
+  const hasSelection = workflow.visualSelections.length > 0;
   const parts: string[] = [];
 
   if (!hasSelection) {
@@ -2703,6 +2704,136 @@ const buildRemoveSelectionTargeting = (workflow: AppState['workflow']) => {
 
 const RESTYLE_GEOMETRY_LOCK =
   'Restyling, recolor, material, finish, and batch-variant edits are edits to the existing pixels and surfaces, not object generation. Preserve the exact original target footprint, bounding box, silhouette, size, aspect ratio, perspective, scale, orientation, contact points, occlusion order, and placement. Do not enlarge, shrink, stretch, move, duplicate, inflate, straighten, rotate, or redraw the selected object or surface. Change only the visible color/material/finish while keeping original shading, highlights, texture, seams, folds, shadows, reflections, and surrounding geometry intact.';
+
+const compactLocalizedInstruction = (parts: Array<string | null | undefined | false>): string =>
+  parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 2400);
+
+/**
+ * The precise GPT Image Edit route consumes this single operation instruction.
+ * It intentionally ignores the shared Select textarea for setting-driven tools,
+ * preventing a hidden prompt from a previous tool from overriding their UI.
+ */
+export const buildLocalizedVisualEditInstruction = (
+  state: AppState,
+  translatedFreePrompt?: string
+): string => {
+  const workflow = state.workflow;
+  const tool = workflow.activeTool === 'replace' ? 'object' : workflow.activeTool;
+  const freePrompt = (translatedFreePrompt ?? workflow.visualPrompt ?? '').replace(/\s+/g, ' ').trim();
+
+  if (tool === 'select') return freePrompt.slice(0, 2400);
+
+  if (tool === 'material') {
+    const material = workflow.visualMaterial;
+    const selected = getMaterialById(material.materialId);
+    const finish = material.referenceEnabled && material.referenceImage
+      ? 'the finish shown in the uploaded material reference image'
+      : selected?.label
+        ? `${selected.label.toLowerCase()} finish`
+        : `${material.materialId || material.category || 'chosen'} finish`;
+    const roughness = material.roughness < 30
+      ? 'polished and reflective'
+      : material.roughness < 60
+        ? 'natural surface roughness'
+        : 'matte and textured';
+    return compactLocalizedInstruction([
+      `Apply ${finish} only to the selected existing surface or object.`,
+      `Use a ${roughness} response.`,
+      material.colorTint && material.colorTint !== '#ffffff' ? `Use color tint ${material.colorTint}.` : null,
+      'Preserve its exact geometry, edges, joints, seams, perspective, source lighting, shadows, reflections, and every overlapping or adjacent object.'
+    ]);
+  }
+
+  if (tool === 'lighting') {
+    const lighting = workflow.visualLighting;
+    const setup = lighting.mode === 'sun'
+      ? `Use sun azimuth ${lighting.sun.azimuth} degrees, elevation ${lighting.sun.elevation} degrees, intensity ${lighting.sun.intensity}, color temperature ${lighting.sun.colorTemp}K, and shadow softness ${lighting.sun.shadowSoftness}.`
+      : lighting.mode === 'hdri'
+        ? `Use the ${lighting.hdri.preset} HDRI look at intensity ${lighting.hdri.intensity} and rotation ${lighting.hdri.rotation} degrees.`
+        : `Use a ${lighting.artificial.type} light with color ${lighting.artificial.color}, intensity ${lighting.artificial.intensity}, and falloff ${lighting.artificial.falloff}.`;
+    return compactLocalizedInstruction([
+      'Relight only the selected area with natural falloff into its immediate surroundings.',
+      setup,
+      `Ambient fill ${lighting.ambient}.`,
+      lighting.preserveShadows ? 'Preserve the identity and direction of existing shadows.' : null,
+      'Do not add, remove, replace, move, or redesign any object, material, text, or architecture.'
+    ]);
+  }
+
+  if (tool === 'object') {
+    const object = workflow.visualObject;
+    const replacement = workflow.visualReplace;
+    const objectName = [object.subcategory, object.category].filter(Boolean).join(' ').toLowerCase() || 'object';
+    if (object.placementMode === 'replace') {
+      return compactLocalizedInstruction([
+        replacement.mode === 'similar'
+          ? 'Replace only the selected existing object with a visually similar object.'
+          : `Replace only the selected existing object with a ${objectName}.`,
+        replacement.style ? `Use a ${replacement.style} aesthetic.` : null,
+        replacement.prompt?.trim() ? `Additional replacement detail: ${replacement.prompt.trim()}.` : null,
+        replacement.matchScale ? 'Match the original footprint and scale.' : null,
+        replacement.matchLighting ? 'Match source lighting and perspective.' : null,
+        replacement.preserveShadows ? 'Preserve or reconstruct physically correct contact shadows.' : null,
+        'Preserve every non-target object and all architecture.'
+      ]);
+    }
+    return compactLocalizedInstruction([
+      `Add one ${objectName} inside the selected placement area.`,
+      `Use scale ${object.scale} percent, rotation ${object.rotation} degrees, and ${object.depth} depth.`,
+      object.autoPerspective ? 'Match scene perspective.' : null,
+      object.groundContact ? 'Ground it on the visible supporting surface.' : null,
+      object.shadow ? 'Add physically consistent contact shadows.' : null,
+      'Do not remove or move existing content.'
+    ]);
+  }
+
+  if (tool === 'people') {
+    const people = workflow.visualPeople;
+    if (people.mode === 'enhance') {
+      return compactLocalizedInstruction([
+        'Enhance only the existing people inside the selected area into realistic humans.',
+        'Preserve person count, identity role, pose, position, scale, body orientation, ground contact, occlusion, clothing category, and attached luggage.',
+        'Match source perspective, lighting, shadows, color temperature, depth of field, and render fidelity. Do not add or remove people or alter architecture.'
+      ]);
+    }
+    return compactLocalizedInstruction([
+      people.mode === 'automatic'
+        ? 'Add context-appropriate realistic people only at physically plausible locations inside the selected area.'
+        : 'Repopulate the selected area with realistic people while preserving plausible circulation and existing architecture.',
+      `Use ${people.density}% density, ${people.grouping}, ${people.flowPattern} flow, ${people.movementDirection} movement, ${people.wardrobeStyle} wardrobe, and activities ${people.activities.join(', ')}.`,
+      `Scene zone: ${people.airportZone}.`,
+      people.preserveExisting ? 'Preserve valid existing people.' : null,
+      'Match human scale, camera perspective, occlusion, lighting, ground contact, shadows, and image fidelity. Do not modify non-human content.'
+    ]);
+  }
+
+  if (tool === 'sky') {
+    const sky = workflow.visualSky;
+    return compactLocalizedInstruction([
+      `Replace only the selected existing sky with a ${sky.preset} sky.`,
+      `Use cloud density ${sky.cloudDensity}, atmosphere ${sky.atmosphere}, brightness ${sky.brightness}, and keep the horizon near ${sky.horizonLine}% of image height.`,
+      sky.reflectInGlass ? 'Update only physically corresponding sky reflections in glass.' : null,
+      sky.matchLighting ? 'Reconcile immediate illumination with the new sky without redesigning the scene.' : null,
+      sky.sunFlare ? 'Include a restrained natural sun flare where physically appropriate.' : null,
+      'Preserve the exact building silhouette, camera, foreground, signage, objects, and geometry.'
+    ]);
+  }
+
+  if (tool === 'remove') {
+    const quickTargets = workflow.visualRemove.quickRemove;
+    return compactLocalizedInstruction([
+      quickTargets.length > 0
+        ? `Remove only the selected ${quickTargets.join(', ')}.`
+        : 'Remove only the complete foreground subject centered in the selected area.',
+      'Remove its attached accessories, contact shadow, and reflection only when they belong to that same subject.',
+      'Reconstruct the newly revealed background from surrounding source evidence.',
+      workflow.visualRemove.preserveStructure ? 'Preserve continuing architectural lines, joints, texture, perspective, and structure.' : null,
+      'Preserve every other person, object, surface, sign, and text element.'
+    ]);
+  }
+
+  return freePrompt.slice(0, 2400);
+};
 
 const generateVisualEditPrompt = (state: AppState): string => {
   const { workflow } = state;
@@ -2727,23 +2858,26 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
   if (tool === 'select') {
     const selectParts: string[] = [];
-    const basePrompt = state.prompt?.trim();
+    const editContract = buildLocalizedVisualEditContract({
+      activeTool: tool,
+      instruction: userPrompt || '',
+      peopleMode: workflow.visualPeople.mode,
+    });
     const personTarget = /\b(person|people|human|figure|man|woman|traveler|passenger|avatar|3d person|silhouette)\b/i.test(userPrompt || '');
     selectParts.push('Selection-guided target edit.');
-    if (basePrompt) {
-      selectParts.push(`Scene context only: "${basePrompt}".`);
-    }
     if (userPrompt) {
       selectParts.push(`Edit instruction: "${userPrompt}".`);
     }
-    selectParts.push(RESTYLE_GEOMETRY_LOCK);
-    selectParts.push('The selection mask is target guidance. Use it to identify the intended pixels, surface, object, or subject, but do not treat the drawn outline as a cut line.');
-    selectParts.push('If the selected target naturally continues slightly beyond the selection, refine and blend those connected nearby pixels as needed so the final result does not reveal the selection shape.');
+    if (editContract.operation === 'recolor' || editContract.operation === 'replace_material') {
+      selectParts.push(RESTYLE_GEOMETRY_LOCK);
+    }
+    selectParts.push('The selection is a search region, not permission to redraw everything it encloses. Identify the target named by the edit instruction and preserve every enclosed non-target pixel, object, and occluder.');
+    selectParts.push('Keep the edit inside the selected region. Follow the real target edges rather than painting the rectangular or lasso boundary.');
     if (personTarget) {
       selectParts.push('Person target rule: if the selection contains a plain white, clay, placeholder, silhouette, or low-quality 3D person, convert that exact selected figure into one realistic human. Preserve the original pose, scale, body orientation, ground contact, location, occlusion, and camera perspective. Match the existing scene lighting, shadow direction, color temperature, and render quality. Do not add any extra people, do not modify any other people, and do not change nearby architecture, signage, floor, furniture, vegetation, or background.');
     }
     selectParts.push('Preserve camera, crop, perspective, horizon, signage/text, architecture, materials, existing people outside the intended target, shadows, reflections, and overall composition.');
-    selectParts.push('Blend the selected edit naturally at the boundary without showing the mask, lasso shape, outline, white patch, smudge, or pasted edge.');
+    selectParts.push('Return a seamless edit with no visible mask, lasso shape, rectangle, outline, white patch, smudge, or pasted edge.');
     return selectParts.filter(Boolean).join(' ');
   }
 
@@ -2755,7 +2889,7 @@ const generateVisualEditPrompt = (state: AppState): string => {
 
     const material = workflow.visualMaterial;
     const selectedMaterial = getMaterialById(material.materialId);
-    const hasAuthoritativeSelection = selectionCount > 0 || Boolean(workflow.visualSelectionMask);
+    const hasAuthoritativeSelection = selectionCount > 0;
     if (hasAuthoritativeSelection) {
       parts.push('The selection indicates the intended material target. Use it to identify the surface or object to refinish, not as the exact visible edge of the material change.');
       parts.push('Treat the edit as a surface finish replacement on the existing target geometry. Continue the finish naturally over the connected visible target where needed, while preserving real object edges, seams, joints, perspective, reflections, and shadow structure.');

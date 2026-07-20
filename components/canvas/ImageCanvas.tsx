@@ -10,8 +10,10 @@ import { useGeneration } from '../../hooks/useGeneration';
 import { VideoLockBanner } from '../video/VideoLockBanner';
 import { ClearCanvasConfirmDialog } from '../modals/ClearCanvasConfirmDialog';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
+import { isUsableVisualSelection } from '../../lib/visualEditPolicy';
 
 type CanvasPoint = { x: number; y: number };
+type CanvasPointerEvent = React.PointerEvent<HTMLDivElement>;
 type ImageLayout = {
   layerWidth: number;
   layerHeight: number;
@@ -37,6 +39,8 @@ type SelectionAdjustDragState = {
   target: SelectionAdjustTarget;
   startPoint: CanvasPoint;
   originalSelections: SelectionShape[];
+  originalUndoStack: SelectionShape[][];
+  originalRedoStack: SelectionShape[][];
   originalShape: SelectionShape;
   originalPolygon: CanvasPoint[] | null;
   edgeAnchorPoint: CanvasPoint | null;
@@ -422,6 +426,8 @@ const StandardCanvas: React.FC = () => {
   const eraseUndoSnapshotRef = useRef<SelectionShape[] | null>(null);
   const eraseUndoAppliedRef = useRef(false);
   const eraseUndoStackRef = useRef<SelectionShape[][] | null>(null);
+  const eraseOriginalUndoStackRef = useRef<SelectionShape[][] | null>(null);
+  const eraseOriginalRedoStackRef = useRef<SelectionShape[][] | null>(null);
   const selectionAdjustDragRef = useRef<SelectionAdjustDragState | null>(null);
   const boundaryLastPointRef = useRef<CanvasPoint | null>(null);
   const boundaryPendingPointRef = useRef<CanvasPoint | null>(null);
@@ -436,12 +442,14 @@ const StandardCanvas: React.FC = () => {
   const layoutRafRef = useRef<number | null>(null);
   const layoutWatchRafRef = useRef<number | null>(null);
   const layoutWatchUntilRef = useRef(0);
+  const activeCanvasPointerIdRef = useRef<number | null>(null);
 
   // Mode helpers
   const isGenerateText = state.mode === 'generate-text';
   const isVideo = state.mode === 'video';
   const isVideoLocked = isVideo && !state.workflow.videoState.accessUnlocked;
   const isVisualEdit = state.mode === 'visual-edit';
+  const showVisualAutoSelecting = isVisualEdit && state.workflow.visualAutoSelecting;
   const isSceneCompose = state.mode === 'scene-compose';
   const isSelectTool = isVisualEdit && state.workflow.activeTool !== 'extend';
   const isSelectionAdjustMode = isSelectTool && state.workflow.visualSelection.mode === 'adjust';
@@ -462,7 +470,10 @@ const StandardCanvas: React.FC = () => {
     'render-sketch',
     'upscale',
   ];
-  const showSplit = state.workflow.canvasSync && !isVideo && !showCompare && splitEligibleModes.includes(state.mode);
+  // Visual selections are tied to one editable frame. Split view uses a
+  // different image ref/layout, so keep the canonical editor visible while
+  // selecting instead of allowing hidden or misregistered masks.
+  const showSplit = state.workflow.canvasSync && !isVideo && !isVisualEdit && !showCompare && splitEligibleModes.includes(state.mode);
   const latestHistoryItem = useMemo(() => {
     const candidates = state.history.filter(
       (item) => item.mode === state.mode && item.thumbnail && item.settings?.kind !== 'source'
@@ -996,6 +1007,8 @@ const StandardCanvas: React.FC = () => {
     eraseUndoSnapshotRef.current = null;
     eraseUndoAppliedRef.current = false;
     eraseUndoStackRef.current = null;
+    eraseOriginalUndoStackRef.current = null;
+    eraseOriginalRedoStackRef.current = null;
   }, []);
 
   const applySelectionEraseAtPoint = useCallback((point: CanvasPoint) => {
@@ -1010,6 +1023,8 @@ const StandardCanvas: React.FC = () => {
 
     if (!eraseUndoSnapshotRef.current) {
       eraseUndoSnapshotRef.current = selections;
+      eraseOriginalUndoStackRef.current = state.workflow.visualSelectionUndoStack;
+      eraseOriginalRedoStackRef.current = state.workflow.visualSelectionRedoStack;
     }
 
     hitIds.forEach((id) => removedIds.add(id));
@@ -1034,6 +1049,7 @@ const StandardCanvas: React.FC = () => {
     getEraserRadius,
     isPointOverSelection,
     state.workflow.visualSelectionUndoStack,
+    state.workflow.visualSelectionRedoStack,
     state.workflow.visualSelections
   ]);
 
@@ -1066,6 +1082,7 @@ const StandardCanvas: React.FC = () => {
       selectionFullPointsRef.current = [];
       boundaryPreviewLastPointRef.current = null;
       boundaryFullPointsRef.current = [];
+      activeCanvasPointerIdRef.current = null;
     };
   }, []);
 
@@ -1286,7 +1303,7 @@ const StandardCanvas: React.FC = () => {
     [getImageBrushSize, getImageLayout, state.canvas.zoom, state.workflow.visualSelectionViewScale]
   );
 
-  const getSelectionPoint = useCallback((e: React.MouseEvent, clamp = false) => {
+  const getSelectionPoint = useCallback((e: CanvasPointerEvent, clamp = false) => {
     const layer = selectionLayerRef.current;
     if (!layer) return null;
     const layout = getImageLayout();
@@ -1322,7 +1339,7 @@ const StandardCanvas: React.FC = () => {
     };
   }, [getImageLayout, state.canvas.zoom]);
 
-  const updateBrushPreview = useCallback((e: React.MouseEvent, clamp = false) => {
+  const updateBrushPreview = useCallback((e: CanvasPointerEvent, clamp = false) => {
     if (!state.uploadedImage || !isSelectTool || selectionMode !== 'brush') {
       setBrushPreviewPoint(null);
       return;
@@ -1336,7 +1353,7 @@ const StandardCanvas: React.FC = () => {
     });
   }, [getSelectionPoint, isSelectTool, selectionMode, state.uploadedImage]);
 
-  const startSelection = useCallback((e: React.MouseEvent) => {
+  const startSelection = useCallback((e: CanvasPointerEvent) => {
     if (!state.uploadedImage || e.button !== 0) return;
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -1367,6 +1384,8 @@ const StandardCanvas: React.FC = () => {
         target,
         startPoint: point,
         originalSelections: state.workflow.visualSelections,
+        originalUndoStack: state.workflow.visualSelectionUndoStack,
+        originalRedoStack: state.workflow.visualSelectionRedoStack,
         originalShape,
         originalPolygon: originalPolygon ? originalPolygon.map((item) => ({ ...item })) : null,
         edgeAnchorPoint,
@@ -1423,11 +1442,13 @@ const StandardCanvas: React.FC = () => {
     state.canvas.zoom,
     state.uploadedImage,
     state.workflow.visualSelection.brushSize,
+    state.workflow.visualSelectionRedoStack,
+    state.workflow.visualSelectionUndoStack,
     state.workflow.visualSelections,
     updateActiveSelection
   ]);
 
-  const startBoundarySelection = useCallback((e: React.MouseEvent) => {
+  const startBoundarySelection = useCallback((e: CanvasPointerEvent) => {
     if (!state.uploadedImage || e.button !== 0) return;
     if (boundaryRafRef.current !== null) {
       cancelAnimationFrame(boundaryRafRef.current);
@@ -1443,7 +1464,7 @@ const StandardCanvas: React.FC = () => {
     updateActiveBoundary([point]);
   }, [getSelectionPoint, setBoundarySelectionInProgress, state.uploadedImage, updateActiveBoundary]);
 
-  const updateSelectionPath = useCallback((e: React.MouseEvent) => {
+  const updateSelectionPath = useCallback((e: CanvasPointerEvent) => {
     const point = getSelectionPoint(e, true);
     if (!point) return;
     if (selectionMode === 'brush') {
@@ -1512,7 +1533,7 @@ const StandardCanvas: React.FC = () => {
           visualSelectionRedoStack: [],
         };
         if (!drag.undoApplied) {
-          payload.visualSelectionUndoStack = [...state.workflow.visualSelectionUndoStack, drag.originalSelections];
+          payload.visualSelectionUndoStack = [...drag.originalUndoStack, drag.originalSelections];
         }
         dispatch({
           type: 'UPDATE_WORKFLOW',
@@ -1565,12 +1586,11 @@ const StandardCanvas: React.FC = () => {
     projectPointOntoSegment,
     replaceSelectionShape,
     selectionMode,
-    state.workflow.visualSelectionUndoStack,
     translateSelectionShape,
     updateActiveSelection
   ]);
 
-  const updateBoundaryPath = useCallback((e: React.MouseEvent) => {
+  const updateBoundaryPath = useCallback((e: CanvasPointerEvent) => {
     const point = getSelectionPoint(e, true);
     if (!point) return;
     boundaryPendingPointRef.current = point;
@@ -1643,25 +1663,17 @@ const StandardCanvas: React.FC = () => {
 
     const finalSelection = activeSelectionRef.current;
     if (finalSelection) {
-      if (finalSelection.type === 'rect') {
-        const width = Math.abs(finalSelection.end.x - finalSelection.start.x);
-        const height = Math.abs(finalSelection.end.y - finalSelection.start.y);
-        if (width > 2 && height > 2) {
-          commitSelection(finalSelection);
-        }
-      } else {
-        const points = selectionFullPointsRef.current.length > 1
+      let candidate: SelectionShape = finalSelection;
+      if (finalSelection.type !== 'rect') {
+        const points = selectionFullPointsRef.current.length > 0
           ? selectionFullPointsRef.current
           : finalSelection.points;
-        if (points.length > 1) {
-          const shape = { ...finalSelection, points };
-          if (shape.type === 'brush' && !shape.brushSize) {
-            commitSelection({ ...shape, brushSize: getImageBrushSize() });
-          } else {
-            commitSelection(shape);
-          }
-        }
+        candidate = { ...finalSelection, points };
       }
+      if (candidate.type === 'brush' && !candidate.brushSize) {
+        candidate = { ...candidate, brushSize: getImageBrushSize() };
+      }
+      if (isUsableVisualSelection(candidate)) commitSelection(candidate);
     }
     selectionFullPointsRef.current = [];
     updateActiveSelection(null);
@@ -1693,6 +1705,68 @@ const StandardCanvas: React.FC = () => {
     boundaryFullPointsRef.current = [];
     updateActiveBoundary(null);
   }, [commitBoundary, setBoundarySelectionInProgress, updateActiveBoundary]);
+
+  const cancelSelectionGesture = useCallback(() => {
+    setSelectionInProgress(false);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    const adjustDrag = selectionAdjustDragRef.current;
+    if (adjustDrag?.undoApplied) {
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualSelections: adjustDrag.originalSelections,
+          visualSelectionUndoStack: adjustDrag.originalUndoStack,
+          visualSelectionRedoStack: adjustDrag.originalRedoStack,
+        },
+      });
+    } else {
+      const eraseSnapshot = eraseUndoSnapshotRef.current;
+      const eraseOriginalUndoStack = eraseOriginalUndoStackRef.current;
+      const eraseOriginalRedoStack = eraseOriginalRedoStackRef.current;
+      if (
+        eraseUndoAppliedRef.current &&
+        eraseSnapshot &&
+        eraseOriginalUndoStack &&
+        eraseOriginalRedoStack
+      ) {
+        dispatch({
+          type: 'UPDATE_WORKFLOW',
+          payload: {
+            visualSelections: eraseSnapshot,
+            visualSelectionUndoStack: eraseOriginalUndoStack,
+            visualSelectionRedoStack: eraseOriginalRedoStack,
+          },
+        });
+      }
+    }
+
+    pendingPointRef.current = null;
+    lastPointRef.current = null;
+    selectionPreviewLastPointRef.current = null;
+    selectionFullPointsRef.current = [];
+    selectionAdjustDragRef.current = null;
+    setSelectionAdjustHandle(null);
+    setBrushPreviewPoint(null);
+    resetEraseState();
+    updateActiveSelection(null);
+  }, [dispatch, resetEraseState, setSelectionInProgress, updateActiveSelection]);
+
+  const cancelBoundaryGesture = useCallback(() => {
+    setBoundarySelectionInProgress(false);
+    if (boundaryRafRef.current !== null) {
+      cancelAnimationFrame(boundaryRafRef.current);
+      boundaryRafRef.current = null;
+    }
+    boundaryPendingPointRef.current = null;
+    boundaryLastPointRef.current = null;
+    boundaryPreviewLastPointRef.current = null;
+    boundaryFullPointsRef.current = [];
+    updateActiveBoundary(null);
+  }, [setBoundarySelectionInProgress, updateActiveBoundary]);
 
   const handleFitToScreen = useCallback((e?: React.MouseEvent) => {
      if (e) {
@@ -1773,13 +1847,13 @@ const StandardCanvas: React.FC = () => {
     }
   };
 
-  const startPan = (e: React.MouseEvent) => {
+  const startPan = (e: CanvasPointerEvent) => {
     if (!state.uploadedImage) return;
     setIsPanning(true);
     setPanStart({ x: e.clientX - state.canvas.pan.x, y: e.clientY - state.canvas.pan.y });
   };
 
-  const updatePan = (e: React.MouseEvent) => {
+  const updatePan = (e: CanvasPointerEvent) => {
     if (!isPanning) return;
     const newPan = { x: e.clientX - panStart.x, y: e.clientY - panStart.y };
     dispatch({ type: 'SET_CANVAS_PAN', payload: newPan });
@@ -1789,7 +1863,7 @@ const StandardCanvas: React.FC = () => {
     setIsPanning(false);
   };
 
-  const handleSceneComposePlacement = useCallback((e: React.MouseEvent) => {
+  const handleSceneComposePlacement = useCallback((e: CanvasPointerEvent) => {
     if (!isSceneCompose || !sceneComposeActivePlacementId || e.button !== 0) return;
     const point = getSelectionPoint(e);
     const layout = getImageLayout();
@@ -1818,7 +1892,7 @@ const StandardCanvas: React.FC = () => {
     sceneComposeReferences,
   ]);
 
-  const updateSelectionAdjustHover = useCallback((e: React.MouseEvent) => {
+  const updateSelectionAdjustHover = useCallback((e: CanvasPointerEvent) => {
     const point = getSelectionPoint(e);
     if (!point) {
       setSelectionAdjustHandle(null);
@@ -1831,7 +1905,19 @@ const StandardCanvas: React.FC = () => {
     state.workflow.visualSelections
   ]);
 
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+  const handleCanvasPointerDown = (e: CanvasPointerEvent) => {
+    if (!state.uploadedImage || !e.isPrimary || e.button !== 0) return;
+    if (state.isGenerating || state.workflow.visualAutoSelecting) return;
+    if (activeCanvasPointerIdRef.current !== null) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, a, [role="button"]')) return;
+
+    activeCanvasPointerIdRef.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    e.preventDefault();
+
     if (isSceneComposePlacementArmed) {
       handleSceneComposePlacement(e);
       return;
@@ -1841,24 +1927,22 @@ const StandardCanvas: React.FC = () => {
       return;
     }
     if (isSelectTool) {
-      if (selectionMode === 'lasso' && isSelectingRef.current) {
-        finishSelection(getSelectionPoint(e, true));
-        return;
-      }
       startSelection(e);
       return;
     }
     startPan(e);
   };
 
-  const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (isSceneComposePlacementArmed) {
-      return;
-    }
+  const handleCanvasPointerMove = (e: CanvasPointerEvent) => {
+    if (!e.isPrimary) return;
+    const activePointerId = activeCanvasPointerIdRef.current;
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    if (activePointerId === null && e.pointerType === 'touch') return;
+    if (activePointerId !== null) e.preventDefault();
+
+    if (isSceneComposePlacementArmed) return;
     if (isBoundaryTool) {
-      if (isBoundarySelectingRef.current) {
-        updateBoundaryPath(e);
-      }
+      if (isBoundarySelectingRef.current) updateBoundaryPath(e);
       return;
     }
     if (isSelectTool) {
@@ -1874,31 +1958,51 @@ const StandardCanvas: React.FC = () => {
     updatePan(e);
   };
 
-  const handleCanvasMouseUp = () => {
-    if (isBoundaryTool && isBoundarySelectingRef.current) {
-      finishBoundarySelection();
-    }
-    if (isSelectTool && isSelectingRef.current && selectionMode !== 'lasso') {
-      finishSelection();
-    }
-    if (selectionMode === 'adjust') {
-      setSelectionAdjustHandle(null);
-    }
+  const finishCanvasPointer = (e: CanvasPointerEvent) => {
+    if (activeCanvasPointerIdRef.current !== e.pointerId) return;
+    const finalPoint = isSelectingRef.current
+      ? getSelectionPoint(e, true)
+      : null;
+
+    // Clear before release because lostpointercapture may fire synchronously.
+    activeCanvasPointerIdRef.current = null;
+    if (isBoundarySelectingRef.current) finishBoundarySelection();
+    if (isSelectingRef.current) finishSelection(finalPoint);
+    if (selectionMode === 'adjust') setSelectionAdjustHandle(null);
     endPan();
+
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
   };
 
-  const handleCanvasMouseLeave = () => {
-    setBrushPreviewPoint(null);
-    if (isBoundaryTool && isBoundarySelectingRef.current) {
-      finishBoundarySelection();
-    }
-    if (isSelectTool && isSelectingRef.current && selectionMode !== 'lasso') {
-      finishSelection();
-    }
-    if (selectionMode === 'adjust') {
-      setSelectionAdjustHandle(null);
-    }
+  const cancelCanvasPointer = (e: CanvasPointerEvent) => {
+    if (activeCanvasPointerIdRef.current !== e.pointerId) return;
+
+    // A canceled gesture is not a commit. Roll back any eager adjust/erase
+    // mutations and discard draw previews before releasing capture.
+    activeCanvasPointerIdRef.current = null;
+    if (isBoundarySelectingRef.current) cancelBoundaryGesture();
+    if (isSelectingRef.current) cancelSelectionGesture();
+    setSelectionAdjustHandle(null);
     endPan();
+
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+  };
+
+  const handleCanvasPointerUp = (e: CanvasPointerEvent) => finishCanvasPointer(e);
+  const handleCanvasPointerCancel = (e: CanvasPointerEvent) => cancelCanvasPointer(e);
+  const handleCanvasLostPointerCapture = (e: CanvasPointerEvent) => cancelCanvasPointer(e);
+  const handleCanvasPointerLeave = () => {
+    if (activeCanvasPointerIdRef.current !== null) return;
+    setBrushPreviewPoint(null);
+    if (selectionMode === 'adjust') setSelectionAdjustHandle(null);
   };
 
   // Video control helpers
@@ -2072,29 +2176,15 @@ const StandardCanvas: React.FC = () => {
     if (maskSize.width === img.naturalWidth && maskSize.height === img.naturalHeight) return;
     if (selectionMigrationRef.current === state.uploadedImage) return;
 
-    const imageAspect = img.naturalWidth / img.naturalHeight;
-    const canvasAspect = maskSize.width / maskSize.height;
-    let drawWidth = maskSize.width;
-    let drawHeight = maskSize.height;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (imageAspect > canvasAspect) {
-      drawWidth = maskSize.width;
-      drawHeight = maskSize.width / imageAspect;
-      offsetY = (maskSize.height - drawHeight) / 2;
-    } else {
-      drawHeight = maskSize.height;
-      drawWidth = maskSize.height * imageAspect;
-      offsetX = (maskSize.width - drawWidth) / 2;
-    }
-
-    const scaleX = img.naturalWidth / drawWidth;
-    const scaleY = img.naturalHeight / drawHeight;
+    // Selection geometry is stored in source-image pixels, never in the
+    // object-contain viewport. An intentional same-image rebase therefore uses
+    // direct source-dimension scaling without letterbox offsets.
+    const scaleX = img.naturalWidth / maskSize.width;
+    const scaleY = img.naturalHeight / maskSize.height;
     const scale = (scaleX + scaleY) / 2;
     const clampPoint = (point: CanvasPoint) => ({
-      x: Math.min(Math.max((point.x - offsetX) * scaleX, 0), img.naturalWidth),
-      y: Math.min(Math.max((point.y - offsetY) * scaleY, 0), img.naturalHeight),
+      x: Math.min(Math.max(point.x * scaleX, 0), img.naturalWidth),
+      y: Math.min(Math.max(point.y * scaleY, 0), img.naturalHeight),
     });
 
     const migratedSelections = state.workflow.visualSelections.map((shape) => {
@@ -2575,12 +2665,17 @@ const StandardCanvas: React.FC = () => {
                 ? "cursor-grabbing"
                 : "cursor-grab"
          )}
-         style={canvasCursor ? { cursor: canvasCursor } : undefined}
+         style={{
+           ...(canvasCursor ? { cursor: canvasCursor } : {}),
+           touchAction: state.uploadedImage ? 'none' : 'auto',
+         }}
          onWheel={handleWheel}
-         onMouseDown={handleCanvasMouseDown}
-         onMouseMove={handleCanvasMouseMove}
-         onMouseUp={handleCanvasMouseUp}
-         onMouseLeave={handleCanvasMouseLeave}
+         onPointerDown={handleCanvasPointerDown}
+         onPointerMove={handleCanvasPointerMove}
+         onPointerUp={handleCanvasPointerUp}
+         onPointerCancel={handleCanvasPointerCancel}
+         onLostPointerCapture={handleCanvasLostPointerCapture}
+         onPointerLeave={handleCanvasPointerLeave}
       >
          <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0" 
             style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} 
@@ -2589,7 +2684,7 @@ const StandardCanvas: React.FC = () => {
          {state.uploadedImage && (
             <button
               type="button"
-              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={handleClearImage}
               className="absolute top-4 right-4 z-20 h-10 w-10 rounded-full border border-white/70 bg-white/90 text-foreground-secondary shadow-lg ring-1 ring-black/5 backdrop-blur-xl flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-600 hover:border-red-200 hover:shadow-xl active:scale-95"
               title={t('topBar.clearImage')}
@@ -2967,7 +3062,7 @@ const StandardCanvas: React.FC = () => {
 
       </div>
 
-      {(state.isGenerating || state.workflow.visualAutoSelecting) && (
+      {(state.isGenerating || showVisualAutoSelecting) && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-none">
               <div className="bg-white/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-white/50">
                   <div className="relative w-16 h-16">
@@ -2977,10 +3072,10 @@ const StandardCanvas: React.FC = () => {
                   </div>
                   <div className="text-center">
                       <h4 className="text-sm font-bold text-foreground">
-                        {state.workflow.visualAutoSelecting ? 'Auto-selecting...' : t('generation.generating')}
+                        {showVisualAutoSelecting ? 'Auto-selecting...' : t('generation.generating')}
                       </h4>
                       <p className="text-xs text-foreground-muted mt-1">
-                        {state.workflow.visualAutoSelecting ? 'Detecting selection areas on the image.' : t('canvas.generating.subtitle')}
+                        {showVisualAutoSelecting ? 'Detecting selection areas on the image.' : t('canvas.generating.subtitle')}
                       </p>
                   </div>
               </div>

@@ -6,7 +6,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
-import { adaptImagePromptForModel, generatePrompt } from '../engine/promptEngine';
+import { adaptImagePromptForModel, buildLocalizedVisualEditInstruction, generatePrompt } from '../engine/promptEngine';
 import {
   getGeminiService,
   isGeminiServiceInitialized,
@@ -34,6 +34,7 @@ import {
   isGatewayAuthenticated,
   queueAppLogEvent,
   setActiveGenerationTraceId,
+  type GatewayImageEditReference,
   type ImageEditOperation,
 } from '../services/apiGateway';
 import { isConvertApiConfigured } from '../services/convertApiService';
@@ -49,8 +50,26 @@ import {
   scaleVisualExtendCanvasLayout,
   type VisualExtendCanvasLayout
 } from '../lib/visualExtend';
+import {
+  dilateEditableAlpha,
+  getEditableAlphaBounds,
+  planLocalizedImageEdit,
+} from '../lib/localizedImageEdit.js';
+import LocalizedImageCompositeWorker from '../lib/localizedImageCompositeWorker.js?worker';
+import {
+  LOCALIZED_IMAGE_COMPOSITE_MESSAGE,
+  LOCALIZED_IMAGE_COMPOSITE_RESULT,
+  runLocalizedImageCompositePipeline,
+} from '../lib/localizedImageCompositeWorker.js';
+import {
+  buildLocalizedVisualEditContract,
+  hasUsableVisualSelection,
+  isUsableVisualSelection,
+  visualEditRequiresSelection,
+  type LocalizedVisualEditContract,
+} from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
@@ -314,6 +333,116 @@ const generatedImageFromDataUrl = (dataUrl: string): GeneratedImage => {
   };
 };
 
+const normalizeGatewayImageEditReference = async (
+  image: ImageData | null
+): Promise<GatewayImageEditReference | null> => {
+  if (!image) return null;
+  if (image.mimeType === 'image/png' || image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp') {
+    return {
+      base64: image.base64,
+      mimeType: image.mimeType,
+      width: image.width,
+      height: image.height,
+    };
+  }
+
+  const converted = await ImageUtils.convertImageFormat(image, 'image/png');
+  if (converted.mimeType !== 'image/png') {
+    throw new Error('The selected reference image could not be converted to PNG for OpenAI Image Edit.');
+  }
+  return {
+    base64: converted.base64,
+    mimeType: 'image/png',
+    width: converted.width,
+    height: converted.height,
+  };
+};
+
+type LocalizedIntentResolution = {
+  targetLabel: string;
+  optimizedInstruction: string;
+  confidence: number;
+};
+
+const parseLocalizedJsonObject = (value: string): Record<string, unknown> => {
+  const unfenced = value.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
+  const start = unfenced.indexOf('{');
+  const end = unfenced.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('The pre-generation localized edit intent compiler returned invalid JSON.');
+  const parsed = JSON.parse(unfenced.slice(start, end + 1));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('The pre-generation localized edit intent compiler returned an invalid result.');
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const normalizeLocalizedAiText = (value: unknown, maxLength: number): string =>
+  typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, maxLength) : '';
+
+const resolveLocalizedEditIntent = async ({
+  service,
+  contract,
+  sourceImage,
+  selectionMask,
+  abortSignal,
+}: {
+  service: ReturnType<typeof getGeminiService>;
+  contract: LocalizedVisualEditContract;
+  sourceImage: ImageData;
+  selectionMask: ImageData;
+  abortSignal: AbortSignal;
+}): Promise<LocalizedIntentResolution> => {
+  const fallback: LocalizedIntentResolution = {
+    targetLabel: contract.targetLabel,
+    optimizedInstruction: contract.userInstruction,
+    confidence: 0,
+  };
+  try {
+    const response = await service.generateText({
+      model: TEXT_MODEL,
+      prompt: [
+        'You are the pre-generation visual instruction compiler for one localized architectural image edit.',
+        'Image 1 is the exact source crop. Image 2 is a grayscale selection map: white is the editable working area and black is protected context.',
+        `The operation category is locked to ${contract.operation}; never change the user’s requested action.`,
+        `Authoritative user instruction: ${JSON.stringify(contract.userInstruction)}.`,
+        `Initial target description: ${JSON.stringify(contract.targetLabel)}.`,
+        contract.colorHex
+          ? `The user literally supplied this exact destination color: ${contract.colorHex}.`
+          : contract.requestedColorText
+            ? `The requested named destination color is ${JSON.stringify(contract.requestedColorText)}; treat it as a natural, non-emissive material color under the source lighting, not a literal CSS swatch.`
+            : '',
+        'Inspect the source and identify the most specific visible target meant by the instruction inside the white area. The user selection remains authoritative and must never be replaced, narrowed, or expanded by your response.',
+        'Write one concise execution instruction for GPT Image. State what to change, the exact target, and the positive visual integration requirements (perspective, scale, lighting, material response, shadows, reflections, and occlusion) that matter for this request.',
+        'Do not turn a property edit into object removal or replacement. Do not invent objects, colors, materials, text, or style details that the user did not request. Do not include mask coordinates or implementation commentary.',
+        'Return JSON only with this schema: {"targetLabel":"specific visible target","optimizedInstruction":"concise faithful image-edit instruction","confidence":0.0}.',
+      ].filter(Boolean).join('\n'),
+      images: [sourceImage, selectionMask],
+      generationConfig: {
+        temperature: 0.05,
+        topP: 0.2,
+        maxOutputTokens: 1000,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: 'high' },
+        abortSignal,
+      },
+    });
+    const parsed = parseLocalizedJsonObject(response);
+    const targetLabel = normalizeLocalizedAiText(parsed.targetLabel, 160);
+    const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
+    const optimizedInstruction = normalizeLocalizedAiText(parsed.optimizedInstruction, 1600);
+    if (targetLabel.length < 2 || optimizedInstruction.length < 8 || confidence < 0.55) return fallback;
+    return {
+      targetLabel,
+      optimizedInstruction,
+      confidence,
+    };
+  } catch (error) {
+    if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) throw error;
+    console.warn('Localized edit instruction compiler failed; using the user instruction unchanged.', error);
+    return fallback;
+  }
+};
+
 const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
   if (!images || images.length === 0) return null;
   return images[images.length - 1];
@@ -327,6 +456,140 @@ const PRECISE_EDIT_SIZE_MULTIPLE = 16;
 const VISUAL_EXTEND_SEAM_MIN_PX = 18;
 const VISUAL_EXTEND_SEAM_MAX_PX = 96;
 const VISUAL_EXTEND_SEAM_RATIO = 0.018;
+
+type LocalizedEditLayout = {
+  sourceWidth: number;
+  sourceHeight: number;
+  sourceRect: { x: number; y: number; width: number; height: number };
+  requestWidth: number;
+  requestHeight: number;
+  contentRect: { x: number; y: number; width: number; height: number };
+  providerExpansion: number;
+  compositeFeather: number;
+  editableAlpha: Uint8ClampedArray;
+  registrationExclusionAlpha: Uint8ClampedArray;
+  operation: ImageEditOperation;
+};
+
+type LocalizedCompositePipelineInput = {
+  sourcePixels: Uint8ClampedArray;
+  comparisonPixels: Uint8ClampedArray;
+  generatedPixels: Uint8ClampedArray;
+  editableAlpha: Uint8ClampedArray;
+  registrationExclusionAlpha: Uint8ClampedArray;
+  width: number;
+  height: number;
+  featherRadius: number;
+  maxShift: number;
+  operation: ImageEditOperation;
+};
+
+type LocalizedCompositePipelineResult = ReturnType<typeof runLocalizedImageCompositePipeline>;
+
+let localizedCompositeWorkerRequestSequence = 0;
+const LOCALIZED_COMPOSITE_WORKER_TIMEOUT_MS = 30_000;
+
+const runLocalizedImageCompositeOffThread = async (
+  input: LocalizedCompositePipelineInput
+): Promise<LocalizedCompositePipelineResult> => {
+  const runSynchronousFallback = () => runLocalizedImageCompositePipeline(input);
+  if (typeof Worker === 'undefined') return runSynchronousFallback();
+
+  let worker: Worker;
+  try {
+    worker = new LocalizedImageCompositeWorker();
+  } catch {
+    return runSynchronousFallback();
+  }
+
+  const requestId = `localized-composite-${++localizedCompositeWorkerRequestSequence}`;
+  // Transfer worker-owned copies. The original ImageData remains available for
+  // the deterministic fallback if module workers are blocked by CSP/runtime.
+  const sourcePixels = new Uint8ClampedArray(input.sourcePixels);
+  const comparisonPixels = new Uint8ClampedArray(input.comparisonPixels);
+  const generatedPixels = new Uint8ClampedArray(input.generatedPixels);
+  const editableAlpha = new Uint8ClampedArray(input.editableAlpha);
+  const registrationExclusionAlpha = new Uint8ClampedArray(input.registrationExclusionAlpha);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = () => {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.onmessageerror = null;
+      worker.terminate();
+    };
+    const resolveFallback = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        resolve(runSynchronousFallback());
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    worker.onmessage = (event: MessageEvent) => {
+      const message = event.data;
+      if (
+        !message ||
+        message.type !== LOCALIZED_IMAGE_COMPOSITE_RESULT ||
+        message.requestId !== requestId
+      ) return;
+      if (message.error) {
+        resolveFallback();
+        return;
+      }
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({
+        pixels: new Uint8ClampedArray(message.pixelsBuffer),
+        matte: new Uint8ClampedArray(message.matteBuffer),
+        registration: message.registration,
+        editableTranslationGate: message.editableTranslationGate,
+        colorOffset: message.colorOffset,
+        appliedTranslation: message.appliedTranslation,
+        quality: message.quality,
+      });
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      resolveFallback();
+    };
+    worker.onmessageerror = resolveFallback;
+    timeoutId = setTimeout(resolveFallback, LOCALIZED_COMPOSITE_WORKER_TIMEOUT_MS);
+
+    try {
+      const transferList = [
+        sourcePixels.buffer,
+        comparisonPixels.buffer,
+        generatedPixels.buffer,
+        editableAlpha.buffer,
+        registrationExclusionAlpha.buffer,
+      ];
+      worker.postMessage({
+        type: LOCALIZED_IMAGE_COMPOSITE_MESSAGE,
+        requestId,
+        sourcePixelsBuffer: sourcePixels.buffer,
+        comparisonPixelsBuffer: comparisonPixels.buffer,
+        generatedPixelsBuffer: generatedPixels.buffer,
+        editableAlphaBuffer: editableAlpha.buffer,
+        registrationExclusionAlphaBuffer: registrationExclusionAlpha.buffer,
+        width: input.width,
+        height: input.height,
+        featherRadius: input.featherRadius,
+        maxShift: input.maxShift,
+        operation: input.operation,
+      }, transferList);
+    } catch {
+      resolveFallback();
+    }
+  });
+};
 
 const roundToPreciseEditMultiple = (value: number) =>
   Math.max(PRECISE_EDIT_SIZE_MULTIPLE, Math.round(value / PRECISE_EDIT_SIZE_MULTIPLE) * PRECISE_EDIT_SIZE_MULTIPLE);
@@ -458,6 +721,294 @@ const renderImageToPngDataUrl = async (
   ctx.drawImage(image, 0, 0, width, height);
 
   return canvas.toDataURL('image/png');
+};
+
+/**
+ * Rasterize the canonical vector selection at the current source-image size.
+ * This is intentionally done inside generate() so an Apply click can never race
+ * the asynchronous preview-mask effect in ImageCanvas.
+ */
+const renderVisualSelectionSnapshot = async (
+  sourceDataUrl: string,
+  shapes: VisualSelectionShape[]
+): Promise<{
+  canvas: HTMLCanvasElement;
+  editableAlpha: Uint8ClampedArray;
+  width: number;
+  height: number;
+} | null> => {
+  const usableShapes = shapes.filter(isUsableVisualSelection);
+  if (usableShapes.length === 0) return null;
+  const source = await loadCanvasImage(sourceDataUrl);
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  if (width < 2 || height < 2) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to rasterize the current selection.');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#fff';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  usableShapes.forEach((shape) => {
+    if (shape.type === 'rect') {
+      const x = Math.min(shape.start.x, shape.end.x);
+      const y = Math.min(shape.start.y, shape.end.y);
+      const rectWidth = Math.abs(shape.end.x - shape.start.x);
+      const rectHeight = Math.abs(shape.end.y - shape.start.y);
+      if (rectWidth >= 1 && rectHeight >= 1) ctx.fillRect(x, y, rectWidth, rectHeight);
+      return;
+    }
+    if (shape.type === 'lasso') {
+      if (shape.points.length < 3) return;
+      ctx.beginPath();
+      ctx.moveTo(shape.points[0].x, shape.points[0].y);
+      shape.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
+    if (shape.points.length === 0) return;
+    const brushSize = Math.max(1, shape.brushSize || 1);
+    ctx.lineWidth = brushSize;
+    if (shape.points.length === 1) {
+      ctx.beginPath();
+      ctx.arc(shape.points[0].x, shape.points[0].y, brushSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(shape.points[0].x, shape.points[0].y);
+    shape.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    ctx.stroke();
+  });
+
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const editableAlpha = new Uint8ClampedArray(width * height);
+  let selectedPixels = 0;
+  for (let index = 0, pixel = 0; pixel < pixels.length; index += 1, pixel += 4) {
+    const alpha = clampByte(pixels[pixel] * (pixels[pixel + 3] / 255));
+    editableAlpha[index] = alpha;
+    if (alpha >= OPENAI_SELECTION_ALPHA_THRESHOLD) selectedPixels += 1;
+  }
+  if (selectedPixels === 0) return null;
+  return { canvas, editableAlpha, width, height };
+};
+
+const cropEditableAlpha = (
+  alpha: Uint8ClampedArray,
+  sourceWidth: number,
+  rect: { x: number; y: number; width: number; height: number }
+): Uint8ClampedArray => {
+  const cropped = new Uint8ClampedArray(rect.width * rect.height);
+  for (let y = 0; y < rect.height; y += 1) {
+    const sourceStart = (rect.y + y) * sourceWidth + rect.x;
+    cropped.set(alpha.subarray(sourceStart, sourceStart + rect.width), y * rect.width);
+  }
+  return cropped;
+};
+
+const alphaToMaskCanvas = (
+  alpha: Uint8ClampedArray,
+  width: number,
+  height: number
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to create the localized edit mask.');
+  const imageData = ctx.createImageData(width, height);
+  for (let index = 0, pixel = 0; index < alpha.length; index += 1, pixel += 4) {
+    imageData.data[pixel] = 255;
+    imageData.data[pixel + 1] = 255;
+    imageData.data[pixel + 2] = 255;
+    imageData.data[pixel + 3] = alpha[index];
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+const prepareLocalizedOpenAIEditInputs = async (
+  sourceDataUrl: string,
+  selectionSnapshot: {
+    editableAlpha: Uint8ClampedArray;
+    width: number;
+    height: number;
+  },
+  contract: LocalizedVisualEditContract,
+  featherAmount: number
+): Promise<{
+  sourceImage: { base64: string; mimeType: 'image/png'; width: number; height: number };
+  selectionMask: { base64: string; mimeType: 'image/png'; width: number; height: number };
+  selectionStats: {
+    selectedPixels: number;
+    selectedRatio: number;
+    userSelectedPixels: number;
+    userSelectedRatio: number;
+    providerEditablePixels: number;
+    providerEditableRatio: number;
+  };
+  layout: LocalizedEditLayout;
+}> => {
+  const source = await loadCanvasImage(sourceDataUrl);
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  if (
+    sourceWidth !== selectionSnapshot.width ||
+    sourceHeight !== selectionSnapshot.height ||
+    selectionSnapshot.editableAlpha.length !== sourceWidth * sourceHeight
+  ) {
+    throw new Error('The current selection no longer matches the source image. Select the area again.');
+  }
+
+  const fullEditableAlpha = selectionSnapshot.editableAlpha;
+  const selectionBounds = getEditableAlphaBounds(fullEditableAlpha, sourceWidth, sourceHeight);
+  if (!selectionBounds) throw new Error('Select a visible area before applying this edit.');
+  const plan = planLocalizedImageEdit({
+    sourceWidth,
+    sourceHeight,
+    selectionBounds,
+    operation: contract.operation,
+    featherAmount,
+  });
+  if (!plan) throw new Error('The selected area could not be mapped to a valid GPT Image 2 edit crop.');
+
+  const editableAlpha = cropEditableAlpha(fullEditableAlpha, sourceWidth, plan.sourceRect);
+  const providerAlpha = dilateEditableAlpha(
+    editableAlpha,
+    plan.sourceRect.width,
+    plan.sourceRect.height,
+    plan.providerExpansion
+  );
+  const registrationExclusionAlpha = dilateEditableAlpha(
+    providerAlpha,
+    plan.sourceRect.width,
+    plan.sourceRect.height,
+    Math.max(2, Math.round(plan.providerExpansion * 0.25))
+  );
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = plan.requestWidth;
+  sourceCanvas.height = plan.requestHeight;
+  const sourceCtx = sourceCanvas.getContext('2d');
+  if (!sourceCtx) throw new Error('Failed to prepare the localized source crop.');
+  sourceCtx.imageSmoothingEnabled = true;
+  sourceCtx.imageSmoothingQuality = 'high';
+  sourceCtx.fillStyle = '#fff';
+  sourceCtx.fillRect(0, 0, plan.requestWidth, plan.requestHeight);
+  sourceCtx.drawImage(
+    source,
+    plan.sourceRect.x,
+    plan.sourceRect.y,
+    plan.sourceRect.width,
+    plan.sourceRect.height,
+    plan.contentRect.x,
+    plan.contentRect.y,
+    plan.contentRect.width,
+    plan.contentRect.height
+  );
+  // Protected request padding is extended from the crop's edge pixels. This
+  // avoids showing the model a stretched duplicate with contradictory geometry.
+  const padLeft = Math.max(0, plan.contentRect.x);
+  const padTop = Math.max(0, plan.contentRect.y);
+  const padRight = Math.max(0, plan.requestWidth - plan.contentRect.x - plan.contentRect.width);
+  const padBottom = Math.max(0, plan.requestHeight - plan.contentRect.y - plan.contentRect.height);
+  const sx = plan.sourceRect.x;
+  const sy = plan.sourceRect.y;
+  const sw = plan.sourceRect.width;
+  const sh = plan.sourceRect.height;
+  if (padLeft > 0) sourceCtx.drawImage(source, sx, sy, 1, sh, 0, padTop, padLeft, plan.contentRect.height);
+  if (padRight > 0) sourceCtx.drawImage(source, sx + sw - 1, sy, 1, sh, plan.contentRect.x + plan.contentRect.width, padTop, padRight, plan.contentRect.height);
+  if (padTop > 0) sourceCtx.drawImage(source, sx, sy, sw, 1, padLeft, 0, plan.contentRect.width, padTop);
+  if (padBottom > 0) sourceCtx.drawImage(source, sx, sy + sh - 1, sw, 1, padLeft, plan.contentRect.y + plan.contentRect.height, plan.contentRect.width, padBottom);
+  if (padLeft > 0 && padTop > 0) sourceCtx.drawImage(source, sx, sy, 1, 1, 0, 0, padLeft, padTop);
+  if (padRight > 0 && padTop > 0) sourceCtx.drawImage(source, sx + sw - 1, sy, 1, 1, plan.contentRect.x + plan.contentRect.width, 0, padRight, padTop);
+  if (padLeft > 0 && padBottom > 0) sourceCtx.drawImage(source, sx, sy + sh - 1, 1, 1, 0, plan.contentRect.y + plan.contentRect.height, padLeft, padBottom);
+  if (padRight > 0 && padBottom > 0) sourceCtx.drawImage(source, sx + sw - 1, sy + sh - 1, 1, 1, plan.contentRect.x + plan.contentRect.width, plan.contentRect.y + plan.contentRect.height, padRight, padBottom);
+
+  const providerMaskCanvas = alphaToMaskCanvas(
+    providerAlpha,
+    plan.sourceRect.width,
+    plan.sourceRect.height
+  );
+  const requestMaskCanvas = document.createElement('canvas');
+  requestMaskCanvas.width = plan.requestWidth;
+  requestMaskCanvas.height = plan.requestHeight;
+  const requestMaskCtx = requestMaskCanvas.getContext('2d');
+  if (!requestMaskCtx) throw new Error('Failed to prepare the localized provider mask.');
+  requestMaskCtx.fillStyle = '#000';
+  requestMaskCtx.fillRect(0, 0, plan.requestWidth, plan.requestHeight);
+  requestMaskCtx.imageSmoothingEnabled = true;
+  requestMaskCtx.imageSmoothingQuality = 'high';
+  requestMaskCtx.drawImage(
+    providerMaskCanvas,
+    plan.contentRect.x,
+    plan.contentRect.y,
+    plan.contentRect.width,
+    plan.contentRect.height
+  );
+  const requestMaskPixels = requestMaskCtx.getImageData(0, 0, plan.requestWidth, plan.requestHeight);
+  let selectedPixels = 0;
+  for (let pixel = 0; pixel < requestMaskPixels.data.length; pixel += 4) {
+    const selectedAlpha = clampByte(
+      ((requestMaskPixels.data[pixel] + requestMaskPixels.data[pixel + 1] + requestMaskPixels.data[pixel + 2]) / 3) *
+      (requestMaskPixels.data[pixel + 3] / 255)
+    );
+    requestMaskPixels.data[pixel] = selectedAlpha;
+    requestMaskPixels.data[pixel + 1] = selectedAlpha;
+    requestMaskPixels.data[pixel + 2] = selectedAlpha;
+    requestMaskPixels.data[pixel + 3] = 255;
+    if (selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD) selectedPixels += 1;
+  }
+  requestMaskCtx.putImageData(requestMaskPixels, 0, 0);
+
+  const sourceData = ImageUtils.dataUrlToImageData(sourceCanvas.toDataURL('image/png'));
+  const maskData = ImageUtils.dataUrlToImageData(requestMaskCanvas.toDataURL('image/png'));
+  if (!sourceData || !maskData) throw new Error('Failed to serialize the localized edit inputs.');
+  const requestPixels = plan.requestWidth * plan.requestHeight;
+
+  return {
+    sourceImage: {
+      base64: sourceData.base64,
+      mimeType: 'image/png',
+      width: plan.requestWidth,
+      height: plan.requestHeight,
+    },
+    selectionMask: {
+      base64: maskData.base64,
+      mimeType: 'image/png',
+      width: plan.requestWidth,
+      height: plan.requestHeight,
+    },
+    selectionStats: {
+      selectedPixels,
+      selectedRatio: selectedPixels / Math.max(requestPixels, 1),
+      userSelectedPixels: selectionBounds.selectedPixels,
+      userSelectedRatio: selectionBounds.selectedPixels / Math.max(sourceWidth * sourceHeight, 1),
+      providerEditablePixels: selectedPixels,
+      providerEditableRatio: selectedPixels / Math.max(requestPixels, 1),
+    },
+    layout: {
+      sourceWidth,
+      sourceHeight,
+      sourceRect: plan.sourceRect,
+      requestWidth: plan.requestWidth,
+      requestHeight: plan.requestHeight,
+      contentRect: plan.contentRect,
+      providerExpansion: plan.providerExpansion,
+      compositeFeather: plan.compositeFeather,
+      editableAlpha,
+      registrationExclusionAlpha,
+      operation: contract.operation,
+    },
+  };
 };
 
 const preparePreciseEditInputs = async (
@@ -851,44 +1402,16 @@ const getVisualExtendSourceRestoreMask = (
   return maskCanvas;
 };
 
-const getPreciseEditOperation = (activeTool: string): ImageEditOperation => {
-  if (activeTool === 'material') return 'replace_material';
-  if (activeTool === 'people') return 'add_people';
-  if (activeTool === 'remove') return 'remove_object';
-  if (activeTool === 'adjust') return 'recolor';
-  return 'custom';
-};
-
-const getPreciseEditTargetLabel = (activeTool: string): string => {
-  const labels: Record<string, string> = {
-    material: 'selected material or surface',
-    people: 'selected people area',
-    remove: 'selected object or person',
-    object: 'selected object',
-    replace: 'selected object',
-    sky: 'selected sky',
-    lighting: 'selected lighting area',
-    background: 'background outside the selected area',
-    select: 'selected area',
-  };
-  return labels[activeTool] || 'selected area';
-};
-
 const PRECISE_OPENAI_EDIT_TOOLS = new Set([
+  'select',
+  'material',
+  'lighting',
   'object',
+  'sky',
   'people',
   'remove',
   'replace',
 ]);
-const PRECISE_OPENAI_SELECTED_RATIO_LIMITS: Record<string, number> = {
-  people: 0.35,
-  remove: 0.35,
-  object: 0.45,
-  replace: 0.45,
-};
-
-const getPreciseOpenAISelectedRatioLimit = (activeTool: string): number =>
-  PRECISE_OPENAI_SELECTED_RATIO_LIMITS[activeTool] ?? 0.45;
 
 const drawMaskImageData = (
   mask: HTMLImageElement,
@@ -1454,6 +1977,141 @@ const materialPreviewToImageData = async (previewUrl: string, fallbackUrl?: stri
   }
 };
 
+const compositeLocalizedVisualEditResult = async (
+  sourceDataUrl: string,
+  generated: GeneratedImage,
+  layout: LocalizedEditLayout
+): Promise<GeneratedImage> => {
+  const [source, generatedImage] = await Promise.all([
+    loadCanvasImage(sourceDataUrl),
+    loadCanvasImage(generated.dataUrl),
+  ]);
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  const generatedWidth = generatedImage.naturalWidth || generatedImage.width;
+  const generatedHeight = generatedImage.naturalHeight || generatedImage.height;
+  if (sourceWidth !== layout.sourceWidth || sourceHeight !== layout.sourceHeight) {
+    throw new Error('The source image changed while the localized edit was running. The result was not applied.');
+  }
+  if (generatedWidth !== layout.requestWidth || generatedHeight !== layout.requestHeight) {
+    throw new Error(
+      `GPT Image 2 returned an unexpected edit size (${generatedWidth}×${generatedHeight}; expected ${layout.requestWidth}×${layout.requestHeight}). The result was not stretched or misplaced.`
+    );
+  }
+
+  const { sourceRect, contentRect } = layout;
+  const sourcePatchCanvas = document.createElement('canvas');
+  sourcePatchCanvas.width = sourceRect.width;
+  sourcePatchCanvas.height = sourceRect.height;
+  const sourcePatchCtx = sourcePatchCanvas.getContext('2d');
+  if (!sourcePatchCtx) throw new Error('Failed to read the source edit crop.');
+  sourcePatchCtx.drawImage(
+    source,
+    sourceRect.x,
+    sourceRect.y,
+    sourceRect.width,
+    sourceRect.height,
+    0,
+    0,
+    sourceRect.width,
+    sourceRect.height
+  );
+
+  const generatedPatchCanvas = document.createElement('canvas');
+  generatedPatchCanvas.width = sourceRect.width;
+  generatedPatchCanvas.height = sourceRect.height;
+  const generatedPatchCtx = generatedPatchCanvas.getContext('2d');
+  if (!generatedPatchCtx) throw new Error('Failed to inverse-map the generated edit crop.');
+  generatedPatchCtx.imageSmoothingEnabled = true;
+  generatedPatchCtx.imageSmoothingQuality = 'high';
+  generatedPatchCtx.drawImage(
+    generatedImage,
+    contentRect.x,
+    contentRect.y,
+    contentRect.width,
+    contentRect.height,
+    0,
+    0,
+    sourceRect.width,
+    sourceRect.height
+  );
+
+  const sourcePatchData = sourcePatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
+  const generatedPatchData = generatedPatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
+  // Compare the provider result against the source after the same request-size
+  // round trip. Otherwise harmless downsample/upscale interpolation is mistaken
+  // for an AI material/color change across the entire ROI.
+  const comparisonRequestCanvas = document.createElement('canvas');
+  comparisonRequestCanvas.width = layout.requestWidth;
+  comparisonRequestCanvas.height = layout.requestHeight;
+  const comparisonRequestCtx = comparisonRequestCanvas.getContext('2d');
+  if (!comparisonRequestCtx) throw new Error('Failed to prepare the localized comparison crop.');
+  comparisonRequestCtx.imageSmoothingEnabled = true;
+  comparisonRequestCtx.imageSmoothingQuality = 'high';
+  comparisonRequestCtx.fillStyle = '#fff';
+  comparisonRequestCtx.fillRect(0, 0, layout.requestWidth, layout.requestHeight);
+  comparisonRequestCtx.drawImage(
+    sourcePatchCanvas,
+    0,
+    0,
+    sourceRect.width,
+    sourceRect.height,
+    contentRect.x,
+    contentRect.y,
+    contentRect.width,
+    contentRect.height
+  );
+  const comparisonPatchCanvas = document.createElement('canvas');
+  comparisonPatchCanvas.width = sourceRect.width;
+  comparisonPatchCanvas.height = sourceRect.height;
+  const comparisonPatchCtx = comparisonPatchCanvas.getContext('2d');
+  if (!comparisonPatchCtx) throw new Error('Failed to inverse-map the localized comparison crop.');
+  comparisonPatchCtx.imageSmoothingEnabled = true;
+  comparisonPatchCtx.imageSmoothingQuality = 'high';
+  comparisonPatchCtx.drawImage(
+    comparisonRequestCanvas,
+    contentRect.x,
+    contentRect.y,
+    contentRect.width,
+    contentRect.height,
+    0,
+    0,
+    sourceRect.width,
+    sourceRect.height
+  );
+  const comparisonPatchData = comparisonPatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
+  const composited = await runLocalizedImageCompositeOffThread({
+    sourcePixels: sourcePatchData.data,
+    comparisonPixels: comparisonPatchData.data,
+    generatedPixels: generatedPatchData.data,
+    editableAlpha: layout.editableAlpha,
+    registrationExclusionAlpha: layout.registrationExclusionAlpha,
+    width: sourceRect.width,
+    height: sourceRect.height,
+    featherRadius: layout.compositeFeather,
+    maxShift: Math.min(8, Math.max(3, Math.round(Math.min(sourceRect.width, sourceRect.height) * 0.006))),
+    operation: layout.operation,
+  });
+
+  if (!composited.quality.accepted) {
+    throw new Error(`The generated local edit failed the ${layout.operation} preservation check (${composited.quality.reason}). It was not applied.`);
+  }
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = sourceWidth;
+  outputCanvas.height = sourceHeight;
+  const outputCtx = outputCanvas.getContext('2d');
+  if (!outputCtx) throw new Error('Failed to composite the localized image edit.');
+  outputCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
+  const localizedImageData = outputCtx.createImageData(sourceRect.width, sourceRect.height);
+  localizedImageData.data.set(composited.pixels);
+  outputCtx.putImageData(localizedImageData, sourceRect.x, sourceRect.y);
+  return {
+    ...generated,
+    ...generatedImageFromDataUrl(outputCanvas.toDataURL('image/png')),
+  };
+};
+
 const compositeVisualEditResult = async (
   sourceDataUrl: string,
   generated: GeneratedImage,
@@ -1619,11 +2277,33 @@ export interface UseGenerationReturn {
   setApiKey: (key: string) => void;
 }
 
+type VisualEditGenerationSession = {
+  sourceImageUrl: string;
+  activeTool: string;
+  visualSelections: AppState['workflow']['visualSelections'];
+};
+
 export function useGeneration(): UseGenerationReturn {
   const { state, dispatch } = useAppStore();
   const { i18n } = useTranslation();
   const abortControllerRef = useRef<AbortController | null>(null);
   const upscaleBatchSnapshotRef = useRef<AppState['workflow']['upscaleBatch'] | null>(null);
+  const latestStateRef = useRef(state);
+  const activeVisualEditSessionRef = useRef<VisualEditGenerationSession | null>(null);
+  latestStateRef.current = state;
+
+  useEffect(() => {
+    const session = activeVisualEditSessionRef.current;
+    if (!session) return;
+    if (
+      state.mode !== 'visual-edit' ||
+      state.uploadedImage !== session.sourceImageUrl ||
+      state.workflow.activeTool !== session.activeTool ||
+      state.workflow.visualSelections !== session.visualSelections
+    ) {
+      abortControllerRef.current?.abort();
+    }
+  }, [state.mode, state.uploadedImage, state.workflow.activeTool, state.workflow.visualSelections]);
 
   const isReady = ensureServiceInitialized();
   const effectiveImageGenerationModel =
@@ -2166,6 +2846,20 @@ export function useGeneration(): UseGenerationReturn {
       effectiveImageGenerationModel,
       state.workflow.videoState
     );
+    let visualEditSession: VisualEditGenerationSession | null = null;
+    const assertVisualEditSessionCurrent = () => {
+      if (!visualEditSession) return;
+      const latest = latestStateRef.current;
+      if (
+        abortSignal.aborted ||
+        latest.mode !== 'visual-edit' ||
+        latest.uploadedImage !== visualEditSession.sourceImageUrl ||
+        latest.workflow.activeTool !== visualEditSession.activeTool ||
+        latest.workflow.visualSelections !== visualEditSession.visualSelections
+      ) {
+        throw new DOMException('The visual edit session changed before the result could be applied.', 'AbortError');
+      }
+    };
 
     try {
       if (abortSignal.aborted) {
@@ -2195,8 +2889,10 @@ export function useGeneration(): UseGenerationReturn {
       // Build prompt. Source-based modes always keep the structured prompt so
       // preservation constraints cannot be bypassed by a freeform prompt.
       let basePrompt = '';
-      let explicitPrompt = state.prompt?.trim() || options.prompt?.trim() || '';
-      if (options.prompt && explicitPrompt && needsTranslation(i18n.language)) {
+      let explicitPrompt = state.mode === 'visual-edit'
+        ? options.prompt?.trim() || state.workflow.visualPrompt?.trim() || ''
+        : state.prompt?.trim() || options.prompt?.trim() || '';
+      if (explicitPrompt && needsTranslation(i18n.language)) {
         try {
           explicitPrompt = await translateToEnglish(explicitPrompt, i18n.language);
         } catch (error) {
@@ -2331,30 +3027,6 @@ export function useGeneration(): UseGenerationReturn {
             images.push(referenceImage);
           }
         });
-      }
-
-      // Add background reference image for visual-edit background tool if enabled
-      if (
-        state.mode === 'visual-edit' &&
-        state.workflow.activeTool === 'background' &&
-        state.workflow.visualBackground.mode === 'image' &&
-        state.workflow.visualBackground.referenceImage
-      ) {
-        const bgImgData = dataUrlToImageData(state.workflow.visualBackground.referenceImage);
-        if (bgImgData) {
-          images.push(bgImgData);
-        }
-      }
-
-      if (
-        state.mode === 'visual-edit' &&
-        state.workflow.activeTool === 'select' &&
-        state.workflow.visualReferenceImage
-      ) {
-        const refImgData = dataUrlToImageData(state.workflow.visualReferenceImage);
-        if (refImgData) {
-          images.push(refImgData);
-        }
       }
 
       // Add attachments
@@ -3537,25 +4209,75 @@ export function useGeneration(): UseGenerationReturn {
           throw new DOMException('Request aborted', 'AbortError');
         }
         const sourceImageUrl = state.uploadedImage;
-        const sourceImage = sourceImageUrl ? dataUrlToImageData(sourceImageUrl) : null;
-        if (!sourceImage) {
+        if (state.workflow.visualAutoSelecting) {
+          throw new Error('Wait for auto-selection to finish before applying the edit.');
+        }
+        if (!sourceImageUrl) {
           throw new Error('No source image available for visual edit.');
         }
         const activeVisualTool = state.workflow.activeTool;
-        const selectedMaskDataUrl = state.workflow.visualSelectionMask;
-        const shouldUseSelectionMask = Boolean(selectedMaskDataUrl) &&
+        visualEditSession = {
+          sourceImageUrl: sourceImageUrl!,
+          activeTool: activeVisualTool,
+          visualSelections: state.workflow.visualSelections,
+        };
+        activeVisualEditSessionRef.current = visualEditSession;
+        assertVisualEditSessionCurrent();
+        const selectionShapesSnapshot = state.workflow.visualSelections.map((shape) => {
+          if (shape.type === 'rect') {
+            return {
+              ...shape,
+              start: { ...shape.start },
+              end: { ...shape.end },
+            };
+          }
+          return {
+            ...shape,
+            points: shape.points.map((point) => ({ ...point })),
+          };
+        });
+        const selectionSnapshot = await renderVisualSelectionSnapshot(
+          sourceImageUrl!,
+          selectionShapesSnapshot
+        );
+        assertVisualEditSessionCurrent();
+        const hasSelection = Boolean(selectionSnapshot) && hasUsableVisualSelection(selectionShapesSnapshot);
+        if (visualEditRequiresSelection(activeVisualTool) && !hasSelection) {
+          throw new Error('Select the area you want to edit before clicking Apply Edits.');
+        }
+        const shouldUseSelectionMask = hasSelection &&
           activeVisualTool !== 'extend' &&
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
         const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-image-generation-2';
+        const willUseLocalizedOpenAIEdit = Boolean(
+          isOpenAIVisualEdit &&
+          shouldUseSelectionMask &&
+          selectionSnapshot &&
+          PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
+          activeVisualTool !== 'extend'
+        );
+        // Avoid duplicating the full source base64 string in memory when the
+        // localized route will immediately extract only a context crop.
+        const sourceImage = willUseLocalizedOpenAIEdit
+          ? null
+          : dataUrlToImageData(sourceImageUrl);
+        if (!willUseLocalizedOpenAIEdit && !sourceImage) {
+          throw new Error('Failed to prepare the source image for visual edit.');
+        }
+        // The localized path consumes the already-rasterized alpha plane directly.
+        // Serialize a full-resolution PNG only for legacy/full-frame paths.
+        const selectedMaskDataUrl = selectionSnapshot && !willUseLocalizedOpenAIEdit
+          ? selectionSnapshot.canvas.toDataURL('image/png')
+          : null;
         const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
         const effectiveFeatherAmount = state.workflow.visualSelection.featherEnabled
           ? state.workflow.visualSelection.featherAmount
-          : 35;
-        const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided'
+          : 0;
+        const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided' && !willUseLocalizedOpenAIEdit
           ? await createGuidanceMaskDataUrl(selectedMaskDataUrl, effectiveFeatherAmount)
           : selectedMaskDataUrl;
-        const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl
+        const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl && !willUseLocalizedOpenAIEdit
           ? isOpenAIVisualEdit
             ? await createOpenAIEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
             : await createEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
@@ -3595,6 +4317,21 @@ export function useGeneration(): UseGenerationReturn {
                 materialReference.fallbackPreviewUrl
               )
             : null;
+        const generalReferenceImage = activeVisualTool === 'select' && state.workflow.visualReferenceImage
+          ? dataUrlToImageData(state.workflow.visualReferenceImage)
+          : null;
+        const backgroundReferenceImage = activeVisualTool === 'background' &&
+          state.workflow.visualBackground.mode === 'image' &&
+          state.workflow.visualBackground.referenceImage
+          ? dataUrlToImageData(state.workflow.visualBackground.referenceImage)
+          : null;
+        const visualEditReferenceImages = (await Promise.all([
+          materialReferenceImage,
+          generalReferenceImage,
+          backgroundReferenceImage,
+        ].map(normalizeGatewayImageEditReference))).filter(
+          (image): image is GatewayImageEditReference => image !== null
+        );
         const visualExtendOutpaintInputs = activeVisualTool === 'extend'
           ? await prepareVisualExtendOutpaintInputs(
               sourceImageUrl!,
@@ -3642,17 +4379,11 @@ export function useGeneration(): UseGenerationReturn {
               }
             : generationConfigWithAbort;
           const editReferenceImages = [
-            requestSourceImage,
+            ...(requestSourceImage ? [requestSourceImage] : []),
             ...(includeMaskAsReferenceImage && requestMaskImage ? [requestMaskImage] : []),
-            ...(materialReferenceImage ? [materialReferenceImage] : [])
+            ...visualEditReferenceImages
           ];
-          const canUsePreciseOpenAIEdit = Boolean(
-            isOpenAIVisualEdit &&
-            shouldUseSelectionMask &&
-            selectedMaskDataUrl &&
-            PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
-            activeVisualTool !== 'extend'
-          );
+          const canUsePreciseOpenAIEdit = willUseLocalizedOpenAIEdit;
           let usedPreciseOpenAIEdit = false;
           let normalizedInputsForMaskedOpenAIEdit: { sourceImage: ImageData; maskImage: ImageData } | null = null;
           const getInputsForGenericEdit = async (): Promise<{ sourceImage: ImageData; maskImage: ImageData | null }> => {
@@ -3661,6 +4392,9 @@ export function useGeneration(): UseGenerationReturn {
                 sourceImage: visualExtendOutpaintInputs.sourceImage,
                 maskImage: visualExtendOutpaintInputs.maskImage,
               };
+            }
+            if (!requestSourceImage) {
+              throw new Error('Failed to prepare the source image for visual edit.');
             }
             if (effectiveImageGenerationModel !== 'chatgpt-image-generation-2' || !requestMaskImage || !editableMaskDataUrl) {
               return { sourceImage: requestSourceImage, maskImage: requestMaskImage || null };
@@ -3676,66 +4410,111 @@ export function useGeneration(): UseGenerationReturn {
             return normalizedInputsForMaskedOpenAIEdit;
           };
 
-          if (canUsePreciseOpenAIEdit && selectedMaskDataUrl) {
-            const preciseInputs = await preparePreciseEditInputs(
-              sourceImageUrl!,
-              selectedMaskDataUrl,
-              editOutsideSelection
+          if (canUsePreciseOpenAIEdit && selectionSnapshot) {
+            const localizedInstruction = buildLocalizedVisualEditInstruction(
+              state,
+              explicitPrompt
             );
-            const selectedRatio = preciseInputs.selectionStats.selectedRatio ?? 1;
-            const sourceSelectedRatio = preciseInputs.sourceSelectionStats.selectedRatio ?? 0;
-            if (editOutsideSelection && sourceSelectedRatio < 0.0025) {
-              throw new Error('Select the foreground or subject you want to keep before editing the background.');
+            const localizedContract = buildLocalizedVisualEditContract({
+              activeTool: activeVisualTool,
+              instruction: localizedInstruction,
+              peopleMode: state.workflow.visualPeople.mode,
+            });
+            if (activeVisualTool === 'select' && !localizedContract.userInstruction) {
+              throw new Error('Describe the requested change in the Edit Prompt field before applying the selection.');
             }
-            if (selectedRatio <= getPreciseOpenAISelectedRatioLimit(activeVisualTool)) {
-              const preciseOperation = getPreciseEditOperation(activeVisualTool);
-              const preciseTargetLabel = getPreciseEditTargetLabel(activeVisualTool);
-              const quality = state.output.resolution === '4k' || state.output.resolution === 'print'
-                ? 'final'
-                : state.output.resolution === '720p'
-                  ? 'draft'
-                  : 'standard';
-
-              result = await runImageGeneration(
-                'precise image edit',
-                basePrompt,
-                editReferenceImages,
-                async (promptForAttempt) => {
-                  updateGenerationStage('aiLayer');
-                  updateProgress(18);
-                  const editResponse = await imageEditRequest({
-                    sourceImage: preciseInputs.sourceImage,
-                    selectionMask: preciseInputs.selectionMask,
-                    selectionStats: preciseInputs.selectionStats,
-                    prompt: promptForAttempt,
-                    operation: preciseOperation,
-                    targetLabel: preciseTargetLabel,
-                    originalGenerationPrompt: basePrompt,
-                    quality,
-                    variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
-                    outputFormat: 'png',
-                    referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
-                  }, { signal: abortSignal });
-                  updateGenerationStage('transfer');
-                  updateProgress(88);
-                  const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
-                  const finalizedImages = await Promise.all(
-                    editedImages.map((image) => compositeVisualEditResult(sourceImageUrl!, image, selectedMaskDataUrl, editOutsideSelection, {
-                      seamless: !editOutsideSelection,
-                      featherAmount: effectiveFeatherAmount,
-                    }))
-                  );
-                  return {
-                    text: null,
-                    images: finalizedImages,
-                    optimizedPrompt: editResponse.versions[0]?.prompt || promptForAttempt
-                  };
-                },
-                basePrompt
-              );
-              visualMaskHandledLocally = true;
-              usedPreciseOpenAIEdit = true;
+            if (!localizedContract.userInstruction) {
+              throw new Error('The selected Visual Edit tool does not yet have a complete operation instruction.');
             }
+            const preciseInputs = await prepareLocalizedOpenAIEditInputs(
+              sourceImageUrl!,
+              selectionSnapshot,
+              localizedContract,
+              effectiveFeatherAmount
+            );
+            assertVisualEditSessionCurrent();
+            updateGenerationStage('aiLayer');
+            updateProgress(14);
+            const resolvedIntent = await resolveLocalizedEditIntent({
+              service,
+              contract: localizedContract,
+              sourceImage: preciseInputs.sourceImage,
+              selectionMask: preciseInputs.selectionMask,
+              abortSignal,
+            });
+            assertVisualEditSessionCurrent();
+            // Every localized operation is a real Image Edit. The pre-generation
+            // layer may clarify the instruction, but it never changes the user's
+            // selection. After generation we only align, seam-match and restore
+            // protected source pixels; generated content is never mechanically
+            // recolored or reconstructed from the source.
+            const modelInstruction = resolvedIntent.optimizedInstruction || localizedContract.userInstruction;
+            const quality: 'final' = 'final';
+            let deterministicAttempt = 0;
+            let lastDeterministicRejection = '';
+            result = await runImageGeneration(
+              'localized image edit',
+              localizedContract.userInstruction,
+              editReferenceImages,
+              async () => {
+                assertVisualEditSessionCurrent();
+                updateGenerationStage('aiLayer');
+                updateProgress(18);
+                const attempt = deterministicAttempt++;
+                const retryInstruction = attempt > 0
+                  ? `${modelInstruction} Retry the same requested edit. The previous candidate could not be safely aligned or blended because: ${lastDeterministicRejection || 'its localized boundary was inconsistent'}. Keep the identical crop and coordinate system, execute the user request visibly, and integrate the edited area naturally with the surrounding perspective, lighting, shadows, reflections, texture, and occlusion.`
+                  : modelInstruction;
+                const editResponse = await imageEditRequest({
+                  sourceImage: preciseInputs.sourceImage,
+                  selectionMask: preciseInputs.selectionMask,
+                  selectionStats: preciseInputs.selectionStats,
+                  prompt: localizedContract.userInstruction,
+                  optimizedPrompt: retryInstruction,
+                  operation: localizedContract.operation,
+                  targetLabel: resolvedIntent.targetLabel,
+                  colorHex: localizedContract.colorHex,
+                  quality,
+                  variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
+                  outputFormat: 'png',
+                  referenceImages: visualEditReferenceImages.length > 0 ? visualEditReferenceImages : undefined,
+                  localizedPatch: true,
+                }, { signal: abortSignal });
+                assertVisualEditSessionCurrent();
+                updateGenerationStage('transfer');
+                updateProgress(88);
+                const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
+                const finalizedImages: GeneratedImage[] = [];
+                // Bound peak memory for high-resolution multi-variant edits.
+                for (const image of editedImages) {
+                  assertVisualEditSessionCurrent();
+                  try {
+                    const finalized = await compositeLocalizedVisualEditResult(
+                      sourceImageUrl!,
+                      image,
+                      preciseInputs.layout
+                    );
+                    finalizedImages.push(finalized);
+                  } catch (error) {
+                    if (!lastDeterministicRejection) {
+                      lastDeterministicRejection = error instanceof Error ? error.message : String(error);
+                    }
+                    throw error;
+                  }
+                }
+                assertVisualEditSessionCurrent();
+                return {
+                  text: null,
+                  images: finalizedImages,
+                  optimizedPrompt: editResponse.versions[0]?.prompt || retryInstruction
+                };
+              },
+              localizedContract.userInstruction,
+              {
+                maxRetries: localizedContract.maxDeterministicRetries,
+              }
+            );
+            visualMaskHandledLocally = true;
+            usedPreciseOpenAIEdit = true;
           }
 
           if (!usedPreciseOpenAIEdit) {
@@ -3758,7 +4537,7 @@ export function useGeneration(): UseGenerationReturn {
                   sourceImage: editSourceImage,
                   maskImage: editMaskImage || undefined,
                   maskMode: requestMaskMode,
-                  referenceImages: materialReferenceImage ? [materialReferenceImage] : undefined,
+                  referenceImages: visualEditReferenceImages.length > 0 ? visualEditReferenceImages : undefined,
                   prompt: promptForAttempt,
                   editType,
                   activeTool: activeVisualTool,
@@ -4090,9 +4869,11 @@ export function useGeneration(): UseGenerationReturn {
             );
       }
       updateProgress(95);
+      assertVisualEditSessionCurrent();
 
       // Process result
       if (result.images && result.images.length > 0 && !isUpscaleMode && !multiAngleHistoryHandled) {
+        assertVisualEditSessionCurrent();
         const sourceForHistory = state.mode === 'scene-compose'
           ? baseImage
           : state.sourceImage ?? (isSourceLockedMode ? state.uploadedImage : null);
@@ -4118,6 +4899,7 @@ export function useGeneration(): UseGenerationReturn {
         // Use the final image part as the main image. Gemini 3 image models can
         // emit interim image parts before the finished render.
         const generatedImageUrl = pickFinalImage(result.images)?.dataUrl || result.images[0].dataUrl;
+        assertVisualEditSessionCurrent();
         dispatch({ type: 'SET_IMAGE', payload: generatedImageUrl });
         dispatch({ type: 'SET_CANVAS_ZOOM', payload: 1 });
         dispatch({ type: 'SET_CANVAS_PAN', payload: { x: 0, y: 0 } });
@@ -4407,6 +5189,14 @@ export function useGeneration(): UseGenerationReturn {
       // Could dispatch an error action here
       // dispatch({ type: 'SET_ERROR', payload: error.message });
     } finally {
+      if (
+        visualEditSession &&
+        activeVisualEditSessionRef.current?.sourceImageUrl === visualEditSession.sourceImageUrl &&
+        activeVisualEditSessionRef.current?.activeTool === visualEditSession.activeTool &&
+        activeVisualEditSessionRef.current?.visualSelections === visualEditSession.visualSelections
+      ) {
+        activeVisualEditSessionRef.current = null;
+      }
       setActiveGenerationTraceId(null);
     }
   }, [

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
-import { generatePrompt } from '../../../engine/promptEngine';
+import { buildLocalizedVisualEditInstruction, generatePrompt } from '../../../engine/promptEngine';
 import { ChevronDown, Copy, Terminal, History, Clock, Layers, Play, Pause, SkipForward, Wand2, Eye, EyeOff, GripVertical, Check, ZoomIn, ZoomOut, Download, RotateCcw, FileText } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { downloadImage, downloadImagesSequentially } from '../../../lib/download';
@@ -14,7 +14,9 @@ import { VideoLockBanner } from '../../video/VideoLockBanner';
 export const BottomPanel: React.FC = () => {
   const { state, dispatch } = useAppStore();
   const { t } = useTranslation();
-  const prompt = generatePrompt(state);
+  const prompt = state.mode === 'visual-edit'
+    ? buildLocalizedVisualEditInstruction(state)
+    : generatePrompt(state);
   const [historySelectMode, setHistorySelectMode] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(() => new Set());
   const [expandedPromptHistoryId, setExpandedPromptHistoryId] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export const BottomPanel: React.FC = () => {
   const showLegend = state.mode === 'masterplan';
   const showCleanup = state.mode === 'img-to-cad';
   const isGenerateTextMode = state.mode === 'generate-text';
+  const isVisualEditMode = state.mode === 'visual-edit';
   const isMultiAngleMode = state.mode === 'multi-angle';
   const isVideoLocked = state.mode === 'video' && !state.workflow.videoState.accessUnlocked;
   const bottomTabs = useMemo(() => [
@@ -122,12 +125,19 @@ export const BottomPanel: React.FC = () => {
           <div className="relative flex-1 group">
             <textarea
               value={editablePrompt}
+              readOnly={isVisualEditMode}
+              aria-label={isVisualEditMode ? 'Compiled Visual Edit prompt preview' : 'Generation prompt'}
+              title={isVisualEditMode ? 'Compiled preview. Use Edit Prompt in the right panel to change the instruction.' : undefined}
               onChange={(event) => {
+                if (isVisualEditMode) return;
                 setEditablePrompt(event.target.value);
                 setIsPromptEdited(true);
                 dispatch({ type: 'SET_PROMPT', payload: event.target.value });
               }}
-              className="w-full h-full resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground-secondary focus:outline-none"
+              className={cn(
+                "w-full h-full resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground-secondary focus:outline-none",
+                isVisualEditMode && "cursor-default"
+              )}
             />
             <div className="absolute top-0 right-0 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
@@ -137,17 +147,19 @@ export const BottomPanel: React.FC = () => {
               >
                 <Copy size={14} />
               </button>
-              <button
-                className="p-2 bg-surface-elevated border border-border rounded shadow-sm hover:bg-surface-sunken"
-                title="Revert to generated prompt"
-                onClick={() => {
-                  setEditablePrompt(prompt);
-                  setIsPromptEdited(false);
-                  dispatch({ type: 'SET_PROMPT', payload: '' });
-                }}
-              >
-                <RotateCcw size={14} />
-              </button>
+              {!isVisualEditMode && (
+                <button
+                  className="p-2 bg-surface-elevated border border-border rounded shadow-sm hover:bg-surface-sunken"
+                  title="Revert to generated prompt"
+                  onClick={() => {
+                    setEditablePrompt(prompt);
+                    setIsPromptEdited(false);
+                    dispatch({ type: 'SET_PROMPT', payload: '' });
+                  }}
+                >
+                  <RotateCcw size={14} />
+                </button>
+              )}
             </div>
           </div>
           {isVideoMode && (

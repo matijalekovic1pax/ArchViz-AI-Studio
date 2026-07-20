@@ -174,7 +174,42 @@ const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
 const updateWorkflow = (
   workflow: WorkflowSettings,
   payload: Partial<WorkflowSettings>
-): WorkflowSettings => normalizeWorkflow({ ...workflow, ...payload });
+): WorkflowSettings => {
+  const selectionChanged = Object.prototype.hasOwnProperty.call(payload, 'visualSelections') &&
+    payload.visualSelections !== workflow.visualSelections;
+  const merged = { ...workflow, ...payload };
+  if (selectionChanged) {
+    merged.visualSelectionMask = null;
+    merged.visualSelectionMaskSize = null;
+    merged.visualSelectionViewScale = null;
+    merged.visualSelectionComposite = null;
+    merged.visualSelectionCompositeSize = null;
+  }
+  return normalizeWorkflow(merged);
+};
+
+const clearVisualSelectionSession = (workflow: WorkflowSettings): WorkflowSettings => ({
+  ...workflow,
+  visualSelections: [],
+  visualSelectionUndoStack: [],
+  visualSelectionRedoStack: [],
+  visualSelectionMask: null,
+  visualSelectionMaskSize: null,
+  visualSelectionViewScale: null,
+  visualSelectionComposite: null,
+  visualSelectionCompositeSize: null,
+  visualAutoSelecting: false,
+});
+
+const clearVisualSelectionDerivedArtifacts = (workflow: WorkflowSettings): WorkflowSettings => ({
+  ...workflow,
+  visualSelectionMask: null,
+  visualSelectionMaskSize: null,
+  visualSelectionViewScale: null,
+  visualSelectionComposite: null,
+  visualSelectionCompositeSize: null,
+  visualAutoSelecting: false,
+});
 
 const shouldLockAiSlopModel = (mode: AppState['mode'], workflow: WorkflowSettings) =>
   mode === 'upscale' && workflow.upscaleMode === 'ai-slop';
@@ -1046,12 +1081,16 @@ function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_MODE': {
       const nextMode = action.payload;
+      const nextWorkflow = nextMode === 'visual-edit' || !state.workflow.visualAutoSelecting
+        ? state.workflow
+        : { ...state.workflow, visualAutoSelecting: false };
       return {
         ...state,
         mode: nextMode,
+        workflow: nextWorkflow,
         activeRightTab: 'default',
         prompt: '',
-        imageGenerationModel: getLockedImageGenerationModel(nextMode, state.workflow) ?? state.imageGenerationModel
+        imageGenerationModel: getLockedImageGenerationModel(nextMode, nextWorkflow) ?? state.imageGenerationModel
       };
     }
     case 'SET_IMAGE_GENERATION_MODEL': return {
@@ -1064,9 +1103,20 @@ function appReducer(state: AppState, action: Action): AppState {
       activeStyleId: action.payload,
       workflow: { ...state.workflow, styleReferenceEnabled: false }
     };
-    case 'SET_IMAGE': return { ...state, uploadedImage: action.payload };
+    case 'SET_IMAGE': return {
+      ...state,
+      uploadedImage: action.payload,
+      workflow: action.payload !== state.uploadedImage
+        ? clearVisualSelectionSession(state.workflow)
+        : state.workflow,
+    };
     case 'SET_SOURCE_IMAGE': return { ...state, sourceImage: action.payload };
-    case 'CLEAR_CANVAS': return { ...state, uploadedImage: null, sourceImage: null };
+    case 'CLEAR_CANVAS': return {
+      ...state,
+      uploadedImage: null,
+      sourceImage: null,
+      workflow: clearVisualSelectionSession(state.workflow),
+    };
     case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
     case 'SET_PROGRESS': return { ...state, progress: action.payload };
     case 'SET_GENERATION_STAGE': return { ...state, generationStage: action.payload };
@@ -1120,7 +1170,9 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
     case 'LOAD_PROJECT': {
-      const workflow = normalizeWorkflow(action.payload.workflow);
+      // Raster previews are revision-specific caches. Rebuild them from the
+      // canonical vector shapes after import instead of trusting serialized data.
+      const workflow = clearVisualSelectionDerivedArtifacts(normalizeWorkflow(action.payload.workflow));
       return {
         ...action.payload,
         imageGenerationModel: getLockedImageGenerationModel(action.payload.mode, workflow) ?? normalizeImageGenerationModel(action.payload?.imageGenerationModel),

@@ -306,7 +306,7 @@ type PeopleChipOption = { value: string; label: string };
 const toggleChip = (items: string[], value: string) =>
   items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
 
-const Chip = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
+const Chip = ({ active, label, onClick }: { key?: React.Key; active: boolean; label: string; onClick: () => void }) => (
   <button
     onClick={onClick}
     className={cn(
@@ -1591,6 +1591,7 @@ export const VisualEditPanel = () => {
   const wf = state.workflow;
   const tool = wf.activeTool;
   const activeTool = tool === 'replace' ? 'object' : tool;
+  const autoSelectionLocked = state.isGenerating || wf.visualAutoSelecting;
 
   const [showExamples, setShowExamples] = useState(false);
   const [materialQuery, setMaterialQuery] = useState('');
@@ -1606,8 +1607,48 @@ export const VisualEditPanel = () => {
   const materialReferenceInputRef = useRef<HTMLInputElement>(null);
   const visualReferenceInputRef = useRef<HTMLInputElement>(null);
   const autoSelectRequestIdRef = useRef(0);
+  const autoSelectImageRef = useRef(state.uploadedImage);
+  const autoSelectIntentRef = useRef('');
+  const lastAutoSelectImageRef = useRef(state.uploadedImage);
+  const lastAutoSelectScopeRef = useRef(`${tool}\u0000${wf.visualSelection.mode}`);
+  autoSelectImageRef.current = state.uploadedImage;
+  autoSelectIntentRef.current = [
+    state.uploadedImage || '',
+    tool,
+    wf.visualSelection.mode,
+    [...wf.visualSelection.autoTargets].sort().join(','),
+    wf.visualPrompt,
+  ].join('\u0000');
 
   const updateWf = (payload: any) => dispatch({ type: 'UPDATE_WORKFLOW', payload });
+
+  useEffect(() => {
+    if (lastAutoSelectImageRef.current === state.uploadedImage) return;
+    lastAutoSelectImageRef.current = state.uploadedImage;
+    autoSelectRequestIdRef.current += 1;
+    setAutoSelectStatus('idle');
+    setAutoSelectMessage('');
+    if (wf.visualAutoSelecting) {
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
+    }
+  }, [dispatch, state.uploadedImage, wf.visualAutoSelecting]);
+
+  useEffect(() => {
+    const nextScope = `${tool}\u0000${wf.visualSelection.mode}`;
+    if (lastAutoSelectScopeRef.current === nextScope) return;
+    lastAutoSelectScopeRef.current = nextScope;
+    autoSelectRequestIdRef.current += 1;
+    setAutoSelectStatus('idle');
+    setAutoSelectMessage('');
+    if (wf.visualAutoSelecting) {
+      dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
+    }
+  }, [dispatch, tool, wf.visualAutoSelecting, wf.visualSelection.mode]);
+
+  useEffect(() => () => {
+    autoSelectRequestIdRef.current += 1;
+    dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
+  }, [dispatch]);
 
   const updateSelection = (updates: Partial<typeof wf.visualSelection>) =>
     updateWf({ visualSelection: { ...wf.visualSelection, ...updates } });
@@ -1942,6 +1983,17 @@ export const VisualEditPanel = () => {
 
   const runAutoSelection = useCallback(async (targets: string[]) => {
     if (!targets.length) return;
+    if (state.isGenerating) {
+      dispatch({
+        type: 'SET_APP_ALERT',
+        payload: {
+          id: nanoid(),
+          tone: 'warning',
+          message: 'Wait for the current generation to finish before changing the selection.'
+        }
+      });
+      return;
+    }
     if (!state.uploadedImage) {
       updateWf({ visualAutoSelecting: false });
       dispatch({
@@ -1967,6 +2019,14 @@ export const VisualEditPanel = () => {
       return;
     }
 
+    const sourceImageUrl = state.uploadedImage;
+    const requestIntent = [
+      sourceImageUrl,
+      tool,
+      wf.visualSelection.mode,
+      [...targets].sort().join(','),
+      wf.visualPrompt,
+    ].join('\u0000');
     const requestId = autoSelectRequestIdRef.current + 1;
     autoSelectRequestIdRef.current = requestId;
     setAutoSelectStatus('loading');
@@ -1977,11 +2037,11 @@ export const VisualEditPanel = () => {
     const MIN_LOADING_MS = 1500;
 
     try {
-      const imageData = ImageUtils.dataUrlToImageData(state.uploadedImage);
+      const imageData = ImageUtils.dataUrlToImageData(sourceImageUrl);
       if (!imageData) {
         throw new Error('Failed to prepare image data.');
       }
-      const imageSize = await loadImageSize(state.uploadedImage);
+      const imageSize = await loadImageSize(sourceImageUrl);
       if (!imageSize) {
         throw new Error('Failed to read image dimensions.');
       }
@@ -2011,13 +2071,21 @@ export const VisualEditPanel = () => {
         throw new Error('No text returned from auto-selection request.');
       }
 
-      if (autoSelectRequestIdRef.current !== requestId) return;
+      if (
+        autoSelectRequestIdRef.current !== requestId ||
+        autoSelectImageRef.current !== sourceImageUrl ||
+        autoSelectIntentRef.current !== requestIntent
+      ) return;
 
       let shapes = buildSelectionShapes(responseText, imageSize.width, imageSize.height, targets);
       if (!shapes.length && shouldRetryAutoSelectionBroadly(targets)) {
         setAutoSelectMessage(`Broadly selecting ${targets.join(', ')}...`);
         const retryResponseText = await requestSelection(true);
-        if (autoSelectRequestIdRef.current !== requestId) return;
+        if (
+          autoSelectRequestIdRef.current !== requestId ||
+          autoSelectImageRef.current !== sourceImageUrl ||
+          autoSelectIntentRef.current !== requestIntent
+        ) return;
         shapes = buildSelectionShapes(retryResponseText, imageSize.width, imageSize.height, targets);
       }
       if (!shapes.length) {
@@ -2036,7 +2104,10 @@ export const VisualEditPanel = () => {
       setAutoSelectStatus('idle');
       setAutoSelectMessage('');
     } catch (error) {
-      if (autoSelectRequestIdRef.current !== requestId) return;
+      if (
+        autoSelectRequestIdRef.current !== requestId ||
+        autoSelectIntentRef.current !== requestIntent
+      ) return;
       setAutoSelectStatus('error');
       const message = error instanceof Error ? error.message : 'Auto selection failed.';
       setAutoSelectMessage(message);
@@ -2066,9 +2137,12 @@ export const VisualEditPanel = () => {
     dispatch,
     ensureAutoSelectService,
     loadImageSize,
+    state.isGenerating,
     state.uploadedImage,
     state.workflow.visualSelectionUndoStack,
     state.workflow.visualSelections,
+    wf.visualSelection.mode,
+    tool,
     wf.visualPrompt,
     updateWf
   ]);
@@ -2196,6 +2270,7 @@ export const VisualEditPanel = () => {
 
   useEffect(() => {
     if (wf.visualSelection.mode !== 'ai' || wf.visualSelection.autoTargets.length === 0) {
+      autoSelectRequestIdRef.current += 1;
       setAutoSelectStatus('idle');
       setAutoSelectMessage('');
       dispatch({ type: 'UPDATE_WORKFLOW', payload: { visualAutoSelecting: false } });
@@ -2416,6 +2491,7 @@ export const VisualEditPanel = () => {
   );
 
   const handleToggleTarget = (target: string) => {
+    if (autoSelectionLocked) return;
     const next = wf.visualSelection.autoTargets.includes(target)
       ? wf.visualSelection.autoTargets.filter((item) => item !== target)
       : [...wf.visualSelection.autoTargets, target];
@@ -2593,20 +2669,20 @@ export const VisualEditPanel = () => {
                 <div className="relative">
                   <div className={cn(
                     'grid grid-cols-2 sm:grid-cols-3 gap-2 transition-opacity',
-                    wf.visualAutoSelecting && 'opacity-50 pointer-events-none'
+                    autoSelectionLocked && 'opacity-50 pointer-events-none'
                   )}>
                     {selectionTargets.map((target) => {
                       const active = wf.visualSelection.autoTargets.includes(target);
                       return (
                         <button
                           key={target}
-                          disabled={wf.visualAutoSelecting}
+                          disabled={autoSelectionLocked}
                           className={cn(
                             'text-[10px] border rounded px-2 py-2 transition-colors',
                             active
                               ? 'bg-foreground text-background border-foreground'
                               : 'border-border text-foreground-muted hover:border-foreground-muted hover:text-foreground',
-                            wf.visualAutoSelecting && 'cursor-not-allowed'
+                            autoSelectionLocked && 'cursor-not-allowed'
                           )}
                           onClick={() => handleToggleTarget(target)}
                         >

@@ -6,6 +6,14 @@ compatibility_date = "2024-01-01"
 enabled = true
 head_sampling_rate = 1
 
+[[durable_objects.bindings]]
+name = "IMAGE_EDIT_LIMITER"
+class_name = "ImageEditLimiter"
+
+[[migrations]]
+tag = "v1_image_edit_limiter"
+new_sqlite_classes = ["ImageEditLimiter"]
+
 [vars]
 APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"
 APPWRITE_PROJECT_ID = "6a28198a0007906d225d"
@@ -47,6 +55,14 @@ APPWRITE_SNAPSHOTS_BUCKET_ID = "feedback_snapshots"
 
 [env.production]
 name = "archviz-api-gateway-prod"
+
+[[env.production.durable_objects.bindings]]
+name = "IMAGE_EDIT_LIMITER"
+class_name = "ImageEditLimiter"
+
+[[env.production.migrations]]
+tag = "v1_image_edit_limiter"
+new_sqlite_classes = ["ImageEditLimiter"]
 
 [env.production.vars]
 APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"

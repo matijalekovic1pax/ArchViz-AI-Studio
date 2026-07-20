@@ -44,6 +44,7 @@ import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../..
 import { generatePrompt } from '../../../engine/promptEngine';
 import { useGeneration } from '../../../hooks/useGeneration';
 import { downloadImage } from '../../../lib/download';
+import { hasUsableVisualSelection, visualEditRequiresSelection } from '../../../lib/visualEditPolicy';
 import { LeftRender3DPanel } from '../left/LeftRender3DPanel';
 import { LeftSceneComposePanel } from '../left/LeftSceneComposePanel';
 import { LeftRenderCADPanel } from '../left/LeftRenderCADPanel';
@@ -283,7 +284,7 @@ const MobileOutputContent: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             {Math.round(state.canvas.zoom * 100)}%
           </div>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+        <div className={cn('grid gap-2', state.mode === 'visual-edit' ? 'grid-cols-4' : 'grid-cols-5')}>
           <button
             type="button"
             onClick={() => handleZoom(-0.25)}
@@ -323,23 +324,25 @@ const MobileOutputContent: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           >
             <ZoomIn size={16} />
           </button>
-          <button
-            type="button"
-            onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { canvasSync: !state.workflow.canvasSync } })}
-            disabled={!hasImage || isVideoMode}
-            className={cn(
-              "flex h-11 items-center justify-center rounded-lg border border-border bg-surface-elevated transition-colors active:scale-95",
-              hasImage && !isVideoMode
-                ? state.workflow.canvasSync
-                  ? "bg-foreground text-background"
-                  : "text-foreground-secondary hover:text-foreground"
-                : "cursor-not-allowed text-foreground-muted/35"
-            )}
-            aria-label={t('topBar.toggleSplitView')}
-            title={t('topBar.toggleSplitView')}
-          >
-            <Columns size={16} />
-          </button>
+          {state.mode !== 'visual-edit' && (
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { canvasSync: !state.workflow.canvasSync } })}
+              disabled={!hasImage || isVideoMode}
+              className={cn(
+                "flex h-11 items-center justify-center rounded-lg border border-border bg-surface-elevated transition-colors active:scale-95",
+                hasImage && !isVideoMode
+                  ? state.workflow.canvasSync
+                    ? "bg-foreground text-background"
+                    : "text-foreground-secondary hover:text-foreground"
+                  : "cursor-not-allowed text-foreground-muted/35"
+              )}
+              aria-label={t('topBar.toggleSplitView')}
+              title={t('topBar.toggleSplitView')}
+            >
+              <Columns size={16} />
+            </button>
+          )}
           <button
             type="button"
             onClick={handleDownloadCurrent}
@@ -470,6 +473,10 @@ export const MobilePanels: React.FC<{
     state.workflow.headshot.frontImage ||
     state.workflow.headshot.rightImage
   );
+  const visualEditNeedsSelection = state.mode === 'visual-edit' &&
+    visualEditRequiresSelection(state.workflow.activeTool) &&
+    !hasUsableVisualSelection(state.workflow.visualSelections);
+  const visualEditBusy = state.mode === 'visual-edit' && state.workflow.visualAutoSelecting;
   const videoReady = isVideoMode
     ? (() => {
         const videoState = state.workflow.videoState;
@@ -496,7 +503,7 @@ export const MobilePanels: React.FC<{
               ? !videoReady || !videoUnlocked
               : isHeadshotMode
                 ? !headshotReady
-                : !state.uploadedImage;
+                : !state.uploadedImage || visualEditNeedsSelection || visualEditBusy;
   const generateLabel = getGenerateLabel(state.mode, t);
   const generationProgress = getGenerationProgressPercent(state.progress);
   const generationStageLabel = state.generationStage

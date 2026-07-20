@@ -173,7 +173,6 @@ const summarizeDataUrlForLog = (value: string) => {
     mimeType: match?.[1] || null,
     chars: value.length,
     bytesApprox: isBase64 ? estimateDataUrlBytes(payload) : payload.length,
-    preview: value.slice(0, 96),
   };
 };
 
@@ -188,14 +187,23 @@ const summarizeStringForLog = (value: string, maxLength = LOG_STRING_PREVIEW_CHA
   };
 };
 
-const summarizeValueForLog = (value: unknown, depth = 0): unknown => {
+const summarizeValueForLog = (value: unknown, depth = 0, fieldName = ''): unknown => {
   if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (typeof value === 'string') return summarizeStringForLog(value);
+  if (typeof value === 'string') {
+    if (/base64|b64_json|bytesBase64Encoded/i.test(fieldName)) {
+      return {
+        kind: 'redacted-binary',
+        chars: value.length,
+        bytesApprox: estimateDataUrlBytes(value),
+      };
+    }
+    return summarizeStringForLog(value);
+  }
   if (typeof value !== 'object') return String(value).slice(0, 500);
   if (depth >= LOG_JSON_MAX_DEPTH) return '[MaxDepth]';
 
   if (Array.isArray(value)) {
-    const items = value.slice(0, LOG_JSON_MAX_ARRAY_ITEMS).map((item) => summarizeValueForLog(item, depth + 1));
+    const items = value.slice(0, LOG_JSON_MAX_ARRAY_ITEMS).map((item) => summarizeValueForLog(item, depth + 1, fieldName));
     if (value.length > LOG_JSON_MAX_ARRAY_ITEMS) {
       items.push({ truncatedItems: value.length - LOG_JSON_MAX_ARRAY_ITEMS });
     }
@@ -205,7 +213,7 @@ const summarizeValueForLog = (value: unknown, depth = 0): unknown => {
   const entries = Object.entries(value as Record<string, unknown>).slice(0, LOG_JSON_MAX_OBJECT_KEYS);
   const output: Record<string, unknown> = {};
   entries.forEach(([key, item]) => {
-    output[key.slice(0, 120)] = summarizeValueForLog(item, depth + 1);
+    output[key.slice(0, 120)] = summarizeValueForLog(item, depth + 1, key);
   });
   const keyCount = Object.keys(value as Record<string, unknown>).length;
   if (keyCount > LOG_JSON_MAX_OBJECT_KEYS) {
@@ -439,18 +447,24 @@ export async function verifyAuth(idToken: string): Promise<GatewayAuthResult> {
 
 async function gatewayFetch(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & {
+    timeoutMs?: number;
+    requestLogSummary?: Record<string, unknown>;
+    requestLogPrompt?: string | null;
+  } = {},
 ): Promise<Response> {
   const token = getGatewayToken();
   if (!token) throw new Error('Not authenticated. Please sign in.');
 
-  const { timeoutMs, ...restInit } = init;
+  const { timeoutMs, requestLogSummary, requestLogPrompt, ...restInit } = init;
   const method = restInit.method || 'GET';
   const traceId = _activeGenerationTraceId || createGatewayTraceId('req');
   const shouldLogRequest = !path.startsWith('/api/logs/');
   const routeInfo = getGatewayLogRouteInfo(path);
   const { summary: requestSummary, prompt } = shouldLogRequest
-    ? summarizeGatewayBodyForLog(restInit.body)
+    ? requestLogSummary
+      ? { summary: requestLogSummary, prompt: requestLogPrompt || null }
+      : summarizeGatewayBodyForLog(restInit.body)
     : { summary: {}, prompt: null };
   const startedAt = Date.now();
   const headers = new Headers(restInit.headers);
@@ -798,7 +812,14 @@ export type ImageEditOperation =
   | 'remove_object'
   | 'custom';
 
-export interface GatewayImageEditImage {
+export interface GatewayImageEditPng {
+  base64: string;
+  mimeType: 'image/png';
+  width: number;
+  height: number;
+}
+
+export interface GatewayImageEditReference {
   base64: string;
   mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   width?: number;
@@ -806,13 +827,20 @@ export interface GatewayImageEditImage {
 }
 
 export interface GatewayImageEditRequest {
-  sourceImage: GatewayImageEditImage;
-  selectionMask: GatewayImageEditImage;
+  sourceImage: GatewayImageEditPng;
+  selectionMask: GatewayImageEditPng;
   selectionStats?: {
     selectedPixels?: number;
     selectedRatio?: number;
+    userSelectedPixels?: number;
+    userSelectedRatio?: number;
+    providerEditablePixels?: number;
+    providerEditableRatio?: number;
   };
+  /** Exact user-authored instruction. This remains the authoritative request. */
   prompt: string;
+  /** Optional pre-generation clarification produced from the source and mask. */
+  optimizedPrompt?: string;
   operation: ImageEditOperation;
   targetLabel?: string;
   colorHex?: string;
@@ -820,8 +848,10 @@ export interface GatewayImageEditRequest {
   originalGenerationPrompt?: string;
   quality?: 'draft' | 'standard' | 'final';
   variants?: number;
-  outputFormat?: 'png' | 'webp' | 'jpeg';
-  referenceImages?: GatewayImageEditImage[];
+  outputFormat?: 'png';
+  referenceImages?: GatewayImageEditReference[];
+  /** True when sourceImage is a context crop that will be inverse-mapped client-side. */
+  localizedPatch?: boolean;
 }
 
 export interface GatewayImageEditVersion {
@@ -847,11 +877,34 @@ export async function imageEditRequest(
   body: GatewayImageEditRequest,
   options?: { signal?: AbortSignal }
 ): Promise<GatewayImageEditResponse> {
+  const serializedBody = JSON.stringify(body);
   const resp = await gatewayFetch('/api/image-edits', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: serializedBody,
     signal: options?.signal,
     timeoutMs: IMAGE_EDIT_TIMEOUT_MS,
+    requestLogPrompt: body.prompt,
+    requestLogSummary: {
+      bodyType: 'localized-image-edit',
+      chars: serializedBody.length,
+      operation: body.operation,
+      localizedPatch: Boolean(body.localizedPatch),
+      variants: body.variants || 1,
+      source: {
+        mimeType: body.sourceImage.mimeType,
+        width: body.sourceImage.width,
+        height: body.sourceImage.height,
+        bytesApprox: estimateDataUrlBytes(body.sourceImage.base64),
+      },
+      mask: {
+        mimeType: body.selectionMask.mimeType,
+        width: body.selectionMask.width,
+        height: body.selectionMask.height,
+        bytesApprox: estimateDataUrlBytes(body.selectionMask.base64),
+      },
+      referenceCount: body.referenceImages?.length || 0,
+      selectionStats: body.selectionStats || null,
+    },
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: `Image edit failed (${resp.status})` }));

@@ -43,6 +43,16 @@ const OPENAI_TEXT_MAX_OUTPUT_TOKENS = 32_000;
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
 const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
+// The localized route carries base64 JSON, so its safe application limit must
+// stay well below both Cloudflare's edge cap and the isolate memory limit.
+const IMAGE_EDIT_DEFAULT_MAX_BODY_BYTES = 48 * 1024 * 1024;
+const IMAGE_EDIT_MAX_BODY_BYTES_CEILING = 64 * 1024 * 1024;
+const IMAGE_EDIT_DEFAULT_RATE_WINDOW_SECONDS = 60;
+const IMAGE_EDIT_DEFAULT_RATE_LIMIT_PER_USER = 10;
+const IMAGE_EDIT_DEFAULT_RATE_LIMIT_PER_IP = 12;
+const IMAGE_EDIT_DEFAULT_CONCURRENCY_PER_USER = 1;
+const IMAGE_EDIT_DEFAULT_CONCURRENCY_PER_IP = 2;
+const IMAGE_EDIT_DEFAULT_LEASE_SECONDS = 10 * 60;
 const VERTEX_AI_BASE  = 'https://us-central1-aiplatform.googleapis.com/v1';
 const CONVERTAPI_BASE = 'https://v2.convertapi.com';
 const ILOVEPDF_BASE   = 'https://api.ilovepdf.com/v1';
@@ -152,6 +162,445 @@ function bytesToHex(bytes) {
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return bytesToHex(new Uint8Array(digest));
+}
+
+const _imageEditLocalLimits = new Map();
+let _imageEditLocalLimitLastSweep = 0;
+
+function boundedEnvInteger(env, key, fallback, min, max) {
+  const value = Number(env?.[key]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function getImageEditGuardConfig(env) {
+  const windowSeconds = boundedEnvInteger(
+    env,
+    'IMAGE_EDIT_RATE_WINDOW_SECONDS',
+    IMAGE_EDIT_DEFAULT_RATE_WINDOW_SECONDS,
+    10,
+    60 * 60
+  );
+  return {
+    maxBodyBytes: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_MAX_BODY_BYTES',
+      IMAGE_EDIT_DEFAULT_MAX_BODY_BYTES,
+      1024,
+      IMAGE_EDIT_MAX_BODY_BYTES_CEILING
+    ),
+    windowMs: windowSeconds * 1000,
+    userRateLimit: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_RATE_LIMIT_PER_USER',
+      IMAGE_EDIT_DEFAULT_RATE_LIMIT_PER_USER,
+      1,
+      10_000
+    ),
+    ipRateLimit: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_RATE_LIMIT_PER_IP',
+      IMAGE_EDIT_DEFAULT_RATE_LIMIT_PER_IP,
+      1,
+      20_000
+    ),
+    userConcurrency: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_MAX_CONCURRENT_PER_USER',
+      IMAGE_EDIT_DEFAULT_CONCURRENCY_PER_USER,
+      1,
+      20
+    ),
+    ipConcurrency: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_MAX_CONCURRENT_PER_IP',
+      IMAGE_EDIT_DEFAULT_CONCURRENCY_PER_IP,
+      1,
+      50
+    ),
+    leaseMs: boundedEnvInteger(
+      env,
+      'IMAGE_EDIT_CONCURRENCY_LEASE_SECONDS',
+      IMAGE_EDIT_DEFAULT_LEASE_SECONDS,
+      30,
+      15 * 60
+    ) * 1000,
+  };
+}
+
+function sweepImageEditLocalLimits(now) {
+  if (now - _imageEditLocalLimitLastSweep < 60_000 && _imageEditLocalLimits.size < 2_000) return;
+  _imageEditLocalLimitLastSweep = now;
+  for (const [key, entry] of _imageEditLocalLimits) {
+    for (const [leaseId, expiresAt] of entry.leases) {
+      if (expiresAt <= now) entry.leases.delete(leaseId);
+    }
+    if (entry.leases.size === 0 && entry.windowEndsAt <= now) {
+      _imageEditLocalLimits.delete(key);
+    }
+  }
+}
+
+function acquireImageEditLocalDimension(spec, leaseId, now, config) {
+  sweepImageEditLocalLimits(now);
+  const windowId = Math.floor(now / config.windowMs);
+  const windowEndsAt = (windowId + 1) * config.windowMs;
+  let entry = _imageEditLocalLimits.get(spec.key);
+  if (!entry || entry.windowId !== windowId) {
+    entry = { windowId, windowEndsAt, count: 0, leases: new Map() };
+    _imageEditLocalLimits.set(spec.key, entry);
+  }
+  for (const [activeLeaseId, expiresAt] of entry.leases) {
+    if (expiresAt <= now) entry.leases.delete(activeLeaseId);
+  }
+  if (entry.count >= spec.rateLimit) {
+    return {
+      ok: false,
+      kind: 'rate',
+      scope: spec.scope,
+      retryAfterSeconds: Math.max(1, Math.ceil((entry.windowEndsAt - now) / 1000)),
+      limit: spec.rateLimit,
+    };
+  }
+  if (entry.leases.size >= spec.concurrency) {
+    const earliestExpiry = Math.min(...entry.leases.values());
+    return {
+      ok: false,
+      kind: 'concurrency',
+      scope: spec.scope,
+      retryAfterSeconds: Math.max(1, Math.min(30, Math.ceil((earliestExpiry - now) / 1000))),
+      limit: spec.concurrency,
+    };
+  }
+  entry.count += 1;
+  entry.leases.set(leaseId, now + config.leaseMs);
+  return {
+    ok: true,
+    release() {
+      const current = _imageEditLocalLimits.get(spec.key);
+      current?.leases.delete(leaseId);
+    },
+  };
+}
+
+async function acquireImageEditDurableDimension(namespace, spec, leaseId, config) {
+  const id = namespace.idFromName(spec.key);
+  const stub = namespace.get(id);
+  const response = await stub.fetch('https://image-edit-limiter.internal/acquire', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      leaseId,
+      rateLimit: spec.rateLimit,
+      concurrency: spec.concurrency,
+      windowMs: config.windowMs,
+      leaseMs: config.leaseMs,
+      scope: spec.scope,
+    }),
+  });
+  const result = await response.json().catch(() => null);
+  if (response.status === 429) {
+    return {
+      ok: false,
+      kind: result?.kind === 'concurrency' ? 'concurrency' : 'rate',
+      scope: spec.scope,
+      retryAfterSeconds: Math.max(1, Number(result?.retryAfterSeconds) || 1),
+      limit: Number(result?.limit) || spec.rateLimit,
+    };
+  }
+  if (!response.ok) throw new Error(`Image edit limiter Durable Object failed (${response.status}).`);
+  return {
+    ok: true,
+    async release() {
+      await stub.fetch('https://image-edit-limiter.internal/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leaseId }),
+      });
+    },
+  };
+}
+
+async function acquireImageEditKvDimension(kv, spec, now, config) {
+  const windowId = Math.floor(now / config.windowMs);
+  const key = `image-edit-rate:${spec.key}:${windowId}`;
+  const current = Math.max(0, Number(await kv.get(key)) || 0);
+  if (current >= spec.rateLimit) {
+    return {
+      ok: false,
+      kind: 'rate',
+      scope: spec.scope,
+      retryAfterSeconds: Math.max(1, Math.ceil((((windowId + 1) * config.windowMs) - now) / 1000)),
+      limit: spec.rateLimit,
+    };
+  }
+  await kv.put(key, String(current + 1), {
+    expirationTtl: Math.max(60, Math.ceil(config.windowMs / 1000) + 60),
+  });
+  return { ok: true };
+}
+
+async function releaseImageEditAcquisitions(acquisitions) {
+  const releases = acquisitions
+    .map((acquisition) => acquisition?.release)
+    .filter((release) => typeof release === 'function')
+    .map((release) => Promise.resolve().then(() => release()));
+  if (releases.length === 0) return;
+  const results = await Promise.allSettled(releases);
+  results.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.warn('[image-edit] limiter lease release failed', result.reason?.message || result.reason);
+    }
+  });
+}
+
+async function acquireImageEditGuard(request, env, user) {
+  const config = getImageEditGuardConfig(env);
+  const userIdentity = String(user?.sub || user?.email || 'unknown-user').trim().toLowerCase();
+  const connectingIp = String(
+    request.headers.get('CF-Connecting-IP') ||
+    request.headers.get('X-Forwarded-For')?.split(',')[0] ||
+    `unknown:${userIdentity}`
+  ).trim().toLowerCase();
+  const [userHash, ipHash] = await Promise.all([
+    sha256Hex(`image-edit:user:${userIdentity}`),
+    sha256Hex(`image-edit:ip:${connectingIp}`),
+  ]);
+  const specs = [
+    {
+      key: `user:${userHash.slice(0, 40)}`,
+      scope: 'user',
+      rateLimit: config.userRateLimit,
+      concurrency: config.userConcurrency,
+    },
+    {
+      key: `ip:${ipHash.slice(0, 40)}`,
+      scope: 'ip',
+      rateLimit: config.ipRateLimit,
+      concurrency: config.ipConcurrency,
+    },
+  ];
+  const leaseId = crypto.randomUUID();
+  const acquisitions = [];
+  const now = Date.now();
+
+  for (const spec of specs) {
+    const acquisition = acquireImageEditLocalDimension(spec, leaseId, now, config);
+    if (!acquisition.ok) {
+      await releaseImageEditAcquisitions(acquisitions);
+      return { ok: false, denial: acquisition, config };
+    }
+    acquisitions.push(acquisition);
+  }
+
+  const durableNamespace = env?.IMAGE_EDIT_LIMITER;
+  if (durableNamespace?.idFromName && durableNamespace?.get) {
+    const durableAcquisitions = [];
+    try {
+      for (const spec of specs) {
+        const acquisition = await acquireImageEditDurableDimension(
+          durableNamespace,
+          spec,
+          leaseId,
+          config
+        );
+        if (!acquisition.ok) {
+          await releaseImageEditAcquisitions([...durableAcquisitions, ...acquisitions]);
+          return { ok: false, denial: acquisition, config };
+        }
+        durableAcquisitions.push(acquisition);
+      }
+      acquisitions.push(...durableAcquisitions);
+    } catch (error) {
+      await releaseImageEditAcquisitions(durableAcquisitions);
+      console.warn('[image-edit] Durable Object limiter unavailable; using isolate fallback', error?.message || error);
+    }
+  } else if (env?.IMAGE_EDIT_RATE_LIMIT_KV?.get && env?.IMAGE_EDIT_RATE_LIMIT_KV?.put) {
+    try {
+      for (const spec of specs) {
+        const acquisition = await acquireImageEditKvDimension(
+          env.IMAGE_EDIT_RATE_LIMIT_KV,
+          spec,
+          now,
+          config
+        );
+        if (!acquisition.ok) {
+          await releaseImageEditAcquisitions(acquisitions);
+          return { ok: false, denial: acquisition, config };
+        }
+      }
+    } catch (error) {
+      console.warn('[image-edit] KV rate limiter unavailable; using isolate fallback', error?.message || error);
+    }
+  }
+
+  let released = false;
+  return {
+    ok: true,
+    config,
+    async release() {
+      if (released) return;
+      released = true;
+      await releaseImageEditAcquisitions(acquisitions);
+    },
+  };
+}
+
+function imageEditLimitResponse(origin, denial) {
+  const retryAfterSeconds = Math.max(1, Math.ceil(Number(denial?.retryAfterSeconds) || 1));
+  const concurrencyLimited = denial?.kind === 'concurrency';
+  return corsResponse(origin, {
+    error: concurrencyLimited
+      ? 'An image edit is already running for this account or network. Wait for it to finish, then try again.'
+      : `Too many image edit requests. Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`,
+    code: concurrencyLimited ? 'image_edit_concurrency_limited' : 'image_edit_rate_limited',
+    scope: denial?.scope || 'user',
+    retryAfterSeconds,
+    limit: denial?.limit || null,
+  }, {
+    status: 429,
+    headers: {
+      'Retry-After': String(retryAfterSeconds),
+      'Cache-Control': 'no-store',
+      'X-RateLimit-Scope': denial?.scope || 'user',
+    },
+  });
+}
+
+function requestBodyError(message, status = 400, code = 'invalid_request_body') {
+  const error = new Error(message);
+  error.statusCode = status;
+  error.code = code;
+  return error;
+}
+
+async function readJsonBodyWithLimit(request, maximumBytes) {
+  const contentLengthHeader = request.headers.get('Content-Length');
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (!Number.isFinite(contentLength) || contentLength < 0) {
+      throw requestBodyError('Invalid Content-Length header.');
+    }
+    if (contentLength > maximumBytes) {
+      throw requestBodyError(
+        `Image edit request body exceeds the ${Math.floor(maximumBytes / (1024 * 1024)) || 1} MB route limit.`,
+        413,
+        'image_edit_body_too_large'
+      );
+    }
+  }
+  if (!request.body) throw requestBodyError('Image edit request body is missing.');
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  let totalBytes = 0;
+  const textChunks = [];
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) {
+        await reader.cancel('Image edit request body is too large.');
+        throw requestBodyError(
+          `Image edit request body exceeds the ${Math.floor(maximumBytes / (1024 * 1024)) || 1} MB route limit.`,
+          413,
+          'image_edit_body_too_large'
+        );
+      }
+      textChunks.push(decoder.decode(value, { stream: true }));
+    }
+    textChunks.push(decoder.decode());
+  } catch (error) {
+    if (error?.statusCode) throw error;
+    throw requestBodyError('Image edit request body is not valid UTF-8 JSON.');
+  } finally {
+    reader.releaseLock();
+  }
+  const text = textChunks.join('');
+  if (!text.trim()) throw requestBodyError('Image edit request body is empty.');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw requestBodyError('Image edit request body is not valid JSON.');
+  }
+}
+
+/**
+ * Optional cross-isolate limiter. Bind a Durable Object namespace named
+ * IMAGE_EDIT_LIMITER to this class; without it, the worker uses KV (if bound)
+ * plus a fail-safe per-isolate limiter.
+ */
+export class ImageEditLimiter {
+  constructor(state) {
+    this.state = state;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const body = await request.json().catch(() => ({}));
+    const leaseId = sanitizeText(body.leaseId, 160);
+    if (!leaseId) return new Response(JSON.stringify({ error: 'Missing lease ID.' }), { status: 400 });
+
+    if (url.pathname === '/release') {
+      await this.state.storage.transaction(async (transaction) => {
+        const stored = await transaction.get('state') || { windowId: -1, count: 0, leases: {} };
+        delete stored.leases?.[leaseId];
+        await transaction.put('state', stored);
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname !== '/acquire') return new Response('Not found', { status: 404 });
+
+    const now = Date.now();
+    const windowMs = Math.max(10_000, Math.min(60 * 60 * 1000, Number(body.windowMs) || 60_000));
+    const leaseMs = Math.max(30_000, Math.min(15 * 60 * 1000, Number(body.leaseMs) || 10 * 60 * 1000));
+    const rateLimit = Math.max(1, Math.min(20_000, Math.floor(Number(body.rateLimit) || 1)));
+    const concurrency = Math.max(1, Math.min(50, Math.floor(Number(body.concurrency) || 1)));
+    const windowId = Math.floor(now / windowMs);
+    let outcome = null;
+
+    await this.state.storage.transaction(async (transaction) => {
+      const stored = await transaction.get('state') || { windowId, count: 0, leases: {} };
+      if (stored.windowId !== windowId) {
+        stored.windowId = windowId;
+        stored.count = 0;
+      }
+      stored.leases = stored.leases || {};
+      for (const [activeLeaseId, expiresAt] of Object.entries(stored.leases)) {
+        if (Number(expiresAt) <= now) delete stored.leases[activeLeaseId];
+      }
+      if (stored.count >= rateLimit) {
+        outcome = {
+          ok: false,
+          kind: 'rate',
+          limit: rateLimit,
+          retryAfterSeconds: Math.max(1, Math.ceil((((windowId + 1) * windowMs) - now) / 1000)),
+        };
+        return;
+      }
+      const activeLeases = Object.values(stored.leases).map(Number);
+      if (activeLeases.length >= concurrency) {
+        outcome = {
+          ok: false,
+          kind: 'concurrency',
+          limit: concurrency,
+          retryAfterSeconds: Math.max(1, Math.min(30, Math.ceil((Math.min(...activeLeases) - now) / 1000))),
+        };
+        return;
+      }
+      stored.count += 1;
+      stored.leases[leaseId] = now + leaseMs;
+      await transaction.put('state', stored);
+      outcome = { ok: true };
+    });
+
+    return new Response(JSON.stringify(outcome), {
+      status: outcome?.ok ? 200 : 429,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 // ─── Vertex AI Service Account Token ─────────────────────────────────────────
@@ -2368,6 +2817,7 @@ const OPENAI_IMAGE_MAX_EDGE = 3840;
 const OPENAI_IMAGE_MIN_PIXELS = 655_360;
 const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
 const OPENAI_IMAGE_SIZE_MULTIPLE = 16;
+const OPENAI_IMAGE_MAX_INPUT_BYTES = 50 * 1024 * 1024;
 
 function parseAspectRatio(aspectRatio) {
   if (typeof aspectRatio !== 'string') return 16 / 9;
@@ -2701,9 +3151,27 @@ function pngChunk(type, data = new Uint8Array()) {
   return out;
 }
 
-async function inflatePngData(bytes) {
+async function inflatePngData(bytes, maximumOutputBytes) {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maximumOutputBytes) {
+        await reader.cancel('PNG decompressed data exceeds its declared dimensions.');
+        throw new Error('PNG decompressed data exceeds its declared dimensions.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return concatBytes(chunks);
 }
 
 async function deflatePngData(bytes) {
@@ -2760,6 +3228,10 @@ async function decodePngRgba(bytes) {
   }
 
   if (!width || !height) throw new Error('Invalid PNG dimensions.');
+  const pixels = width * height;
+  if (Math.max(width, height) > OPENAI_IMAGE_MAX_EDGE || pixels > OPENAI_IMAGE_MAX_PIXELS) {
+    throw new Error('PNG dimensions exceed GPT Image edit limits.');
+  }
   if (bitDepth !== 8) throw new Error('Only 8-bit PNG images are supported for precise compositing.');
   if (interlace !== 0) throw new Error('Interlaced PNG images are not supported for precise compositing.');
 
@@ -2767,10 +3239,10 @@ async function decodePngRgba(bytes) {
   const channels = channelsByColorType[colorType];
   if (!channels) throw new Error('Unsupported PNG color type for precise compositing.');
 
-  const inflated = await inflatePngData(concatBytes(idatParts));
   const rowBytes = width * channels;
   const expected = (rowBytes + 1) * height;
-  if (inflated.length < expected) throw new Error('PNG pixel data is incomplete.');
+  const inflated = await inflatePngData(concatBytes(idatParts), expected);
+  if (inflated.length !== expected) throw new Error('PNG pixel data length does not match its declared dimensions.');
 
   const rgba = new Uint8Array(width * height * 4);
   let inputOffset = 0;
@@ -2994,28 +3466,51 @@ function getImageEditRadius(width, height, operation) {
 
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
-  const userPrompt = sanitizeText(request.prompt, OPENAI_IMAGE_MAX_PROMPT_CHARS);
+  const rawUserPrompt = sanitizeText(request.prompt, 4_000);
+  const optimizedPrompt = sanitizeText(request.optimizedPrompt, 4_000);
   const targetLabel = sanitizeText(request.targetLabel, 160) || 'selected area';
   const materialDescription = sanitizeText(request.materialDescription, 500);
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
-  const materialOrColor = materialDescription || colorHex || userPrompt || 'the requested finish';
-  const restyleGeometryLock = 'Treat recolor, material, finish, and restyling requests as batch-edit variants of the existing source pixels, not as object generation. Preserve the exact original footprint, bounding box, silhouette, size, aspect ratio, perspective, scale, orientation, contact points, occlusion order, and placement of the selected target. Do not enlarge, shrink, stretch, move, duplicate, inflate, straighten, rotate, or redraw the selected object or surface. Change only visible color/material/finish while preserving original shading, highlights, texture, seams, folds, shadows, reflections, and surrounding geometry.';
-  const surfaceOcclusionLock = 'If the selected target is a surface such as a floor, wall, ceiling, road, paving, countertop, or facade, edit only the visible pixels of that surface. Preserve all foreground occluders exactly, even if they overlap the mask: people, bodies, faces, hair, clothing, hands, shoes, luggage, chairs, benches, tables, plants, columns, railings, fixtures, signage, vehicles, and object silhouettes must remain unchanged. Preserve their contact shadows and physically update only the surface reflections or color spill that belongs to the edited material.';
+  const referenceCount = Array.isArray(request.referenceImages) ? Math.min(4, request.referenceImages.length) : 0;
+  const imageRoles = [
+    'IMAGE INPUTS: Image 1 is the source image to edit and is the authority for composition and coordinates.',
+    referenceCount > 0
+      ? `Images 2-${referenceCount + 1} are references only for the requested object, material, texture, color, or style.`
+      : '',
+  ].filter(Boolean).join(' ');
+  const frameLock = request.localizedPatch
+    ? 'COMPOSITION: Return the identical crop, dimensions, camera, perspective, scale, framing, and pixel coordinate system. Do not recenter, zoom, translate, rotate, or reframe.'
+    : 'COMPOSITION: Preserve the camera, framing, crop, perspective, horizon, scale, and aspect ratio.';
+  const selectionRule = 'SELECTION: The transparent part of the mask is editable and the opaque part is protected. Make the requested change within the editable area. Preserve non-target content that is also inside the editable area.';
+  const exactRequest = `AUTHORITATIVE USER REQUEST: ${rawUserPrompt}`;
+  const interpretation = optimizedPrompt && optimizedPrompt !== rawUserPrompt
+    ? `PRE-GENERATION VISUAL INTERPRETATION: ${optimizedPrompt}`
+    : '';
 
-  const base = `Edit only the masked/selected area of this architectural visualization. Preserve the original camera angle, perspective, geometry, room layout, furniture positions, lighting direction, shadows, reflections, image style, and all unselected areas. Do not change walls, floors, furniture, people, objects, text, signage, or background outside the selected area unless physically necessary at the mask boundary. ${restyleGeometryLock}`;
-  let task = '';
-  if (operation === 'replace_material' || operation === 'recolor') {
-    task = `In the selected area, change the ${targetLabel} to ${materialOrColor}. ${surfaceOcclusionLock} Preserve the exact shape, seams, folds, perspective, scale, texture direction, highlights, shadows, and contact shadows. The result should look like a realistic architectural visualization, not a painted overlay.`;
+  let task;
+  if (operation === 'recolor') {
+    const desiredColor = colorHex || materialDescription || 'the color explicitly named by the user';
+    task = `TASK: Re-render only the visible material color of ${targetLabel} as ${desiredColor}. Keep the same objects, count, geometry, silhouette, position, perspective, construction details, texture, wear, and upholstery seams. Render the requested color as a real non-emissive material under the existing light, with natural shading, highlights, reflections, and shadows.`;
+  } else if (operation === 'replace_material') {
+    const desiredFinish = materialDescription || colorHex || 'the finish explicitly described by the user';
+    task = `TASK: Re-render the material or finish of ${targetLabel} as ${desiredFinish}. Keep its geometry, boundaries, scale, perspective, joints, seams, occlusions, and surrounding objects. Make the finish physically plausible under the existing light rather than pasting a flat texture.`;
   } else if (operation === 'add_people') {
-    task = `Add realistic people only inside the selected area according to this request: ${userPrompt || 'Add a small number of naturally integrated people.'} They should have correct architectural scale, believable posture, lighting, shadows, reflections, and perspective. Preserve the rest of the image unchanged.`;
+    task = 'TASK: Add exactly the people requested in plausible positions inside the editable area. Match architectural scale, perspective, pose, depth, occlusion, lighting, contact shadows, and reflections.';
   } else if (operation === 'remove_people' || operation === 'remove_object') {
-    task = `Remove the selected ${operation === 'remove_people' ? 'people' : targetLabel || 'object'}. Reconstruct the background, furniture, floor, wall, and lighting behind them naturally as if they were never there. Preserve surrounding architecture, perspective, texture, shadows, and all unselected areas.`;
+    task = `TASK: Remove only the requested ${operation === 'remove_people' ? 'people' : targetLabel}, including their directly associated shadow or reflection, and reconstruct the revealed background consistently from the surrounding scene.`;
   } else {
-    task = `Apply this edit only to the selected area: ${userPrompt}. If this is a color, material, finish, or style change, keep the selected target locked to its original size, ratio, silhouette, perspective, and placement; do not generate a replacement object. Preserve the rest of the image unchanged.`;
+    task = `TASK: Apply the user-requested edit to ${targetLabel} exactly. Make any addition, removal, replacement, style, material, color, lighting, or structural change only when the request calls for it.`;
   }
 
-  const context = sanitizeText(request.originalGenerationPrompt, 1600);
-  return [base, task, context ? `Original render description/context: ${context}` : ''].filter(Boolean).join('\n\n');
+  return [
+    exactRequest,
+    interpretation,
+    task,
+    selectionRule,
+    frameLock,
+    imageRoles,
+    'INTEGRATION: Produce one photorealistic edited image. Match the source perspective, scale, depth, lighting direction and intensity, color temperature, material response, shadows, reflections, texture, grain, sharpness, and occlusion. The result must look like one continuous photograph with no visible mask, rectangle, lasso, flat overlay, halo, border, or seam. Preserve all content not implicated by the request, especially text and signage.',
+  ].filter(Boolean).join('\n\n').slice(0, OPENAI_IMAGE_MAX_PROMPT_CHARS);
 }
 
 function decodeImageEditBase64Image(image, label) {
@@ -3028,7 +3523,57 @@ function decodeImageEditBase64Image(image, label) {
   if (mimeType !== 'image/png') {
     throw new Error(`${label} must be a PNG image for precise masked editing.`);
   }
-  const bytes = base64Decode(image.base64);
+  const normalizedBase64 = image.base64.trim();
+  const estimatedBytes = Math.max(0, Math.floor((normalizedBase64.length * 3) / 4) - (normalizedBase64.endsWith('==') ? 2 : normalizedBase64.endsWith('=') ? 1 : 0));
+  if (estimatedBytes <= 0 || estimatedBytes > OPENAI_IMAGE_MAX_INPUT_BYTES) {
+    throw new Error(`${label} exceeds the 50 MB image input limit.`);
+  }
+  if (normalizedBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalizedBase64)) {
+    throw new Error(`${label} contains invalid base64 image data.`);
+  }
+  const bytes = base64Decode(normalizedBase64);
+  if (bytes.length !== estimatedBytes || bytes.length > OPENAI_IMAGE_MAX_INPUT_BYTES) {
+    throw new Error(`${label} has an invalid or oversized image payload.`);
+  }
+  return { bytes, mimeType };
+}
+
+function decodeImageEditReferenceImage(image, label) {
+  if (!image || typeof image.base64 !== 'string' || typeof image.mimeType !== 'string') {
+    throw new Error(`${label} is missing image data or MIME type.`);
+  }
+  const mimeType = image.mimeType.toLowerCase().replace('image/jpg', 'image/jpeg');
+  if (!/^image\/(png|jpeg|webp)$/.test(mimeType)) {
+    throw new Error(`${label} has an unsupported image MIME type.`);
+  }
+  const normalizedBase64 = image.base64.trim();
+  const estimatedBytes = Math.max(0, Math.floor((normalizedBase64.length * 3) / 4) - (normalizedBase64.endsWith('==') ? 2 : normalizedBase64.endsWith('=') ? 1 : 0));
+  if (estimatedBytes <= 0 || estimatedBytes > OPENAI_IMAGE_MAX_INPUT_BYTES) {
+    throw new Error(`${label} exceeds the 50 MB image input limit.`);
+  }
+  if (normalizedBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalizedBase64)) {
+    throw new Error(`${label} contains invalid base64 image data.`);
+  }
+  const bytes = base64Decode(normalizedBase64);
+  const isPng = bytes.length >= 8 && PNG_SIGNATURE.every((value, index) => bytes[index] === value);
+  const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isWebp = bytes.length >= 12 &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' &&
+    String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP';
+  if (
+    (mimeType === 'image/png' && !isPng) ||
+    (mimeType === 'image/jpeg' && !isJpeg) ||
+    (mimeType === 'image/webp' && !isWebp)
+  ) {
+    throw new Error(`${label} bytes do not match the declared MIME type.`);
+  }
+  if (isPng) {
+    const dimensions = readPngDimensions(bytes, label);
+    const pixels = dimensions.width * dimensions.height;
+    if (Math.max(dimensions.width, dimensions.height) > OPENAI_IMAGE_MAX_EDGE || pixels > OPENAI_IMAGE_MAX_PIXELS) {
+      throw new Error(`${label} dimensions exceed GPT Image edit limits.`);
+    }
+  }
   return { bytes, mimeType };
 }
 
@@ -3182,8 +3727,19 @@ async function handleImageEdit(request, env, user) {
     return corsResponse(origin, { error: 'Only the OpenAI image edit provider is enabled.' }, { status: 501 });
   }
 
+  const guard = await acquireImageEditGuard(request, env, user);
+  if (!guard.ok) return imageEditLimitResponse(origin, guard.denial);
+
   try {
-    const body = await request.json();
+    const body = await readJsonBodyWithLimit(request, guard.config.maxBodyBytes);
+    const encodedImageChars = [
+      body?.sourceImage?.base64,
+      body?.selectionMask?.base64,
+      ...(Array.isArray(body?.referenceImages) ? body.referenceImages.map((image) => image?.base64) : []),
+    ].reduce((total, value) => total + (typeof value === 'string' ? value.length : 0), 0);
+    if (encodedImageChars > MAX_PAYLOAD_BYTES - 1024 * 1024) {
+      return corsResponse(origin, { error: 'Encoded image payload is too large.' }, { status: 413 });
+    }
     const operation = normalizeImageEditOperation(body.operation);
     const quality = normalizeImageEditQuality(body.quality);
     const variants = Math.max(1, Math.min(4, Math.floor(clampNumber(body.variants, 1, 4, 1))));
@@ -3218,6 +3774,10 @@ async function handleImageEdit(request, env, user) {
       1,
       clientSelectedPixels == null ? null : clientSelectedPixels / Math.max(totalPixels, 1)
     );
+    const userSelectedPixels = clampNumber(body.selectionStats?.userSelectedPixels, 0, OPENAI_IMAGE_MAX_PIXELS, null);
+    const userSelectedRatio = clampNumber(body.selectionStats?.userSelectedRatio, 0, 1, null);
+    const providerEditablePixels = clampNumber(body.selectionStats?.providerEditablePixels, 0, totalPixels, clientSelectedPixels);
+    const providerEditableRatio = clampNumber(body.selectionStats?.providerEditableRatio, 0, 1, clientSelectedRatio);
     const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image');
     const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
     const sourcePng = readPngDimensions(sourceInput.bytes, 'Source image');
@@ -3239,36 +3799,37 @@ async function handleImageEdit(request, env, user) {
     if (selectedRatio <= 0) {
       return badRequest(origin, 'Please select an area to edit.');
     }
-    if (selectedRatio < 0.0025) {
-      return badRequest(origin, 'The selected area is too small.');
+    if (selectedRatio < 0.0002) {
+      return badRequest(origin, 'The selected area is too small to survive provider resampling. Expand it by a few pixels.');
     }
-    if (operation !== 'custom' && selectedRatio > 0.7) {
-      return badRequest(origin, 'The selected area is too large for this edit. Try a smaller mask or use a custom edit.');
+    if (selectedRatio > 0.96) {
+      return badRequest(origin, 'The selection leaves too little protected context. Reduce it slightly so the edit can stay registered.');
     }
 
     const normalizedMaskBytes = await buildOpenAISelectionMaskPng(maskPng.width, maskPng.height, selectionAlpha);
     const outputFormat = normalizeOpenAIOutputFormat(body.outputFormat);
-    const outputMimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
+    if (outputFormat !== 'png') {
+      return badRequest(origin, 'Localized image edits require PNG output for exact dimension and pixel validation.');
+    }
+    const outputMimeType = 'image/png';
 
     const form = new FormData();
-    const model = env.IMAGE_EDIT_DEFAULT_MODEL || OPENAI_IMAGE_MODEL;
+    const model = OPENAI_IMAGE_MODEL;
     form.append('model', model);
     form.append('prompt', prompt);
     form.append('n', String(variants));
     form.append('size', `${sourceSize.width}x${sourceSize.height}`);
     form.append('quality', mapImageEditQualityToOpenAI(quality));
     form.append('output_format', outputFormat);
+    form.append('background', 'opaque');
     form.append('image[]', new Blob([sourceInput.bytes], { type: sourceInput.mimeType }), 'source.png');
     form.append('mask', new Blob([normalizedMaskBytes], { type: 'image/png' }), 'mask.png');
 
     const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.slice(0, 4) : [];
     referenceImages.forEach((image, index) => {
-      if (!image || typeof image.base64 !== 'string') return;
-      const mimeType = typeof image.mimeType === 'string' && /^image\/(png|jpe?g|webp)$/i.test(image.mimeType)
-        ? image.mimeType.toLowerCase().replace('image/jpg', 'image/jpeg')
-        : 'image/png';
-      const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
-      form.append('image[]', new Blob([base64Decode(image.base64)], { type: mimeType }), `reference-${index + 1}.${ext}`);
+      const decoded = decodeImageEditReferenceImage(image, `Reference image ${index + 1}`);
+      const ext = decoded.mimeType === 'image/jpeg' ? 'jpg' : decoded.mimeType.split('/')[1];
+      form.append('image[]', new Blob([decoded.bytes], { type: decoded.mimeType }), `reference-${index + 1}.${ext}`);
     });
 
     const upstreamResp = await fetchWithRetry((signal) =>
@@ -3284,26 +3845,38 @@ async function handleImageEdit(request, env, user) {
     );
 
     const data = await upstreamResp.json().catch(() => null);
+    const requestId = upstreamResp.headers.get('x-request-id') || upstreamResp.headers.get('openai-request-id') || null;
     if (!upstreamResp.ok) {
       const message = extractOpenAIError(data, `OpenAI image edit failed (${upstreamResp.status})`);
-      return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+      return corsResponse(origin, { error: message, requestId }, { status: upstreamResp.status });
     }
 
     const rawEntries = Array.isArray(data?.data) ? data.data : [];
     if (rawEntries.length === 0) {
-      return corsResponse(origin, { error: 'OpenAI image edit returned no image data.' }, { status: 502 });
+      return corsResponse(origin, { error: 'OpenAI image edit returned no image data.', requestId }, { status: 502 });
     }
 
     const editId = crypto.randomUUID();
-    const requestId = upstreamResp.headers.get('x-request-id') || upstreamResp.headers.get('openai-request-id') || null;
     const versions = rawEntries
+      .slice(0, variants)
       .map((entry, index) => {
         const rawBase64 = entry?.b64_json;
         if (!rawBase64 || typeof rawBase64 !== 'string') return null;
+        // Bound the encoded response before atob allocates a second full-size copy.
+        // A legal GPT Image 2 PNG is comfortably below the 50 MB per-image limit.
+        if (rawBase64.length > Math.ceil(OPENAI_IMAGE_MAX_INPUT_BYTES * 4 / 3) + 4) return null;
+        try {
+          const outputBytes = base64Decode(rawBase64);
+          const outputPng = readPngDimensions(outputBytes, 'OpenAI edit output');
+          if (outputPng.width !== sourceSize.width || outputPng.height !== sourceSize.height) {
+            return null;
+          }
+        } catch {
+          return null;
+        }
         return {
           id: crypto.randomUUID(),
           imageUrl: `data:${outputMimeType};base64,${rawBase64}`,
-          rawImageUrl: `data:${outputMimeType};base64,${rawBase64}`,
           parentImageId: null,
           operation,
           prompt,
@@ -3321,6 +3894,11 @@ async function handleImageEdit(request, env, user) {
             selectedPixels,
             selectedRatio,
             clientSelectedRatio,
+            userSelectedPixels,
+            userSelectedRatio,
+            providerEditablePixels,
+            providerEditableRatio,
+            localizedPatch: Boolean(body.localizedPatch),
             requestId,
             usage: data?.usage || null,
           },
@@ -3328,8 +3906,11 @@ async function handleImageEdit(request, env, user) {
       })
       .filter(Boolean);
 
-    if (versions.length === 0) {
-      return corsResponse(origin, { error: 'OpenAI image edit returned unreadable image data.' }, { status: 502 });
+    if (versions.length !== variants) {
+      return corsResponse(origin, {
+        error: `OpenAI image edit returned ${versions.length} valid PNG variant${versions.length === 1 ? '' : 's'}; ${variants} required. No partial result was applied.`,
+        requestId,
+      }, { status: 502 });
     }
 
     return corsResponse(origin, {
@@ -3339,14 +3920,22 @@ async function handleImageEdit(request, env, user) {
       usage: data?.usage || null,
     });
   } catch (err) {
+    if (err?.statusCode === 413 || err?.statusCode === 400) {
+      return corsResponse(origin, {
+        error: err.message,
+        code: err.code || 'invalid_request_body',
+      }, { status: err.statusCode });
+    }
     const timedOut = err?.name === 'AbortError';
     const message = err?.message || 'The edit failed. Try expanding the selected area slightly or simplifying the instruction.';
-    const badInput = /\b(PNG|mask|source image|selection|selected area|dimensions?|unsupported|interlaced|invalid)\b/i.test(message);
+    const badInput = /\b(PNG|mask|source image|reference image|selection|selected area|dimensions?|unsupported|interlaced|invalid|oversized|limit|base64)\b/i.test(message);
     return corsResponse(origin, {
       error: timedOut
         ? 'The edit failed because the image service timed out. Try a smaller selected area or lower quality.'
         : message,
-    }, { status: timedOut ? 504 : badInput ? 400 : 500 });
+      }, { status: timedOut ? 504 : badInput ? 400 : 500 });
+  } finally {
+    await guard.release();
   }
 }
 

@@ -25,6 +25,7 @@ import { downloadFile, downloadImage, downloadImagesSequentially } from '../lib/
 import { downloadMaterialValidationReport } from '../lib/materialValidationExport';
 import { GeminiService, ImageUtils, type AttachmentData, type ImageData } from '../services/geminiService';
 import { getGatewaySessionDiagnostics } from '../services/apiGateway';
+import { hasUsableVisualSelection, visualEditRequiresSelection } from '../lib/visualEditPolicy';
 
 type AssistantRole = 'user' | 'assistant';
 
@@ -417,28 +418,17 @@ const isTargetedExistingImageEditRequest = (question: string) => {
   return hasEditIntent && hasTarget && hasLocalEditLanguage;
 };
 
-const VISUAL_EDIT_SELECTION_TOOLS = new Set([
-  'material',
-  'lighting',
-  'object',
-  'sky',
-  'remove',
-  'replace',
-  'people',
-]);
-
 const getManualSelectionGuidance = (question: string, state: AppState, targets: string[]) => {
   if (!isTargetedExistingImageEditRequest(question)) return null;
-  if (state.workflow.visualSelections.length > 0 || state.workflow.visualSelectionMask) return null;
+  if (hasUsableVisualSelection(state.workflow.visualSelections)) return null;
   const targetText = targets.length ? targets.join(', ') : 'the area you want to edit';
   return `I will not run auto-selection. Please use Visual Edit's Rect, Brush, or Lasso selection to mark ${targetText} yourself, then tell me to apply the edit.`;
 };
 
 const shouldRequireManualVisualSelection = (state: AppState) =>
   state.mode === 'visual-edit' &&
-  VISUAL_EDIT_SELECTION_TOOLS.has(state.workflow.activeTool) &&
-  !state.workflow.visualSelectionMask &&
-  state.workflow.visualSelections.length === 0;
+  visualEditRequiresSelection(state.workflow.activeTool) &&
+  !hasUsableVisualSelection(state.workflow.visualSelections);
 
 const getVisualEditFallbackTargets = (question: string) => {
   const targets = visualEditTargetPatterns
@@ -476,7 +466,7 @@ const appendVisualEditRoutingFallbackRequests = (
 
   const targets = getVisualEditFallbackTargets(question);
   if (!targets.length) return requests;
-  const manualSelectionNeeded = state.workflow.visualSelections.length === 0 && !state.workflow.visualSelectionMask;
+  const manualSelectionNeeded = state.workflow.visualSelections.length === 0;
 
   const hasModeRequest = requests.some((request) =>
     request.type === 'set_mode' && getAssistantModeFromRequest(request) === 'visual-edit'
@@ -592,7 +582,7 @@ const appendAssistantGovernanceFallbackRequests = (
     : hasAssistantControlPromise(answerContent)
       ? getAssistantModeAfterControlCue(answerContent) || getAssistantModeFromText(answerContent)
       : null;
-  const withModeRequest = (() => {
+  const withModeRequest = ((): AppAssistantActionRequest[] => {
     if (!requestedMode || requestedMode === state.mode) return visualEditRequests;
     const hasModeRequest = visualEditRequests.some((request) =>
       request.type === 'set_mode' && getAssistantModeFromRequest(request) === requestedMode
@@ -635,7 +625,9 @@ const parseCurrentImageDownloadOptions = (
   value: unknown
 ): { format: CurrentImageDownloadFormat; resolution: CurrentImageDownloadResolution } => {
   const fallback = { format: 'png' as const, resolution: 'full' as const };
-  const normalize = (raw: unknown) => {
+  const normalize = (
+    raw: unknown
+  ): { format: CurrentImageDownloadFormat; resolution: CurrentImageDownloadResolution } => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
     const options = raw as Record<string, unknown>;
     const format = options.format === 'jpg' || options.format === 'jpeg'
@@ -758,6 +750,9 @@ const getAssistantGenerationReadiness = (
     case 'visual-edit':
       if (!state.uploadedImage) {
         return { ready: false, message: 'Upload or select an image before running Visual Edit.' };
+      }
+      if (state.workflow.visualAutoSelecting) {
+        return { ready: false, message: 'Wait for auto-selection to finish before applying this Visual Edit.' };
       }
       if (shouldRequireManualVisualSelection(state)) {
         return { ready: false, message: 'Select the area manually with Rect, Brush, or Lasso before applying this Visual Edit.' };

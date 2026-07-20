@@ -62,6 +62,24 @@ wrangler secret put APPWRITE_SNAPSHOTS_BUCKET_ID
 
 `OPENAI_API_KEY` enables GPT document translation and the ChatGPT Image Generation 2 option.
 
+## Localized image-edit protection
+
+`wrangler.toml` binds the SQLite-backed `ImageEditLimiter` Durable Object in both the default and production environments. It provides atomic, cross-isolate rate and concurrency protection for `/api/image-edits`; the Worker also retains a bounded per-isolate fallback for local development or temporary binding failures.
+
+The defaults are 10 edits per user and 12 per network per minute, with one active edit per user and two per network. They can be tuned with non-secret Worker variables:
+
+```text
+IMAGE_EDIT_RATE_WINDOW_SECONDS
+IMAGE_EDIT_RATE_LIMIT_PER_USER
+IMAGE_EDIT_RATE_LIMIT_PER_IP
+IMAGE_EDIT_MAX_CONCURRENT_PER_USER
+IMAGE_EDIT_MAX_CONCURRENT_PER_IP
+IMAGE_EDIT_CONCURRENCY_LEASE_SECONDS
+IMAGE_EDIT_MAX_BODY_BYTES
+```
+
+The body limit defaults to 48 MiB and is enforced while streaming, before JSON parsing. Deploying the updated Worker applies the `v1_image_edit_limiter` Durable Object migration.
+
 ## Appwrite feedback backend
 
 Feedback reports are written by the Worker using a server API key. The browser never talks to Appwrite directly.

@@ -706,9 +706,9 @@ export class GeminiService {
     const maskScopeInstructions = usesOpenAIAlphaMask
       ? maskMode === 'guided'
         ? [
-            'Use the attached alpha mask as editable-region guidance: transparent or low-alpha pixels mark the user-selected target focus, and opaque pixels protect the source image.',
-            'The transparent region is a pointer to the intended object, surface, or area. If that target naturally continues slightly beyond the low-alpha pixels, refine and blend nearby connected pixels as needed.',
-            'You may naturally reconstruct and blend nearby pixels only where required for texture continuation, material falloff, shadows, reflections, occlusion, or cleanup.',
+            'Use the attached alpha mask as a search region: transparent or low-alpha pixels may contain the named target plus surrounding context, and opaque pixels protect the source image.',
+            'Modify only the target explicitly named by the user inside the transparent region. Preserve unrelated objects, surfaces, occluders, text, shadows, and reflections even when the selection encloses them.',
+            'Do not change opaque pixels or extend the edit beyond the mask. Follow real object and surface edges inside the selected region instead of filling the selection shape.',
             'Preserve unrelated architecture, materials, people, signage, camera, perspective, and overall composition.',
             'Never draw, expose, fill, or preserve the mask itself in the final image; no black bands, white blobs, blank patches, outlines, labels, or visible mask artifacts.'
           ].join(' ')
@@ -718,9 +718,9 @@ export class GeminiService {
           ].join(' ')
       : maskMode === 'guided'
       ? [
-          'Use the bright selection pixels as spatial guidance for the user-selected target area, not as a hard pasted cutout, clipping stencil, or alpha edge.',
-          'The selected shape is a pointer to the intended object, surface, or area. If that target naturally continues slightly beyond the bright pixels, refine and blend those nearby connected pixels as needed.',
-          'You may naturally reconstruct and blend nearby pixels beyond the selection where required for texture continuation, material falloff, shadows, reflections, occlusion, or cleanup.',
+          'Use the bright selection pixels as a search region for the target explicitly named by the user.',
+          'Modify only that named target inside the selected shape. Preserve unrelated objects, surfaces, occluders, text, shadows, and reflections even when they are enclosed by the selection.',
+          'Follow real target edges rather than filling the rectangle, lasso, or brush shape, and do not extend the edit beyond the selected region.',
           'Preserve unrelated architecture, materials, people, signage, camera, perspective, and overall composition.',
           'Never draw, expose, fill, or preserve the selection guidance itself in the final image; no white blobs, blank patches, outlines, labels, or visible mask artifacts.'
         ].join(' ')
@@ -781,7 +781,7 @@ export class GeminiService {
     switch (request.editType) {
       case 'inpaint':
         editPrompt = maskMode === 'guided'
-          ? `${maskInstructions} Apply the requested edit to the target indicated by the ${editGuidanceLabel}: ${request.prompt}. Keep the edit focused on the intended selected target while allowing seamless reconstruction beyond the guidance edge when visually necessary.`
+          ? `${maskInstructions} Apply the requested edit only to the named target inside the ${editGuidanceLabel}: ${request.prompt}. Preserve all non-target content, including context pixels enclosed by a broad selection.`
           : `${maskInstructions} Edit only the allowed masked area according to this instruction: ${request.prompt}. Maintain seamless blending at the mask boundary.`;
         break;
       case 'outpaint':
