@@ -42,13 +42,30 @@ export const DEFAULT_DOCUMENT_TRANSLATION_MODEL: DocumentTranslationModel = 'gpt
 
 /** Models reserved for tender-CV conversion, where schema matching matters more than speed. */
 export const CV_CONVERSION_MODELS = [
-  'gpt-5.6-terra',
-  'gemini-3.1-pro',
+  'gpt-5',
+  'gemini-3.1-pro-preview',
 ] as const;
 
 export type CvConversionModel = typeof CV_CONVERSION_MODELS[number];
 
-export const DEFAULT_CV_CONVERSION_MODEL: CvConversionModel = 'gpt-5.6-terra';
+export const DEFAULT_CV_CONVERSION_MODEL: CvConversionModel = 'gpt-5';
+
+/**
+ * Converts the former display-name values into the provider model IDs.
+ * This also makes an already-open client resilient to a stale model selection.
+ */
+export function normalizeCvConversionModel(model: string | null | undefined): CvConversionModel {
+  switch (model) {
+    case 'gpt-5':
+    case 'gpt-5.6-terra':
+      return 'gpt-5';
+    case 'gemini-3.1-pro-preview':
+    case 'gemini-3.1-pro':
+      return 'gemini-3.1-pro-preview';
+    default:
+      return DEFAULT_CV_CONVERSION_MODEL;
+  }
+}
 
 export interface StyleConfiguration {
   id: string;

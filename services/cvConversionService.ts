@@ -11,11 +11,12 @@ import { getGeminiService } from './geminiService';
 import { openAITextRequest } from './apiGateway';
 import { convertPdfToDocxWithConvertApi } from './convertApiService';
 import { parseDocx, replaceParagraphText } from './docxParserService';
-import type {
-  CvConversionModel,
-  CvConversionOutput,
-  CvConversionProgress,
-  DocumentTranslateDocument,
+import {
+  normalizeCvConversionModel,
+  type CvConversionModel,
+  type CvConversionOutput,
+  type CvConversionProgress,
+  type DocumentTranslateDocument,
 } from '../types';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -65,6 +66,7 @@ export interface CvConversionOptions {
 /** Convert each queued CV sequentially so large tender forms do not overload the gateway. */
 export async function convertCvBatch(options: CvConversionOptions): Promise<CvConversionOutput[]> {
   const { sourceDocuments, templateDocument, onProgress, onOutput, abortSignal } = options;
+  const conversionModel = normalizeCvConversionModel(options.conversionModel);
   if (sourceDocuments.length === 0) throw new Error('Upload at least one company CV to convert.');
   if (!templateDocument) throw new Error('Upload the tender CV template before converting.');
 
@@ -80,6 +82,7 @@ export async function convertCvBatch(options: CvConversionOptions): Promise<CvCo
     try {
       const output = await convertOneCv({
         ...options,
+        conversionModel,
         sourceDocument,
         templateDocx,
         documentNumber,
@@ -334,7 +337,7 @@ ${input.sourceContent}`;
 
   const response = await generateText({
     prompt,
-    model: input.conversionModel,
+    model: normalizeCvConversionModel(input.conversionModel),
     temperature: 0.1,
     maxOutputTokens: 32_000,
     abortSignal: input.abortSignal,

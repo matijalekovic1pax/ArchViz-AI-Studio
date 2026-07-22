@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 import { useAppStore } from '../../../store';
 import { SectionHeader } from './SharedLeftComponents';
 import { cn } from '../../../lib/utils';
-import type { CvConversionModel, DocumentTranslateDocument } from '../../../types';
+import { normalizeCvConversionModel, type CvConversionModel, type DocumentTranslateDocument } from '../../../types';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PDF_MIME = 'application/pdf';
@@ -19,8 +19,8 @@ const LANGUAGE_OPTIONS = [
 ] as const;
 
 const MODEL_OPTIONS: Array<{ value: CvConversionModel; label: string; provider: string }> = [
-  { value: 'gpt-5.6-terra', label: 'ChatGPT 5.6 Terra', provider: 'OpenAI' },
-  { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', provider: 'Google' },
+  { value: 'gpt-5', label: 'GPT-5', provider: 'OpenAI' },
+  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', provider: 'Google' },
 ];
 
 export const LeftCvConvertPanel: React.FC = () => {
@@ -29,6 +29,7 @@ export const LeftCvConvertPanel: React.FC = () => {
   const cvInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const cvConversion = state.workflow.cvConversion;
+  const selectedConversionModel = normalizeCvConversionModel(cvConversion.conversionModel);
 
   const resetOutputs = () => ({
     outputs: [],
@@ -199,7 +200,7 @@ export const LeftCvConvertPanel: React.FC = () => {
         <SectionHeader title={t('cvConversion.modelTitle')} />
         <div className="space-y-2">
           {MODEL_OPTIONS.map((model) => {
-            const selected = cvConversion.conversionModel === model.value;
+            const selected = selectedConversionModel === model.value;
             return (
               <button
                 key={model.value}
