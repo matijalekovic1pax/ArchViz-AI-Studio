@@ -1216,6 +1216,10 @@ export async function convertDocxToPdf(fileName: string, fileData: string): Prom
   return gatewayPost('/api/convert/docx-to-pdf', { fileName, fileData }, { timeoutMs: 300_000 });
 }
 
+export async function convertHtmlToDocx(fileName: string, fileData: string): Promise<any> {
+  return gatewayPost('/api/convert/html-to-docx', { fileName, fileData }, { timeoutMs: 300_000 });
+}
+
 // ─── iLovePDF ────────────────────────────────────────────────────────────────
 
 export async function ilovepdfAuth(): Promise<{ token: string }> {

@@ -6413,6 +6413,9 @@ export default {
     if (path === '/api/convert/docx-to-pdf' && request.method === 'POST') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'convertapi', action: 'docx-to-pdf', route: '/api/convert/docx-to-pdf' }, () => handleConvertApi(request, env, 'docx', 'pdf'));
     }
+    if (path === '/api/convert/html-to-docx' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'convertapi', action: 'html-to-docx', route: '/api/convert/html-to-docx' }, () => handleConvertApi(request, env, 'html', 'docx'));
+    }
 
     // iLovePDF multi-step proxy
     if (path.startsWith('/api/ilovepdf/')) {

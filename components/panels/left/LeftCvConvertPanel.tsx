@@ -20,7 +20,7 @@ const LANGUAGE_OPTIONS = [
 
 const MODEL_OPTIONS: Array<{ value: CvConversionModel; label: string; provider: string }> = [
   { value: 'gpt-5', label: 'GPT-5 Document Agent', provider: 'OpenAI' },
-  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro + Document Agent', provider: 'Google + OpenAI' },
+  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Document Agent', provider: 'Google' },
 ];
 
 export const LeftCvConvertPanel: React.FC = () => {

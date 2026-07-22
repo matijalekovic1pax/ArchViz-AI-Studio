@@ -3,7 +3,7 @@
  * All API calls go through the API gateway — no API keys in the client.
  */
 
-import { convertDocxToPdf, convertPdfToDocx } from './apiGateway';
+import { convertDocxToPdf, convertHtmlToDocx, convertPdfToDocx } from './apiGateway';
 
 export interface ConvertApiProgress {
   phase: 'uploading' | 'converting' | 'downloading' | 'complete' | 'error';
@@ -85,4 +85,30 @@ export async function convertDocxToPdfWithConvertApi(
   onProgress?.({ phase: 'complete', percent: 100, message: 'Word preview ready!' });
 
   return pdfDataUrl;
+}
+
+/**
+ * Converts an AI-authored HTML document to an editable Word document. The AI
+ * controls the content and styling; ConvertAPI only produces the Word binary.
+ */
+export async function convertHtmlToDocxWithConvertApi(html: string): Promise<string> {
+  if (!html.trim()) throw new Error('The document agent did not return HTML to convert.');
+  const htmlBase64 = utf8ToBase64(html);
+  const result = await convertHtmlToDocx('tender-cv.html', htmlBase64);
+
+  if (!result.Files || result.Files.length === 0 || !result.Files[0].FileData) {
+    throw new Error('ConvertAPI returned no Word document.');
+  }
+
+  return `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${result.Files[0].FileData}`;
+}
+
+function utf8ToBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
