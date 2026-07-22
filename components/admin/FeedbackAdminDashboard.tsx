@@ -52,6 +52,7 @@ const WORKFLOW_LABEL_KEY_BY_MODE: Record<GenerationMode, string> = {
   'video': 'workflows.video',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',
+  'cv-convert': 'workflows.cvConvert',
   'pdf-compression': 'workflows.pdfCompression',
   'headshot': 'workflows.headshot',
 };

@@ -345,6 +345,7 @@ const ASSISTANT_MODE_ROUTES: Array<{ mode: GenerationMode; label: string; aliase
   { mode: 'video', label: 'Video Studio', aliases: ['video', 'video studio'] },
   { mode: 'material-validation', label: 'Material Validation', aliases: ['material validation'] },
   { mode: 'document-translate', label: 'Doc Translator', aliases: ['document translate', 'document translator', 'doc translator'] },
+  { mode: 'cv-convert', label: 'Tender CV Converter', aliases: ['cv converter', 'tender cv', 'tender cv converter', 'cv conversion'] },
   { mode: 'pdf-compression', label: 'PDF Compressor', aliases: ['pdf compressor', 'pdf compression'] },
   { mode: 'headshot', label: 'AI Headshots', aliases: ['headshot', 'headshots', 'ai headshots'] },
 ];
@@ -739,6 +740,10 @@ const getAssistantGenerationReadiness = (
       return state.workflow.documentTranslate.sourceDocument
         ? { ready: true }
         : { ready: false, message: 'Upload a document before running translation.' };
+    case 'cv-convert':
+      return state.workflow.cvConversion.sourceDocuments.length > 0 && state.workflow.cvConversion.templateDocument
+        ? { ready: true }
+        : { ready: false, message: 'Upload at least one company CV and a tender template before converting.' };
     case 'pdf-compression':
       return state.workflow.pdfCompression.queue.length > 0
         ? { ready: true }

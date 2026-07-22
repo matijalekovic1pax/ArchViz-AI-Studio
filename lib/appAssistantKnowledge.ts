@@ -20,7 +20,7 @@ export interface AppAssistantPromptMessage {
 
 export const APP_ASSISTANT_GLOBAL_RULES = [
   'The assistant is embedded inside ArchViz AI Studio and must answer as an in-app guide, not as marketing copy.',
-  'The current app has 18 active features. Image-to-3D, mesh reconstruction, and 3D model export are not active features.',
+  'The current app has 19 active features. Image-to-3D, mesh reconstruction, and 3D model export are not active features.',
   'The top bar includes an Image Model selector with Nano Banana Pro and ChatGPT Image Generation 2.',
   'If a user asks for a removed workflow, explain that it is unavailable and redirect to the closest active feature.',
   'Answer only from the provided app context. If the context does not contain a requested control or feature, say the current app context does not specify it and offer the closest listed control.',
@@ -74,7 +74,7 @@ export const APP_ASSISTANT_GUIDED_WORKFLOW_RULES = [
   'Multi-Angle: ask which view set is needed, how many views, and how strict consistency should be before generating.',
   'Upscale: ask whether the goal is subtle cleanup, client delivery, print, or video-source quality before applying aggressive sharpening/detail settings.',
   'Video Studio: ask for motion/camera intent, duration/aspect ratio, and whether audio is needed before generating the clip.',
-  'Material Validation, Document Translate, and PDF Compression: verify required files and operational settings first; if missing, guide upload/settings rather than pretending the workflow can run.',
+  'Material Validation, Document Translate, Tender CV Converter, and PDF Compression: verify required files and operational settings first; if missing, guide upload/settings rather than pretending the workflow can run.',
   'Headshot: ask for intended use, tone, background, and whether more portrait angles should be attached before generating.',
 ];
 
@@ -412,6 +412,27 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     watchOut: ['PDF translation converts to Word first and outputs DOCX.', 'Complex PDFs may need cleanup after conversion.'],
     suggestions: ['What happens to PPTX animations?', 'Why does PDF output as DOCX?', 'Which file formats are supported?'],
   },
+  'cv-convert': {
+    mode: 'cv-convert',
+    title: 'Tender CV Converter',
+    summary: 'Convert company CVs into a tender-provided CV template, with optional translation and layout-aware table mapping.',
+    bestFor: ['tender submissions', 'batch CV reformatting', 'template-specific consultant CVs'],
+    steps: [
+      'Open the Tender CV Converter workflow.',
+      'Upload one or more company CVs in PDF or DOCX format.',
+      'Upload the tender CV template in PDF or DOCX format.',
+      'Choose the final language and conversion model, then convert and download each tender-ready DOCX.',
+    ],
+    controls: ['company CV stack', 'tender template', 'final language', 'conversion model', 'converted CV outputs'],
+    specificGuidance: [
+      'Tender CV Converter maps existing CV information into the tender template; it must not invent qualifications, employment history, or certifications.',
+      'PDF inputs are converted through the existing document conversion service before template-aware rebuilding.',
+      'The converter preserves the tender template structure and expands repeatable table rows when the source CV has multiple matching entries.',
+      'Use ChatGPT 5.6 Terra or Gemini 3.1 Pro when formatting and translation fidelity are especially important.',
+    ],
+    watchOut: ['Review final tender forms for mandatory declarations and signatures.', 'Complex scanned PDFs may require manual cleanup after conversion.'],
+    suggestions: ['Which files should I upload?', 'Can I convert several CVs at once?', 'Which model should I choose for a tender template?'],
+  },
   'pdf-compression': {
     mode: 'pdf-compression',
     title: 'PDF Compression',
@@ -455,7 +476,16 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
 };
 
 export function getAppAssistantFeature(mode: GenerationMode): AppAssistantFeatureGuide {
-  return APP_ASSISTANT_FEATURES[mode];
+  return APP_ASSISTANT_FEATURES[mode] || {
+    mode,
+    title: 'Studio Assistant',
+    summary: 'Get help with the current workspace.',
+    bestFor: ['workflow guidance'],
+    steps: ['Review the available controls and add the required inputs for this workflow.'],
+    controls: [],
+    watchOut: [],
+    suggestions: ['What can I do in this workflow?'],
+  };
 }
 
 export function getAppAssistantModeList(): string {
@@ -762,6 +792,16 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Target language: ${wf.documentTranslate.targetLanguage}`,
         'Preserve formatting: always enabled',
         `Progress phase: ${wf.documentTranslate.progress.phase}`
+      );
+      break;
+    case 'cv-convert':
+      lines.push(
+        `Company CVs: ${wf.cvConversion.sourceDocuments.length}`,
+        `Tender template: ${wf.cvConversion.templateDocument?.name || 'none'}`,
+        `Target language: ${wf.cvConversion.targetLanguage}`,
+        `Model: ${wf.cvConversion.conversionModel}`,
+        `Converted outputs: ${wf.cvConversion.outputs.filter((output) => output.dataUrl).length}`,
+        `Progress phase: ${wf.cvConversion.progress.phase}`
       );
       break;
     case 'pdf-compression':
