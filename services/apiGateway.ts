@@ -49,7 +49,43 @@ let _jwtExpiresAt: number = 0;
 let _onSessionExpired: (() => void) | null = null;
 let _activeGenerationTraceId: string | null = null;
 
+const asGatewayErrorDetails = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const readPositiveSeconds = (value: unknown): number | undefined => {
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.ceil(numeric) : undefined;
+};
+
+const parseRetryAfterSeconds = (value: string | null, now = Date.now()): number | undefined => {
+  if (!value) return undefined;
+  const normalizedValue = value.trim();
+  if (!normalizedValue) return undefined;
+  const deltaSeconds = readPositiveSeconds(normalizedValue);
+  if (deltaSeconds !== undefined) return deltaSeconds;
+  const retryAt = Date.parse(normalizedValue);
+  return Number.isFinite(retryAt) ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : undefined;
+};
+
+const getGatewayErrorMessage = (details: unknown, fallback: string): string => {
+  const record = asGatewayErrorDetails(details);
+  const error = record?.error;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  const nestedError = asGatewayErrorDetails(error);
+  if (typeof nestedError?.message === 'string' && nestedError.message.trim()) {
+    return nestedError.message.trim();
+  }
+  if (typeof record?.message === 'string' && record.message.trim()) return record.message.trim();
+  return fallback;
+};
+
 export class GatewayApiError extends Error {
+  public readonly code?: string;
+  public readonly requestId?: string;
+  public readonly retryAfterSeconds?: number;
+
   constructor(
     message: string,
     public status: number,
@@ -58,8 +94,66 @@ export class GatewayApiError extends Error {
   ) {
     super(message);
     this.name = 'GatewayApiError';
+    const detailRecord = asGatewayErrorDetails(details);
+    this.code = typeof detailRecord?.code === 'string' ? detailRecord.code : undefined;
+    this.requestId = typeof detailRecord?.requestId === 'string' ? detailRecord.requestId : undefined;
+    this.retryAfterSeconds = readPositiveSeconds(detailRecord?.retryAfterSeconds);
   }
 }
+
+export type ImageEditGatewayErrorKind =
+  | 'gateway-concurrency-limit'
+  | 'gateway-rate-limit'
+  | 'upstream-rate-limit'
+  | 'invalid-request'
+  | 'payload-too-large'
+  | 'authorization'
+  | 'upstream-unavailable'
+  | 'unknown';
+
+export interface ImageEditGatewayErrorInfo {
+  kind: ImageEditGatewayErrorKind;
+  status: number;
+  message: string;
+  code?: string;
+  requestId?: string;
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Preserve the distinction between our image-edit guard and OpenAI failures.
+ * Both can return HTTP 429, but only guard responses carry one of our stable
+ * `image_edit_*` codes. Callers must not infer the source from status alone.
+ */
+export const getImageEditGatewayErrorInfo = (error: unknown): ImageEditGatewayErrorInfo | null => {
+  if (!(error instanceof GatewayApiError) || error.provider !== 'openai-image-edit') return null;
+
+  let kind: ImageEditGatewayErrorKind = 'unknown';
+  if (error.code === 'image_edit_concurrency_limited') {
+    kind = 'gateway-concurrency-limit';
+  } else if (error.code === 'image_edit_rate_limited') {
+    kind = 'gateway-rate-limit';
+  } else if (error.status === 429) {
+    kind = 'upstream-rate-limit';
+  } else if (error.status === 413) {
+    kind = 'payload-too-large';
+  } else if (error.status === 400 || error.status === 409 || error.status === 422) {
+    kind = 'invalid-request';
+  } else if (error.status === 401 || error.status === 403) {
+    kind = 'authorization';
+  } else if (error.status === 500 || error.status === 502 || error.status === 503 || error.status === 504) {
+    kind = 'upstream-unavailable';
+  }
+
+  return {
+    kind,
+    status: error.status,
+    message: error.message,
+    ...(error.code ? { code: error.code } : {}),
+    ...(error.requestId ? { requestId: error.requestId } : {}),
+    ...(error.retryAfterSeconds !== undefined ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+  };
+};
 
 export interface GatewaySessionDiagnostics {
   gatewayUrl: string;
@@ -907,8 +1001,23 @@ export async function imageEditRequest(
     },
   });
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: `Image edit failed (${resp.status})` }));
-    throw new GatewayApiError(err.error || `Image edit failed (${resp.status})`, resp.status, 'openai-image-edit', err);
+    const fallbackMessage = `Image edit failed (${resp.status})`;
+    const responseDetails = await resp.json().catch(() => ({ error: fallbackMessage }));
+    const detailRecord = asGatewayErrorDetails(responseDetails) || { error: fallbackMessage };
+    const retryAfterHeader = resp.headers.get('Retry-After');
+    const retryAfterSeconds = parseRetryAfterSeconds(retryAfterHeader)
+      ?? readPositiveSeconds(detailRecord.retryAfterSeconds);
+    const details = {
+      ...detailRecord,
+      ...(retryAfterHeader ? { retryAfter: retryAfterHeader } : {}),
+      ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+    };
+    throw new GatewayApiError(
+      getGatewayErrorMessage(details, fallbackMessage),
+      resp.status,
+      'openai-image-edit',
+      details
+    );
   }
   return resp.json();
 }

@@ -312,11 +312,25 @@ async function acquireImageEditDurableDimension(namespace, spec, leaseId, config
   return {
     ok: true,
     async release() {
-      await stub.fetch('https://image-edit-limiter.internal/release', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leaseId }),
-      });
+      let lastError = null;
+      // Release is idempotent. A couple of short retries prevent a transient
+      // Durable Object error from leaving the user behind a stale lease while
+      // keeping the active one-request concurrency guarantee unchanged.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const releaseResponse = await stub.fetch('https://image-edit-limiter.internal/release', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leaseId }),
+          });
+          if (releaseResponse.ok) return;
+          lastError = new Error(`Image edit limiter release failed (${releaseResponse.status}).`);
+        } catch (error) {
+          lastError = error;
+        }
+        if (attempt < 2) await sleep(50 * (attempt + 1));
+      }
+      throw lastError || new Error('Image edit limiter release failed.');
     },
   };
 }
@@ -449,11 +463,14 @@ async function acquireImageEditGuard(request, env, user) {
 function imageEditLimitResponse(origin, denial) {
   const retryAfterSeconds = Math.max(1, Math.ceil(Number(denial?.retryAfterSeconds) || 1));
   const concurrencyLimited = denial?.kind === 'concurrency';
+  const reason = concurrencyLimited ? 'concurrency' : 'rate_limit';
   return corsResponse(origin, {
     error: concurrencyLimited
       ? 'An image edit is already running for this account or network. Wait for it to finish, then try again.'
       : `Too many image edit requests. Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`,
     code: concurrencyLimited ? 'image_edit_concurrency_limited' : 'image_edit_rate_limited',
+    reason,
+    retryable: true,
     scope: denial?.scope || 'user',
     retryAfterSeconds,
     limit: denial?.limit || null,
@@ -463,6 +480,8 @@ function imageEditLimitResponse(origin, denial) {
       'Retry-After': String(retryAfterSeconds),
       'Cache-Control': 'no-store',
       'X-RateLimit-Scope': denial?.scope || 'user',
+      'X-RateLimit-Reason': reason,
+      'Access-Control-Expose-Headers': 'Retry-After, X-RateLimit-Scope, X-RateLimit-Reason',
     },
   });
 }
@@ -2927,6 +2946,188 @@ function extractOpenAIError(data, fallback) {
   return fallback;
 }
 
+function sanitizeOpenAIErrorMetadata(value, maxLen = 160) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLen || !/^[a-z0-9_.:-]+$/i.test(normalized)) return null;
+  return normalized;
+}
+
+function sanitizeOpenAIRequestId(headers) {
+  const value = headers?.get?.('x-request-id') || headers?.get?.('openai-request-id') || '';
+  return sanitizeOpenAIErrorMetadata(value, 200);
+}
+
+function sanitizeOpenAIErrorMessage(value, fallback) {
+  const message = sanitizeText(typeof value === 'string' ? value : '', 1200);
+  if (!message) return fallback;
+  // Provider errors can contain project/organization identifiers. They are useful
+  // in server logs but are not needed in a browser-facing diagnostic.
+  return message
+    .replace(/\bsk-[a-z0-9_-]{8,}\b/gi, '[redacted-key]')
+    .replace(/\b(?:org|proj|project|user|acct)[_-][a-z0-9_-]{6,}\b/gi, '[redacted-id]')
+    .replace(/\bbearer\s+[a-z0-9._~+/=-]{8,}\b/gi, 'Bearer [redacted]');
+}
+
+function normalizeOpenAIRateLimitHeaderValue(value, kind) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized.length > 80) return null;
+  if (kind === 'count') {
+    return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : null;
+  }
+  return /^(?:\d+(?:\.\d+)?(?:ms|s|m|h)){1,4}$/.test(normalized) ? normalized : null;
+}
+
+function parseOpenAIRateLimitDurationSeconds(value) {
+  const normalized = normalizeOpenAIRateLimitHeaderValue(value, 'duration');
+  if (!normalized) return null;
+  const unitSeconds = { ms: 0.001, s: 1, m: 60, h: 3600 };
+  const matches = [...normalized.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)];
+  if (matches.length === 0 || matches.map((match) => match[0]).join('') !== normalized) return null;
+  const seconds = matches.reduce((total, match) => total + Number(match[1]) * unitSeconds[match[2]], 0);
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.max(1, Math.ceil(seconds)) : null;
+}
+
+function normalizeOpenAIRetryAfterSeconds(headers, fallback = null) {
+  const raw = headers?.get?.('retry-after');
+  let seconds = null;
+  if (raw && /^\d+(?:\.\d+)?$/.test(raw.trim())) {
+    seconds = Math.ceil(Number(raw));
+  } else if (raw) {
+    const retryAt = Date.parse(raw);
+    if (Number.isFinite(retryAt)) seconds = Math.ceil((retryAt - Date.now()) / 1000);
+  }
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    seconds = parseOpenAIRateLimitDurationSeconds(headers?.get?.('x-ratelimit-reset-requests'));
+  }
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = fallback;
+  return Number.isFinite(seconds) && seconds > 0
+    ? Math.max(1, Math.min(60 * 60, Math.ceil(seconds)))
+    : null;
+}
+
+function getOpenAIRateLimitDetails(headers) {
+  const mappings = [
+    ['x-ratelimit-limit-requests', 'limitRequests', 'count'],
+    ['x-ratelimit-remaining-requests', 'remainingRequests', 'count'],
+    ['x-ratelimit-reset-requests', 'resetRequests', 'duration'],
+    ['x-ratelimit-limit-tokens', 'limitTokens', 'count'],
+    ['x-ratelimit-remaining-tokens', 'remainingTokens', 'count'],
+    ['x-ratelimit-reset-tokens', 'resetTokens', 'duration'],
+  ];
+  const details = {};
+  for (const [headerName, field, kind] of mappings) {
+    const value = normalizeOpenAIRateLimitHeaderValue(headers?.get?.(headerName), kind);
+    if (value !== null) details[field] = value;
+  }
+  return details;
+}
+
+function getOpenAIClientDiagnosticHeaders(upstreamHeaders, options = {}) {
+  const requestId = sanitizeOpenAIRequestId(upstreamHeaders);
+  const retryAfterSeconds = options.retryAfterSeconds ?? normalizeOpenAIRetryAfterSeconds(upstreamHeaders);
+  const rateLimit = getOpenAIRateLimitDetails(upstreamHeaders);
+  const output = {
+    'Cache-Control': 'no-store',
+    'Access-Control-Expose-Headers': [
+      'Retry-After',
+      'X-OpenAI-Request-Id',
+      'X-RateLimit-Limit-Requests',
+      'X-RateLimit-Remaining-Requests',
+      'X-RateLimit-Reset-Requests',
+      'X-RateLimit-Limit-Tokens',
+      'X-RateLimit-Remaining-Tokens',
+      'X-RateLimit-Reset-Tokens',
+    ].join(', '),
+  };
+  if (requestId) output['X-OpenAI-Request-Id'] = requestId;
+  if (retryAfterSeconds) output['Retry-After'] = String(retryAfterSeconds);
+  const headerMappings = {
+    limitRequests: 'X-RateLimit-Limit-Requests',
+    remainingRequests: 'X-RateLimit-Remaining-Requests',
+    resetRequests: 'X-RateLimit-Reset-Requests',
+    limitTokens: 'X-RateLimit-Limit-Tokens',
+    remainingTokens: 'X-RateLimit-Remaining-Tokens',
+    resetTokens: 'X-RateLimit-Reset-Tokens',
+  };
+  for (const [field, headerName] of Object.entries(headerMappings)) {
+    if (rateLimit[field] !== undefined) output[headerName] = rateLimit[field];
+  }
+  return output;
+}
+
+function classifyOpenAI429(data, providerMessage) {
+  const providerCode = sanitizeOpenAIErrorMetadata(data?.error?.code);
+  const providerType = sanitizeOpenAIErrorMetadata(data?.error?.type);
+  const signal = `${providerCode || ''} ${providerType || ''} ${providerMessage || ''}`.toLowerCase();
+  const quotaExceeded =
+    /(?:insufficient|exceeded|exhausted)[_\s-]*quota/.test(signal) ||
+    /(?:billing|credit|spend|usage)[_\s-]*(?:hard[_\s-]*)?(?:limit|quota|inactive|exceeded|reached)/.test(signal) ||
+    /(?:billing_hard_limit_reached|billing_not_active|usage_limit_reached)/.test(signal);
+  return {
+    code: quotaExceeded ? 'openai_quota_exceeded' : 'openai_rate_limited',
+    reason: quotaExceeded ? 'quota' : 'rate_limit',
+    retryable: !quotaExceeded,
+    providerCode,
+    providerType,
+  };
+}
+
+function createOpenAIUpstreamErrorResponse(origin, upstreamResp, data, fallbackLabel = 'OpenAI API') {
+  const status = Number(upstreamResp?.status) || 502;
+  const requestId = sanitizeOpenAIRequestId(upstreamResp?.headers);
+  const fallback = `${fallbackLabel} error (${status})`;
+  const providerMessage = sanitizeOpenAIErrorMessage(extractOpenAIError(data, fallback), fallback);
+  const providerCode = sanitizeOpenAIErrorMetadata(data?.error?.code);
+  const providerType = sanitizeOpenAIErrorMetadata(data?.error?.type);
+
+  if (status === 429) {
+    const classification = classifyOpenAI429(data, providerMessage);
+    const retryAfterSeconds = normalizeOpenAIRetryAfterSeconds(
+      upstreamResp.headers,
+      classification.retryable ? 30 : null
+    );
+    const rateLimit = getOpenAIRateLimitDetails(upstreamResp.headers);
+    const body = {
+      error: classification.retryable
+        ? 'OpenAI is temporarily rate limiting image requests. Wait for the retry window, then try again.'
+        : 'The production OpenAI project has reached a quota or billing limit. Check its billing and usage limits before retrying.',
+      code: classification.code,
+      reason: classification.reason,
+      provider: 'openai',
+      providerStatus: 429,
+      providerCode: classification.providerCode,
+      providerType: classification.providerType,
+      providerMessage,
+      requestId,
+      retryable: classification.retryable,
+      retryAfterSeconds,
+      ...(Object.keys(rateLimit).length > 0 ? { rateLimit } : {}),
+    };
+    Object.keys(body).forEach((key) => body[key] == null && delete body[key]);
+    return corsResponse(origin, body, {
+      status: 429,
+      headers: getOpenAIClientDiagnosticHeaders(upstreamResp.headers, { retryAfterSeconds }),
+    });
+  }
+
+  const body = {
+    error: providerMessage,
+    code: 'openai_upstream_error',
+    provider: 'openai',
+    providerStatus: status,
+    providerCode,
+    providerType,
+    requestId,
+  };
+  Object.keys(body).forEach((key) => body[key] == null && delete body[key]);
+  return corsResponse(origin, body, {
+    status,
+    headers: getOpenAIClientDiagnosticHeaders(upstreamResp?.headers),
+  });
+}
+
 function extractOpenAIResponseText(data) {
   if (typeof data?.output_text === 'string') return data.output_text;
 
@@ -3002,8 +3203,7 @@ async function handleOpenAIResponses(request, env) {
 
     const data = await upstreamResp.json().catch(() => null);
     if (!upstreamResp.ok) {
-      const message = extractOpenAIError(data, `OpenAI text API error (${upstreamResp.status})`);
-      return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+      return createOpenAIUpstreamErrorResponse(origin, upstreamResp, data, 'OpenAI text API');
     }
 
     const normalized = normalizeOpenAITextResponse(data, model);
@@ -3605,7 +3805,12 @@ async function createOpenAIImageProxyResponse(origin, upstreamResp) {
     errData,
     errText.slice(0, 500) || `OpenAI image API error (${upstreamResp.status})`
   );
-  return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+  return createOpenAIUpstreamErrorResponse(
+    origin,
+    upstreamResp,
+    errData || { error: { message } },
+    'OpenAI image API'
+  );
 }
 
 function appendOpenAIFormFile(form, key, value, fallbackName) {
@@ -3845,10 +4050,9 @@ async function handleImageEdit(request, env, user) {
     );
 
     const data = await upstreamResp.json().catch(() => null);
-    const requestId = upstreamResp.headers.get('x-request-id') || upstreamResp.headers.get('openai-request-id') || null;
+    const requestId = sanitizeOpenAIRequestId(upstreamResp.headers);
     if (!upstreamResp.ok) {
-      const message = extractOpenAIError(data, `OpenAI image edit failed (${upstreamResp.status})`);
-      return corsResponse(origin, { error: message, requestId }, { status: upstreamResp.status });
+      return createOpenAIUpstreamErrorResponse(origin, upstreamResp, data, 'OpenAI image edit');
     }
 
     const rawEntries = Array.isArray(data?.data) ? data.data : [];
@@ -4027,8 +4231,7 @@ async function handleOpenAIImages(request, env) {
     }
     const data = await upstreamResp.json().catch(() => null);
     if (!upstreamResp.ok) {
-      const message = extractOpenAIError(data, `OpenAI image API error (${upstreamResp.status})`);
-      return corsResponse(origin, { error: message }, { status: upstreamResp.status });
+      return createOpenAIUpstreamErrorResponse(origin, upstreamResp, data, 'OpenAI image API');
     }
 
     const normalized = normalizeOpenAIImageResponse(data);
@@ -5631,7 +5834,18 @@ async function handleAppLogEventCreate(request, env, user) {
     console.error('[logs] event create failed', {
       message: error?.message || String(error),
     });
-    return corsResponse(origin, { error: error.message || 'Failed to write application log.' }, { status: 500 });
+    // Application logs are optional telemetry. A storage/schema outage must not
+    // surface as a failed product request or interfere with image generation.
+    return corsResponse(origin, {
+      success: true,
+      stored: false,
+      skipped: true,
+      code: 'telemetry_storage_unavailable',
+      reason: 'Optional telemetry storage is temporarily unavailable.',
+    }, {
+      status: 202,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
 }
 

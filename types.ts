@@ -16,6 +16,7 @@ export type GenerationMode =
   | 'video'
   | 'material-validation'
   | 'document-translate'
+  | 'cv-convert'
   | 'pdf-compression'
   | 'headshot';
 
@@ -38,6 +39,16 @@ export const DOCUMENT_TRANSLATION_MODELS = [
 export type DocumentTranslationModel = typeof DOCUMENT_TRANSLATION_MODELS[number];
 
 export const DEFAULT_DOCUMENT_TRANSLATION_MODEL: DocumentTranslationModel = 'gpt-5.4-mini';
+
+/** Models reserved for tender-CV conversion, where schema matching matters more than speed. */
+export const CV_CONVERSION_MODELS = [
+  'gpt-5.6-terra',
+  'gemini-3.1-pro',
+] as const;
+
+export type CvConversionModel = typeof CV_CONVERSION_MODELS[number];
+
+export const DEFAULT_CV_CONVERSION_MODEL: CvConversionModel = 'gpt-5.6-terra';
 
 export interface StyleConfiguration {
   id: string;
@@ -725,6 +736,7 @@ export interface WorkflowSettings {
 
   // 13. Document Translation
   documentTranslate: DocumentTranslateState;
+  cvConversion: CvConversionState;
 
   // 14. PDF Compression
   pdfCompression: PdfCompressionState;
@@ -1193,6 +1205,38 @@ export interface DocumentTranslateState {
   error: string | null;
 }
 
+// --- Tender CV Conversion Types ---
+
+export interface CvConversionOutput {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  name: string;
+  dataUrl: string | null;
+  warnings: string[] | null;
+  error: string | null;
+  createdAt: number;
+}
+
+export interface CvConversionProgress {
+  phase: 'idle' | 'converting' | 'parsing' | 'structuring' | 'rebuilding' | 'complete' | 'error';
+  currentDocument: number;
+  totalDocuments: number;
+  percent: number;
+  message?: string;
+}
+
+export interface CvConversionState {
+  sourceDocuments: DocumentTranslateDocument[];
+  templateDocument: DocumentTranslateDocument | null;
+  targetLanguage: string;
+  conversionModel: CvConversionModel;
+  progress: CvConversionProgress;
+  outputs: CvConversionOutput[];
+  activeOutputId: string | null;
+  error: string | null;
+}
+
 // --- PDF Compression Types ---
 
 export interface PdfCompressionDocument {
@@ -1439,6 +1483,7 @@ export type Action =
   | { type: 'UPDATE_VIDEO_CAMERA'; payload: Partial<VideoState['camera']> }
   | { type: 'UPDATE_VIDEO_TIMELINE'; payload: Partial<VideoState['timeline']> }
   | { type: 'UPDATE_MATERIAL_VALIDATION'; payload: Partial<MaterialValidationState> }
+  | { type: 'UPDATE_CV_CONVERSION'; payload: Partial<CvConversionState> }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'UPDATE_CHAT_MESSAGE'; payload: { id: string; updates: Partial<ChatMessage> } }
   | { type: 'ADD_CUSTOM_STYLE'; payload: StyleConfiguration }

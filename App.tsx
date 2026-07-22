@@ -12,6 +12,7 @@ import { ImageCanvas } from './components/canvas/ImageCanvas';
 import { FloatingGenerateButton } from './components/FloatingGenerateButton';
 import { MaterialValidationView } from './components/MaterialValidationView';
 import { DocumentTranslateView } from './components/DocumentTranslateView';
+import { CvConvertView } from './components/CvConvertView';
 import { PdfCompressionView } from './components/PdfCompressionView';
 import { AppAssistant } from './components/AppAssistant';
 import { GenerationMode } from './types';
@@ -149,13 +150,15 @@ const Layout: React.FC = () => {
             <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
             <DocumentTranslateView />
+          ) : state.mode === 'cv-convert' ? (
+            <CvConvertView />
           ) : state.mode === 'pdf-compression' ? (
             <PdfCompressionView />
           ) : (
             <ImageCanvas />
           )}
           <FloatingGenerateButton />
-          {state.mode !== 'document-translate' && state.mode !== 'pdf-compression' && (
+          {state.mode !== 'document-translate' && state.mode !== 'cv-convert' && state.mode !== 'pdf-compression' && (
             <div className="hidden lg:block">
               <BottomPanel />
             </div>

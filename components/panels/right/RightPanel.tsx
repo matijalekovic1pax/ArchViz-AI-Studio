@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
 import {
   Box, FileCode, Grid, Eraser, Layers, RectangleVertical, Pencil, Maximize2, Video, CheckCircle2, Settings,
-  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, UserCircle, Combine, Orbit
+  ChevronsRight, ChevronsLeft, HelpCircle, Sparkle, Wrench, Brush, X, Info, Camera, Languages, FileDown, FileStack, UserCircle, Combine, Orbit
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Render3DPanel } from './Render3DPanel';
@@ -20,6 +20,7 @@ import { ImageToCadPanel } from './ImageToCadPanel';
 import { VideoPanel } from './VideoPanel';
 import { ValidationPanel } from './ValidationPanel';
 import { DocumentTranslatePanel } from './DocumentTranslatePanel';
+import { CvConvertPanel } from './CvConvertPanel';
 import { PdfCompressionPanel } from './PdfCompressionPanel';
 import { HeadshotPanel } from './HeadshotPanel';
 import { SceneComposePanel } from './SceneComposePanel';
@@ -155,6 +156,12 @@ export const RightPanel: React.FC = () => {
         PanelIcon = Languages;
         panelDescription = t('rightPanel.documentTranslate.description');
         panelContent = <DocumentTranslatePanel />;
+        break;
+      case 'cv-convert':
+        panelTitle = t('rightPanel.cvConvert.title');
+        PanelIcon = FileStack;
+        panelDescription = t('rightPanel.cvConvert.description');
+        panelContent = <CvConvertPanel />;
         break;
       case 'pdf-compression':
         panelTitle = t('rightPanel.pdfCompression.title');

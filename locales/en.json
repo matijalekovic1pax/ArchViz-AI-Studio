@@ -92,6 +92,7 @@
     "generateRender": "Generate Render",
     "generateOutputFirst": "Generate output first",
     "translateDocument": "Translate Document",
+    "convertCvs": "Convert CVs",
     "cancel": "Cancel"
   },
   "modes": {
@@ -356,6 +357,34 @@
       "sr": "Serbian"
     }
   },
+  "cvConversion": {
+    "companyCvs": "Company CVs",
+    "uploadCvs": "Upload company CVs",
+    "wordPdfMultiple": "Select one or more PDF or Word documents",
+    "removeCv": "Remove CV",
+    "tenderTemplate": "Tender template",
+    "uploadTemplate": "Upload tender template",
+    "templateFormats": "Word or PDF tender form",
+    "templateReady": "Template ready",
+    "removeTemplate": "Remove template",
+    "finalLanguage": "Final language",
+    "modelTitle": "Conversion model",
+    "formattingFocused": "formatting & tender mapping",
+    "convertedCvs": "Converted CVs",
+    "downloadAll": "Download all",
+    "converting": "Converting CVs",
+    "noOutputs": "No converted CVs yet",
+    "noOutputsDescription": "Upload CVs and a tender template, then use Convert CVs to create the completed tender forms.",
+    "outputReady": "Tender-format Word document ready",
+    "downloadOutput": "Download converted CV",
+    "workspaceTitle": "Tender CV converter",
+    "workspaceDescription": "Upload your company CVs and the procurement template. The converter fills the tender form while preserving its tables, declarations, and layout.",
+    "preparingPreview": "Preparing document preview…",
+    "previewError": "The document was created, but its preview could not be rendered.",
+    "convertedPreview": "Converted tender CV",
+    "templatePreview": "Tender template preview",
+    "outputsCount": "{{count}} ready"
+  },
   "workflows": {
     "generateText": "Generate",
     "render3d": "3D to Render",
@@ -366,6 +395,7 @@
     "angleChange": "Angle Change",
     "materialValidation": "Material Validation",
     "documentTranslate": "Doc Translator",
+    "cvConvert": "CV Converter",
     "pdfCompression": "PDF Compressor",
     "exploded": "Exploded Views",
     "section": "Render to Section",
@@ -961,6 +991,10 @@
     "documentTranslate": {
       "title": "Translation",
       "description": "Configure translation settings and download translated documents."
+    },
+    "cvConvert": {
+      "title": "CV outputs",
+      "description": "Review and download CVs converted into the selected tender template."
     },
     "pdfCompression": {
       "title": "PDF Compression",

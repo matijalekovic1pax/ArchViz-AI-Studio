@@ -28,8 +28,10 @@ import { classifyDocumentRole } from '../services/materialValidationPipeline';
 import { createMaterialValidationService } from '../services/materialValidationService';
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
+import { convertCvBatch } from '../services/cvConversionService';
 import {
   createGatewayTraceId,
+  getImageEditGatewayErrorInfo,
   imageEditRequest,
   isGatewayAuthenticated,
   queueAppLogEvent,
@@ -69,9 +71,9 @@ import {
   type LocalizedVisualEditContract,
 } from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape } from '../types';
 
-const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate'];
+const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'cv-convert'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
 const SOURCE_LOCKED_MODES: GenerationMode[] = [
   'render-3d',
@@ -88,6 +90,91 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
 const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
 const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-sketch'];
 const TEMPORARY_AI_SERVICE_STATUSES = new Set([500, 502, 503, 504]);
+
+class LocalizedCompositeRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LocalizedCompositeRejectedError';
+  }
+}
+
+const isLocalizedCompositeRejectedError = (error: unknown): error is LocalizedCompositeRejectedError =>
+  error instanceof LocalizedCompositeRejectedError;
+
+type LocalizedImageEditErrorAlert = {
+  tone: 'warning' | 'error';
+  title: string;
+  message: string;
+};
+
+const formatRetryDelay = (seconds: number | undefined): string => {
+  if (seconds === undefined) return 'a moment';
+  const boundedSeconds = Math.max(1, seconds);
+  if (boundedSeconds < 60) return `${boundedSeconds} second${boundedSeconds === 1 ? '' : 's'}`;
+  const minutes = Math.ceil(boundedSeconds / 60);
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+};
+
+const getLocalizedImageEditErrorAlert = (error: unknown): LocalizedImageEditErrorAlert | null => {
+  const info = getImageEditGatewayErrorInfo(error);
+  if (!info) return null;
+
+  const retryDelay = formatRetryDelay(info.retryAfterSeconds);
+  const requestReference = info.requestId
+    ? ` If this continues, give support OpenAI request ID ${info.requestId}.`
+    : '';
+
+  switch (info.kind) {
+    case 'gateway-concurrency-limit':
+      return {
+        tone: 'warning',
+        title: 'Another image edit is still running',
+        message: `Wait ${retryDelay} for the current edit to finish, then press Apply Edits again. Your original image was not changed.`,
+      };
+    case 'gateway-rate-limit':
+      return {
+        tone: 'warning',
+        title: 'Image edit limit reached',
+        message: `Wait ${retryDelay}, then press Apply Edits again. Your original image was not changed.`,
+      };
+    case 'upstream-rate-limit':
+      return {
+        tone: 'warning',
+        title: 'OpenAI is temporarily rate-limiting image edits',
+        message: `Wait ${retryDelay}, then press Apply Edits again. The app did not submit an automatic duplicate request and your original image was not changed.${requestReference}`,
+      };
+    case 'payload-too-large':
+      return {
+        tone: 'error',
+        title: 'The selected edit is too large to send',
+        message: 'Select a smaller area, remove unnecessary reference images, and press Apply Edits again. Your original image was not changed.',
+      };
+    case 'invalid-request':
+      return {
+        tone: 'error',
+        title: 'OpenAI could not process this selected edit',
+        message: `${info.message} Adjust the selection or edit description, then press Apply Edits again. Your original image was not changed.${requestReference}`,
+      };
+    case 'authorization':
+      return {
+        tone: 'error',
+        title: 'Image editing is not authorized',
+        message: `The production OpenAI credentials or project permissions were rejected. Ask an administrator to check the OpenAI project, then try again.${requestReference}`,
+      };
+    case 'upstream-unavailable':
+      return {
+        tone: 'warning',
+        title: 'OpenAI image editing is temporarily unavailable',
+        message: `Wait ${retryDelay}, then press Apply Edits again. Your original image was not changed.${requestReference}`,
+      };
+    default:
+      return {
+        tone: 'error',
+        title: 'The selected image edit failed',
+        message: `${info.message} Your original image was not changed.${requestReference}`,
+      };
+  }
+};
 
 const estimateBase64Bytes = (base64: string): number => {
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
@@ -2094,7 +2181,9 @@ const compositeLocalizedVisualEditResult = async (
   });
 
   if (!composited.quality.accepted) {
-    throw new Error(`The generated local edit failed the ${layout.operation} preservation check (${composited.quality.reason}). It was not applied.`);
+    throw new LocalizedCompositeRejectedError(
+      `The generated local edit failed the ${layout.operation} preservation check (${composited.quality.reason}). It was not applied.`
+    );
   }
 
   const outputCanvas = document.createElement('canvas');
@@ -2799,6 +2888,17 @@ export function useGeneration(): UseGenerationReturn {
       return;
     }
 
+    if (state.mode === 'cv-convert' && (
+      state.workflow.cvConversion.sourceDocuments.length === 0 ||
+      !state.workflow.cvConversion.templateDocument
+    )) {
+      dispatch({
+        type: 'UPDATE_CV_CONVERSION',
+        payload: { error: 'Upload at least one company CV and a tender template before converting.' }
+      });
+      return;
+    }
+
     // Cancel any ongoing generation
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -3336,7 +3436,11 @@ export function useGeneration(): UseGenerationReturn {
       const runWithRetry = async <T>(
         label: string,
         fn: () => Promise<T>,
-        options?: { timeoutMs?: number; maxRetries?: number }
+        options?: {
+          timeoutMs?: number;
+          maxRetries?: number;
+          shouldRetry?: (error: unknown, attempt: number) => boolean;
+        }
       ): Promise<T> => {
         const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
         const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -3365,11 +3469,17 @@ export function useGeneration(): UseGenerationReturn {
             if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) {
               throw error;
             }
-            const isTimeout = lastError.message?.includes('timed out');
-            if (attempt < maxRetries) {
-              const delay = isTimeout ? 1000 : Math.min(1000 * Math.pow(2, attempt), 8000);
-              await new Promise(resolve => setTimeout(resolve, delay));
+            const { status } = getErrorMetadata(error);
+            const isHttpClientFailure = status !== undefined && status >= 400 && status < 500;
+            const retryAllowed = options?.shouldRetry
+              ? options.shouldRetry(error, attempt)
+              : !isHttpClientFailure;
+            if (attempt >= maxRetries || !retryAllowed) {
+              throw error;
             }
+            const isTimeout = lastError.message?.includes('timed out');
+            const delay = isTimeout ? 1000 : Math.min(1000 * Math.pow(2, attempt), 8000);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
 
@@ -3503,11 +3613,13 @@ export function useGeneration(): UseGenerationReturn {
         generationOptions: {
           timeoutMs?: number;
           maxRetries?: number;
+          shouldRetry?: (error: unknown, attempt: number) => boolean;
         } = imageGenerationRetryOptions
       ): Promise<GeminiResponse> => {
         const effectiveGenerationRetryOptions = {
           timeoutMs: generationOptions.timeoutMs ?? imageGenerationRetryOptions.timeoutMs,
-          maxRetries: generationOptions.maxRetries ?? imageGenerationRetryOptions.maxRetries
+          maxRetries: generationOptions.maxRetries ?? imageGenerationRetryOptions.maxRetries,
+          shouldRetry: generationOptions.shouldRetry,
         };
         if (abortSignal.aborted) {
           throw new DOMException('Request aborted', 'AbortError');
@@ -3706,6 +3818,94 @@ export function useGeneration(): UseGenerationReturn {
                 }
               });
             }
+          }
+          result = { text: null, images: [] };
+        } else if (state.mode === 'cv-convert') {
+          const cvConversion = state.workflow.cvConversion;
+          if (cvConversion.sourceDocuments.length === 0 || !cvConversion.templateDocument) {
+            dispatch({
+              type: 'UPDATE_CV_CONVERSION',
+              payload: { error: 'Upload at least one company CV and a tender template before converting.' }
+            });
+            return;
+          }
+
+          const streamedOutputs: CvConversionOutput[] = [];
+          dispatch({
+            type: 'UPDATE_CV_CONVERSION',
+            payload: {
+              outputs: [],
+              activeOutputId: null,
+              error: null,
+              progress: {
+                phase: 'converting',
+                currentDocument: 0,
+                totalDocuments: cvConversion.sourceDocuments.length,
+                percent: 0,
+                message: 'Preparing tender template…',
+              },
+            },
+          });
+
+          try {
+            const outputs = await runWithRetry(
+              'tender CV conversion',
+              () => convertCvBatch({
+                sourceDocuments: cvConversion.sourceDocuments,
+                templateDocument: cvConversion.templateDocument!,
+                targetLanguage: cvConversion.targetLanguage,
+                conversionModel: cvConversion.conversionModel,
+                onProgress: (progress: CvConversionProgress) => {
+                  updateGenerationStage(progress.phase === 'rebuilding' ? 'finalizing' : 'generation');
+                  dispatch({ type: 'UPDATE_CV_CONVERSION', payload: { progress } });
+                  updateProgress(progress.percent);
+                },
+                onOutput: (output: CvConversionOutput) => {
+                  streamedOutputs.push(output);
+                  const latestSuccessfulOutput = [...streamedOutputs].reverse().find((candidate) => candidate.dataUrl);
+                  dispatch({
+                    type: 'UPDATE_CV_CONVERSION',
+                    payload: {
+                      outputs: [...streamedOutputs],
+                      activeOutputId: latestSuccessfulOutput?.id ?? null,
+                    },
+                  });
+                },
+                abortSignal,
+              }),
+              { timeoutMs: 20 * 60 * 1000 }
+            );
+
+            const successfulOutputs = outputs.filter((output) => output.dataUrl);
+            dispatch({
+              type: 'UPDATE_CV_CONVERSION',
+              payload: {
+                outputs,
+                activeOutputId: successfulOutputs.at(-1)?.id ?? null,
+                error: successfulOutputs.length === 0 ? 'No CVs could be converted. Review the output errors and try again.' : null,
+                progress: {
+                  phase: 'complete',
+                  currentDocument: cvConversion.sourceDocuments.length,
+                  totalDocuments: cvConversion.sourceDocuments.length,
+                  percent: 100,
+                  message: `Converted ${successfulOutputs.length} of ${cvConversion.sourceDocuments.length} CVs.`,
+                },
+              },
+            });
+          } catch (error) {
+            const cancelled = (error as DOMException)?.name === 'AbortError';
+            dispatch({
+              type: 'UPDATE_CV_CONVERSION',
+              payload: {
+                error: cancelled ? 'CV conversion cancelled.' : error instanceof Error ? error.message : 'CV conversion failed.',
+                progress: {
+                  phase: cancelled ? 'idle' : 'error',
+                  currentDocument: 0,
+                  totalDocuments: cvConversion.sourceDocuments.length,
+                  percent: 0,
+                },
+              },
+            });
           }
           result = { text: null, images: [] };
         } else {
@@ -4495,7 +4695,7 @@ export function useGeneration(): UseGenerationReturn {
                     );
                     finalizedImages.push(finalized);
                   } catch (error) {
-                    if (!lastDeterministicRejection) {
+                    if (isLocalizedCompositeRejectedError(error) && !lastDeterministicRejection) {
                       lastDeterministicRejection = error instanceof Error ? error.message : String(error);
                     }
                     throw error;
@@ -4511,6 +4711,7 @@ export function useGeneration(): UseGenerationReturn {
               localizedContract.userInstruction,
               {
                 maxRetries: localizedContract.maxDeterministicRetries,
+                shouldRetry: isLocalizedCompositeRejectedError,
               }
             );
             visualMaskHandledLocally = true;
@@ -5147,7 +5348,19 @@ export function useGeneration(): UseGenerationReturn {
         },
       });
       const isImageMode = !TEXT_ONLY_MODES.includes(state.mode);
-      const isServiceUnavailable = isImageMode && isTemporaryAiServiceFailure(error, errorMessage);
+      const localizedImageEditAlert = state.mode === 'visual-edit'
+        ? getLocalizedImageEditErrorAlert(error)
+        : null;
+      const isServiceUnavailable = !localizedImageEditAlert && isImageMode && isTemporaryAiServiceFailure(error, errorMessage);
+      if (localizedImageEditAlert) {
+        dispatch({
+          type: 'SET_APP_ALERT',
+          payload: {
+            id: nanoid(),
+            ...localizedImageEditAlert,
+          }
+        });
+      }
       if (isServiceUnavailable) {
         const providerName = effectiveImageGenerationModel === 'chatgpt-image-generation-2'
           ? 'ChatGPT Image Generation 2'
@@ -5162,7 +5375,7 @@ export function useGeneration(): UseGenerationReturn {
           }
         });
       }
-      if (!isServiceUnavailable) {
+      if (!localizedImageEditAlert && !isServiceUnavailable) {
         const message = errorMessage || 'Generation failed. Please try again.';
         dispatch({
           type: 'SET_APP_ALERT',
@@ -5236,6 +5449,15 @@ export function useGeneration(): UseGenerationReturn {
           warnings: null,
           xlsxStats: null,
           progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+        }
+      });
+    }
+    if (state.mode === 'cv-convert') {
+      dispatch({
+        type: 'UPDATE_CV_CONVERSION',
+        payload: {
+          error: 'CV conversion cancelled.',
+          progress: { phase: 'idle', currentDocument: 0, totalDocuments: 0, percent: 0 },
         }
       });
     }

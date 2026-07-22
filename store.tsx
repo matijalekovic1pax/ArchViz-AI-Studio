@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_DOCUMENT_TRANSLATION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -314,6 +314,22 @@ const initialDocumentTranslate: DocumentTranslateState = {
   translatedDocumentUrl: null,
   warnings: null,
   xlsxStats: null,
+  error: null,
+};
+
+const initialCvConversion: CvConversionState = {
+  sourceDocuments: [],
+  templateDocument: null,
+  targetLanguage: 'en',
+  conversionModel: DEFAULT_CV_CONVERSION_MODEL,
+  progress: {
+    phase: 'idle',
+    currentDocument: 0,
+    totalDocuments: 0,
+    percent: 0,
+  },
+  outputs: [],
+  activeOutputId: null,
   error: null,
 };
 
@@ -877,10 +893,13 @@ const initialWorkflow: WorkflowSettings = {
   // 13. Document Translation
   documentTranslate: initialDocumentTranslate,
 
-  // 14. PDF Compression
+  // 14. Tender CV Conversion
+  cvConversion: initialCvConversion,
+
+  // 15. PDF Compression
   pdfCompression: initialPdfCompression,
 
-  // 15. Headshot Generator
+  // 16. Headshot Generator
   headshot: initialHeadshot,
 };
 
@@ -1139,6 +1158,9 @@ function appReducer(state: AppState, action: Action): AppState {
 
     // Document Translation Reducer
     case 'UPDATE_DOCUMENT_TRANSLATE': return { ...state, workflow: { ...state.workflow, documentTranslate: { ...state.workflow.documentTranslate, ...action.payload } } };
+
+    // Tender CV Conversion Reducer
+    case 'UPDATE_CV_CONVERSION': return { ...state, workflow: { ...state.workflow, cvConversion: { ...state.workflow.cvConversion, ...action.payload } } };
 
     // Chat Reducers
     case 'ADD_CHAT_MESSAGE': return { ...state, chatMessages: [...state.chatMessages, action.payload] };

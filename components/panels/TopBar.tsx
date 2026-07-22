@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, FileStack, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { Toggle } from '../ui/Toggle';
@@ -26,6 +26,7 @@ const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'angle-change': 'workflows.angleChange',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',
+  'cv-convert': 'workflows.cvConvert',
   'pdf-compression': 'workflows.pdfCompression',
   exploded: 'workflows.exploded',
   section: 'workflows.section',
@@ -189,6 +190,8 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     ? false
     : state.mode === 'document-translate'
       ? !state.workflow.documentTranslate.sourceDocument
+      : state.mode === 'cv-convert'
+        ? state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument
       : isPdfCompressionMode
         ? !pdfQueueReady
         : isUpscaleMode
@@ -247,6 +250,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     }
     if (state.mode === 'document-translate') {
       if (!state.workflow.documentTranslate.sourceDocument) return;
+      await generate();
+      return;
+    }
+    if (state.mode === 'cv-convert') {
+      if (state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument) return;
       await generate();
       return;
     }
@@ -686,7 +694,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     };
   };
   const activeModelCopy = getModelCopy(activeImageGenerationModel);
-  const showTopBarImageModelSelector = state.mode !== 'document-translate';
+  const showTopBarImageModelSelector = state.mode !== 'document-translate' && state.mode !== 'cv-convert';
   const renderModelSelector = (menuPositionClassName = 'left-0 origin-top-left') => (
     <div className="relative shrink-0">
       <button
@@ -782,6 +790,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       case 'material-validation': return t('generation.runValidation');
       case 'render-sketch': return t('generation.renderSketch');
       case 'document-translate': return t('generation.translateDocument');
+      case 'cv-convert': return t('generation.convertCvs');
       default: return t('generation.generateRender');
     }
   };
@@ -1305,6 +1314,8 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   <>
                     {state.mode === 'document-translate' ? (
                       <Languages size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
+                    ) : state.mode === 'cv-convert' ? (
+                      <FileStack size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     ) : (
                       <Sparkles size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     )}

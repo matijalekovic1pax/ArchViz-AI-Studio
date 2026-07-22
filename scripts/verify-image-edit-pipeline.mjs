@@ -97,6 +97,18 @@ function assertSourceContract() {
   assert.match(generationHookSource, /state\.mode === 'visual-edit' \? null : generationConfig\?\.imageConfig\?\.aspectRatio/);
   assert.match(generationHookSource, /if \(!composited\.quality\.accepted\)/, 'localized property edits must fail closed when semantic preservation checks fail');
   assert.match(generationHookSource, /maxRetries: localizedContract\.maxDeterministicRetries/, 'localized deterministic preservation failures must receive a bounded automatic retry');
+  const runWithRetrySource = extractConstSource(generationHookSource, 'runWithRetry', 'runAbortableWithTimeout');
+  assert.match(runWithRetrySource, /shouldRetry\?: \(error: unknown, attempt: number\) => boolean/, 'retry helper must accept an explicit retry policy');
+  assert.match(runWithRetrySource, /status >= 400 && status < 500/, 'HTTP 4xx failures, including 429, must be non-retryable by default');
+  assert.match(runWithRetrySource, /options\?\.shouldRetry\s*\?\s*options\.shouldRetry\(error, attempt\)/, 'an explicit retry predicate must control specialized retries');
+  assert.match(runWithRetrySource, /if \(attempt >= maxRetries \|\| !retryAllowed\) \{\s*throw error;/, 'non-retryable failures must escape before any backoff or duplicate API request');
+  assert.match(generationHookSource, /class LocalizedCompositeRejectedError extends Error/, 'deterministic compositor rejection must have a dedicated error type');
+  assert.match(generationHookSource, /const isLocalizedCompositeRejectedError[\s\S]*instanceof LocalizedCompositeRejectedError;/, 'localized retries must use a deterministic compositor-only predicate');
+  assert.equal(
+    (generationHookSource.match(/new LocalizedCompositeRejectedError\(/g) || []).length,
+    1,
+    'only the deterministic compositor quality gate may create a retryable localized-edit error'
+  );
   const preciseToolsStart = generationHookSource.indexOf('const PRECISE_OPENAI_EDIT_TOOLS');
   const preciseToolsEnd = generationHookSource.indexOf('const drawMaskImageData');
   assert.notEqual(preciseToolsStart, -1, 'client must define precise OpenAI edit tools');
@@ -127,6 +139,8 @@ function assertSourceContract() {
   const localizedPostGenerationSource = generationHookSource.slice(localizedEditRequest, localizedBranchEnd);
   assert.doesNotMatch(localizedPostGenerationSource, /service\.generateText|generateText\(|parseLocalizedJsonObject|verifyLocalizedEditCandidate/, 'generated localized images must never be sent to another AI layer');
   assert.match(localizedPostGenerationSource, /compositeLocalizedVisualEditResult\(/, 'post-generation handling must retain the deterministic compositor');
+  assert.match(localizedPostGenerationSource, /shouldRetry: isLocalizedCompositeRejectedError/, 'only deterministic compositor rejection may trigger the one localized regeneration');
+  assert.doesNotMatch(localizedPostGenerationSource, /shouldRetry:\s*\([^)]*(?:status|429|GatewayApiError)/, 'gateway/API failures must never be opted into localized automatic retry');
   const localizedIntentDefinitionStart = generationHookSource.indexOf('const resolveLocalizedEditIntent');
   const localizedIntentDefinitionEnd = generationHookSource.indexOf('const pickFinalImage', localizedIntentDefinitionStart);
   const localizedIntentDefinition = generationHookSource.slice(localizedIntentDefinitionStart, localizedIntentDefinitionEnd);
@@ -176,6 +190,17 @@ function assertSourceContract() {
   assert.match(localizedComposite, /\.\.\.generated,[\s\S]*\.\.\.generatedImageFromDataUrl/, 'final localized composite must preserve provider result metadata');
   assert.match(apiGatewaySource, /normalizeOpenAISizeOverride/, 'client gateway must accept doc-legal custom GPT Image 2 sizes');
   assert.match(apiGatewaySource, /localizedPatch\?: boolean/, 'gateway contract must distinguish a fixed localized crop');
+  const imageEditRequestStart = apiGatewaySource.indexOf('export async function imageEditRequest');
+  const imageEditRequestEnd = apiGatewaySource.indexOf('\n// ─── Veo Video Generation', imageEditRequestStart);
+  assert.ok(imageEditRequestStart >= 0 && imageEditRequestEnd > imageEditRequestStart, 'image-edit API client must have an isolated testable definition');
+  const imageEditRequestSource = apiGatewaySource.slice(imageEditRequestStart, imageEditRequestEnd);
+  assert.doesNotMatch(imageEditRequestSource, /for\s*\(|while\s*\(|setTimeout\s*\(/, 'the image-edit API client must make one request and surface 4xx/429 without an automatic retry');
+  assert.match(imageEditRequestSource, /resp\.headers\.get\('Retry-After'\)/, 'the image-edit client must preserve the gateway retry window');
+  assert.match(apiGatewaySource, /error\.code === 'image_edit_concurrency_limited'/, 'client diagnostics must distinguish the internal concurrency limiter');
+  assert.match(apiGatewaySource, /error\.code === 'image_edit_rate_limited'/, 'client diagnostics must distinguish the internal rate limiter');
+  assert.match(apiGatewaySource, /error\.status === 429[\s\S]*kind = 'upstream-rate-limit'/, 'an otherwise uncoded 429 must remain classified as an upstream limit');
+  const queueAppLogEventSource = extractFunctionSource(apiGatewaySource, 'queueAppLogEvent');
+  assert.match(queueAppLogEventSource, /void submitAppLogEvent\([\s\S]*\.catch\(/, 'telemetry writes must remain detached and fail-soft on the client');
   assert.match(workerSource, /normalizeOpenAISizeValue\(generationConfig\.openAI\?\.size, null\)/, 'worker gateway must honor app-provided custom GPT Image 2 size overrides');
   assert.match(workerSource, /Return the identical crop, dimensions, camera, perspective, scale, framing, and pixel coordinate system/, 'worker prompt must prohibit crop recentering and camera drift');
   assert.match(workerSource, /readPngDimensions\(outputBytes, 'OpenAI edit output'\)/, 'worker must validate returned PNG dimensions');
@@ -825,7 +850,7 @@ async function verifyWorkerImageEditRoute() {
   const originalFetch = globalThis.fetch;
   let capturedUrl = '';
   let capturedInit = null;
-  globalThis.fetch = async (url, init = {}) => {
+  const successfulOpenAIEditFetch = async (url, init = {}) => {
     capturedUrl = String(url);
     capturedInit = init;
     assert.equal(capturedUrl, 'https://api.openai.com/v1/images/edits');
@@ -842,6 +867,7 @@ async function verifyWorkerImageEditRoute() {
       },
     });
   };
+  globalThis.fetch = successfulOpenAIEditFetch;
 
   try {
     const basePayload = {
@@ -937,6 +963,72 @@ async function verifyWorkerImageEditRoute() {
     assert.ok(Math.abs(metadata.selectedRatio - expectedStats.ratio) < 1e-12);
     assert.equal(metadata.clientSelectedRatio, 1 / (WIDTH * HEIGHT));
     assert.equal(metadata.requestId, 'test-openai-request');
+
+    let upstream429Calls = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      upstream429Calls += 1;
+      capturedUrl = String(url);
+      capturedInit = init;
+      return new Response(JSON.stringify({
+        error: {
+          message: 'Rate limit reached for project proj_browser_secret123.',
+          type: 'requests',
+          code: 'rate_limit_exceeded',
+        },
+      }), {
+        status: 429,
+        headers: {
+          'content-type': 'application/json',
+          'retry-after': '17',
+          'x-request-id': 'req-upstream-rate-429',
+          'x-ratelimit-limit-requests': '50',
+          'x-ratelimit-remaining-requests': '0',
+          'x-ratelimit-reset-requests': '17s',
+        },
+      });
+    };
+    const upstream429Response = await worker.fetch(makeRequest(basePayload), baseEnv, { waitUntil() {} });
+    assert.equal(upstream429Calls, 1, 'an upstream 429 must never trigger a duplicate OpenAI edit request');
+    assert.equal(upstream429Response.status, 429);
+    assert.equal(upstream429Response.headers.get('Retry-After'), '17', 'upstream retry timing must survive the worker boundary');
+    assert.equal(upstream429Response.headers.get('X-OpenAI-Request-Id'), 'req-upstream-rate-429');
+    assert.match(upstream429Response.headers.get('Access-Control-Expose-Headers') || '', /Retry-After/i, 'browser clients must be allowed to read the retry header');
+    const upstream429Body = await upstream429Response.json();
+    assert.equal(upstream429Body.code, 'openai_rate_limited', 'upstream 429 must not be mislabeled as the gateway limiter');
+    assert.equal(upstream429Body.provider, 'openai');
+    assert.equal(upstream429Body.providerStatus, 429);
+    assert.equal(upstream429Body.providerCode, 'rate_limit_exceeded');
+    assert.equal(upstream429Body.requestId, 'req-upstream-rate-429');
+    assert.equal(upstream429Body.retryAfterSeconds, 17);
+    assert.equal(upstream429Body.retryable, true);
+    assert.doesNotMatch(JSON.stringify(upstream429Body), /proj_browser_secret123/, 'provider identifiers must be redacted from browser-facing diagnostics');
+
+    let upstream400Calls = 0;
+    globalThis.fetch = async () => {
+      upstream400Calls += 1;
+      return new Response(JSON.stringify({
+        error: {
+          message: 'The supplied edit mask is invalid.',
+          type: 'invalid_request_error',
+          code: 'invalid_image',
+        },
+      }), {
+        status: 400,
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'req-upstream-invalid-400',
+        },
+      });
+    };
+    const upstream400Response = await worker.fetch(makeRequest(basePayload), baseEnv, { waitUntil() {} });
+    assert.equal(upstream400Calls, 1, 'an upstream 4xx must never trigger a duplicate OpenAI edit request');
+    assert.equal(upstream400Response.status, 400);
+    const upstream400Body = await upstream400Response.json();
+    assert.equal(upstream400Body.code, 'openai_upstream_error');
+    assert.equal(upstream400Body.providerCode, 'invalid_image');
+    assert.equal(upstream400Body.requestId, 'req-upstream-invalid-400');
+    assert.equal(upstream400Response.headers.get('X-OpenAI-Request-Id'), 'req-upstream-invalid-400');
+    globalThis.fetch = successfulOpenAIEditFetch;
 
     const longPromptResponse = await worker.fetch(makeRequest({
       ...basePayload,
@@ -1181,8 +1273,17 @@ async function verifyWorkerImageEditRoute() {
     assert.equal((await worker.fetch(makeGuardRequest(invalidGuardPayload), guardEnv, { waitUntil() {} })).status, 400);
     const rateLimitedResponse = await worker.fetch(makeGuardRequest(invalidGuardPayload), guardEnv, { waitUntil() {} });
     assert.equal(rateLimitedResponse.status, 429, 'image edit route must rate-limit repeated requests per user');
-    assert.ok(Number(rateLimitedResponse.headers.get('Retry-After')) >= 1);
-    assert.equal((await rateLimitedResponse.json()).code, 'image_edit_rate_limited');
+    const internalRetryAfter = Number(rateLimitedResponse.headers.get('Retry-After'));
+    assert.ok(internalRetryAfter >= 1);
+    assert.equal(rateLimitedResponse.headers.get('X-RateLimit-Scope'), 'user');
+    assert.equal(rateLimitedResponse.headers.get('Cache-Control'), 'no-store');
+    const rateLimitedBody = await rateLimitedResponse.json();
+    assert.equal(rateLimitedBody.code, 'image_edit_rate_limited');
+    assert.equal(rateLimitedBody.scope, 'user');
+    assert.equal(rateLimitedBody.retryAfterSeconds, internalRetryAfter, 'internal limiter JSON and Retry-After header must agree');
+    assert.equal(rateLimitedBody.provider, 'gateway', 'an internal limiter response must be explicitly distinguished from OpenAI');
+    assert.equal(rateLimitedBody.reason, 'rate_limit');
+    assert.equal(rateLimitedBody.retryable, true);
 
     const concurrencyToken = await signTestJwt({
       sub: 'image-edit-concurrency-test',
@@ -1270,6 +1371,49 @@ async function verifyWorkerImageEditRoute() {
       400,
       'body-limit rejection must also release its concurrency lease'
     );
+
+    let telemetryStorageCalls = 0;
+    globalThis.fetch = async (url) => {
+      telemetryStorageCalls += 1;
+      assert.match(String(url), /^https:\/\/appwrite\.test\/v1\//, 'telemetry failure probe must target only the mocked Appwrite endpoint');
+      return new Response(JSON.stringify({ message: 'mock telemetry storage failure' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const telemetryRequest = new Request('https://worker.test/api/logs/events', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Origin: 'http://localhost:3000',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        traceId: 'image-edit-telemetry-fail-soft',
+        eventType: 'gateway_request',
+        provider: 'openai',
+        path: '/api/image-edits',
+        status: 'failed',
+        statusCode: 429,
+      }),
+    });
+    const telemetryResponse = await worker.fetch(telemetryRequest, {
+      JWT_SECRET: jwtSecret,
+      APPWRITE_ENDPOINT: 'https://appwrite.test/v1',
+      APPWRITE_PROJECT_ID: 'test-project',
+      APPWRITE_API_KEY: 'test-api-key',
+    }, { waitUntil() {} });
+    assert.ok(telemetryStorageCalls >= 1, 'fail-soft probe must exercise configured telemetry persistence');
+    assert.equal(telemetryResponse.status, 202, 'optional telemetry storage failure must not surface as an application 500');
+    assert.equal(telemetryResponse.headers.get('Cache-Control'), 'no-store');
+    const telemetryBody = await telemetryResponse.json();
+    assert.deepEqual(telemetryBody, {
+      success: true,
+      stored: false,
+      skipped: true,
+      code: 'telemetry_storage_unavailable',
+      reason: 'Optional telemetry storage is temporarily unavailable.',
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

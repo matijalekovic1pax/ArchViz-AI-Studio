@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera, Orbit,
-  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine
+  ChevronsLeft, ChevronsRight, Languages, FileDown, FileStack, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -24,6 +24,7 @@ import { LeftImageToCADPanel } from './LeftImageToCADPanel';
 import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from './LeftDocumentTranslatePanel';
+import { LeftCvConvertPanel } from './LeftCvConvertPanel';
 import { LeftPdfCompressionPanel } from './LeftPdfCompressionPanel';
 import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 
@@ -38,6 +39,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
+  { id: 'cv-convert', labelKey: 'workflows.cvConvert', icon: FileStack },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
   { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
   { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
@@ -66,6 +68,7 @@ export const LeftSidebar: React.FC = () => {
       case 'render-cad': return <LeftRenderCADPanel />;
       case 'material-validation': return <LeftValidationPanel />;
       case 'document-translate': return <LeftDocumentTranslatePanel />;
+      case 'cv-convert': return <LeftCvConvertPanel />;
       case 'pdf-compression': return <LeftPdfCompressionPanel />;
       case 'masterplan': return <LeftMasterplanPanel />;
       case 'visual-edit': return <LeftVisualEditPanel />;
@@ -118,10 +121,10 @@ export const LeftSidebar: React.FC = () => {
 
       {/* Specific Workflow Content Panel - HIDDEN in generate-text mode */}
       {showPanel && (leftSidebarOpen ? (
-        <div className={cn(
-          "bg-background-tertiary border-r border-border flex flex-col overflow-hidden transition-all relative",
-          state.leftSidebarWidth ? `w-[${state.leftSidebarWidth}px]` : "w-[280px]"
-        )}>
+        <div
+          className="w-[280px] bg-background-tertiary border-r border-border flex flex-col overflow-hidden transition-all relative"
+          style={state.leftSidebarWidth ? { width: `${state.leftSidebarWidth}px` } : undefined}
+        >
            {/* Fixed Header */}
            <div className="shrink-0 p-5 pb-3 bg-background-tertiary border-b border-border-subtle z-10 flex justify-between items-center">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">{activeWorkflowLabel}</h2>
