@@ -16,6 +16,8 @@ import type {
   FeedbackReportPriority,
   FeedbackReportStatus,
   FeedbackReportSummary,
+  CvConversionModel,
+  DocumentTranslateDocument,
   GenerationMode,
 } from '../types';
 
@@ -25,6 +27,7 @@ const DEFAULT_GATEWAY_URL = import.meta.env.PROD
 const GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 const VIDEO_GENERATE_TIMEOUT_MS = 240_000;
 const OPENAI_TEXT_TIMEOUT_MS = 180_000;
+const CV_DOCUMENT_AGENT_TIMEOUT_MS = 12 * 60_000;
 const OPENAI_IMAGE_TIMEOUT_MS = 10 * 60_000;
 const GEMINI_PRO_IMAGE_TIMEOUT_MS = 10 * 60_000;
 const LOG_EVENT_TIMEOUT_MS = 15_000;
@@ -389,6 +392,7 @@ const getGatewayLogRouteInfo = (path: string) => {
     return { provider: 'gemini', model: match?.[1], action: match?.[2] || 'request' };
   }
   if (path.startsWith('/api/image-edits')) return { provider: 'openai', model: 'gpt-image-2', action: 'image-edit' };
+  if (path.startsWith('/api/cv-document-agent')) return { provider: 'openai', model: 'gpt-5', action: 'document-agent' };
   if (path.startsWith('/api/openai/responses')) return { provider: 'openai', action: 'responses' };
   if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2', action: 'images' };
   if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
@@ -751,6 +755,107 @@ export async function openAITextRequest(
     throw new GatewayApiError(err.error || `OpenAI text API error (${resp.status})`, resp.status, 'openai', err);
   }
   return resp.json();
+}
+
+// ─── AI-authored CV documents ───────────────────────────────────────────────
+
+export interface CvDocumentAgentRequest {
+  sourceDocument: DocumentTranslateDocument;
+  templateDocument: DocumentTranslateDocument;
+  targetLanguage: string;
+  conversionModel: CvConversionModel;
+  planningBrief?: string;
+  signal?: AbortSignal;
+}
+
+export interface CvDocumentAgentResponse {
+  dataUrl: string;
+  name: string;
+  warnings: string[];
+}
+
+/**
+ * Sends the original documents to the document agent as files. The agent returns
+ * a finished .docx binary, so no browser-side layout reconstruction is needed.
+ */
+export async function createCvDocumentWithAgent(
+  request: CvDocumentAgentRequest,
+): Promise<CvDocumentAgentResponse> {
+  const form = new FormData();
+  const [sourceBlob, templateBlob] = await Promise.all([
+    dataUrlToBlob(request.sourceDocument.dataUrl),
+    dataUrlToBlob(request.templateDocument.dataUrl),
+  ]);
+
+  form.append('sourceDocument', sourceBlob, request.sourceDocument.name);
+  form.append('templateDocument', templateBlob, request.templateDocument.name);
+  form.append('targetLanguage', request.targetLanguage);
+  form.append('conversionModel', request.conversionModel);
+  if (request.planningBrief) form.append('planningBrief', request.planningBrief);
+
+  const resp = await gatewayFetch('/api/cv-document-agent', {
+    method: 'POST',
+    body: form,
+    signal: request.signal,
+    timeoutMs: CV_DOCUMENT_AGENT_TIMEOUT_MS,
+    requestLogSummary: {
+      sourceName: request.sourceDocument.name,
+      sourceType: request.sourceDocument.type,
+      sourceSize: request.sourceDocument.size,
+      templateName: request.templateDocument.name,
+      templateType: request.templateDocument.type,
+      templateSize: request.templateDocument.size,
+      targetLanguage: request.targetLanguage,
+      conversionModel: request.conversionModel,
+      hasPlanningBrief: Boolean(request.planningBrief),
+    },
+  });
+
+  if (!resp.ok) {
+    const details = await resp.json().catch(() => ({ error: `Document agent error (${resp.status})` }));
+    throw new GatewayApiError(
+      getGatewayErrorMessage(details, `Document agent error (${resp.status})`),
+      resp.status,
+      'openai',
+      details,
+    );
+  }
+
+  const contentType = resp.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
+    throw new GatewayApiError('The document agent returned an invalid Word document.', 502, 'openai');
+  }
+
+  const blob = await resp.blob();
+  if (blob.size === 0) throw new GatewayApiError('The document agent returned an empty Word document.', 502, 'openai');
+  return {
+    dataUrl: await blobToDataUrl(blob),
+    name: fileNameFromDisposition(resp.headers.get('Content-Disposition')) || 'converted-tender-cv.docx',
+    warnings: [],
+  };
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const response = await fetch(dataUrl);
+  if (!response.ok) throw new Error('The uploaded document could not be prepared for the document agent.');
+  return response.blob();
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('The generated Word document could not be read.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function fileNameFromDisposition(disposition: string | null): string | null {
+  const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded); } catch { return encoded; }
+  }
+  return disposition?.match(/filename="?([^";]+)"?/i)?.[1] || null;
 }
 
 // ─── OpenAI Image API ───────────────────────────────────────────────────────
