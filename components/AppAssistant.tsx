@@ -345,7 +345,6 @@ const ASSISTANT_MODE_ROUTES: Array<{ mode: GenerationMode; label: string; aliase
   { mode: 'video', label: 'Video Studio', aliases: ['video', 'video studio'] },
   { mode: 'material-validation', label: 'Material Validation', aliases: ['material validation'] },
   { mode: 'document-translate', label: 'Doc Translator', aliases: ['document translate', 'document translator', 'doc translator'] },
-  { mode: 'cv-convert', label: 'Tender CV Converter', aliases: ['cv converter', 'tender cv', 'tender cv converter', 'cv conversion'] },
   { mode: 'pdf-compression', label: 'PDF Compressor', aliases: ['pdf compressor', 'pdf compression'] },
   { mode: 'headshot', label: 'AI Headshots', aliases: ['headshot', 'headshots', 'ai headshots'] },
 ];

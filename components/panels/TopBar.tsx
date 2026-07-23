@@ -26,7 +26,6 @@ const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'angle-change': 'workflows.angleChange',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',
-  'cv-convert': 'workflows.cvConvert',
   'pdf-compression': 'workflows.pdfCompression',
   exploded: 'workflows.exploded',
   section: 'workflows.section',

@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera, Orbit,
-  ChevronsLeft, ChevronsRight, Languages, FileDown, FileStack, UserCircle, Combine
+  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -39,7 +39,6 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
-  { id: 'cv-convert', labelKey: 'workflows.cvConvert', icon: FileStack },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
   { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
   { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
