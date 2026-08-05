@@ -2743,15 +2743,28 @@ export const applyAppAssistantActions = (
           break;
         case 'document-translate-source': {
           const type = getDocumentTranslateType(file);
-          setPath(nextDocumentTranslate, 'sourceDocument', {
-            id: makeAssistantImageId(),
+          const existingQueue = readArrayPath(
+            nextDocumentTranslate,
+            'queue',
+            state.workflow.documentTranslate.queue || []
+          );
+          if (existingQueue.length >= 20) break;
+          const id = makeAssistantImageId();
+          const source = {
+            id,
             name: file.name,
             type,
             mimeType: file.mimeType || 'application/octet-stream',
             size: file.size,
             dataUrl: file.url,
             uploadedAt: Date.now(),
-          });
+          };
+          setPath(nextDocumentTranslate, 'queue', [
+            ...existingQueue,
+            { ...source, status: 'queued' },
+          ]);
+          setPath(nextDocumentTranslate, 'activeDocumentId', id);
+          setPath(nextDocumentTranslate, 'sourceDocument', source);
           setPath(nextDocumentTranslate, 'error', null);
           setPath(nextDocumentTranslate, 'translatedDocumentUrl', null);
           setPath(nextDocumentTranslate, 'warnings', null);
@@ -2934,6 +2947,8 @@ export const applyAppAssistantActions = (
       const identifier = typeof action.value === 'string' ? action.value : null;
       switch (action.fileTarget) {
         case 'document-translate-source':
+          setPath(nextDocumentTranslate, 'queue', []);
+          setPath(nextDocumentTranslate, 'activeDocumentId', null);
           setPath(nextDocumentTranslate, 'sourceDocument', null);
           setPath(nextDocumentTranslate, 'progress', {
             phase: 'idle',

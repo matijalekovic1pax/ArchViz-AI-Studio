@@ -787,7 +787,8 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
       break;
     case 'document-translate':
       lines.push(
-        `Source document: ${wf.documentTranslate.sourceDocument?.name || 'none'}`,
+        `Queued documents: ${(wf.documentTranslate.queue || []).length}`,
+        `Active document: ${wf.documentTranslate.sourceDocument?.name || 'none'}`,
         `Source language: ${wf.documentTranslate.sourceLanguage}`,
         `Target language: ${wf.documentTranslate.targetLanguage}`,
         'Preserve formatting: always enabled',

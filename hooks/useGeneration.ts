@@ -71,7 +71,7 @@ import {
   type LocalizedVisualEditContract,
 } from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'cv-convert'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
@@ -2880,10 +2880,10 @@ export function useGeneration(): UseGenerationReturn {
       return;
     }
 
-    if (state.mode === 'document-translate' && !state.workflow.documentTranslate.sourceDocument) {
+    if (state.mode === 'document-translate' && (state.workflow.documentTranslate.queue || []).length === 0) {
       dispatch({
         type: 'UPDATE_DOCUMENT_TRANSLATE',
-        payload: { error: 'Please upload a document to translate.', warnings: null, xlsxStats: null }
+        payload: { error: 'Please upload at least one document to translate.', warnings: null, xlsxStats: null }
       });
       return;
     }
@@ -3701,13 +3701,14 @@ export function useGeneration(): UseGenerationReturn {
           await runBatchMaterialValidation();
           result = { text: null, images: [] };
         } else if (state.mode === 'document-translate') {
-          // Document translation mode
+          // Document translation mode — batch queue: translate every queued document one by one
           const docTranslate = state.workflow.documentTranslate;
+          const queueSnapshot: DocumentTranslateQueueItem[] = (docTranslate.queue || []).map((item) => ({ ...item }));
 
-          if (!docTranslate.sourceDocument) {
+          if (queueSnapshot.length === 0) {
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
-              payload: { error: 'Please upload a document to translate.', warnings: null, xlsxStats: null }
+              payload: { error: 'Please upload at least one document to translate.', warnings: null, xlsxStats: null }
             });
             dispatch({ type: 'SET_GENERATING', payload: false });
             dispatch({ type: 'SET_PROGRESS', payload: 0 });
@@ -3715,85 +3716,197 @@ export function useGeneration(): UseGenerationReturn {
             return;
           }
 
-          // Check if PDF converter is needed for PDF documents
-        const isPdf = docTranslate.sourceDocument.mimeType.includes('pdf');
-        if (isPdf) {
-          const hasCustomApi = ensurePdfConverterInitialized();
+          // Check if the PDF converter is needed for any queued PDF document
+          const hasPdf = queueSnapshot.some((item) => item.mimeType.includes('pdf'));
+          if (hasPdf) {
+            const hasCustomApi = ensurePdfConverterInitialized();
 
-          if (!hasCustomApi) {
+            if (!hasCustomApi) {
+              dispatch({
+                type: 'UPDATE_DOCUMENT_TRANSLATE',
+                payload: {
+                  error: 'PDF conversion service is unavailable. Please try again later.',
+                  warnings: null,
+                  xlsxStats: null,
+                }
+              });
+              dispatch({ type: 'SET_GENERATING', payload: false });
+              dispatch({ type: 'SET_PROGRESS', payload: 0 });
+              dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
+              return;
+            }
+          }
+
+          const totalCount = queueSnapshot.length;
+          let processedCount = 0;
+          const failedResults: Array<{ name: string; error: string }> = [];
+          const completedResults: DocumentTranslateQueueItem[] = [];
+
+          const syncQueue = (nextQueue: DocumentTranslateQueueItem[]) => {
+            dispatch({
+              type: 'UPDATE_DOCUMENT_TRANSLATE',
+              payload: { queue: [...nextQueue] }
+            });
+          };
+
+          const selectActive = (
+            item: DocumentTranslateQueueItem,
+            result?: { dataUrl: string; warnings: string[] | null; xlsxStats: XlsxTranslationStats | null }
+          ) => {
+            const done = Boolean(result);
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
               payload: {
-                error: 'PDF conversion service is unavailable. Please try again later.',
-                warnings: null,
-                xlsxStats: null,
+                activeDocumentId: item.id,
+                sourceDocument: {
+                  id: item.id,
+                  name: item.name,
+                  type: item.type,
+                  mimeType: item.mimeType,
+                  size: item.size,
+                  dataUrl: item.dataUrl,
+                  uploadedAt: item.uploadedAt,
+                },
+                translatedDocumentUrl: result?.dataUrl ?? null,
+                warnings: result?.warnings ?? null,
+                xlsxStats: result?.xlsxStats ?? null,
+                error: null,
+                progress: done
+                  ? { phase: 'complete', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+                  : { phase: 'parsing', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 },
               }
             });
-            dispatch({ type: 'SET_GENERATING', payload: false });
-            dispatch({ type: 'SET_PROGRESS', payload: 0 });
-            dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
-            return;
-          }
-          }
-
-          // Reset state
-          dispatch({
-            type: 'UPDATE_DOCUMENT_TRANSLATE',
-            payload: {
-              error: null,
-              translatedDocumentUrl: null,
-              warnings: null,
-              xlsxStats: null,
-              progress: {
-                phase: 'parsing',
-                currentSegment: 0,
-                totalSegments: 0,
-                currentBatch: 0,
-                totalBatches: 0,
-              }
-            }
-          });
+          };
 
           try {
-            const translationResult = await runWithRetry(
-              'document translation',
-              () => translateDocument({
-                sourceDocument: docTranslate.sourceDocument,
-                sourceLanguage: docTranslate.sourceLanguage,
-                targetLanguage: docTranslate.targetLanguage,
-                translationModel: docTranslate.translationModel,
-                translateHeaders: docTranslate.translateHeaders,
-                translateFootnotes: docTranslate.translateFootnotes,
-                onProgress: (progress: TranslationProgress) => {
-                  updateGenerationStage('generation');
-                  dispatch({
-                    type: 'UPDATE_DOCUMENT_TRANSLATE',
-                    payload: { progress }
-                  });
-                  // Update global progress based on translation progress
-                  const percent = progress.totalSegments > 0
-                    ? Math.round((progress.currentSegment / progress.totalSegments) * 100)
-                    : 0;
-                  dispatch({ type: 'SET_PROGRESS', payload: percent });
-                },
-                abortSignal,
-              }),
-              { timeoutMs: 8 * 60 * 1000 }
-            );
+            while (queueSnapshot.length > 0) {
+              if (abortSignal.aborted) {
+                throw new DOMException('Request aborted', 'AbortError');
+              }
+              const item = queueSnapshot[0];
 
+              // Skip documents already handled by a previous run of the batch
+              if (item.status === 'done') {
+                completedResults.push(item);
+                queueSnapshot.shift();
+                processedCount += 1;
+                continue;
+              }
+              if (item.status === 'failed') {
+                failedResults.push({ name: item.name, error: item.error || 'Translation failed.' });
+                queueSnapshot.shift();
+                processedCount += 1;
+                continue;
+              }
+
+              // Mark as processing and show it in the preview
+              queueSnapshot[0] = { ...item, status: 'processing', error: null };
+              syncQueue(queueSnapshot);
+              selectActive(queueSnapshot[0]);
+
+              try {
+                const translationResult = await runWithRetry(
+                  'document translation',
+                  () => translateDocument({
+                    sourceDocument: {
+                      id: item.id,
+                      name: item.name,
+                      type: item.type,
+                      mimeType: item.mimeType,
+                      size: item.size,
+                      dataUrl: item.dataUrl,
+                      uploadedAt: item.uploadedAt,
+                    },
+                    sourceLanguage: docTranslate.sourceLanguage,
+                    targetLanguage: docTranslate.targetLanguage,
+                    translationModel: docTranslate.translationModel,
+                    translateHeaders: docTranslate.translateHeaders,
+                    translateFootnotes: docTranslate.translateFootnotes,
+                    onProgress: (progress: TranslationProgress) => {
+                      updateGenerationStage('generation');
+                      dispatch({
+                        type: 'UPDATE_DOCUMENT_TRANSLATE',
+                        payload: { progress }
+                      });
+                      // Global progress: overall batch position + per-document progress
+                      const docPercent = progress.totalSegments > 0
+                        ? Math.min(1, progress.currentSegment / progress.totalSegments)
+                        : 0;
+                      const overall = Math.round(((processedCount + docPercent) / totalCount) * 100);
+                      dispatch({ type: 'SET_PROGRESS', payload: Math.max(0, Math.min(100, overall)) });
+                    },
+                    abortSignal,
+                  }),
+                  { timeoutMs: 8 * 60 * 1000 }
+                );
+
+                const doneItem: DocumentTranslateQueueItem = {
+                  ...queueSnapshot[0],
+                  status: 'done',
+                  translatedDocumentUrl: translationResult.dataUrl,
+                  warnings: translationResult.warnings,
+                  xlsxStats: translationResult.xlsxStats,
+                  error: null,
+                };
+                queueSnapshot[0] = doneItem;
+                syncQueue(queueSnapshot);
+                completedResults.push(doneItem);
+                selectActive(doneItem, translationResult);
+              } catch (error) {
+                if ((error as DOMException)?.name === 'AbortError') {
+                  throw error;
+                }
+                const errorMessage = error instanceof Error ? error.message : 'Translation failed.';
+                const failedItem: DocumentTranslateQueueItem = {
+                  ...queueSnapshot[0],
+                  status: 'failed',
+                  error: errorMessage,
+                };
+                queueSnapshot[0] = failedItem;
+                syncQueue(queueSnapshot);
+                failedResults.push({ name: item.name, error: errorMessage });
+                dispatch({
+                  type: 'UPDATE_DOCUMENT_TRANSLATE',
+                  payload: {
+                    error: `${item.name}: ${errorMessage}`,
+                    warnings: null,
+                    xlsxStats: null,
+                    progress: { phase: 'error', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
+                  }
+                });
+              }
+
+              queueSnapshot.shift();
+              processedCount += 1;
+            }
+
+            // Final summary: leave the last successful document selected so its
+            // preview and download remain available.
+            const lastDone = completedResults[completedResults.length - 1];
+            if (lastDone && lastDone.translatedDocumentUrl) {
+              selectActive(lastDone, {
+                dataUrl: lastDone.translatedDocumentUrl,
+                warnings: lastDone.warnings || null,
+                xlsxStats: lastDone.xlsxStats || null,
+              });
+            }
+            const summaryError =
+              failedResults.length === 1
+                ? `${failedResults[0].name}: ${failedResults[0].error}`
+                : failedResults.length > 1
+                  ? `${failedResults.length} of ${totalCount} document${totalCount === 1 ? '' : 's'} failed to translate.`
+                  : null;
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
               payload: {
-                translatedDocumentUrl: translationResult.dataUrl,
-                warnings: translationResult.warnings,
-                xlsxStats: translationResult.xlsxStats,
+                error: summaryError,
                 progress: {
-                  phase: 'complete',
+                  phase: failedResults.length === totalCount ? 'error' : 'complete',
                   currentSegment: 0,
                   totalSegments: 0,
                   currentBatch: 0,
                   totalBatches: 0,
-                }
+                },
               }
             });
           } catch (error) {
@@ -5448,6 +5561,9 @@ export function useGeneration(): UseGenerationReturn {
           error: 'Translation cancelled.',
           warnings: null,
           xlsxStats: null,
+          queue: (state.workflow.documentTranslate.queue || []).map((item) =>
+            item.status === 'processing' ? { ...item, status: 'queued' as const } : item
+          ),
           progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
         }
       });

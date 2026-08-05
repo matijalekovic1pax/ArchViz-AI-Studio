@@ -13,7 +13,7 @@ import { convertDocxToPdfPreview } from '../services/docxPreviewService';
 export const DocumentTranslateView: React.FC = () => {
   const { state } = useAppStore();
   const { t } = useTranslation();
-  const { sourceDocument, progress, translatedDocumentUrl, error } = state.workflow.documentTranslate;
+  const { queue, sourceDocument, progress, translatedDocumentUrl, error } = state.workflow.documentTranslate;
 
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [xlsxHtmlContent, setXlsxHtmlContent] = useState<string | null>(null);
@@ -330,6 +330,18 @@ export const DocumentTranslateView: React.FC = () => {
                 {progress.phase === 'error' && t('documentTranslate.progress.error')}
               </h3>
             </div>
+
+            {sourceDocument && progress.phase !== 'complete' && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-foreground-muted">
+                <FileText size={14} className="shrink-0" />
+                <span className="truncate flex-1">{sourceDocument.name}</span>
+                {queue.length > 0 && (
+                  <span className="shrink-0 text-[10px] font-semibold text-foreground-muted">
+                    {queue.findIndex((item) => item.id === sourceDocument.id) + 1}/{queue.length}
+                  </span>
+                )}
+              </div>
+            )}
 
             {progress.phase === 'translating' && progress.totalBatches > 0 && (
               <div className="space-y-3">

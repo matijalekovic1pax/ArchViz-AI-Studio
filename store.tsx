@@ -298,6 +298,8 @@ const initialRender3D: Render3DSettings = {
 };
 
 const initialDocumentTranslate: DocumentTranslateState = {
+  queue: [],
+  activeDocumentId: null,
   sourceDocument: null,
   sourceLanguage: 'auto',
   targetLanguage: 'en',

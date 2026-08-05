@@ -501,7 +501,7 @@ export const MobilePanels: React.FC<{
     : state.mode === 'material-validation'
       ? false
       : state.mode === 'document-translate'
-        ? !state.workflow.documentTranslate.sourceDocument
+        ? (state.workflow.documentTranslate.queue || []).length === 0
         : state.mode === 'cv-convert'
           ? state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument
         : isPdfCompressionMode

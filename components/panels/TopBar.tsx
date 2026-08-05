@@ -188,7 +188,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const isDisabled = state.mode === 'material-validation'
     ? false
     : state.mode === 'document-translate'
-      ? !state.workflow.documentTranslate.sourceDocument
+      ? (state.workflow.documentTranslate.queue || []).length === 0
       : state.mode === 'cv-convert'
         ? state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument
       : isPdfCompressionMode
@@ -248,7 +248,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       return;
     }
     if (state.mode === 'document-translate') {
-      if (!state.workflow.documentTranslate.sourceDocument) return;
+      if ((state.workflow.documentTranslate.queue || []).length === 0) return;
       await generate();
       return;
     }

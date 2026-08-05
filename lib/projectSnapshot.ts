@@ -96,6 +96,11 @@ const prepareStateImagesForFeedbackSnapshot = async (state: AppState): Promise<A
       },
       documentTranslate: {
         ...documentTranslate,
+        queue: (documentTranslate.queue || []).map((item) => ({
+          ...item,
+          dataUrl: '',
+          translatedDocumentUrl: null,
+        })),
         sourceDocument: documentTranslate.sourceDocument
           ? { ...documentTranslate.sourceDocument, dataUrl: '' }
           : null,

@@ -1072,6 +1072,18 @@ export interface DocumentTranslateDocument {
   uploadedAt: number;
 }
 
+/**
+ * A queued document in the batch document translator. Mirrors the upscale batch
+ * queue: documents are uploaded together and translated one by one.
+ */
+export interface DocumentTranslateQueueItem extends DocumentTranslateDocument {
+  status: 'queued' | 'processing' | 'done' | 'failed';
+  error?: string | null;
+  translatedDocumentUrl?: string | null;
+  warnings?: string[] | null;
+  xlsxStats?: XlsxTranslationStats | null;
+}
+
 export interface SegmentContext {
   location: 'body' | 'header' | 'footer' | 'footnote' | 'table-cell';
   styleInfo?: string;
@@ -1209,6 +1221,11 @@ export interface DocumentTranslationResult {
 }
 
 export interface DocumentTranslateState {
+  /** Batch queue of documents uploaded for translation (max 20). */
+  queue: DocumentTranslateQueueItem[];
+  /** Id of the queue item currently shown in the preview / right panel. */
+  activeDocumentId: string | null;
+  /** Mirrors the active queue item's source data. Kept for backward compatibility. */
   sourceDocument: DocumentTranslateDocument | null;
   sourceLanguage: string;
   targetLanguage: string;
@@ -1216,6 +1233,7 @@ export interface DocumentTranslateState {
   translateHeaders: boolean;
   translateFootnotes: boolean;
   progress: TranslationProgress;
+  /** Result of the active document's last translation. */
   translatedDocumentUrl: string | null;
   warnings: string[] | null;
   xlsxStats: XlsxTranslationStats | null;

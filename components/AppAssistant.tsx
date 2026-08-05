@@ -736,9 +736,9 @@ const getAssistantGenerationReadiness = (
         ? { ready: true }
         : { ready: false, message: 'Upload material documents before running validation.' };
     case 'document-translate':
-      return state.workflow.documentTranslate.sourceDocument
+      return (state.workflow.documentTranslate.queue || []).length > 0
         ? { ready: true }
-        : { ready: false, message: 'Upload a document before running translation.' };
+        : { ready: false, message: 'Upload at least one document to the queue before running translation.' };
     case 'cv-convert':
       return state.workflow.cvConversion.sourceDocuments.length > 0 && state.workflow.cvConversion.templateDocument
         ? { ready: true }
