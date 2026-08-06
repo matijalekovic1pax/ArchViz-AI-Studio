@@ -368,6 +368,7 @@ const WORKFLOW_DYNAMIC_SKIP_PREFIXES = [
   'videoState.generationProgress',
   'videoState.generationHistory',
   'documentTranslate.sourceDocument',
+  'documentTranslate.outputs',
   'documentTranslate.progress',
   'documentTranslate.translatedDocumentUrl',
   'documentTranslate.warnings',
@@ -2948,6 +2949,7 @@ export const applyAppAssistantActions = (
       switch (action.fileTarget) {
         case 'document-translate-source':
           setPath(nextDocumentTranslate, 'queue', []);
+          setPath(nextDocumentTranslate, 'outputs', []);
           setPath(nextDocumentTranslate, 'activeDocumentId', null);
           setPath(nextDocumentTranslate, 'sourceDocument', null);
           setPath(nextDocumentTranslate, 'progress', {

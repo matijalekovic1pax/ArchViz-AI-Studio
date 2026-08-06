@@ -1084,6 +1084,17 @@ export interface DocumentTranslateQueueItem extends DocumentTranslateDocument {
   xlsxStats?: XlsxTranslationStats | null;
 }
 
+/**
+ * A finished translation kept after the batch queue has been cleared, so the
+ * right panel can keep offering every translated document for download.
+ */
+export interface DocumentTranslateOutput extends DocumentTranslateDocument {
+  translatedDocumentUrl: string;
+  warnings: string[] | null;
+  xlsxStats: XlsxTranslationStats | null;
+  translatedAt: number;
+}
+
 export interface SegmentContext {
   location: 'body' | 'header' | 'footer' | 'footnote' | 'table-cell';
   styleInfo?: string;
@@ -1223,6 +1234,8 @@ export interface DocumentTranslationResult {
 export interface DocumentTranslateState {
   /** Batch queue of documents uploaded for translation (max 20). */
   queue: DocumentTranslateQueueItem[];
+  /** Completed translations, preserved after the queue is cleared. */
+  outputs: DocumentTranslateOutput[];
   /** Id of the queue item currently shown in the preview / right panel. */
   activeDocumentId: string | null;
   /** Mirrors the active queue item's source data. Kept for backward compatibility. */

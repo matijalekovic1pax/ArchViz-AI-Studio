@@ -5,7 +5,8 @@ import { Download, Loader2, AlertTriangle, CheckCircle2, FileText, Key } from 'l
 import { Toggle } from '../../ui/Toggle';
 import { isConvertApiConfigured } from '../../../services/convertApiService';
 import { downloadFile } from '../../../lib/download';
-import type { DocumentTranslateQueueItem } from '../../../types';
+import { cn } from '../../../lib/utils';
+import type { DocumentTranslateOutput } from '../../../types';
 
 const DOCX_MIME_EXTENSION = 'docx';
 const XLSX_MIME_EXTENSION = 'xlsx';
@@ -26,11 +27,12 @@ export const DocumentTranslatePanel: React.FC = () => {
   }, []);
 
   const queue = docTranslate.queue || [];
-  const doneItems = queue.filter(
-    (item): item is DocumentTranslateQueueItem & { translatedDocumentUrl: string } =>
-      item.status === 'done' && !!item.translatedDocumentUrl
-  );
-  const allDone = queue.length > 0 && doneItems.length === queue.length;
+  const outputs = docTranslate.outputs || [];
+  // Every output is a completed translation with a download URL.
+  const doneItems = outputs;
+  const hasPending = queue.some((item) => item.status === 'queued' || item.status === 'processing');
+  const hasFailed = queue.some((item) => item.status === 'failed');
+  const allDone = doneItems.length > 0 && !hasPending && !hasFailed;
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -39,7 +41,7 @@ export const DocumentTranslatePanel: React.FC = () => {
   };
 
   const buildOutputName = useCallback(
-    (name: string, type: DocumentTranslateQueueItem['type']) => {
+    (name: string, type: DocumentTranslateOutput['type']) => {
       const baseName = name.substring(0, name.lastIndexOf('.'));
       const ext =
         type === 'xlsx'
@@ -53,11 +55,44 @@ export const DocumentTranslatePanel: React.FC = () => {
   );
 
   const downloadItem = useCallback(
-    async (item: DocumentTranslateQueueItem) => {
+    async (item: { name: string; type: DocumentTranslateOutput['type']; translatedDocumentUrl?: string | null }) => {
       if (!item.translatedDocumentUrl) return;
       await downloadFile(item.translatedDocumentUrl, buildOutputName(item.name, item.type));
     },
     [buildOutputName]
+  );
+
+  const previewOutput = useCallback(
+    (output: DocumentTranslateOutput) => {
+      // Show the selected output in the center preview, mirroring the queue item.
+      dispatch({
+        type: 'UPDATE_DOCUMENT_TRANSLATE',
+        payload: {
+          activeDocumentId: output.id,
+          sourceDocument: {
+            id: output.id,
+            name: output.name,
+            type: output.type,
+            mimeType: output.mimeType,
+            size: output.size,
+            dataUrl: output.dataUrl,
+            uploadedAt: output.uploadedAt,
+          },
+          translatedDocumentUrl: output.translatedDocumentUrl,
+          warnings: output.warnings,
+          xlsxStats: output.xlsxStats,
+          error: null,
+          progress: {
+            phase: 'complete',
+            currentSegment: 0,
+            totalSegments: 0,
+            currentBatch: 0,
+            totalBatches: 0,
+          },
+        },
+      });
+    },
+    [dispatch]
   );
 
   const getOutputSize = useCallback((dataUrl: string): number => {
@@ -186,7 +221,21 @@ export const DocumentTranslatePanel: React.FC = () => {
             {doneItems.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2"
+                role="button"
+                tabIndex={0}
+                onClick={() => previewOutput(item)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    previewOutput(item);
+                  }
+                }}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border bg-background px-2.5 py-2 transition-colors cursor-pointer',
+                  docTranslate.activeDocumentId === item.id
+                    ? 'border-accent bg-accent/5'
+                    : 'border-border hover:border-foreground/40'
+                )}
               >
                 <FileText size={14} className="shrink-0 text-foreground-muted" />
                 <div className="min-w-0 flex-1">
@@ -198,7 +247,10 @@ export const DocumentTranslatePanel: React.FC = () => {
                 <button
                   type="button"
                   disabled={downloadingAll}
-                  onClick={() => void downloadItem(item)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void downloadItem(item);
+                  }}
                   className="p-1.5 rounded-md text-foreground-muted hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
                   title={t('documentTranslate.downloadTranslated')}
                 >

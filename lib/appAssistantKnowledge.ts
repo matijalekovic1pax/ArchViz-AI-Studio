@@ -788,6 +788,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
     case 'document-translate':
       lines.push(
         `Queued documents: ${(wf.documentTranslate.queue || []).length}`,
+        `Translated outputs: ${(wf.documentTranslate.outputs || []).length}`,
         `Active document: ${wf.documentTranslate.sourceDocument?.name || 'none'}`,
         `Source language: ${wf.documentTranslate.sourceLanguage}`,
         `Target language: ${wf.documentTranslate.targetLanguage}`,

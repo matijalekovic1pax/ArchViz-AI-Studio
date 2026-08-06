@@ -71,7 +71,7 @@ import {
   type LocalizedVisualEditContract,
 } from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateOutput, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
 
 const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'cv-convert'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
@@ -3779,30 +3779,30 @@ export function useGeneration(): UseGenerationReturn {
           };
 
           try {
-            while (queueSnapshot.length > 0) {
+            // Iterate by index so the full queue stays in the store: every
+            // document is updated in place and none are dropped as the run goes.
+            for (let index = 0; index < queueSnapshot.length; index++) {
               if (abortSignal.aborted) {
                 throw new DOMException('Request aborted', 'AbortError');
               }
-              const item = queueSnapshot[0];
+              const item = queueSnapshot[index];
 
               // Skip documents already handled by a previous run of the batch
               if (item.status === 'done') {
                 completedResults.push(item);
-                queueSnapshot.shift();
                 processedCount += 1;
                 continue;
               }
               if (item.status === 'failed') {
                 failedResults.push({ name: item.name, error: item.error || 'Translation failed.' });
-                queueSnapshot.shift();
                 processedCount += 1;
                 continue;
               }
 
               // Mark as processing and show it in the preview
-              queueSnapshot[0] = { ...item, status: 'processing', error: null };
+              queueSnapshot[index] = { ...item, status: 'processing', error: null };
               syncQueue(queueSnapshot);
-              selectActive(queueSnapshot[0]);
+              selectActive(queueSnapshot[index]);
 
               try {
                 const translationResult = await runWithRetry(
@@ -3841,14 +3841,14 @@ export function useGeneration(): UseGenerationReturn {
                 );
 
                 const doneItem: DocumentTranslateQueueItem = {
-                  ...queueSnapshot[0],
+                  ...queueSnapshot[index],
                   status: 'done',
                   translatedDocumentUrl: translationResult.dataUrl,
                   warnings: translationResult.warnings,
                   xlsxStats: translationResult.xlsxStats,
                   error: null,
                 };
-                queueSnapshot[0] = doneItem;
+                queueSnapshot[index] = doneItem;
                 syncQueue(queueSnapshot);
                 completedResults.push(doneItem);
                 selectActive(doneItem, translationResult);
@@ -3858,11 +3858,11 @@ export function useGeneration(): UseGenerationReturn {
                 }
                 const errorMessage = error instanceof Error ? error.message : 'Translation failed.';
                 const failedItem: DocumentTranslateQueueItem = {
-                  ...queueSnapshot[0],
+                  ...queueSnapshot[index],
                   status: 'failed',
                   error: errorMessage,
                 };
-                queueSnapshot[0] = failedItem;
+                queueSnapshot[index] = failedItem;
                 syncQueue(queueSnapshot);
                 failedResults.push({ name: item.name, error: errorMessage });
                 dispatch({
@@ -3876,7 +3876,6 @@ export function useGeneration(): UseGenerationReturn {
                 });
               }
 
-              queueSnapshot.shift();
               processedCount += 1;
             }
 
@@ -3896,10 +3895,40 @@ export function useGeneration(): UseGenerationReturn {
                 : failedResults.length > 1
                   ? `${failedResults.length} of ${totalCount} document${totalCount === 1 ? '' : 's'} failed to translate.`
                   : null;
+
+            // Move completed translations into `outputs` so the right panel keeps
+            // every translated document, then clear them from the left queue so it
+            // is ready for the next batch. Failed items stay queued for retry.
+            const newOutputs: DocumentTranslateOutput[] = completedResults
+              .filter((entry): entry is DocumentTranslateQueueItem & { translatedDocumentUrl: string } =>
+                !!entry.translatedDocumentUrl
+              )
+              .map((entry) => ({
+                id: entry.id,
+                name: entry.name,
+                type: entry.type,
+                mimeType: entry.mimeType,
+                size: entry.size,
+                dataUrl: entry.dataUrl,
+                uploadedAt: entry.uploadedAt,
+                translatedDocumentUrl: entry.translatedDocumentUrl,
+                warnings: entry.warnings || null,
+                xlsxStats: entry.xlsxStats || null,
+                translatedAt: Date.now(),
+              }));
+            const existingOutputIds = new Set((docTranslate.outputs || []).map((output) => output.id));
+            const mergedOutputs = [
+              ...(docTranslate.outputs || []),
+              ...newOutputs.filter((output) => !existingOutputIds.has(output.id)),
+            ];
+            const remainingQueue = queueSnapshot.filter((entry) => entry.status !== 'done');
+
             dispatch({
               type: 'UPDATE_DOCUMENT_TRANSLATE',
               payload: {
                 error: summaryError,
+                outputs: mergedOutputs,
+                queue: remainingQueue,
                 progress: {
                   phase: failedResults.length === totalCount ? 'error' : 'complete',
                   currentSegment: 0,
@@ -5555,15 +5584,44 @@ export function useGeneration(): UseGenerationReturn {
       });
     }
     if (state.mode === 'document-translate') {
+      // Preserve translations that already finished before the cancel: move them
+      // into outputs (so the right panel keeps them downloadable) and keep the
+      // rest of the queue (processing items fall back to queued) for the next run.
+      const currentQueue = state.workflow.documentTranslate.queue || [];
+      const doneForOutputs: DocumentTranslateOutput[] = currentQueue
+        .filter((item): item is DocumentTranslateQueueItem & { translatedDocumentUrl: string } =>
+          item.status === 'done' && !!item.translatedDocumentUrl
+        )
+        .map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          type: entry.type,
+          mimeType: entry.mimeType,
+          size: entry.size,
+          dataUrl: entry.dataUrl,
+          uploadedAt: entry.uploadedAt,
+          translatedDocumentUrl: entry.translatedDocumentUrl,
+          warnings: entry.warnings || null,
+          xlsxStats: entry.xlsxStats || null,
+          translatedAt: Date.now(),
+        }));
+      const existingOutputIds = new Set((state.workflow.documentTranslate.outputs || []).map((output) => output.id));
+      const cancelOutputs = [
+        ...(state.workflow.documentTranslate.outputs || []),
+        ...doneForOutputs.filter((output) => !existingOutputIds.has(output.id)),
+      ];
       dispatch({
         type: 'UPDATE_DOCUMENT_TRANSLATE',
         payload: {
           error: 'Translation cancelled.',
           warnings: null,
           xlsxStats: null,
-          queue: (state.workflow.documentTranslate.queue || []).map((item) =>
-            item.status === 'processing' ? { ...item, status: 'queued' as const } : item
-          ),
+          outputs: cancelOutputs,
+          queue: currentQueue
+            .filter((item) => item.status !== 'done')
+            .map((item) =>
+              item.status === 'processing' ? { ...item, status: 'queued' as const } : item
+            ),
           progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
         }
       });
