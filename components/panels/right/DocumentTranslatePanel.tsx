@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../../store';
-import { Download, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-react';
+import { Download, Loader2, AlertTriangle, CheckCircle2, FileText, Key } from 'lucide-react';
 import { Toggle } from '../../ui/Toggle';
 import { isConvertApiConfigured } from '../../../services/convertApiService';
 import { downloadFile } from '../../../lib/download';
+import type { DocumentTranslateQueueItem } from '../../../types';
 
 const DOCX_MIME_EXTENSION = 'docx';
 const XLSX_MIME_EXTENSION = 'xlsx';
@@ -17,25 +18,88 @@ export const DocumentTranslatePanel: React.FC = () => {
   const { progress } = docTranslate;
 
   const [convertApiConfigured, setConvertApiConfigured] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadIndex, setDownloadIndex] = useState(-1);
 
   useEffect(() => {
     setConvertApiConfigured(isConvertApiConfigured());
   }, []);
 
-  const handleDownload = () => {
-    if (!docTranslate.translatedDocumentUrl || !docTranslate.sourceDocument) return;
+  const queue = docTranslate.queue || [];
+  const doneItems = queue.filter(
+    (item): item is DocumentTranslateQueueItem & { translatedDocumentUrl: string } =>
+      item.status === 'done' && !!item.translatedDocumentUrl
+  );
+  const allDone = queue.length > 0 && doneItems.length === queue.length;
 
-    const originalName = docTranslate.sourceDocument.name;
-    const baseName = originalName.substring(0, originalName.lastIndexOf('.'));
-    const ext =
-      docTranslate.sourceDocument.type === 'xlsx'
-        ? XLSX_MIME_EXTENSION
-        : docTranslate.sourceDocument.type === 'pptx'
-        ? PPTX_MIME_EXTENSION
-        : DOCX_MIME_EXTENSION;
-    const filename = `${baseName}_${docTranslate.targetLanguage}.${ext}`;
-    downloadFile(docTranslate.translatedDocumentUrl, filename);
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const buildOutputName = useCallback(
+    (name: string, type: DocumentTranslateQueueItem['type']) => {
+      const baseName = name.substring(0, name.lastIndexOf('.'));
+      const ext =
+        type === 'xlsx'
+          ? XLSX_MIME_EXTENSION
+          : type === 'pptx'
+          ? PPTX_MIME_EXTENSION
+          : DOCX_MIME_EXTENSION;
+      return `${baseName}_${docTranslate.targetLanguage}.${ext}`;
+    },
+    [docTranslate.targetLanguage]
+  );
+
+  const downloadItem = useCallback(
+    async (item: DocumentTranslateQueueItem) => {
+      if (!item.translatedDocumentUrl) return;
+      await downloadFile(item.translatedDocumentUrl, buildOutputName(item.name, item.type));
+    },
+    [buildOutputName]
+  );
+
+  const getOutputSize = useCallback((dataUrl: string): number => {
+    // Decoded byte count of the output file, derived from its base64 data URL.
+    const idx = dataUrl.indexOf(',');
+    if (idx === -1) return 0;
+    const base64 = dataUrl.slice(idx + 1);
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+  }, []);
+
+  const handleDownloadSingle = useCallback(async () => {
+    const item = doneItems[0];
+    if (!item) return;
+    setDownloadingAll(true);
+    setDownloadIndex(0);
+    try {
+      await downloadItem(item);
+    } finally {
+      setDownloadingAll(false);
+      setDownloadIndex(-1);
+    }
+  }, [doneItems, downloadItem]);
+
+  const handleDownloadAll = useCallback(async () => {
+    const items = doneItems;
+    if (items.length === 0) return;
+    setDownloadingAll(true);
+    try {
+      for (let i = 0; i < items.length; i++) {
+        setDownloadIndex(i);
+        await downloadItem(items[i]);
+        // Browsers throttle rapid programmatic downloads; space them out.
+        if (i < items.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+        }
+      }
+    } finally {
+      setDownloadingAll(false);
+      setDownloadIndex(-1);
+    }
+  }, [doneItems, downloadItem]);
 
   const isPdf = docTranslate.sourceDocument?.mimeType.includes('pdf') ?? false;
   const isXlsx = docTranslate.sourceDocument?.type === 'xlsx';
@@ -103,21 +167,68 @@ export const DocumentTranslatePanel: React.FC = () => {
         </div>
       )}
 
-      {/* Success + Download */}
-      {progress.phase === 'complete' && docTranslate.translatedDocumentUrl && (
+      {/* Outputs — every translated document in the queue */}
+      {doneItems.length > 0 && (
         <div className="bg-surface-elevated border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 size={18} className="text-accent" />
             <span className="text-sm font-medium text-foreground">
-              {t('documentTranslate.translationComplete')}
+              {allDone
+                ? t('documentTranslate.translationComplete')
+                : t('documentTranslate.outputsTitle')}
+            </span>
+            <span className="ml-auto text-[10px] font-semibold text-foreground-muted">
+              {doneItems.length}
             </span>
           </div>
+
+          <div className="space-y-2 mb-3">
+            {doneItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2"
+              >
+                <FileText size={14} className="shrink-0 text-foreground-muted" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate">{buildOutputName(item.name, item.type)}</p>
+                  <p className="text-[10px] text-foreground-muted">
+                    {formatFileSize(getOutputSize(item.translatedDocumentUrl))}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={downloadingAll}
+                  onClick={() => void downloadItem(item)}
+                  className="p-1.5 rounded-md text-foreground-muted hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                  title={t('documentTranslate.downloadTranslated')}
+                >
+                  <Download size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <button
-            onClick={handleDownload}
-            className="w-full px-4 py-3 bg-foreground text-background rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors shadow-sm"
+            onClick={doneItems.length === 1 ? handleDownloadSingle : handleDownloadAll}
+            disabled={downloadingAll}
+            className="w-full px-4 py-3 bg-foreground text-background rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors shadow-sm disabled:opacity-70"
           >
-            <Download size={16} />
-            {t('documentTranslate.downloadTranslated')}
+            {downloadingAll ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                {t('documentTranslate.downloadingAll', {
+                  current: downloadIndex + 1,
+                  total: doneItems.length,
+                })}
+              </>
+            ) : (
+              <>
+                <Download size={16} />
+                {doneItems.length > 1
+                  ? t('documentTranslate.downloadAllCount', { count: doneItems.length })
+                  : t('documentTranslate.downloadTranslated')}
+              </>
+            )}
           </button>
         </div>
       )}
