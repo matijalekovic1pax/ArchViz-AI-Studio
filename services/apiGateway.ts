@@ -1035,7 +1035,12 @@ export interface GatewayImageEditReference {
 
 export interface GatewayImageEditRequest {
   sourceImage: GatewayImageEditSource;
-  selectionMask: GatewayImageEditPng;
+  /**
+   * Omitted for edits that transform content the model must be able to see.
+   * A provider mask erases that region from the model's view, so masking a
+   * recolour or refinish target blinds it to the very thing it must restyle.
+   */
+  selectionMask?: GatewayImageEditPng;
   selectionStats?: {
     selectedPixels?: number;
     selectedRatio?: number;
@@ -1097,12 +1102,14 @@ export async function imageEditRequest(
         height: body.sourceImage.height,
         bytesApprox: estimateDataUrlBytes(body.sourceImage.base64),
       },
-      mask: {
-        mimeType: body.selectionMask.mimeType,
-        width: body.selectionMask.width,
-        height: body.selectionMask.height,
-        bytesApprox: estimateDataUrlBytes(body.selectionMask.base64),
-      },
+      mask: body.selectionMask
+        ? {
+            mimeType: body.selectionMask.mimeType,
+            width: body.selectionMask.width,
+            height: body.selectionMask.height,
+            bytesApprox: estimateDataUrlBytes(body.selectionMask.base64),
+          }
+        : null,
       referenceCount: body.referenceImages?.length || 0,
       selectionStats: body.selectionStats || null,
     },

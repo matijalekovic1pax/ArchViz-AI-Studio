@@ -59,6 +59,7 @@ import {
   dilateEditableAlpha,
   getEditableAlphaBounds,
   getOpenAIEditFrameSize,
+  operationNeedsProviderMask,
   planOpenAIFullFrameEdit,
 } from '../lib/openAIImageEdit.js';
 import {
@@ -1633,6 +1634,14 @@ const materialPreviewToImageData = async (previewUrl: string, fallbackUrl?: stri
   }
 };
 
+/** Raised when the provider hands back the selection unrendered. */
+class UnrenderedEditError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnrenderedEditError';
+  }
+}
+
 /**
  * Maps one GPT Image 2 whole-frame result back onto the source image.
  *
@@ -1676,15 +1685,53 @@ const compositeFullFrameVisualEditResult = async (
   if (!generatedCtx) throw new Error('Failed to read the GPT Image 2 edit.');
   generatedCtx.imageSmoothingEnabled = true;
   generatedCtx.imageSmoothingQuality = 'high';
-  // Lay the source down first so any pixel the provider returns transparent
-  // falls back to the original instead of compositing as black. A canvas reads
-  // unpainted pixels as rgba(0,0,0,0), and copying that RGB would stamp a solid
-  // black patch exactly the shape of the selection.
-  generatedCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   // The request canvas is within a fraction of a percent of the source aspect
-  // ratio, so this inverse scale restores the original geometry exactly.
+  // ratio, so this inverse scale restores the original geometry exactly. Drawn
+  // on a cleared canvas first so the provider's own alpha is still readable.
+  generatedCtx.clearRect(0, 0, sourceWidth, sourceHeight);
   generatedCtx.drawImage(generatedImage, 0, 0, sourceWidth, sourceHeight);
   const generatedData = generatedCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+
+  // gpt-image-2 shows itself the masked area as an erased hole and sometimes
+  // hands that hole straight back — either as alpha 0, or painted flat black.
+  // Copying either into the frame destroys the very region the user selected,
+  // so measure the selection before trusting the result.
+  const sourceProbe = sourceData.data;
+  const generatedProbe = generatedData.data;
+  let editablePixels = 0;
+  let unrenderedPixels = 0;
+  for (let index = 0, pixel = 0; index < layout.providerAlpha.length; index += 1, pixel += 4) {
+    if (layout.providerAlpha[index] < OPENAI_SELECTION_ALPHA_THRESHOLD) continue;
+    editablePixels += 1;
+    const alpha = generatedProbe[pixel + 3];
+    if (alpha < 8) {
+      unrenderedPixels += 1;
+      continue;
+    }
+    const generatedIsBlack = generatedProbe[pixel] < 10 &&
+      generatedProbe[pixel + 1] < 10 &&
+      generatedProbe[pixel + 2] < 10;
+    const sourceIsBlack = sourceProbe[pixel] < 40 &&
+      sourceProbe[pixel + 1] < 40 &&
+      sourceProbe[pixel + 2] < 40;
+    if (generatedIsBlack && !sourceIsBlack) unrenderedPixels += 1;
+  }
+  const unrenderedRatio = unrenderedPixels / Math.max(editablePixels, 1);
+  if (unrenderedRatio > 0.5) {
+    throw new UnrenderedEditError(
+      `GPT Image 2 returned the selected area unrendered: ${Math.round(unrenderedRatio * 100)}% of it came back ` +
+      `${unrenderedPixels === 0 ? 'empty' : 'blank'} instead of edited. Your image was left unchanged.`
+    );
+  }
+  // Anything the provider left transparent now falls back to the original
+  // rather than compositing as black.
+  const flattenCtx = generatedCanvas.getContext('2d');
+  if (!flattenCtx) throw new Error('Failed to read the GPT Image 2 edit.');
+  flattenCtx.globalCompositeOperation = 'destination-over';
+  flattenCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
+  flattenCtx.globalCompositeOperation = 'source-over';
+  const flattened = flattenCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+  generatedData.data.set(flattened.data);
 
   // The ramp lives inside the dilated overscan, so the user's own selection is
   // carried at full generated strength and protected pixels stay untouched.
@@ -4308,7 +4355,12 @@ export function useGeneration(): UseGenerationReturn {
                 updateProgress(24);
                 const editResponse = await imageEditRequest({
                   sourceImage: fullFrameInputs.sourceImage,
-                  selectionMask: fullFrameInputs.selectionMask,
+                  // Restyling operations deliberately send no mask so the model
+                  // can still see the target it has to restyle. The edit is
+                  // confined to the selection by the local composite instead.
+                  ...(operationNeedsProviderMask(editContract.operation)
+                    ? { selectionMask: fullFrameInputs.selectionMask }
+                    : {}),
                   selectionStats: fullFrameInputs.selectionStats,
                   prompt: editContract.userInstruction,
                   operation: editContract.operation,

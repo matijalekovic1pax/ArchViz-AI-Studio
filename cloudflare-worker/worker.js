@@ -3856,6 +3856,7 @@ function mapImageEditQualityToOpenAI(value) {
  */
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
+  const hasProviderMask = Boolean(request.selectionMask);
   const userPrompt = sanitizeText(request.prompt, 4_000);
   const targetLabel = sanitizeText(request.targetLabel, 160) || 'the selected area';
   const materialDescription = sanitizeText(request.materialDescription, 500);
@@ -3881,7 +3882,9 @@ function buildImageEditPrompt(request) {
   return [
     `Edit this architectural photograph. ${userPrompt}`,
     task,
-    'KEEP EVERYTHING ELSE IDENTICAL: the camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale; the existing light direction, intensity and colour temperature; every other object, surface, person, plant, vehicle, sign, label and piece of text; and the overall composition, rendering style and image quality. Change only what the request asks for, and follow the real edges of that target rather than any rectangular or freehand boundary.',
+    hasProviderMask
+      ? 'KEEP EVERYTHING ELSE IDENTICAL: the camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale; the existing light direction, intensity and colour temperature; every other object, surface, person, plant, vehicle, sign, label and piece of text; and the overall composition, rendering style and image quality. Change only what the request asks for, and follow the real edges of that target rather than any rectangular or freehand boundary.'
+      : 'KEEP EVERYTHING ELSE IDENTICAL: return the same photograph with only the requested change applied. Keep the camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale; the existing light direction, intensity and colour temperature; every other object, surface, person, plant, vehicle, sign, label and piece of text; and the overall composition, rendering style and image quality. Redraw the target in place, at its exact original position, size, silhouette and perspective — do not move, resize, duplicate or restyle anything else in the frame.',
     'INTEGRATION: The change must read as part of the original photograph — correct perspective and scale, correct occlusion order, physically plausible contact shadows and reflections, and matching depth of field, grain, noise, sharpness, colour response and tonal range. Leave no visible outline, halo, fringe, flat overlay, cut-out edge or seam.',
     referenceCount > 0
       ? `IMAGE INPUTS: Image 1 is the photograph being edited and is the authority for composition, geometry and coordinates. Images 2-${referenceCount + 1} are references only, for the requested object, material, texture, colour or style — never for framing, and never copied into the frame wholesale.`
@@ -4134,10 +4137,13 @@ async function handleImageEdit(request, env, user) {
       return badRequest(origin, 'The normalized edit prompt is empty.');
     }
 
+    // A provider mask is optional: edits that restyle existing content omit it
+    // so the model can still see the target it has to restyle.
+    const hasProviderMask = Boolean(body.selectionMask);
     const sourceSize = getDeclaredImageEditSize(body.sourceImage);
-    const maskSize = getDeclaredImageEditSize(body.selectionMask);
+    const maskSize = hasProviderMask ? getDeclaredImageEditSize(body.selectionMask) : sourceSize;
     if (!sourceSize.width || !sourceSize.height || !maskSize.width || !maskSize.height) {
-      return badRequest(origin, 'Source image and selection mask dimensions are required.');
+      return badRequest(origin, 'Source image dimensions are required.');
     }
     if (sourceSize.width !== maskSize.width || sourceSize.height !== maskSize.height) {
       return badRequest(origin, 'Selection mask dimensions must match the source image.');
@@ -4165,39 +4171,44 @@ async function handleImageEdit(request, env, user) {
     const providerEditablePixels = clampNumber(body.selectionStats?.providerEditablePixels, 0, totalPixels, clientSelectedPixels);
     const providerEditableRatio = clampNumber(body.selectionStats?.providerEditableRatio, 0, 1, clientSelectedRatio);
     const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image', { allowJpeg: true });
-    const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
     const sourceFrame = sourceInput.mimeType === 'image/jpeg'
       ? readJpegDimensions(sourceInput.bytes, 'Source image')
       : readPngDimensions(sourceInput.bytes, 'Source image');
-    const maskPng = await decodePngRgba(maskInput.bytes);
     if (sourceFrame.width !== sourceSize.width || sourceFrame.height !== sourceSize.height) {
       return badRequest(origin, 'Declared source image dimensions do not match the encoded image.');
     }
-    if (maskPng.width !== maskSize.width || maskPng.height !== maskSize.height) {
-      return badRequest(origin, 'Declared selection mask dimensions do not match the PNG.');
-    }
-    if (sourceFrame.width !== maskPng.width || sourceFrame.height !== maskPng.height) {
-      return badRequest(origin, 'The selection mask must have the same dimensions as the source image.');
-    }
 
-    const selectionAlpha = rgbaToSelectionAlpha(maskPng);
-    const serverSelectionStats = alphaStats(selectionAlpha);
-    const selectedPixels = serverSelectionStats.selected;
-    const selectedRatio = serverSelectionStats.ratio;
-    if (selectedRatio <= 0) {
-      return badRequest(origin, 'Please select an area to edit.');
-    }
-    // An absolute floor rather than a ratio: the frame is sent at the mask's
-    // own resolution, so what matters is whether the region is large enough for
-    // the model to render into, not how it compares to a 1MP or an 8MP frame.
-    if (selectedPixels < 256) {
-      return badRequest(origin, 'The selected area is too small to edit. Expand it by a few pixels.');
-    }
-    if (selectedRatio > 0.995) {
-      return badRequest(origin, 'The whole frame is selected, so there is no protected context to edit against. Leave a little of the image unselected.');
-    }
+    let selectedPixels = null;
+    let selectedRatio = null;
+    let normalizedMaskBytes = null;
+    if (hasProviderMask) {
+      const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
+      const maskPng = await decodePngRgba(maskInput.bytes);
+      if (maskPng.width !== maskSize.width || maskPng.height !== maskSize.height) {
+        return badRequest(origin, 'Declared selection mask dimensions do not match the PNG.');
+      }
+      if (sourceFrame.width !== maskPng.width || sourceFrame.height !== maskPng.height) {
+        return badRequest(origin, 'The selection mask must have the same dimensions as the source image.');
+      }
 
-    const normalizedMaskBytes = await buildOpenAISelectionMaskPng(maskPng.width, maskPng.height, selectionAlpha);
+      const selectionAlpha = rgbaToSelectionAlpha(maskPng);
+      const serverSelectionStats = alphaStats(selectionAlpha);
+      selectedPixels = serverSelectionStats.selected;
+      selectedRatio = serverSelectionStats.ratio;
+      if (selectedRatio <= 0) {
+        return badRequest(origin, 'Please select an area to edit.');
+      }
+      // An absolute floor rather than a ratio: the frame is sent at its own
+      // resolution, so what matters is whether the region is large enough for
+      // the model to render into, not how it compares to a 1MP or an 8MP frame.
+      if (selectedPixels < 256) {
+        return badRequest(origin, 'The selected area is too small to edit. Expand it by a few pixels.');
+      }
+      if (selectedRatio > 0.995) {
+        return badRequest(origin, 'The whole frame is selected, so there is no protected context to edit against. Leave a little of the image unselected.');
+      }
+      normalizedMaskBytes = await buildOpenAISelectionMaskPng(maskPng.width, maskPng.height, selectionAlpha);
+    }
     const outputFormat = normalizeOpenAIOutputFormat(body.outputFormat);
     if (outputFormat !== 'png') {
       return badRequest(origin, 'Masked image edits require PNG output for exact dimension and pixel validation.');
@@ -4218,7 +4229,9 @@ async function handleImageEdit(request, env, user) {
       new Blob([sourceInput.bytes], { type: sourceInput.mimeType }),
       sourceInput.mimeType === 'image/jpeg' ? 'source.jpg' : 'source.png'
     );
-    form.append('mask', new Blob([normalizedMaskBytes], { type: 'image/png' }), 'mask.png');
+    if (normalizedMaskBytes) {
+      form.append('mask', new Blob([normalizedMaskBytes], { type: 'image/png' }), 'mask.png');
+    }
 
     const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.slice(0, 4) : [];
     referenceImages.forEach((image, index) => {
