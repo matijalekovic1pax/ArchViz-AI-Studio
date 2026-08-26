@@ -3847,11 +3847,12 @@ function mapImageEditQualityToOpenAI(value) {
 /**
  * Builds the GPT Image 2 edit prompt for one masked whole-frame request.
  *
- * OpenAI documents the mask as guidance rather than a hard boundary, so the
- * prompt has to carry the containment rule itself. The structure below is the
- * one their image-editing guide recommends for masked edits: say that only the
- * transparent region may change, name the target, name what must be preserved,
- * then state the blending requirements.
+ * The prompt describes the picture that should come back and never describes
+ * the mask. gpt-image-2 sees the masked area as an erased hole, so naming
+ * "the transparent region" in the prompt reads to the model as an instruction
+ * about transparency and it renders the selection empty — which an opaque PNG
+ * resolves to a solid black patch. Spatial containment is the mask's job;
+ * the prompt's job is to say what the finished image looks like.
  */
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
@@ -3869,7 +3870,7 @@ function buildImageEditPrompt(request) {
     const desiredFinish = materialDescription || colorHex || 'the finish described in the edit request';
     task = `TASK: Re-render the material or finish of ${targetLabel} as ${desiredFinish}. Keep its geometry, boundaries, scale, perspective, joints, seams, occlusions and every surrounding object. Give the new finish physically plausible reflectance, texture scale and direction under the existing light rather than pasting a flat texture.`;
   } else if (operation === 'add_people') {
-    task = 'TASK: Add exactly the people described in the edit request, at plausible positions inside the editable region. Match architectural scale, camera perspective, pose, depth, occlusion, lighting direction, contact shadows and reflections. Add no other people anywhere in the frame.';
+    task = 'TASK: Add exactly the people described in the request, standing or moving at plausible positions on the visible floor. Match architectural scale, camera perspective, pose, depth, occlusion, lighting direction, contact shadows and reflections. Add no other people anywhere in the frame.';
   } else if (operation === 'remove_people' || operation === 'remove_object') {
     const subject = operation === 'remove_people' ? 'the people described in the edit request' : targetLabel;
     task = `TASK: Remove ${subject}, together with the contact shadow and reflection that belong to that same subject, and rebuild the background, floor, wall, furniture and lighting revealed behind them so the scene reads as if the subject was never there. Continue every architectural line, joint, texture and perspective that runs behind the subject. Do not replace it with a different object.`;
@@ -3878,15 +3879,14 @@ function buildImageEditPrompt(request) {
   }
 
   return [
-    `EDIT REQUEST: ${userPrompt}`,
+    `Edit this architectural photograph. ${userPrompt}`,
     task,
-    'EDIT REGION: Only the fully transparent region of the supplied mask may change. Every pixel under the opaque region of the mask must come back exactly as it appears in the first image — same objects, same materials, same text, same people. Content that happens to fall inside the editable region but is not part of the request stays as it is too: the mask marks where to look, not permission to repaint everything inside it. Follow the real edges of the target instead of painting the rectangle, lasso or brush shape.',
-    'PRESERVE: Camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale. Existing light direction, intensity and colour temperature. Every object, surface, person, plant, vehicle, sign, label and piece of text outside the requested change. The overall composition, rendering style and image quality.',
-    'BLEND: Integrate the edit as part of the original photograph. Match perspective and scale at the boundary, respect occlusion order, cast physically correct contact shadows and reflections, and match the surrounding depth of field, grain, noise, sharpness, colour response and tonal range.',
+    'KEEP EVERYTHING ELSE IDENTICAL: the camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale; the existing light direction, intensity and colour temperature; every other object, surface, person, plant, vehicle, sign, label and piece of text; and the overall composition, rendering style and image quality. Change only what the request asks for, and follow the real edges of that target rather than any rectangular or freehand boundary.',
+    'INTEGRATION: The change must read as part of the original photograph — correct perspective and scale, correct occlusion order, physically plausible contact shadows and reflections, and matching depth of field, grain, noise, sharpness, colour response and tonal range. Leave no visible outline, halo, fringe, flat overlay, cut-out edge or seam.',
     referenceCount > 0
-      ? `IMAGE INPUTS: Image 1 is the image being edited and is the authority for composition, geometry and coordinates. Images 2-${referenceCount + 1} are references only, for the requested object, material, texture, colour or style — never for framing, and never copied into the frame wholesale.`
-      : 'IMAGE INPUTS: Image 1 is the image being edited and is the authority for composition, geometry and coordinates.',
-    'OUTPUT: One photorealistic image at the same dimensions as image 1, with no visible mask boundary, rectangle, lasso outline, brush stroke, halo, fringe, flat overlay, cut-out edge or seam.',
+      ? `IMAGE INPUTS: Image 1 is the photograph being edited and is the authority for composition, geometry and coordinates. Images 2-${referenceCount + 1} are references only, for the requested object, material, texture, colour or style — never for framing, and never copied into the frame wholesale.`
+      : 'IMAGE INPUTS: Image 1 is the photograph being edited and is the authority for composition, geometry and coordinates.',
+    'OUTPUT: Return one complete, fully rendered, photorealistic photograph at the same dimensions as image 1. Every part of the frame must be filled with real scene content — never leave any area blank, empty, flat, hollow or unrendered.',
   ].filter(Boolean).join('\n\n').slice(0, OPENAI_IMAGE_MAX_PROMPT_CHARS);
 }
 

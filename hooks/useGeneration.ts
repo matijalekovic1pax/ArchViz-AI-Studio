@@ -1676,6 +1676,11 @@ const compositeFullFrameVisualEditResult = async (
   if (!generatedCtx) throw new Error('Failed to read the GPT Image 2 edit.');
   generatedCtx.imageSmoothingEnabled = true;
   generatedCtx.imageSmoothingQuality = 'high';
+  // Lay the source down first so any pixel the provider returns transparent
+  // falls back to the original instead of compositing as black. A canvas reads
+  // unpainted pixels as rgba(0,0,0,0), and copying that RGB would stamp a solid
+  // black patch exactly the shape of the selection.
+  generatedCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   // The request canvas is within a fraction of a percent of the source aspect
   // ratio, so this inverse scale restores the original geometry exactly.
   generatedCtx.drawImage(generatedImage, 0, 0, sourceWidth, sourceHeight);
