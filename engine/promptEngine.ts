@@ -2819,6 +2819,25 @@ export const buildLocalizedVisualEditInstruction = (
     ]);
   }
 
+  if (tool === 'background') {
+    const background = workflow.visualBackground;
+    const described = background.mode === 'image'
+      ? background.referenceMode === 'absolute'
+        ? 'the background shown in the uploaded reference image, reproduced faithfully'
+        : 'a background in the style, palette and atmosphere of the uploaded reference image'
+      : (background.prompt || freePrompt || '').trim();
+    return compactLocalizedInstruction([
+      described
+        ? `Replace the background behind the selected subject with ${described}.`
+        : 'Replace the background behind the selected subject with a clean, context-appropriate setting.',
+      'Keep the selected subject itself completely unchanged, including its silhouette, edges, hair, fine detail and contact points.',
+      background.matchPerspective ? 'Match the original camera height, focal length, horizon line and vanishing points.' : null,
+      background.matchLighting ? 'Match the original light direction, intensity, colour temperature and shadow behaviour.' : null,
+      background.preserveDepth ? 'Preserve the original depth of field and atmospheric falloff.' : null,
+      background.seamlessBlend ? 'Blend the new background into the subject edges without halo, fringing or cut-out artefacts.' : null,
+    ]);
+  }
+
   if (tool === 'remove') {
     const quickTargets = workflow.visualRemove.quickRemove;
     return compactLocalizedInstruction([

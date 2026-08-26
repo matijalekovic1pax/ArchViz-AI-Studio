@@ -36,7 +36,9 @@ import {
   isGatewayAuthenticated,
   queueAppLogEvent,
   setActiveGenerationTraceId,
+  type GatewayImageEditPng,
   type GatewayImageEditReference,
+  type GatewayImageEditSource,
   type ImageEditOperation,
 } from '../services/apiGateway';
 import { isConvertApiConfigured } from '../services/convertApiService';
@@ -53,16 +55,12 @@ import {
   type VisualExtendCanvasLayout
 } from '../lib/visualExtend';
 import {
+  buildInwardFeatherMatte,
   dilateEditableAlpha,
   getEditableAlphaBounds,
-  planLocalizedImageEdit,
-} from '../lib/localizedImageEdit.js';
-import LocalizedImageCompositeWorker from '../lib/localizedImageCompositeWorker.js?worker';
-import {
-  LOCALIZED_IMAGE_COMPOSITE_MESSAGE,
-  LOCALIZED_IMAGE_COMPOSITE_RESULT,
-  runLocalizedImageCompositePipeline,
-} from '../lib/localizedImageCompositeWorker.js';
+  getOpenAIEditFrameSize,
+  planOpenAIFullFrameEdit,
+} from '../lib/openAIImageEdit.js';
 import {
   buildLocalizedVisualEditContract,
   hasUsableVisualSelection,
@@ -90,16 +88,6 @@ const SOURCE_LOCKED_MODES: GenerationMode[] = [
 const STRICT_SOURCE_FIDELITY_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch', 'upscale'];
 const RENDER_GENERATION_PIPELINE_MODES: GenerationMode[] = ['render-sketch'];
 const TEMPORARY_AI_SERVICE_STATUSES = new Set([500, 502, 503, 504]);
-
-class LocalizedCompositeRejectedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'LocalizedCompositeRejectedError';
-  }
-}
-
-const isLocalizedCompositeRejectedError = (error: unknown): error is LocalizedCompositeRejectedError =>
-  error instanceof LocalizedCompositeRejectedError;
 
 type LocalizedImageEditErrorAlert = {
   tone: 'warning' | 'error';
@@ -146,8 +134,8 @@ const getLocalizedImageEditErrorAlert = (error: unknown): LocalizedImageEditErro
     case 'payload-too-large':
       return {
         tone: 'error',
-        title: 'The selected edit is too large to send',
-        message: 'Select a smaller area, remove unnecessary reference images, and press Apply Edits again. Your original image was not changed.',
+        title: 'This image is too large to send for editing',
+        message: 'Use a smaller source image or remove unnecessary reference images, then press Apply Edits again. Your original image was not changed.',
       };
     case 'invalid-request':
       return {
@@ -445,376 +433,41 @@ const normalizeGatewayImageEditReference = async (
   };
 };
 
-type LocalizedIntentResolution = {
-  targetLabel: string;
-  optimizedInstruction: string;
-  confidence: number;
-};
-
-const parseLocalizedJsonObject = (value: string): Record<string, unknown> => {
-  const unfenced = value.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
-  const start = unfenced.indexOf('{');
-  const end = unfenced.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('The pre-generation localized edit intent compiler returned invalid JSON.');
-  const parsed = JSON.parse(unfenced.slice(start, end + 1));
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('The pre-generation localized edit intent compiler returned an invalid result.');
-  }
-  return parsed as Record<string, unknown>;
-};
-
-const normalizeLocalizedAiText = (value: unknown, maxLength: number): string =>
-  typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, maxLength) : '';
-
-const resolveLocalizedEditIntent = async ({
-  service,
-  contract,
-  sourceImage,
-  selectionMask,
-  abortSignal,
-}: {
-  service: ReturnType<typeof getGeminiService>;
-  contract: LocalizedVisualEditContract;
-  sourceImage: ImageData;
-  selectionMask: ImageData;
-  abortSignal: AbortSignal;
-}): Promise<LocalizedIntentResolution> => {
-  const fallback: LocalizedIntentResolution = {
-    targetLabel: contract.targetLabel,
-    optimizedInstruction: contract.userInstruction,
-    confidence: 0,
-  };
-  try {
-    const response = await service.generateText({
-      model: TEXT_MODEL,
-      prompt: [
-        'You are the pre-generation visual instruction compiler for one localized architectural image edit.',
-        'Image 1 is the exact source crop. Image 2 is a grayscale selection map: white is the editable working area and black is protected context.',
-        `The operation category is locked to ${contract.operation}; never change the user’s requested action.`,
-        `Authoritative user instruction: ${JSON.stringify(contract.userInstruction)}.`,
-        `Initial target description: ${JSON.stringify(contract.targetLabel)}.`,
-        contract.colorHex
-          ? `The user literally supplied this exact destination color: ${contract.colorHex}.`
-          : contract.requestedColorText
-            ? `The requested named destination color is ${JSON.stringify(contract.requestedColorText)}; treat it as a natural, non-emissive material color under the source lighting, not a literal CSS swatch.`
-            : '',
-        'Inspect the source and identify the most specific visible target meant by the instruction inside the white area. The user selection remains authoritative and must never be replaced, narrowed, or expanded by your response.',
-        'Write one concise execution instruction for GPT Image. State what to change, the exact target, and the positive visual integration requirements (perspective, scale, lighting, material response, shadows, reflections, and occlusion) that matter for this request.',
-        'Do not turn a property edit into object removal or replacement. Do not invent objects, colors, materials, text, or style details that the user did not request. Do not include mask coordinates or implementation commentary.',
-        'Return JSON only with this schema: {"targetLabel":"specific visible target","optimizedInstruction":"concise faithful image-edit instruction","confidence":0.0}.',
-      ].filter(Boolean).join('\n'),
-      images: [sourceImage, selectionMask],
-      generationConfig: {
-        temperature: 0.05,
-        topP: 0.2,
-        maxOutputTokens: 1000,
-        responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: 'high' },
-        abortSignal,
-      },
-    });
-    const parsed = parseLocalizedJsonObject(response);
-    const targetLabel = normalizeLocalizedAiText(parsed.targetLabel, 160);
-    const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
-    const optimizedInstruction = normalizeLocalizedAiText(parsed.optimizedInstruction, 1600);
-    if (targetLabel.length < 2 || optimizedInstruction.length < 8 || confidence < 0.55) return fallback;
-    return {
-      targetLabel,
-      optimizedInstruction,
-      confidence,
-    };
-  } catch (error) {
-    if ((error as DOMException)?.name === 'AbortError' || abortSignal.aborted) throw error;
-    console.warn('Localized edit instruction compiler failed; using the user instruction unchanged.', error);
-    return fallback;
-  }
-};
-
 const pickFinalImage = (images?: GeneratedImage[]): GeneratedImage | null => {
   if (!images || images.length === 0) return null;
   return images[images.length - 1];
 };
 
 const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
-const PRECISE_EDIT_MAX_LONG_EDGE = 3_840;
-const PRECISE_EDIT_MAX_PIXELS = 8_294_400;
-const PRECISE_EDIT_MIN_PIXELS = 655_360;
-const PRECISE_EDIT_SIZE_MULTIPLE = 16;
+/** Above this encoded size the whole-frame edit source is sent as JPEG. */
+const OPENAI_EDIT_SOURCE_PNG_BUDGET_BYTES = 8 * 1024 * 1024;
 const VISUAL_EXTEND_SEAM_MIN_PX = 18;
 const VISUAL_EXTEND_SEAM_MAX_PX = 96;
 const VISUAL_EXTEND_SEAM_RATIO = 0.018;
 
-type LocalizedEditLayout = {
+/**
+ * Everything needed to map one GPT Image 2 whole-frame result back onto the
+ * untouched source image. `providerAlpha` is the dilated editable plane that
+ * was actually sent, in source pixels.
+ */
+type FullFrameEditLayout = {
   sourceWidth: number;
   sourceHeight: number;
-  sourceRect: { x: number; y: number; width: number; height: number };
   requestWidth: number;
   requestHeight: number;
-  contentRect: { x: number; y: number; width: number; height: number };
-  providerExpansion: number;
+  providerAlpha: Uint8ClampedArray;
   compositeFeather: number;
-  editableAlpha: Uint8ClampedArray;
-  registrationExclusionAlpha: Uint8ClampedArray;
-  operation: ImageEditOperation;
-};
-
-type LocalizedCompositePipelineInput = {
-  sourcePixels: Uint8ClampedArray;
-  comparisonPixels: Uint8ClampedArray;
-  generatedPixels: Uint8ClampedArray;
-  editableAlpha: Uint8ClampedArray;
-  registrationExclusionAlpha: Uint8ClampedArray;
-  width: number;
-  height: number;
-  featherRadius: number;
-  maxShift: number;
-  operation: ImageEditOperation;
-};
-
-type LocalizedCompositePipelineResult = ReturnType<typeof runLocalizedImageCompositePipeline>;
-
-let localizedCompositeWorkerRequestSequence = 0;
-const LOCALIZED_COMPOSITE_WORKER_TIMEOUT_MS = 30_000;
-
-const runLocalizedImageCompositeOffThread = async (
-  input: LocalizedCompositePipelineInput
-): Promise<LocalizedCompositePipelineResult> => {
-  const runSynchronousFallback = () => runLocalizedImageCompositePipeline(input);
-  if (typeof Worker === 'undefined') return runSynchronousFallback();
-
-  let worker: Worker;
-  try {
-    worker = new LocalizedImageCompositeWorker();
-  } catch {
-    return runSynchronousFallback();
-  }
-
-  const requestId = `localized-composite-${++localizedCompositeWorkerRequestSequence}`;
-  // Transfer worker-owned copies. The original ImageData remains available for
-  // the deterministic fallback if module workers are blocked by CSP/runtime.
-  const sourcePixels = new Uint8ClampedArray(input.sourcePixels);
-  const comparisonPixels = new Uint8ClampedArray(input.comparisonPixels);
-  const generatedPixels = new Uint8ClampedArray(input.generatedPixels);
-  const editableAlpha = new Uint8ClampedArray(input.editableAlpha);
-  const registrationExclusionAlpha = new Uint8ClampedArray(input.registrationExclusionAlpha);
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const cleanup = () => {
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      worker.onmessage = null;
-      worker.onerror = null;
-      worker.onmessageerror = null;
-      worker.terminate();
-    };
-    const resolveFallback = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        resolve(runSynchronousFallback());
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    worker.onmessage = (event: MessageEvent) => {
-      const message = event.data;
-      if (
-        !message ||
-        message.type !== LOCALIZED_IMAGE_COMPOSITE_RESULT ||
-        message.requestId !== requestId
-      ) return;
-      if (message.error) {
-        resolveFallback();
-        return;
-      }
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve({
-        pixels: new Uint8ClampedArray(message.pixelsBuffer),
-        matte: new Uint8ClampedArray(message.matteBuffer),
-        registration: message.registration,
-        editableTranslationGate: message.editableTranslationGate,
-        colorOffset: message.colorOffset,
-        appliedTranslation: message.appliedTranslation,
-        quality: message.quality,
-      });
-    };
-    worker.onerror = (event) => {
-      event.preventDefault();
-      resolveFallback();
-    };
-    worker.onmessageerror = resolveFallback;
-    timeoutId = setTimeout(resolveFallback, LOCALIZED_COMPOSITE_WORKER_TIMEOUT_MS);
-
-    try {
-      const transferList = [
-        sourcePixels.buffer,
-        comparisonPixels.buffer,
-        generatedPixels.buffer,
-        editableAlpha.buffer,
-        registrationExclusionAlpha.buffer,
-      ];
-      worker.postMessage({
-        type: LOCALIZED_IMAGE_COMPOSITE_MESSAGE,
-        requestId,
-        sourcePixelsBuffer: sourcePixels.buffer,
-        comparisonPixelsBuffer: comparisonPixels.buffer,
-        generatedPixelsBuffer: generatedPixels.buffer,
-        editableAlphaBuffer: editableAlpha.buffer,
-        registrationExclusionAlphaBuffer: registrationExclusionAlpha.buffer,
-        width: input.width,
-        height: input.height,
-        featherRadius: input.featherRadius,
-        maxShift: input.maxShift,
-        operation: input.operation,
-      }, transferList);
-    } catch {
-      resolveFallback();
-    }
-  });
-};
-
-const roundToPreciseEditMultiple = (value: number) =>
-  Math.max(PRECISE_EDIT_SIZE_MULTIPLE, Math.round(value / PRECISE_EDIT_SIZE_MULTIPLE) * PRECISE_EDIT_SIZE_MULTIPLE);
-
-const getPreciseEditSize = (width: number, height: number) => {
-  if (!width || !height) return null;
-  const ratio = width / height;
-  if (ratio > 3 || ratio < 1 / 3) return null;
-
-  const pixels = width * height;
-  const longEdge = Math.max(width, height);
-  let scale = Math.min(
-    1,
-    PRECISE_EDIT_MAX_LONG_EDGE / Math.max(longEdge, 1),
-    Math.sqrt(PRECISE_EDIT_MAX_PIXELS / Math.max(pixels, 1))
-  );
-  if (pixels * scale * scale < PRECISE_EDIT_MIN_PIXELS) {
-    scale = Math.sqrt(PRECISE_EDIT_MIN_PIXELS / Math.max(pixels, 1));
-  }
-
-  const rawWidth = width * scale;
-  const rawHeight = height * scale;
-  const baseWidth = roundToPreciseEditMultiple(rawWidth);
-  const baseHeight = roundToPreciseEditMultiple(rawHeight);
-  const basePixels = baseWidth * baseHeight;
-  const baseLongEdge = Math.max(baseWidth, baseHeight);
-  if (
-    baseLongEdge <= PRECISE_EDIT_MAX_LONG_EDGE &&
-    basePixels <= PRECISE_EDIT_MAX_PIXELS &&
-    basePixels >= PRECISE_EDIT_MIN_PIXELS
-  ) {
-    return { width: baseWidth, height: baseHeight };
-  }
-
-  let best: { width: number; height: number; score: number } | null = null;
-
-  for (let widthStep = -4; widthStep <= 4; widthStep += 1) {
-    for (let heightStep = -4; heightStep <= 4; heightStep += 1) {
-      const candidateWidth = baseWidth + widthStep * PRECISE_EDIT_SIZE_MULTIPLE;
-      const candidateHeight = baseHeight + heightStep * PRECISE_EDIT_SIZE_MULTIPLE;
-      if (candidateWidth < PRECISE_EDIT_SIZE_MULTIPLE || candidateHeight < PRECISE_EDIT_SIZE_MULTIPLE) continue;
-      const candidatePixels = candidateWidth * candidateHeight;
-      const candidateLongEdge = Math.max(candidateWidth, candidateHeight);
-      if (candidateLongEdge > PRECISE_EDIT_MAX_LONG_EDGE || candidatePixels > PRECISE_EDIT_MAX_PIXELS) continue;
-      if (candidatePixels < PRECISE_EDIT_MIN_PIXELS) continue;
-
-      const ratioError = Math.abs(candidateWidth / candidateHeight - ratio) / ratio;
-      const sizeError = Math.abs(candidatePixels / Math.max(rawWidth * rawHeight, 1) - 1);
-      const score = ratioError * 100 + sizeError;
-      if (!best || score < best.score) {
-        best = { width: candidateWidth, height: candidateHeight, score };
-      }
-    }
-  }
-
-  return best
-    ? { width: best.width, height: best.height }
-    : null;
-};
-
-const renderSelectionAlphaMaskDataUrl = async (
-  imageSrc: string,
-  width: number,
-  height: number,
-  invert = false
-): Promise<{
-  dataUrl: string;
-  selectedPixels: number;
-  selectedRatio: number;
-  sourceSelectedPixels: number;
-  sourceSelectedRatio: number;
-}> => {
-  const image = await loadCanvasImage(imageSrc);
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to prepare selection mask for precise edit.');
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.clearRect(0, 0, width, height);
-  ctx.drawImage(image, 0, 0, width, height);
-
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const pixels = imageData.data;
-  let selectedPixels = 0;
-  let sourceSelectedPixels = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    const value = ((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3) * (pixels[index + 3] / 255);
-    const sourceSelectedAlpha = clampByte(value <= 6 ? 0 : value);
-    const selectedAlpha = invert ? 255 - sourceSelectedAlpha : sourceSelectedAlpha;
-    const sourceSelected = sourceSelectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD;
-    const selected = selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD;
-    if (sourceSelected) sourceSelectedPixels += 1;
-    if (selected) selectedPixels += 1;
-    pixels[index] = 255;
-    pixels[index + 1] = 255;
-    pixels[index + 2] = 255;
-    pixels[index + 3] = selectedAlpha;
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  return {
-    dataUrl: canvas.toDataURL('image/png'),
-    selectedPixels,
-    selectedRatio: selectedPixels / Math.max(width * height, 1),
-    sourceSelectedPixels,
-    sourceSelectedRatio: sourceSelectedPixels / Math.max(width * height, 1),
-  };
-};
-
-const renderImageToPngDataUrl = async (
-  imageSrc: string,
-  width: number,
-  height: number
-): Promise<string> => {
-  const image = await loadCanvasImage(imageSrc);
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to prepare image for precise edit.');
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(image, 0, 0, width, height);
-
-  return canvas.toDataURL('image/png');
 };
 
 /**
- * Rasterize the canonical vector selection at the current source-image size.
- * This is intentionally done inside generate() so an Apply click can never race
- * the asynchronous preview-mask effect in ImageCanvas.
+ * Legal GPT Image 2 request canvas for a whole source frame. Shared by the
+ * outpaint and non-masked provider routes so every OpenAI request lands on the
+ * same multiple-of-16 grid with the same aspect fidelity.
  */
+const getPreciseEditSize = (width: number, height: number) =>
+  getOpenAIEditFrameSize(width, height);
+
+
 const renderVisualSelectionSnapshot = async (
   sourceDataUrl: string,
   shapes: VisualSelectionShape[]
@@ -888,19 +541,6 @@ const renderVisualSelectionSnapshot = async (
   return { canvas, editableAlpha, width, height };
 };
 
-const cropEditableAlpha = (
-  alpha: Uint8ClampedArray,
-  sourceWidth: number,
-  rect: { x: number; y: number; width: number; height: number }
-): Uint8ClampedArray => {
-  const cropped = new Uint8ClampedArray(rect.width * rect.height);
-  for (let y = 0; y < rect.height; y += 1) {
-    const sourceStart = (rect.y + y) * sourceWidth + rect.x;
-    cropped.set(alpha.subarray(sourceStart, sourceStart + rect.width), y * rect.width);
-  }
-  return cropped;
-};
-
 const alphaToMaskCanvas = (
   alpha: Uint8ClampedArray,
   width: number,
@@ -922,7 +562,7 @@ const alphaToMaskCanvas = (
   return canvas;
 };
 
-const prepareLocalizedOpenAIEditInputs = async (
+const prepareFullFrameOpenAIEditInputs = async (
   sourceDataUrl: string,
   selectionSnapshot: {
     editableAlpha: Uint8ClampedArray;
@@ -930,10 +570,11 @@ const prepareLocalizedOpenAIEditInputs = async (
     height: number;
   },
   contract: LocalizedVisualEditContract,
-  featherAmount: number
+  featherAmount: number,
+  editOutsideSelection: boolean
 ): Promise<{
-  sourceImage: { base64: string; mimeType: 'image/png'; width: number; height: number };
-  selectionMask: { base64: string; mimeType: 'image/png'; width: number; height: number };
+  sourceImage: GatewayImageEditSource;
+  selectionMask: GatewayImageEditPng;
   selectionStats: {
     selectedPixels: number;
     selectedRatio: number;
@@ -942,7 +583,7 @@ const prepareLocalizedOpenAIEditInputs = async (
     providerEditablePixels: number;
     providerEditableRatio: number;
   };
-  layout: LocalizedEditLayout;
+  layout: FullFrameEditLayout;
 }> => {
   const source = await loadCanvasImage(sourceDataUrl);
   const sourceWidth = source.naturalWidth || source.width;
@@ -955,116 +596,93 @@ const prepareLocalizedOpenAIEditInputs = async (
     throw new Error('The current selection no longer matches the source image. Select the area again.');
   }
 
-  const fullEditableAlpha = selectionSnapshot.editableAlpha;
-  const selectionBounds = getEditableAlphaBounds(fullEditableAlpha, sourceWidth, sourceHeight);
+  // The Background tool edits everything the user did not select, so the
+  // canonical editable plane is inverted before anything else consumes it.
+  const drawnAlpha = selectionSnapshot.editableAlpha;
+  const editableAlpha = editOutsideSelection
+    ? Uint8ClampedArray.from(drawnAlpha, (value) => 255 - value)
+    : drawnAlpha;
+
+  const selectionBounds = getEditableAlphaBounds(editableAlpha, sourceWidth, sourceHeight);
   if (!selectionBounds) throw new Error('Select a visible area before applying this edit.');
-  const plan = planLocalizedImageEdit({
+
+  const plan = planOpenAIFullFrameEdit({
     sourceWidth,
     sourceHeight,
     selectionBounds,
     operation: contract.operation,
     featherAmount,
+    editOutsideSelection,
   });
-  if (!plan) throw new Error('The selected area could not be mapped to a valid GPT Image 2 edit crop.');
+  if (!plan) {
+    throw new Error('GPT Image 2 cannot edit this image because its aspect ratio is more extreme than 3:1.');
+  }
 
-  const editableAlpha = cropEditableAlpha(fullEditableAlpha, sourceWidth, plan.sourceRect);
+  // OpenAI documents the mask as guidance rather than a hard boundary and
+  // recommends erring generous so the model has room to blend shadows,
+  // reflections and soft edges. The composite ramp lives in that overscan.
   const providerAlpha = dilateEditableAlpha(
     editableAlpha,
-    plan.sourceRect.width,
-    plan.sourceRect.height,
+    sourceWidth,
+    sourceHeight,
     plan.providerExpansion
-  );
-  const registrationExclusionAlpha = dilateEditableAlpha(
-    providerAlpha,
-    plan.sourceRect.width,
-    plan.sourceRect.height,
-    Math.max(2, Math.round(plan.providerExpansion * 0.25))
   );
 
   const sourceCanvas = document.createElement('canvas');
   sourceCanvas.width = plan.requestWidth;
   sourceCanvas.height = plan.requestHeight;
   const sourceCtx = sourceCanvas.getContext('2d');
-  if (!sourceCtx) throw new Error('Failed to prepare the localized source crop.');
+  if (!sourceCtx) throw new Error('Failed to prepare the source image for GPT Image 2.');
   sourceCtx.imageSmoothingEnabled = true;
   sourceCtx.imageSmoothingQuality = 'high';
-  sourceCtx.fillStyle = '#fff';
+  // The whole frame is sent, so the model keeps the camera, perspective,
+  // lighting and style of the real scene while it fills the editable region.
+  sourceCtx.fillStyle = '#ffffff';
   sourceCtx.fillRect(0, 0, plan.requestWidth, plan.requestHeight);
-  sourceCtx.drawImage(
-    source,
-    plan.sourceRect.x,
-    plan.sourceRect.y,
-    plan.sourceRect.width,
-    plan.sourceRect.height,
-    plan.contentRect.x,
-    plan.contentRect.y,
-    plan.contentRect.width,
-    plan.contentRect.height
-  );
-  // Protected request padding is extended from the crop's edge pixels. This
-  // avoids showing the model a stretched duplicate with contradictory geometry.
-  const padLeft = Math.max(0, plan.contentRect.x);
-  const padTop = Math.max(0, plan.contentRect.y);
-  const padRight = Math.max(0, plan.requestWidth - plan.contentRect.x - plan.contentRect.width);
-  const padBottom = Math.max(0, plan.requestHeight - plan.contentRect.y - plan.contentRect.height);
-  const sx = plan.sourceRect.x;
-  const sy = plan.sourceRect.y;
-  const sw = plan.sourceRect.width;
-  const sh = plan.sourceRect.height;
-  if (padLeft > 0) sourceCtx.drawImage(source, sx, sy, 1, sh, 0, padTop, padLeft, plan.contentRect.height);
-  if (padRight > 0) sourceCtx.drawImage(source, sx + sw - 1, sy, 1, sh, plan.contentRect.x + plan.contentRect.width, padTop, padRight, plan.contentRect.height);
-  if (padTop > 0) sourceCtx.drawImage(source, sx, sy, sw, 1, padLeft, 0, plan.contentRect.width, padTop);
-  if (padBottom > 0) sourceCtx.drawImage(source, sx, sy + sh - 1, sw, 1, padLeft, plan.contentRect.y + plan.contentRect.height, plan.contentRect.width, padBottom);
-  if (padLeft > 0 && padTop > 0) sourceCtx.drawImage(source, sx, sy, 1, 1, 0, 0, padLeft, padTop);
-  if (padRight > 0 && padTop > 0) sourceCtx.drawImage(source, sx + sw - 1, sy, 1, 1, plan.contentRect.x + plan.contentRect.width, 0, padRight, padTop);
-  if (padLeft > 0 && padBottom > 0) sourceCtx.drawImage(source, sx, sy + sh - 1, 1, 1, 0, plan.contentRect.y + plan.contentRect.height, padLeft, padBottom);
-  if (padRight > 0 && padBottom > 0) sourceCtx.drawImage(source, sx + sw - 1, sy + sh - 1, 1, 1, plan.contentRect.x + plan.contentRect.width, plan.contentRect.y + plan.contentRect.height, padRight, padBottom);
+  sourceCtx.drawImage(source, 0, 0, plan.requestWidth, plan.requestHeight);
 
-  const providerMaskCanvas = alphaToMaskCanvas(
-    providerAlpha,
-    plan.sourceRect.width,
-    plan.sourceRect.height
-  );
+  const providerMaskCanvas = alphaToMaskCanvas(providerAlpha, sourceWidth, sourceHeight);
   const requestMaskCanvas = document.createElement('canvas');
   requestMaskCanvas.width = plan.requestWidth;
   requestMaskCanvas.height = plan.requestHeight;
   const requestMaskCtx = requestMaskCanvas.getContext('2d');
-  if (!requestMaskCtx) throw new Error('Failed to prepare the localized provider mask.');
-  requestMaskCtx.fillStyle = '#000';
-  requestMaskCtx.fillRect(0, 0, plan.requestWidth, plan.requestHeight);
+  if (!requestMaskCtx) throw new Error('Failed to prepare the GPT Image 2 selection mask.');
   requestMaskCtx.imageSmoothingEnabled = true;
   requestMaskCtx.imageSmoothingQuality = 'high';
-  requestMaskCtx.drawImage(
-    providerMaskCanvas,
-    plan.contentRect.x,
-    plan.contentRect.y,
-    plan.contentRect.width,
-    plan.contentRect.height
-  );
+  requestMaskCtx.drawImage(providerMaskCanvas, 0, 0, plan.requestWidth, plan.requestHeight);
+
+  // Transmitted convention: opaque white means editable. The gateway inverts it
+  // into OpenAI's alpha-zero-is-editable mask, so the plane is flattened here
+  // and never depends on canvas alpha surviving PNG serialization.
   const requestMaskPixels = requestMaskCtx.getImageData(0, 0, plan.requestWidth, plan.requestHeight);
-  let selectedPixels = 0;
+  let providerEditablePixels = 0;
   for (let pixel = 0; pixel < requestMaskPixels.data.length; pixel += 4) {
-    const selectedAlpha = clampByte(
-      ((requestMaskPixels.data[pixel] + requestMaskPixels.data[pixel + 1] + requestMaskPixels.data[pixel + 2]) / 3) *
-      (requestMaskPixels.data[pixel + 3] / 255)
-    );
-    requestMaskPixels.data[pixel] = selectedAlpha;
-    requestMaskPixels.data[pixel + 1] = selectedAlpha;
-    requestMaskPixels.data[pixel + 2] = selectedAlpha;
+    const value = clampByte(requestMaskPixels.data[pixel] * (requestMaskPixels.data[pixel + 3] / 255));
+    requestMaskPixels.data[pixel] = value;
+    requestMaskPixels.data[pixel + 1] = value;
+    requestMaskPixels.data[pixel + 2] = value;
     requestMaskPixels.data[pixel + 3] = 255;
-    if (selectedAlpha >= OPENAI_SELECTION_ALPHA_THRESHOLD) selectedPixels += 1;
+    if (value >= OPENAI_SELECTION_ALPHA_THRESHOLD) providerEditablePixels += 1;
   }
   requestMaskCtx.putImageData(requestMaskPixels, 0, 0);
 
-  const sourceData = ImageUtils.dataUrlToImageData(sourceCanvas.toDataURL('image/png'));
+  // A whole-frame 4K PNG is tens of megabytes to upload, which dominates the
+  // round trip. Protected pixels never come back from the provider anyway, so
+  // once the lossless encode gets large the frame is sent as high-quality JPEG.
+  let encodedSourceDataUrl = sourceCanvas.toDataURL('image/png');
+  if (estimateBase64Bytes(encodedSourceDataUrl.split(',')[1] || '') > OPENAI_EDIT_SOURCE_PNG_BUDGET_BYTES) {
+    encodedSourceDataUrl = sourceCanvas.toDataURL('image/jpeg', 0.95);
+  }
+  const sourceData = ImageUtils.dataUrlToImageData(encodedSourceDataUrl);
   const maskData = ImageUtils.dataUrlToImageData(requestMaskCanvas.toDataURL('image/png'));
-  if (!sourceData || !maskData) throw new Error('Failed to serialize the localized edit inputs.');
+  if (!sourceData || !maskData) throw new Error('Failed to serialize the GPT Image 2 edit inputs.');
   const requestPixels = plan.requestWidth * plan.requestHeight;
+  const sourcePixels = sourceWidth * sourceHeight;
 
   return {
     sourceImage: {
       base64: sourceData.base64,
-      mimeType: 'image/png',
+      mimeType: sourceData.mimeType === 'image/jpeg' ? 'image/jpeg' : 'image/png',
       width: plan.requestWidth,
       height: plan.requestHeight,
     },
@@ -1075,75 +693,20 @@ const prepareLocalizedOpenAIEditInputs = async (
       height: plan.requestHeight,
     },
     selectionStats: {
-      selectedPixels,
-      selectedRatio: selectedPixels / Math.max(requestPixels, 1),
+      selectedPixels: providerEditablePixels,
+      selectedRatio: providerEditablePixels / Math.max(requestPixels, 1),
       userSelectedPixels: selectionBounds.selectedPixels,
-      userSelectedRatio: selectionBounds.selectedPixels / Math.max(sourceWidth * sourceHeight, 1),
-      providerEditablePixels: selectedPixels,
-      providerEditableRatio: selectedPixels / Math.max(requestPixels, 1),
+      userSelectedRatio: selectionBounds.selectedPixels / Math.max(sourcePixels, 1),
+      providerEditablePixels,
+      providerEditableRatio: providerEditablePixels / Math.max(requestPixels, 1),
     },
     layout: {
       sourceWidth,
       sourceHeight,
-      sourceRect: plan.sourceRect,
       requestWidth: plan.requestWidth,
       requestHeight: plan.requestHeight,
-      contentRect: plan.contentRect,
-      providerExpansion: plan.providerExpansion,
+      providerAlpha,
       compositeFeather: plan.compositeFeather,
-      editableAlpha,
-      registrationExclusionAlpha,
-      operation: contract.operation,
-    },
-  };
-};
-
-const preparePreciseEditInputs = async (
-  sourceDataUrl: string,
-  selectionMaskDataUrl: string,
-  editOutsideSelection = false
-) => {
-  const sourceImage = await loadCanvasImage(sourceDataUrl);
-  const width = sourceImage.naturalWidth || sourceImage.width;
-  const height = sourceImage.naturalHeight || sourceImage.height;
-  const size = getPreciseEditSize(width, height);
-  if (!size) {
-    throw new Error('The image aspect ratio is too extreme for precise editing.');
-  }
-
-  const sourcePng = await renderImageToPngDataUrl(sourceDataUrl, size.width, size.height);
-  const maskPng = await renderSelectionAlphaMaskDataUrl(
-    selectionMaskDataUrl,
-    size.width,
-    size.height,
-    editOutsideSelection
-  );
-  const sourceImageData = ImageUtils.dataUrlToImageData(sourcePng);
-  const selectionMaskData = ImageUtils.dataUrlToImageData(maskPng.dataUrl);
-  if (!sourceImageData || !selectionMaskData) {
-    throw new Error('Failed to prepare source image and selection mask.');
-  }
-
-  return {
-    sourceImage: {
-      base64: sourceImageData.base64,
-      mimeType: 'image/png' as const,
-      width: size.width,
-      height: size.height,
-    },
-    selectionMask: {
-      base64: selectionMaskData.base64,
-      mimeType: 'image/png' as const,
-      width: size.width,
-      height: size.height,
-    },
-    selectionStats: {
-      selectedPixels: maskPng.selectedPixels,
-      selectedRatio: maskPng.selectedRatio,
-    },
-    sourceSelectionStats: {
-      selectedPixels: maskPng.sourceSelectedPixels,
-      selectedRatio: maskPng.sourceSelectedRatio,
     },
   };
 };
@@ -1489,7 +1052,12 @@ const getVisualExtendSourceRestoreMask = (
   return maskCanvas;
 };
 
-const PRECISE_OPENAI_EDIT_TOOLS = new Set([
+/**
+ * Tools that run as a GPT Image 2 masked edit against the whole frame.
+ * `background` inverts the drawn selection; `adjust` and `extend` keep their
+ * own geometry pipelines.
+ */
+const OPENAI_MASKED_EDIT_TOOLS = new Set([
   'select',
   'material',
   'lighting',
@@ -1498,6 +1066,7 @@ const PRECISE_OPENAI_EDIT_TOOLS = new Set([
   'people',
   'remove',
   'replace',
+  'background',
 ]);
 
 const drawMaskImageData = (
@@ -2064,10 +1633,23 @@ const materialPreviewToImageData = async (previewUrl: string, fallbackUrl?: stri
   }
 };
 
-const compositeLocalizedVisualEditResult = async (
+/**
+ * Maps one GPT Image 2 whole-frame result back onto the source image.
+ *
+ * gpt-image-2 re-renders the entire canvas even when a mask is supplied, and
+ * OpenAI explicitly does not guarantee that protected pixels come back
+ * byte-identical. Compositing the returned frame over the original through the
+ * dilated selection is what turns "mostly preserved" into "exactly preserved":
+ * generated pixels inside the selection, source pixels everywhere else, and a
+ * feathered ramp in the dilated overscan so no seam is visible.
+ *
+ * This step never rejects a result. Whatever the model produced inside the
+ * selection is what the user gets.
+ */
+const compositeFullFrameVisualEditResult = async (
   sourceDataUrl: string,
   generated: GeneratedImage,
-  layout: LocalizedEditLayout
+  layout: FullFrameEditLayout
 ): Promise<GeneratedImage> => {
   const [source, generatedImage] = await Promise.all([
     loadCanvasImage(sourceDataUrl),
@@ -2075,126 +1657,58 @@ const compositeLocalizedVisualEditResult = async (
   ]);
   const sourceWidth = source.naturalWidth || source.width;
   const sourceHeight = source.naturalHeight || source.height;
-  const generatedWidth = generatedImage.naturalWidth || generatedImage.width;
-  const generatedHeight = generatedImage.naturalHeight || generatedImage.height;
   if (sourceWidth !== layout.sourceWidth || sourceHeight !== layout.sourceHeight) {
-    throw new Error('The source image changed while the localized edit was running. The result was not applied.');
-  }
-  if (generatedWidth !== layout.requestWidth || generatedHeight !== layout.requestHeight) {
-    throw new Error(
-      `GPT Image 2 returned an unexpected edit size (${generatedWidth}×${generatedHeight}; expected ${layout.requestWidth}×${layout.requestHeight}). The result was not stretched or misplaced.`
-    );
-  }
-
-  const { sourceRect, contentRect } = layout;
-  const sourcePatchCanvas = document.createElement('canvas');
-  sourcePatchCanvas.width = sourceRect.width;
-  sourcePatchCanvas.height = sourceRect.height;
-  const sourcePatchCtx = sourcePatchCanvas.getContext('2d');
-  if (!sourcePatchCtx) throw new Error('Failed to read the source edit crop.');
-  sourcePatchCtx.drawImage(
-    source,
-    sourceRect.x,
-    sourceRect.y,
-    sourceRect.width,
-    sourceRect.height,
-    0,
-    0,
-    sourceRect.width,
-    sourceRect.height
-  );
-
-  const generatedPatchCanvas = document.createElement('canvas');
-  generatedPatchCanvas.width = sourceRect.width;
-  generatedPatchCanvas.height = sourceRect.height;
-  const generatedPatchCtx = generatedPatchCanvas.getContext('2d');
-  if (!generatedPatchCtx) throw new Error('Failed to inverse-map the generated edit crop.');
-  generatedPatchCtx.imageSmoothingEnabled = true;
-  generatedPatchCtx.imageSmoothingQuality = 'high';
-  generatedPatchCtx.drawImage(
-    generatedImage,
-    contentRect.x,
-    contentRect.y,
-    contentRect.width,
-    contentRect.height,
-    0,
-    0,
-    sourceRect.width,
-    sourceRect.height
-  );
-
-  const sourcePatchData = sourcePatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
-  const generatedPatchData = generatedPatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
-  // Compare the provider result against the source after the same request-size
-  // round trip. Otherwise harmless downsample/upscale interpolation is mistaken
-  // for an AI material/color change across the entire ROI.
-  const comparisonRequestCanvas = document.createElement('canvas');
-  comparisonRequestCanvas.width = layout.requestWidth;
-  comparisonRequestCanvas.height = layout.requestHeight;
-  const comparisonRequestCtx = comparisonRequestCanvas.getContext('2d');
-  if (!comparisonRequestCtx) throw new Error('Failed to prepare the localized comparison crop.');
-  comparisonRequestCtx.imageSmoothingEnabled = true;
-  comparisonRequestCtx.imageSmoothingQuality = 'high';
-  comparisonRequestCtx.fillStyle = '#fff';
-  comparisonRequestCtx.fillRect(0, 0, layout.requestWidth, layout.requestHeight);
-  comparisonRequestCtx.drawImage(
-    sourcePatchCanvas,
-    0,
-    0,
-    sourceRect.width,
-    sourceRect.height,
-    contentRect.x,
-    contentRect.y,
-    contentRect.width,
-    contentRect.height
-  );
-  const comparisonPatchCanvas = document.createElement('canvas');
-  comparisonPatchCanvas.width = sourceRect.width;
-  comparisonPatchCanvas.height = sourceRect.height;
-  const comparisonPatchCtx = comparisonPatchCanvas.getContext('2d');
-  if (!comparisonPatchCtx) throw new Error('Failed to inverse-map the localized comparison crop.');
-  comparisonPatchCtx.imageSmoothingEnabled = true;
-  comparisonPatchCtx.imageSmoothingQuality = 'high';
-  comparisonPatchCtx.drawImage(
-    comparisonRequestCanvas,
-    contentRect.x,
-    contentRect.y,
-    contentRect.width,
-    contentRect.height,
-    0,
-    0,
-    sourceRect.width,
-    sourceRect.height
-  );
-  const comparisonPatchData = comparisonPatchCtx.getImageData(0, 0, sourceRect.width, sourceRect.height);
-  const composited = await runLocalizedImageCompositeOffThread({
-    sourcePixels: sourcePatchData.data,
-    comparisonPixels: comparisonPatchData.data,
-    generatedPixels: generatedPatchData.data,
-    editableAlpha: layout.editableAlpha,
-    registrationExclusionAlpha: layout.registrationExclusionAlpha,
-    width: sourceRect.width,
-    height: sourceRect.height,
-    featherRadius: layout.compositeFeather,
-    maxShift: Math.min(8, Math.max(3, Math.round(Math.min(sourceRect.width, sourceRect.height) * 0.006))),
-    operation: layout.operation,
-  });
-
-  if (!composited.quality.accepted) {
-    throw new LocalizedCompositeRejectedError(
-      `The generated local edit failed the ${layout.operation} preservation check (${composited.quality.reason}). It was not applied.`
-    );
+    throw new Error('The source image changed while the edit was running. The result was not applied.');
   }
 
   const outputCanvas = document.createElement('canvas');
   outputCanvas.width = sourceWidth;
   outputCanvas.height = sourceHeight;
   const outputCtx = outputCanvas.getContext('2d');
-  if (!outputCtx) throw new Error('Failed to composite the localized image edit.');
+  if (!outputCtx) throw new Error('Failed to composite the GPT Image 2 edit.');
   outputCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
-  const localizedImageData = outputCtx.createImageData(sourceRect.width, sourceRect.height);
-  localizedImageData.data.set(composited.pixels);
-  outputCtx.putImageData(localizedImageData, sourceRect.x, sourceRect.y);
+  const sourceData = outputCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+
+  const generatedCanvas = document.createElement('canvas');
+  generatedCanvas.width = sourceWidth;
+  generatedCanvas.height = sourceHeight;
+  const generatedCtx = generatedCanvas.getContext('2d');
+  if (!generatedCtx) throw new Error('Failed to read the GPT Image 2 edit.');
+  generatedCtx.imageSmoothingEnabled = true;
+  generatedCtx.imageSmoothingQuality = 'high';
+  // The request canvas is within a fraction of a percent of the source aspect
+  // ratio, so this inverse scale restores the original geometry exactly.
+  generatedCtx.drawImage(generatedImage, 0, 0, sourceWidth, sourceHeight);
+  const generatedData = generatedCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+
+  // The ramp lives inside the dilated overscan, so the user's own selection is
+  // carried at full generated strength and protected pixels stay untouched.
+  const matte = buildInwardFeatherMatte(
+    layout.providerAlpha,
+    sourceWidth,
+    sourceHeight,
+    layout.compositeFeather
+  );
+
+  const sourcePixels = sourceData.data;
+  const generatedPixels = generatedData.data;
+  for (let index = 0, pixel = 0; index < matte.length; index += 1, pixel += 4) {
+    const weight = matte[index];
+    if (weight === 0) continue;
+    if (weight === 255) {
+      sourcePixels[pixel] = generatedPixels[pixel];
+      sourcePixels[pixel + 1] = generatedPixels[pixel + 1];
+      sourcePixels[pixel + 2] = generatedPixels[pixel + 2];
+      continue;
+    }
+    const alpha = weight / 255;
+    const inverse = 1 - alpha;
+    sourcePixels[pixel] = sourcePixels[pixel] * inverse + generatedPixels[pixel] * alpha;
+    sourcePixels[pixel + 1] = sourcePixels[pixel + 1] * inverse + generatedPixels[pixel + 1] * alpha;
+    sourcePixels[pixel + 2] = sourcePixels[pixel + 2] * inverse + generatedPixels[pixel + 2] * alpha;
+  }
+  outputCtx.putImageData(sourceData, 0, 0);
+
   return {
     ...generated,
     ...generatedImageFromDataUrl(outputCanvas.toDataURL('image/png')),
@@ -4592,34 +4106,34 @@ export function useGeneration(): UseGenerationReturn {
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
         const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-image-generation-2';
-        const willUseLocalizedOpenAIEdit = Boolean(
+        const willUseFullFrameOpenAIEdit = Boolean(
           isOpenAIVisualEdit &&
           shouldUseSelectionMask &&
           selectionSnapshot &&
-          PRECISE_OPENAI_EDIT_TOOLS.has(activeVisualTool) &&
+          OPENAI_MASKED_EDIT_TOOLS.has(activeVisualTool) &&
           activeVisualTool !== 'extend'
         );
-        // Avoid duplicating the full source base64 string in memory when the
-        // localized route will immediately extract only a context crop.
-        const sourceImage = willUseLocalizedOpenAIEdit
+        // The GPT Image 2 route re-encodes the frame at the provider's request
+        // size, so the untouched full-resolution copy is never materialized.
+        const sourceImage = willUseFullFrameOpenAIEdit
           ? null
           : dataUrlToImageData(sourceImageUrl);
-        if (!willUseLocalizedOpenAIEdit && !sourceImage) {
+        if (!willUseFullFrameOpenAIEdit && !sourceImage) {
           throw new Error('Failed to prepare the source image for visual edit.');
         }
-        // The localized path consumes the already-rasterized alpha plane directly.
-        // Serialize a full-resolution PNG only for legacy/full-frame paths.
-        const selectedMaskDataUrl = selectionSnapshot && !willUseLocalizedOpenAIEdit
+        // The GPT Image 2 route consumes the rasterized alpha plane directly.
+        // Serialize a full-resolution PNG only for the other providers.
+        const selectedMaskDataUrl = selectionSnapshot && !willUseFullFrameOpenAIEdit
           ? selectionSnapshot.canvas.toDataURL('image/png')
           : null;
         const maskMode = getVisualMaskMode(activeVisualTool, shouldUseSelectionMask, editOutsideSelection);
         const effectiveFeatherAmount = state.workflow.visualSelection.featherEnabled
           ? state.workflow.visualSelection.featherAmount
           : 0;
-        const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided' && !willUseLocalizedOpenAIEdit
+        const guidanceMaskDataUrl = shouldUseSelectionMask && selectedMaskDataUrl && maskMode === 'guided' && !willUseFullFrameOpenAIEdit
           ? await createGuidanceMaskDataUrl(selectedMaskDataUrl, effectiveFeatherAmount)
           : selectedMaskDataUrl;
-        const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl && !willUseLocalizedOpenAIEdit
+        const editableMaskDataUrl = shouldUseSelectionMask && guidanceMaskDataUrl && !willUseFullFrameOpenAIEdit
           ? isOpenAIVisualEdit
             ? await createOpenAIEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
             : await createEditableMaskDataUrl(guidanceMaskDataUrl, editOutsideSelection)
@@ -4725,8 +4239,7 @@ export function useGeneration(): UseGenerationReturn {
             ...(includeMaskAsReferenceImage && requestMaskImage ? [requestMaskImage] : []),
             ...visualEditReferenceImages
           ];
-          const canUsePreciseOpenAIEdit = willUseLocalizedOpenAIEdit;
-          let usedPreciseOpenAIEdit = false;
+          let usedFullFrameOpenAIEdit = false;
           let normalizedInputsForMaskedOpenAIEdit: { sourceImage: ImageData; maskImage: ImageData } | null = null;
           const getInputsForGenericEdit = async (): Promise<{ sourceImage: ImageData; maskImage: ImageData | null }> => {
             if (visualExtendOutpaintInputs) {
@@ -4752,115 +4265,86 @@ export function useGeneration(): UseGenerationReturn {
             return normalizedInputsForMaskedOpenAIEdit;
           };
 
-          if (canUsePreciseOpenAIEdit && selectionSnapshot) {
+          if (willUseFullFrameOpenAIEdit && selectionSnapshot) {
             const localizedInstruction = buildLocalizedVisualEditInstruction(
               state,
               explicitPrompt
             );
-            const localizedContract = buildLocalizedVisualEditContract({
+            const editContract = buildLocalizedVisualEditContract({
               activeTool: activeVisualTool,
               instruction: localizedInstruction,
               peopleMode: state.workflow.visualPeople.mode,
             });
-            if (activeVisualTool === 'select' && !localizedContract.userInstruction) {
+            if (activeVisualTool === 'select' && !editContract.userInstruction) {
               throw new Error('Describe the requested change in the Edit Prompt field before applying the selection.');
             }
-            if (!localizedContract.userInstruction) {
+            if (!editContract.userInstruction) {
               throw new Error('The selected Visual Edit tool does not yet have a complete operation instruction.');
             }
-            const preciseInputs = await prepareLocalizedOpenAIEditInputs(
+            const fullFrameInputs = await prepareFullFrameOpenAIEditInputs(
               sourceImageUrl!,
               selectionSnapshot,
-              localizedContract,
-              effectiveFeatherAmount
+              editContract,
+              effectiveFeatherAmount,
+              editOutsideSelection
             );
             assertVisualEditSessionCurrent();
             updateGenerationStage('aiLayer');
-            updateProgress(14);
-            const resolvedIntent = await resolveLocalizedEditIntent({
-              service,
-              contract: localizedContract,
-              sourceImage: preciseInputs.sourceImage,
-              selectionMask: preciseInputs.selectionMask,
-              abortSignal,
-            });
-            assertVisualEditSessionCurrent();
-            // Every localized operation is a real Image Edit. The pre-generation
-            // layer may clarify the instruction, but it never changes the user's
-            // selection. After generation we only align, seam-match and restore
-            // protected source pixels; generated content is never mechanically
-            // recolored or reconstructed from the source.
-            const modelInstruction = resolvedIntent.optimizedInstruction || localizedContract.userInstruction;
-            const quality: 'final' = 'final';
-            let deterministicAttempt = 0;
-            let lastDeterministicRejection = '';
+            updateProgress(18);
+            const quality: 'draft' | 'standard' | 'final' =
+              state.output.resolution === '720p' ? 'standard' : 'final';
             result = await runImageGeneration(
-              'localized image edit',
-              localizedContract.userInstruction,
+              'gpt image 2 edit',
+              editContract.userInstruction,
               editReferenceImages,
               async () => {
                 assertVisualEditSessionCurrent();
                 updateGenerationStage('aiLayer');
-                updateProgress(18);
-                const attempt = deterministicAttempt++;
-                const retryInstruction = attempt > 0
-                  ? `${modelInstruction} Retry the same requested edit. The previous candidate could not be safely aligned or blended because: ${lastDeterministicRejection || 'its localized boundary was inconsistent'}. Keep the identical crop and coordinate system, execute the user request visibly, and integrate the edited area naturally with the surrounding perspective, lighting, shadows, reflections, texture, and occlusion.`
-                  : modelInstruction;
+                updateProgress(24);
                 const editResponse = await imageEditRequest({
-                  sourceImage: preciseInputs.sourceImage,
-                  selectionMask: preciseInputs.selectionMask,
-                  selectionStats: preciseInputs.selectionStats,
-                  prompt: localizedContract.userInstruction,
-                  optimizedPrompt: retryInstruction,
-                  operation: localizedContract.operation,
-                  targetLabel: resolvedIntent.targetLabel,
-                  colorHex: localizedContract.colorHex,
+                  sourceImage: fullFrameInputs.sourceImage,
+                  selectionMask: fullFrameInputs.selectionMask,
+                  selectionStats: fullFrameInputs.selectionStats,
+                  prompt: editContract.userInstruction,
+                  operation: editContract.operation,
+                  targetLabel: editContract.targetLabel,
+                  colorHex: editContract.colorHex,
+                  materialDescription: activeVisualTool === 'material'
+                    ? materialReference?.label || editContract.requestedColorText
+                    : editContract.requestedColorText,
                   quality,
                   variants: Math.max(1, Math.min(4, options.numberOfImages || 1)),
                   outputFormat: 'png',
                   referenceImages: visualEditReferenceImages.length > 0 ? visualEditReferenceImages : undefined,
-                  localizedPatch: true,
                 }, { signal: abortSignal });
                 assertVisualEditSessionCurrent();
                 updateGenerationStage('transfer');
                 updateProgress(88);
-                const editedImages = editResponse.versions.map((version) => generatedImageFromDataUrl(version.imageUrl));
                 const finalizedImages: GeneratedImage[] = [];
-                // Bound peak memory for high-resolution multi-variant edits.
-                for (const image of editedImages) {
+                // Composited one at a time so a multi-variant 4K edit never
+                // holds several full-resolution frames in memory at once.
+                for (const version of editResponse.versions) {
                   assertVisualEditSessionCurrent();
-                  try {
-                    const finalized = await compositeLocalizedVisualEditResult(
-                      sourceImageUrl!,
-                      image,
-                      preciseInputs.layout
-                    );
-                    finalizedImages.push(finalized);
-                  } catch (error) {
-                    if (isLocalizedCompositeRejectedError(error) && !lastDeterministicRejection) {
-                      lastDeterministicRejection = error instanceof Error ? error.message : String(error);
-                    }
-                    throw error;
-                  }
+                  finalizedImages.push(await compositeFullFrameVisualEditResult(
+                    sourceImageUrl!,
+                    generatedImageFromDataUrl(version.imageUrl),
+                    fullFrameInputs.layout
+                  ));
                 }
                 assertVisualEditSessionCurrent();
                 return {
                   text: null,
                   images: finalizedImages,
-                  optimizedPrompt: editResponse.versions[0]?.prompt || retryInstruction
+                  optimizedPrompt: editResponse.versions[0]?.prompt || editContract.userInstruction
                 };
               },
-              localizedContract.userInstruction,
-              {
-                maxRetries: localizedContract.maxDeterministicRetries,
-                shouldRetry: isLocalizedCompositeRejectedError,
-              }
+              editContract.userInstruction
             );
             visualMaskHandledLocally = true;
-            usedPreciseOpenAIEdit = true;
+            usedFullFrameOpenAIEdit = true;
           }
 
-          if (!usedPreciseOpenAIEdit) {
+          if (!usedFullFrameOpenAIEdit) {
             let nonPreciseEditComposited = false;
             result = await runImageGeneration(
               'image edit',

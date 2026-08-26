@@ -1018,6 +1018,14 @@ export interface GatewayImageEditPng {
   height: number;
 }
 
+/** The edit source may be JPEG; the selection mask must always be PNG. */
+export interface GatewayImageEditSource {
+  base64: string;
+  mimeType: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
+}
+
 export interface GatewayImageEditReference {
   base64: string;
   mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
@@ -1026,7 +1034,7 @@ export interface GatewayImageEditReference {
 }
 
 export interface GatewayImageEditRequest {
-  sourceImage: GatewayImageEditPng;
+  sourceImage: GatewayImageEditSource;
   selectionMask: GatewayImageEditPng;
   selectionStats?: {
     selectedPixels?: number;
@@ -1038,19 +1046,14 @@ export interface GatewayImageEditRequest {
   };
   /** Exact user-authored instruction. This remains the authoritative request. */
   prompt: string;
-  /** Optional pre-generation clarification produced from the source and mask. */
-  optimizedPrompt?: string;
   operation: ImageEditOperation;
   targetLabel?: string;
   colorHex?: string;
   materialDescription?: string;
-  originalGenerationPrompt?: string;
   quality?: 'draft' | 'standard' | 'final';
   variants?: number;
   outputFormat?: 'png';
   referenceImages?: GatewayImageEditReference[];
-  /** True when sourceImage is a context crop that will be inverse-mapped client-side. */
-  localizedPatch?: boolean;
 }
 
 export interface GatewayImageEditVersion {
@@ -1084,10 +1087,9 @@ export async function imageEditRequest(
     timeoutMs: IMAGE_EDIT_TIMEOUT_MS,
     requestLogPrompt: body.prompt,
     requestLogSummary: {
-      bodyType: 'localized-image-edit',
+      bodyType: 'gpt-image-2-masked-edit',
       chars: serializedBody.length,
       operation: body.operation,
-      localizedPatch: Boolean(body.localizedPatch),
       variants: body.variants || 1,
       source: {
         mimeType: body.sourceImage.mimeType,

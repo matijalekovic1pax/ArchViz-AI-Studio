@@ -3524,6 +3524,52 @@ function readPngDimensions(bytes, label = 'PNG image') {
   throw new Error(`${label} is missing PNG dimensions.`);
 }
 
+/**
+ * Reads the frame dimensions from a baseline or progressive JPEG.
+ *
+ * The edit source may arrive as JPEG: a whole-frame 4K PNG is tens of
+ * megabytes to upload, and the returned pixels are only ever used inside the
+ * selection, so lossless transport of the protected area buys nothing.
+ */
+function readJpegDimensions(bytes, label = 'JPEG image') {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error(`${label} must be a valid JPEG image.`);
+  }
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    if (marker === 0xff) {
+      offset += 1;
+      continue;
+    }
+    // Standalone markers carry no payload.
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (length < 2 || offset + 2 + length > bytes.length) {
+      throw new Error(`${label} has invalid JPEG data.`);
+    }
+    const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf &&
+      marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isStartOfFrame) {
+      if (length < 7) throw new Error(`${label} has invalid JPEG data.`);
+      return {
+        height: (bytes[offset + 5] << 8) | bytes[offset + 6],
+        width: (bytes[offset + 7] << 8) | bytes[offset + 8],
+      };
+    }
+    if (marker === 0xda) break;
+    offset += 2 + length;
+  }
+  throw new Error(`${label} is missing JPEG dimensions.`);
+}
+
 function writeUint32(bytes, offset, value) {
   bytes[offset] = (value >>> 24) & 255;
   bytes[offset + 1] = (value >>> 16) & 255;
@@ -3770,71 +3816,6 @@ function alphaStats(alpha) {
   return { selected, ratio: selected / Math.max(alpha.length, 1) };
 }
 
-function dilateAlpha(alpha, width, height, radius) {
-  if (radius <= 0) return alpha;
-  const binary = new Uint8Array(alpha.length);
-  for (let index = 0; index < alpha.length; index += 1) {
-    binary[index] = alpha[index] >= OPENAI_SELECTION_ALPHA_THRESHOLD ? 1 : 0;
-  }
-  const stride = width + 1;
-  const integral = new Uint32Array((width + 1) * (height + 1));
-  for (let y = 0; y < height; y += 1) {
-    let rowSum = 0;
-    for (let x = 0; x < width; x += 1) {
-      rowSum += binary[y * width + x];
-      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + rowSum;
-    }
-  }
-
-  const out = new Uint8Array(alpha.length);
-  for (let y = 0; y < height; y += 1) {
-    const y1 = Math.max(0, y - radius);
-    const y2 = Math.min(height - 1, y + radius);
-    for (let x = 0; x < width; x += 1) {
-      const x1 = Math.max(0, x - radius);
-      const x2 = Math.min(width - 1, x + radius);
-      const sum =
-        integral[(y2 + 1) * stride + x2 + 1] -
-        integral[y1 * stride + x2 + 1] -
-        integral[(y2 + 1) * stride + x1] +
-        integral[y1 * stride + x1];
-      out[y * width + x] = sum > 0 ? 255 : 0;
-    }
-  }
-  return out;
-}
-
-function boxBlurAlpha(alpha, width, height, radius) {
-  if (radius <= 0) return alpha;
-  const stride = width + 1;
-  const integral = new Uint32Array((width + 1) * (height + 1));
-  for (let y = 0; y < height; y += 1) {
-    let rowSum = 0;
-    for (let x = 0; x < width; x += 1) {
-      rowSum += alpha[y * width + x];
-      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + rowSum;
-    }
-  }
-
-  const out = new Uint8Array(alpha.length);
-  for (let y = 0; y < height; y += 1) {
-    const y1 = Math.max(0, y - radius);
-    const y2 = Math.min(height - 1, y + radius);
-    for (let x = 0; x < width; x += 1) {
-      const x1 = Math.max(0, x - radius);
-      const x2 = Math.min(width - 1, x + radius);
-      const sum =
-        integral[(y2 + 1) * stride + x2 + 1] -
-        integral[y1 * stride + x2 + 1] -
-        integral[(y2 + 1) * stride + x1] +
-        integral[y1 * stride + x1];
-      const count = (x2 - x1 + 1) * (y2 - y1 + 1);
-      out[y * width + x] = Math.round(sum / count);
-    }
-  }
-  return out;
-}
-
 function buildOpenAISelectionMaskPng(width, height, selectedAlpha) {
   const rgba = new Uint8Array(width * height * 4);
   for (let index = 0, pixel = 0; index < selectedAlpha.length; index += 1, pixel += 4) {
@@ -3845,19 +3826,6 @@ function buildOpenAISelectionMaskPng(width, height, selectedAlpha) {
     rgba[pixel + 3] = 255 - selectedAlpha[index];
   }
   return encodePngRgba(width, height, rgba);
-}
-
-function compositeRgba(source, edited, matte) {
-  const out = new Uint8Array(source.data.length);
-  for (let i = 0, p = 0; i < source.data.length; i += 4, p += 1) {
-    const alpha = matte[p] / 255;
-    const inverse = 1 - alpha;
-    out[i] = Math.round(source.data[i] * inverse + edited.data[i] * alpha);
-    out[i + 1] = Math.round(source.data[i + 1] * inverse + edited.data[i + 1] * alpha);
-    out[i + 2] = Math.round(source.data[i + 2] * inverse + edited.data[i + 2] * alpha);
-    out[i + 3] = Math.round(source.data[i + 3] * inverse + edited.data[i + 3] * alpha);
-  }
-  return out;
 }
 
 function normalizeImageEditOperation(value) {
@@ -3876,76 +3844,65 @@ function mapImageEditQualityToOpenAI(value) {
   return 'medium';
 }
 
-function getImageEditRadius(width, height, operation) {
-  const longEdge = Math.max(width, height);
-  const peopleOrRemoval = operation === 'add_people' || operation === 'remove_people' || operation === 'remove_object';
-  const dilation = peopleOrRemoval
-    ? Math.round(Math.min(32, Math.max(14, longEdge * 0.009)))
-    : Math.round(Math.min(20, Math.max(8, longEdge * 0.0045)));
-  const feather = peopleOrRemoval
-    ? Math.round(Math.min(14, Math.max(6, longEdge * 0.004)))
-    : Math.round(Math.min(10, Math.max(4, longEdge * 0.0025)));
-  return { dilation, feather };
-}
-
+/**
+ * Builds the GPT Image 2 edit prompt for one masked whole-frame request.
+ *
+ * OpenAI documents the mask as guidance rather than a hard boundary, so the
+ * prompt has to carry the containment rule itself. The structure below is the
+ * one their image-editing guide recommends for masked edits: say that only the
+ * transparent region may change, name the target, name what must be preserved,
+ * then state the blending requirements.
+ */
 function buildImageEditPrompt(request) {
   const operation = normalizeImageEditOperation(request.operation);
-  const rawUserPrompt = sanitizeText(request.prompt, 4_000);
-  const optimizedPrompt = sanitizeText(request.optimizedPrompt, 4_000);
-  const targetLabel = sanitizeText(request.targetLabel, 160) || 'selected area';
+  const userPrompt = sanitizeText(request.prompt, 4_000);
+  const targetLabel = sanitizeText(request.targetLabel, 160) || 'the selected area';
   const materialDescription = sanitizeText(request.materialDescription, 500);
   const colorHex = /^#[0-9a-fA-F]{6}$/.test(String(request.colorHex || '')) ? request.colorHex : '';
   const referenceCount = Array.isArray(request.referenceImages) ? Math.min(4, request.referenceImages.length) : 0;
-  const imageRoles = [
-    'IMAGE INPUTS: Image 1 is the source image to edit and is the authority for composition and coordinates.',
-    referenceCount > 0
-      ? `Images 2-${referenceCount + 1} are references only for the requested object, material, texture, color, or style.`
-      : '',
-  ].filter(Boolean).join(' ');
-  const frameLock = request.localizedPatch
-    ? 'COMPOSITION: Return the identical crop, dimensions, camera, perspective, scale, framing, and pixel coordinate system. Do not recenter, zoom, translate, rotate, or reframe.'
-    : 'COMPOSITION: Preserve the camera, framing, crop, perspective, horizon, scale, and aspect ratio.';
-  const selectionRule = 'SELECTION: The transparent part of the mask is editable and the opaque part is protected. Make the requested change within the editable area. Preserve non-target content that is also inside the editable area.';
-  const exactRequest = `AUTHORITATIVE USER REQUEST: ${rawUserPrompt}`;
-  const interpretation = optimizedPrompt && optimizedPrompt !== rawUserPrompt
-    ? `PRE-GENERATION VISUAL INTERPRETATION: ${optimizedPrompt}`
-    : '';
 
   let task;
   if (operation === 'recolor') {
-    const desiredColor = colorHex || materialDescription || 'the color explicitly named by the user';
-    task = `TASK: Re-render only the visible material color of ${targetLabel} as ${desiredColor}. Keep the same objects, count, geometry, silhouette, position, perspective, construction details, texture, wear, and upholstery seams. Render the requested color as a real non-emissive material under the existing light, with natural shading, highlights, reflections, and shadows.`;
+    const desiredColor = colorHex || materialDescription || 'the colour named in the edit request';
+    task = `TASK: Re-render only the visible colour of ${targetLabel} as ${desiredColor}. Keep the same objects, object count, geometry, silhouette, position, scale, perspective, construction detail, texture, wear and seams. Render the new colour as a real non-emissive material lit by the existing scene, with its own shading, highlights, reflections and contact shadows — not as a flat overlay or tint.`;
   } else if (operation === 'replace_material') {
-    const desiredFinish = materialDescription || colorHex || 'the finish explicitly described by the user';
-    task = `TASK: Re-render the material or finish of ${targetLabel} as ${desiredFinish}. Keep its geometry, boundaries, scale, perspective, joints, seams, occlusions, and surrounding objects. Make the finish physically plausible under the existing light rather than pasting a flat texture.`;
+    const desiredFinish = materialDescription || colorHex || 'the finish described in the edit request';
+    task = `TASK: Re-render the material or finish of ${targetLabel} as ${desiredFinish}. Keep its geometry, boundaries, scale, perspective, joints, seams, occlusions and every surrounding object. Give the new finish physically plausible reflectance, texture scale and direction under the existing light rather than pasting a flat texture.`;
   } else if (operation === 'add_people') {
-    task = 'TASK: Add exactly the people requested in plausible positions inside the editable area. Match architectural scale, perspective, pose, depth, occlusion, lighting, contact shadows, and reflections.';
+    task = 'TASK: Add exactly the people described in the edit request, at plausible positions inside the editable region. Match architectural scale, camera perspective, pose, depth, occlusion, lighting direction, contact shadows and reflections. Add no other people anywhere in the frame.';
   } else if (operation === 'remove_people' || operation === 'remove_object') {
-    task = `TASK: Remove only the requested ${operation === 'remove_people' ? 'people' : targetLabel}, including their directly associated shadow or reflection, and reconstruct the revealed background consistently from the surrounding scene.`;
+    const subject = operation === 'remove_people' ? 'the people described in the edit request' : targetLabel;
+    task = `TASK: Remove ${subject}, together with the contact shadow and reflection that belong to that same subject, and rebuild the background, floor, wall, furniture and lighting revealed behind them so the scene reads as if the subject was never there. Continue every architectural line, joint, texture and perspective that runs behind the subject. Do not replace it with a different object.`;
   } else {
-    task = `TASK: Apply the user-requested edit to ${targetLabel} exactly. Make any addition, removal, replacement, style, material, color, lighting, or structural change only when the request calls for it.`;
+    task = `TASK: Apply the edit request to ${targetLabel} exactly as written. Add, remove, replace or restyle only what the request calls for, and leave every other element of the scene as it is.`;
   }
 
   return [
-    exactRequest,
-    interpretation,
+    `EDIT REQUEST: ${userPrompt}`,
     task,
-    selectionRule,
-    frameLock,
-    imageRoles,
-    'INTEGRATION: Produce one photorealistic edited image. Match the source perspective, scale, depth, lighting direction and intensity, color temperature, material response, shadows, reflections, texture, grain, sharpness, and occlusion. The result must look like one continuous photograph with no visible mask, rectangle, lasso, flat overlay, halo, border, or seam. Preserve all content not implicated by the request, especially text and signage.',
+    'EDIT REGION: Only the fully transparent region of the supplied mask may change. Every pixel under the opaque region of the mask must come back exactly as it appears in the first image — same objects, same materials, same text, same people. Content that happens to fall inside the editable region but is not part of the request stays as it is too: the mask marks where to look, not permission to repaint everything inside it. Follow the real edges of the target instead of painting the rectangle, lasso or brush shape.',
+    'PRESERVE: Camera position, focal length, framing, crop, aspect ratio, perspective, horizon and scale. Existing light direction, intensity and colour temperature. Every object, surface, person, plant, vehicle, sign, label and piece of text outside the requested change. The overall composition, rendering style and image quality.',
+    'BLEND: Integrate the edit as part of the original photograph. Match perspective and scale at the boundary, respect occlusion order, cast physically correct contact shadows and reflections, and match the surrounding depth of field, grain, noise, sharpness, colour response and tonal range.',
+    referenceCount > 0
+      ? `IMAGE INPUTS: Image 1 is the image being edited and is the authority for composition, geometry and coordinates. Images 2-${referenceCount + 1} are references only, for the requested object, material, texture, colour or style — never for framing, and never copied into the frame wholesale.`
+      : 'IMAGE INPUTS: Image 1 is the image being edited and is the authority for composition, geometry and coordinates.',
+    'OUTPUT: One photorealistic image at the same dimensions as image 1, with no visible mask boundary, rectangle, lasso outline, brush stroke, halo, fringe, flat overlay, cut-out edge or seam.',
   ].filter(Boolean).join('\n\n').slice(0, OPENAI_IMAGE_MAX_PROMPT_CHARS);
 }
 
-function decodeImageEditBase64Image(image, label) {
+function decodeImageEditBase64Image(image, label, { allowJpeg = false } = {}) {
   if (!image || typeof image.base64 !== 'string') {
     throw new Error(`${label} is missing.`);
   }
   const mimeType = typeof image.mimeType === 'string'
     ? image.mimeType.toLowerCase().replace('image/jpg', 'image/jpeg')
     : 'image/png';
-  if (mimeType !== 'image/png') {
-    throw new Error(`${label} must be a PNG image for precise masked editing.`);
+  if (mimeType !== 'image/png' && !(allowJpeg && mimeType === 'image/jpeg')) {
+    throw new Error(
+      allowJpeg
+        ? `${label} must be a PNG or JPEG image for masked editing.`
+        : `${label} must be a PNG image for masked editing.`
+    );
   }
   const normalizedBase64 = image.base64.trim();
   const estimatedBytes = Math.max(0, Math.floor((normalizedBase64.length * 3) / 4) - (normalizedBase64.endsWith('==') ? 2 : normalizedBase64.endsWith('=') ? 1 : 0));
@@ -4186,7 +4143,7 @@ async function handleImageEdit(request, env, user) {
       return badRequest(origin, 'Selection mask dimensions must match the source image.');
     }
     if (sourceSize.width % 16 !== 0 || sourceSize.height % 16 !== 0) {
-      return badRequest(origin, 'The image dimensions must be divisible by 16 for precise editing.');
+      return badRequest(origin, 'The image dimensions must be multiples of 16 for GPT Image 2 editing.');
     }
 
     const longEdge = Math.max(sourceSize.width, sourceSize.height);
@@ -4207,18 +4164,20 @@ async function handleImageEdit(request, env, user) {
     const userSelectedRatio = clampNumber(body.selectionStats?.userSelectedRatio, 0, 1, null);
     const providerEditablePixels = clampNumber(body.selectionStats?.providerEditablePixels, 0, totalPixels, clientSelectedPixels);
     const providerEditableRatio = clampNumber(body.selectionStats?.providerEditableRatio, 0, 1, clientSelectedRatio);
-    const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image');
+    const sourceInput = decodeImageEditBase64Image(body.sourceImage, 'Source image', { allowJpeg: true });
     const maskInput = decodeImageEditBase64Image(body.selectionMask, 'Selection mask');
-    const sourcePng = readPngDimensions(sourceInput.bytes, 'Source image');
+    const sourceFrame = sourceInput.mimeType === 'image/jpeg'
+      ? readJpegDimensions(sourceInput.bytes, 'Source image')
+      : readPngDimensions(sourceInput.bytes, 'Source image');
     const maskPng = await decodePngRgba(maskInput.bytes);
-    if (sourcePng.width !== sourceSize.width || sourcePng.height !== sourceSize.height) {
-      return badRequest(origin, 'Declared source image dimensions do not match the PNG.');
+    if (sourceFrame.width !== sourceSize.width || sourceFrame.height !== sourceSize.height) {
+      return badRequest(origin, 'Declared source image dimensions do not match the encoded image.');
     }
     if (maskPng.width !== maskSize.width || maskPng.height !== maskSize.height) {
       return badRequest(origin, 'Declared selection mask dimensions do not match the PNG.');
     }
-    if (sourcePng.width !== maskPng.width || sourcePng.height !== maskPng.height) {
-      return badRequest(origin, 'Selection mask PNG dimensions must match the source image PNG.');
+    if (sourceFrame.width !== maskPng.width || sourceFrame.height !== maskPng.height) {
+      return badRequest(origin, 'The selection mask must have the same dimensions as the source image.');
     }
 
     const selectionAlpha = rgbaToSelectionAlpha(maskPng);
@@ -4228,17 +4187,20 @@ async function handleImageEdit(request, env, user) {
     if (selectedRatio <= 0) {
       return badRequest(origin, 'Please select an area to edit.');
     }
-    if (selectedRatio < 0.0002) {
-      return badRequest(origin, 'The selected area is too small to survive provider resampling. Expand it by a few pixels.');
+    // An absolute floor rather than a ratio: the frame is sent at the mask's
+    // own resolution, so what matters is whether the region is large enough for
+    // the model to render into, not how it compares to a 1MP or an 8MP frame.
+    if (selectedPixels < 256) {
+      return badRequest(origin, 'The selected area is too small to edit. Expand it by a few pixels.');
     }
-    if (selectedRatio > 0.96) {
-      return badRequest(origin, 'The selection leaves too little protected context. Reduce it slightly so the edit can stay registered.');
+    if (selectedRatio > 0.995) {
+      return badRequest(origin, 'The whole frame is selected, so there is no protected context to edit against. Leave a little of the image unselected.');
     }
 
     const normalizedMaskBytes = await buildOpenAISelectionMaskPng(maskPng.width, maskPng.height, selectionAlpha);
     const outputFormat = normalizeOpenAIOutputFormat(body.outputFormat);
     if (outputFormat !== 'png') {
-      return badRequest(origin, 'Localized image edits require PNG output for exact dimension and pixel validation.');
+      return badRequest(origin, 'Masked image edits require PNG output for exact dimension and pixel validation.');
     }
     const outputMimeType = 'image/png';
 
@@ -4251,7 +4213,11 @@ async function handleImageEdit(request, env, user) {
     form.append('quality', mapImageEditQualityToOpenAI(quality));
     form.append('output_format', outputFormat);
     form.append('background', 'opaque');
-    form.append('image[]', new Blob([sourceInput.bytes], { type: sourceInput.mimeType }), 'source.png');
+    form.append(
+      'image[]',
+      new Blob([sourceInput.bytes], { type: sourceInput.mimeType }),
+      sourceInput.mimeType === 'image/jpeg' ? 'source.jpg' : 'source.png'
+    );
     form.append('mask', new Blob([normalizedMaskBytes], { type: 'image/png' }), 'mask.png');
 
     const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.slice(0, 4) : [];
@@ -4326,7 +4292,6 @@ async function handleImageEdit(request, env, user) {
             userSelectedRatio,
             providerEditablePixels,
             providerEditableRatio,
-            localizedPatch: Boolean(body.localizedPatch),
             requestId,
             usage: data?.usage || null,
           },
@@ -4334,9 +4299,11 @@ async function handleImageEdit(request, env, user) {
       })
       .filter(Boolean);
 
-    if (versions.length !== variants) {
+    // A short batch is still a usable edit, so only a completely unreadable
+    // response is an error. Callers see how many variants actually arrived.
+    if (versions.length === 0) {
       return corsResponse(origin, {
-        error: `OpenAI image edit returned ${versions.length} valid PNG variant${versions.length === 1 ? '' : 's'}; ${variants} required. No partial result was applied.`,
+        error: 'OpenAI image edit returned no usable PNG variant at the requested size.',
         requestId,
       }, { status: 502 });
     }
