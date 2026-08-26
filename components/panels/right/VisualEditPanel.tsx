@@ -273,31 +273,26 @@ const buildAutoSelectionPrompt = (
         '- Keep small object selections tighter than broad surface selections.'
       ].join('\n');
 
+  // Phrased to match the segmentation format Gemini is actually trained to
+  // emit. Asking for a bespoke {"polygons":[{"points":[{x,y}]}]} schema pushes
+  // the model off its spatial priors, and long walls of rules degrade grounding
+  // further, so the schema line leads and the rule list stays short.
+  const targetNames = targets.join(', ');
   return [
-    'You are an expert segmentation assistant for an architectural visual editor.',
-    `Image dimensions are ${width}x${height}. All returned coordinates must use normalized 0 to 1000 image coordinates, never screen coordinates and never pixel coordinates.`,
-    `Active edit tool: ${activeTool}. ${getAutoSelectionIntentRule(activeTool)}`,
-    'Detect only the requested target categories:',
+    `Give the segmentation masks for the ${targetNames} in this architectural visualization.`,
+    'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", the segmentation mask in the key "mask", and the text label in the key "label".',
+    'The box_2d must be [ymin, xmin, ymax, xmax] normalized to 0-1000. The mask must be a polygon of [x, y] points, also normalized to 0-1000, tracing the outline of that one instance.',
+    'What each requested target means here:',
     targetLines,
     hardRuleBlock,
     retryBlock,
     promptContext,
-    'Output requirements:',
-    '- Return JSON only. Do not include markdown, code fences, comments, prose, or explanations.',
-    '- Use this exact schema: {"polygons":[{"label":"target label","confidence":0.0,"points":[{"x":0,"y":0}]}]}.',
-    '- Coordinates must be integers from 0 to 1000. x=0 is left, y=0 is top.',
+    `Active edit tool: ${activeTool}. ${getAutoSelectionIntentRule(activeTool)}`,
     surfaceGuidanceRules,
-    '- Return one polygon per distinct visible target instance or one polygon per coherent continuous surface region.',
-    '- Enclose the complete visible target with 8 to 24 points and a modest context margin for natural blending. Avoid razor-precise tracing unless the active tool is protecting a foreground/background boundary.',
-    hasBroadSurfaceTarget
-      ? '- For broad surfaces, simple quadrilaterals and perspective polygons are acceptable when they capture the visible target well.'
-      : '- Use rectangles only when the intended target area is genuinely rectangular.',
-    '- Include occluded visible portions as one polygon if they clearly belong to the same object. Do not invent hidden parts behind other objects.',
-    hasBroadSurfaceTarget
-      ? '- For broad surfaces, do not reject the target because exact occlusion tracing is difficult. The downstream image edit will preserve unrelated source objects.'
-      : '- For surfaces in a non-surface request, avoid unrelated foreground objects.',
-    '- Do not select the entire image unless the requested target genuinely occupies the full frame.',
-    '- If no requested targets are clearly visible, return {"polygons":[]}.',
+    '- One entry per distinct visible instance, or one entry per continuous surface region.',
+    '- Trace the outline you can actually see. Do not invent parts hidden behind other objects, and do not return the whole image unless the target genuinely fills the frame.',
+    '- Return JSON only: no markdown, no code fences, no prose.',
+    '- If none of the requested targets are visible, return [].',
   ].join('\n');
 };
 
@@ -1885,17 +1880,45 @@ export const VisualEditPanel = () => {
       }
 
       let points: unknown[] | null = null;
+      // Gemini's documented segmentation entry is {box_2d, mask, label}, where
+      // `mask` is a polygon of [x, y] normalized to 0-1000. Read that first:
+      // it is what the model actually emits when left in its trained format.
+      const maskSource = Array.isArray(item?.mask) ? item.mask : null;
       const pointSource =
         (Array.isArray(item) ? item : null) ||
         item?.points ||
         item?.polygon ||
         item?.contour ||
         item?.outline ||
-        item?.vertices;
+        item?.vertices ||
+        maskSource;
 
       const pointArray = parseMaybeArray(pointSource);
       if (pointArray) {
         points = pointArray;
+      } else if (item?.box_2d || item?.box2d) {
+        // box_2d is [ymin, xmin, ymax, xmax] — y first. Reading it as
+        // [x1, y1, x2, y2] transposes the selection, which lands it somewhere
+        // unrelated unless the box happens to be square.
+        const boxArray = parseMaybeArray(item.box_2d || item.box2d);
+        if (boxArray && boxArray.length >= 4) {
+          const ymin = toNumber(boxArray[0]);
+          const xmin = toNumber(boxArray[1]);
+          const ymax = toNumber(boxArray[2]);
+          const xmax = toNumber(boxArray[3]);
+          if (
+            [ymin, xmin, ymax, xmax].every((value) => Number.isFinite(value)) &&
+            xmax > xmin &&
+            ymax > ymin
+          ) {
+            points = [
+              [xmin, ymin],
+              [xmax, ymin],
+              [xmax, ymax],
+              [xmin, ymax],
+            ];
+          }
+        }
       } else if (item?.bbox || item?.box || item?.boundingBox || item?.bounding_box) {
         const box = item.bbox || item.box || item.boundingBox || item.bounding_box;
         const boxArray = parseMaybeArray(box);
@@ -2062,7 +2085,11 @@ export const VisualEditPanel = () => {
           topP: broadRetry ? 0.25 : 0.15,
           maxOutputTokens: 8192,
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: 'high' }
+          // Google's image-understanding guide is explicit that segmentation
+          // gets better with thinking disabled. Extended reasoning talks the
+          // model out of its trained spatial grounding and is a large part of
+          // why results swung between exact and arbitrary.
+          thinkingConfig: { thinkingLevel: 'minimal' }
         }
       });
 
