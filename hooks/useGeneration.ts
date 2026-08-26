@@ -59,15 +59,16 @@ import {
   dilateEditableAlpha,
   getEditableAlphaBounds,
   getOpenAIEditFrameSize,
-  operationNeedsProviderMask,
   planOpenAIFullFrameEdit,
 } from '../lib/openAIImageEdit.js';
 import {
   buildLocalizedVisualEditContract,
   hasUsableVisualSelection,
   isUsableVisualSelection,
+  resolveVisualEditScope,
   visualEditRequiresSelection,
   type LocalizedVisualEditContract,
+  type VisualEditScope,
 } from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateOutput, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
@@ -456,7 +457,8 @@ type FullFrameEditLayout = {
   sourceHeight: number;
   requestWidth: number;
   requestHeight: number;
-  providerAlpha: Uint8ClampedArray;
+  /** Null on whole-frame runs, where the returned frame replaces the source. */
+  providerAlpha: Uint8ClampedArray | null;
   compositeFeather: number;
 };
 
@@ -569,7 +571,7 @@ const prepareFullFrameOpenAIEditInputs = async (
     editableAlpha: Uint8ClampedArray;
     width: number;
     height: number;
-  },
+  } | null,
   contract: LocalizedVisualEditContract,
   featherAmount: number,
   editOutsideSelection: boolean
@@ -589,32 +591,39 @@ const prepareFullFrameOpenAIEditInputs = async (
   const source = await loadCanvasImage(sourceDataUrl);
   const sourceWidth = source.naturalWidth || source.width;
   const sourceHeight = source.naturalHeight || source.height;
-  if (
+  if (selectionSnapshot && (
     sourceWidth !== selectionSnapshot.width ||
     sourceHeight !== selectionSnapshot.height ||
     selectionSnapshot.editableAlpha.length !== sourceWidth * sourceHeight
-  ) {
+  )) {
     throw new Error('The current selection no longer matches the source image. Select the area again.');
   }
 
   // The Background tool edits everything the user did not select, so the
   // canonical editable plane is inverted before anything else consumes it.
-  const drawnAlpha = selectionSnapshot.editableAlpha;
-  const editableAlpha = editOutsideSelection
+  const drawnAlpha = selectionSnapshot?.editableAlpha ?? null;
+  const editableAlpha = drawnAlpha && editOutsideSelection
     ? Uint8ClampedArray.from(drawnAlpha, (value) => 255 - value)
     : drawnAlpha;
 
-  const selectionBounds = getEditableAlphaBounds(editableAlpha, sourceWidth, sourceHeight);
-  if (!selectionBounds) throw new Error('Select a visible area before applying this edit.');
+  const selectionBounds = editableAlpha
+    ? getEditableAlphaBounds(editableAlpha, sourceWidth, sourceHeight)
+    : null;
+  if (editableAlpha && !selectionBounds) {
+    throw new Error('Select a visible area before applying this edit.');
+  }
 
-  const plan = planOpenAIFullFrameEdit({
-    sourceWidth,
-    sourceHeight,
-    selectionBounds,
-    operation: contract.operation,
-    featherAmount,
-    editOutsideSelection,
-  });
+  const frame = getOpenAIEditFrameSize(sourceWidth, sourceHeight);
+  const plan = selectionBounds
+    ? planOpenAIFullFrameEdit({
+        sourceWidth,
+        sourceHeight,
+        selectionBounds,
+        operation: contract.operation,
+        featherAmount,
+        editOutsideSelection,
+      })
+    : frame && { requestWidth: frame.width, requestHeight: frame.height, providerExpansion: 0, compositeFeather: 0 };
   if (!plan) {
     throw new Error('GPT Image 2 cannot edit this image because its aspect ratio is more extreme than 3:1.');
   }
@@ -622,12 +631,9 @@ const prepareFullFrameOpenAIEditInputs = async (
   // OpenAI documents the mask as guidance rather than a hard boundary and
   // recommends erring generous so the model has room to blend shadows,
   // reflections and soft edges. The composite ramp lives in that overscan.
-  const providerAlpha = dilateEditableAlpha(
-    editableAlpha,
-    sourceWidth,
-    sourceHeight,
-    plan.providerExpansion
-  );
+  const providerAlpha = editableAlpha
+    ? dilateEditableAlpha(editableAlpha, sourceWidth, sourceHeight, plan.providerExpansion)
+    : null;
 
   const sourceCanvas = document.createElement('canvas');
   sourceCanvas.width = plan.requestWidth;
@@ -642,7 +648,11 @@ const prepareFullFrameOpenAIEditInputs = async (
   sourceCtx.fillRect(0, 0, plan.requestWidth, plan.requestHeight);
   sourceCtx.drawImage(source, 0, 0, plan.requestWidth, plan.requestHeight);
 
-  const providerMaskCanvas = alphaToMaskCanvas(providerAlpha, sourceWidth, sourceHeight);
+  const providerMaskCanvas = alphaToMaskCanvas(
+    providerAlpha ?? new Uint8ClampedArray(sourceWidth * sourceHeight).fill(255),
+    sourceWidth,
+    sourceHeight
+  );
   const requestMaskCanvas = document.createElement('canvas');
   requestMaskCanvas.width = plan.requestWidth;
   requestMaskCanvas.height = plan.requestHeight;
@@ -696,8 +706,8 @@ const prepareFullFrameOpenAIEditInputs = async (
     selectionStats: {
       selectedPixels: providerEditablePixels,
       selectedRatio: providerEditablePixels / Math.max(requestPixels, 1),
-      userSelectedPixels: selectionBounds.selectedPixels,
-      userSelectedRatio: selectionBounds.selectedPixels / Math.max(sourcePixels, 1),
+      userSelectedPixels: selectionBounds?.selectedPixels ?? sourcePixels,
+      userSelectedRatio: (selectionBounds?.selectedPixels ?? sourcePixels) / Math.max(sourcePixels, 1),
       providerEditablePixels,
       providerEditableRatio: providerEditablePixels / Math.max(requestPixels, 1),
     },
@@ -1675,6 +1685,20 @@ const compositeFullFrameVisualEditResult = async (
   outputCanvas.height = sourceHeight;
   const outputCtx = outputCanvas.getContext('2d');
   if (!outputCtx) throw new Error('Failed to composite the GPT Image 2 edit.');
+
+  // Whole-frame runs (People / Auto, Quick Remove) deliberately regenerate the
+  // entire scene, so the returned frame is the result — there is nothing to
+  // composite it through.
+  if (!layout.providerAlpha) {
+    outputCtx.imageSmoothingEnabled = true;
+    outputCtx.imageSmoothingQuality = 'high';
+    outputCtx.drawImage(generatedImage, 0, 0, sourceWidth, sourceHeight);
+    return {
+      ...generated,
+      ...generatedImageFromDataUrl(outputCanvas.toDataURL('image/png')),
+    };
+  }
+
   outputCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   const sourceData = outputCtx.getImageData(0, 0, sourceWidth, sourceHeight);
 
@@ -4149,21 +4173,29 @@ export function useGeneration(): UseGenerationReturn {
           selectionShapesSnapshot
         );
         assertVisualEditSessionCurrent();
+        const quickRemoveCount = state.workflow.visualRemove.quickRemove.length;
         const hasSelection = Boolean(selectionSnapshot) && hasUsableVisualSelection(selectionShapesSnapshot);
-        if (visualEditRequiresSelection(activeVisualTool) && !hasSelection) {
+        if (visualEditRequiresSelection(activeVisualTool, { quickRemoveCount }) && !hasSelection) {
           throw new Error('Select the area you want to edit before clicking Apply Edits.');
         }
+        const visualEditScope: VisualEditScope = resolveVisualEditScope({
+          activeTool: activeVisualTool,
+          peopleMode: state.workflow.visualPeople.mode,
+          objectPlacementMode: state.workflow.visualObject.placementMode,
+          quickRemoveCount,
+          hasSelection,
+        });
         const shouldUseSelectionMask = hasSelection &&
+          !visualEditScope.wholeFrame &&
           activeVisualTool !== 'extend' &&
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
         const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-image-generation-2';
         const willUseFullFrameOpenAIEdit = Boolean(
           isOpenAIVisualEdit &&
-          shouldUseSelectionMask &&
-          selectionSnapshot &&
           OPENAI_MASKED_EDIT_TOOLS.has(activeVisualTool) &&
-          activeVisualTool !== 'extend'
+          activeVisualTool !== 'extend' &&
+          (visualEditScope.wholeFrame || (shouldUseSelectionMask && selectionSnapshot))
         );
         // The GPT Image 2 route re-encodes the frame at the provider's request
         // size, so the untouched full-resolution copy is never materialized.
@@ -4317,7 +4349,7 @@ export function useGeneration(): UseGenerationReturn {
             return normalizedInputsForMaskedOpenAIEdit;
           };
 
-          if (willUseFullFrameOpenAIEdit && selectionSnapshot) {
+          if (willUseFullFrameOpenAIEdit && (visualEditScope.wholeFrame || selectionSnapshot)) {
             const localizedInstruction = buildLocalizedVisualEditInstruction(
               state,
               explicitPrompt
@@ -4335,7 +4367,7 @@ export function useGeneration(): UseGenerationReturn {
             }
             const fullFrameInputs = await prepareFullFrameOpenAIEditInputs(
               sourceImageUrl!,
-              selectionSnapshot,
+              visualEditScope.wholeFrame ? null : selectionSnapshot,
               editContract,
               effectiveFeatherAmount,
               editOutsideSelection
@@ -4355,10 +4387,11 @@ export function useGeneration(): UseGenerationReturn {
                 updateProgress(24);
                 const editResponse = await imageEditRequest({
                   sourceImage: fullFrameInputs.sourceImage,
-                  // Restyling operations deliberately send no mask so the model
-                  // can still see the target it has to restyle. The edit is
-                  // confined to the selection by the local composite instead.
-                  ...(operationNeedsProviderMask(editContract.operation)
+                  // A mask is sent only where the target should vanish or new
+                  // content fills space the model need not read. Restyling
+                  // edits go unmasked so the model can see what it must keep;
+                  // the selection is enforced by the local composite instead.
+                  ...(visualEditScope.useProviderMask
                     ? { selectionMask: fullFrameInputs.selectionMask }
                     : {}),
                   selectionStats: fullFrameInputs.selectionStats,

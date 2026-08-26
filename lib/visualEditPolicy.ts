@@ -276,6 +276,72 @@ const SELECTION_REQUIRED_TOOLS = new Set([
   'background',
 ]);
 
+export interface VisualEditScopeInput {
+  activeTool: string;
+  /** People tool mode. */
+  peopleMode?: string;
+  /** Object tool placement mode. */
+  objectPlacementMode?: string;
+  /** How many Quick Remove target types are selected. */
+  quickRemoveCount?: number;
+  hasSelection: boolean;
+}
+
+export interface VisualEditScope {
+  /** Regenerate the entire frame and use the result as-is, ignoring any selection. */
+  wholeFrame: boolean;
+  /**
+   * Send a mask to /v1/images/edits.
+   *
+   * The endpoint erases the masked region from the model's view, so a mask is
+   * only correct when the target is meant to disappear (Remove) or when new
+   * content fills space the model does not need to read (Repopulate, placing a
+   * new object, replacing the sky or the background). Any edit that restyles
+   * something the model must first see — recolour, material, lighting, People
+   * Enhance, replacing an object in place — goes unmasked. Containment never
+   * depends on this: the result is always composited back through the user's
+   * own selection locally.
+   */
+  useProviderMask: boolean;
+}
+
+/** Resolves what one Visual Edit run should actually do. */
+export const resolveVisualEditScope = ({
+  activeTool,
+  peopleMode,
+  objectPlacementMode,
+  quickRemoveCount = 0,
+  hasSelection,
+}: VisualEditScopeInput): VisualEditScope => {
+  // People / Auto repopulates the whole scene, so it deliberately ignores any
+  // selection and returns a completely regenerated frame.
+  if (activeTool === 'people' && peopleMode === 'automatic') {
+    return { wholeFrame: true, useProviderMask: false };
+  }
+  // Quick Remove names types rather than places: every instance of those types
+  // is removed across the frame, so it is a whole-frame regeneration too.
+  if (activeTool === 'remove' && quickRemoveCount > 0 && !hasSelection) {
+    return { wholeFrame: true, useProviderMask: false };
+  }
+  if (activeTool === 'remove') {
+    return { wholeFrame: false, useProviderMask: true };
+  }
+  if (activeTool === 'people') {
+    // Repopulate fills the selected area with new people; Enhance has to see
+    // the people it is making more realistic.
+    return { wholeFrame: false, useProviderMask: peopleMode === 'repopulate' };
+  }
+  if (activeTool === 'object' || activeTool === 'replace') {
+    // Placing a new object fills empty space; replacing one in place needs the
+    // original visible for footprint, scale and perspective.
+    return { wholeFrame: false, useProviderMask: objectPlacementMode === 'place' };
+  }
+  if (activeTool === 'sky' || activeTool === 'background') {
+    return { wholeFrame: false, useProviderMask: true };
+  }
+  return { wholeFrame: false, useProviderMask: false };
+};
+
 const hasTwoDimensionalLasso = (points: Array<{ x: number; y: number }>) => {
   if (points.length < 3) return false;
   const origin = points[0];
@@ -322,6 +388,14 @@ export const hasUsableVisualSelection = (shapes: VisualSelectionShape[]): boolea
 /**
  * People, lighting, and sky intentionally support an explicit full-frame mode.
  * When the user supplies a selection they still route through localized editing.
+ *
+ * Remove is the one conditional case: naming Quick Remove targets is itself the
+ * instruction, so no selection is needed for that run.
  */
-export const visualEditRequiresSelection = (activeTool: string): boolean =>
-  SELECTION_REQUIRED_TOOLS.has(activeTool);
+export const visualEditRequiresSelection = (
+  activeTool: string,
+  options: { quickRemoveCount?: number } = {}
+): boolean => {
+  if (activeTool === 'remove' && (options.quickRemoveCount || 0) > 0) return false;
+  return SELECTION_REQUIRED_TOOLS.has(activeTool);
+};

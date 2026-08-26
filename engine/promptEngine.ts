@@ -1,7 +1,7 @@
 
 import { AppState, DEFAULT_RENDER3D_SOURCE_MODE, DEFAULT_RENDER_GENERATION_MODE, ImageGenerationModel, RENDER_GENERATION_MODES, RenderGenerationMode, StyleConfiguration, VisualSelectionShape } from '../types';
 import { getMaterialById } from '../lib/materialCatalog';
-import { buildLocalizedVisualEditContract } from '../lib/visualEditPolicy';
+import { buildLocalizedVisualEditContract, hasUsableVisualSelection } from '../lib/visualEditPolicy';
 
 type ImagePromptMode = AppState['mode'];
 type ImagePromptTool = AppState['workflow']['activeTool'] | string | undefined;
@@ -2765,45 +2765,61 @@ export const buildLocalizedVisualEditInstruction = (
     const replacement = workflow.visualReplace;
     const objectName = [object.subcategory, object.category].filter(Boolean).join(' ').toLowerCase() || 'object';
     if (object.placementMode === 'replace') {
+      // Replacement is shown the original so it can match footprint and scale.
       return compactLocalizedInstruction([
         replacement.mode === 'similar'
-          ? 'Replace only the selected existing object with a visually similar object.'
-          : `Replace only the selected existing object with a ${objectName}.`,
+          ? 'Replace the existing object in this part of the scene with a visually similar object of the same kind.'
+          : `Replace the existing object in this part of the scene with a ${objectName}.`,
         replacement.style ? `Use a ${replacement.style} aesthetic.` : null,
         replacement.prompt?.trim() ? `Additional replacement detail: ${replacement.prompt.trim()}.` : null,
-        replacement.matchScale ? 'Match the original footprint and scale.' : null,
-        replacement.matchLighting ? 'Match source lighting and perspective.' : null,
-        replacement.preserveShadows ? 'Preserve or reconstruct physically correct contact shadows.' : null,
-        'Preserve every non-target object and all architecture.'
+        replacement.matchScale ? 'Draw it in place, occupying the same footprint, size and orientation as the object it replaces.' : null,
+        replacement.matchLighting ? 'Match the existing lighting direction, colour temperature and camera perspective.' : null,
+        replacement.preserveShadows ? 'Give it physically correct contact shadows and reflections.' : null,
+        'Change nothing else: every other object, surface, sign, text and all architecture stays exactly as it is.'
       ]);
     }
+    // Placement fills space, so the surroundings have to be rebuilt with it.
     return compactLocalizedInstruction([
-      `Add one ${objectName} inside the selected placement area.`,
+      `Add one ${objectName} standing on the visible floor in this part of the scene.`,
       `Use scale ${object.scale} percent, rotation ${object.rotation} degrees, and ${object.depth} depth.`,
-      object.autoPerspective ? 'Match scene perspective.' : null,
-      object.groundContact ? 'Ground it on the visible supporting surface.' : null,
-      object.shadow ? 'Add physically consistent contact shadows.' : null,
-      'Do not remove or move existing content.'
+      object.autoPerspective ? 'Match the camera perspective and architectural scale.' : null,
+      object.groundContact ? 'Rest it on the visible supporting surface with believable contact.' : null,
+      object.shadow ? 'Give it physically consistent contact shadows and reflections.' : null,
+      'Rebuild the floor, wall and background around it consistently with the surrounding scene. Do not remove, move or restyle anything that is already there.'
     ]);
   }
 
   if (tool === 'people') {
     const people = workflow.visualPeople;
+    const crowdSpec = [
+      `Use ${people.density}% density, ${people.grouping}, ${people.flowPattern} flow, ${people.movementDirection} movement, ${people.wardrobeStyle} wardrobe, and activities ${people.activities.join(', ')}.`,
+      `Scene zone: ${people.airportZone}.`,
+    ];
     if (people.mode === 'enhance') {
+      // Enhance restyles people that already exist, so the model is shown them.
       return compactLocalizedInstruction([
-        'Enhance only the existing people inside the selected area into realistic humans.',
-        'Preserve person count, identity role, pose, position, scale, body orientation, ground contact, occlusion, clothing category, and attached luggage.',
-        'Match source perspective, lighting, shadows, color temperature, depth of field, and render fidelity. Do not add or remove people or alter architecture.'
+        'Redraw the existing people in this scene as photorealistic humans.',
+        'Keep the same number of people, and keep every one of them at their exact original position, scale, pose, body orientation, facing direction, ground contact, occlusion, clothing category and carried luggage.',
+        'Replace mannequin, clay, untextured, white, silhouette or low-poly render appearance with realistic skin, hair, faces, clothing fabric and footwear.',
+        'Match the existing camera perspective, lighting direction, shadows, colour temperature, depth of field and render fidelity. Do not add anyone, remove anyone, or change the architecture, furniture, signage or floor.'
+      ]);
+    }
+    if (people.mode === 'automatic') {
+      // Auto repopulates the whole scene rather than one selected area.
+      return compactLocalizedInstruction([
+        'Populate this entire scene with context-appropriate photorealistic people at physically plausible locations throughout the frame.',
+        ...crowdSpec,
+        people.preserveExisting ? 'Keep any people who already look realistic exactly as they are.' : null,
+        'Match human scale to the architecture, follow the camera perspective, respect occlusion behind existing objects, and give everyone correct ground contact, contact shadows and reflections.',
+        'Do not change the architecture, materials, signage, text, furniture, lighting or camera in any way.'
       ]);
     }
     return compactLocalizedInstruction([
-      people.mode === 'automatic'
-        ? 'Add context-appropriate realistic people only at physically plausible locations inside the selected area.'
-        : 'Repopulate the selected area with realistic people while preserving plausible circulation and existing architecture.',
-      `Use ${people.density}% density, ${people.grouping}, ${people.flowPattern} flow, ${people.movementDirection} movement, ${people.wardrobeStyle} wardrobe, and activities ${people.activities.join(', ')}.`,
-      `Scene zone: ${people.airportZone}.`,
-      people.preserveExisting ? 'Preserve valid existing people.' : null,
-      'Match human scale, camera perspective, occlusion, lighting, ground contact, shadows, and image fidelity. Do not modify non-human content.'
+      'Add new photorealistic people standing and walking in this part of the scene, on the visible floor, as if they were always there.',
+      ...crowdSpec,
+      people.preserveExisting ? 'Keep any existing people exactly as they are.' : null,
+      'Match human scale to the architecture, follow the camera perspective, respect occlusion, and give everyone correct ground contact, contact shadows and reflections.',
+      'Reconstruct the floor, wall and background around them consistently with the surrounding scene. Do not change the architecture, materials, signage or text.'
     ]);
   }
 
@@ -2840,14 +2856,21 @@ export const buildLocalizedVisualEditInstruction = (
 
   if (tool === 'remove') {
     const quickTargets = workflow.visualRemove.quickRemove;
+    const hasSelection = hasUsableVisualSelection(workflow.visualSelections);
+    const targetList = quickTargets.join(', ');
+    // Quick Remove names types, not places: with no selection it sweeps the
+    // whole frame. A selection always narrows the edit to one subject.
+    const subject = !hasSelection && quickTargets.length > 0
+      ? `every ${targetList} visible anywhere in this image`
+      : quickTargets.length > 0
+        ? `the ${targetList} in this part of the scene`
+        : 'the single main subject at the centre of this part of the scene';
     return compactLocalizedInstruction([
-      quickTargets.length > 0
-        ? `Remove only the selected ${quickTargets.join(', ')}.`
-        : 'Remove only the complete foreground subject centered in the selected area.',
-      'Remove its attached accessories, contact shadow, and reflection only when they belong to that same subject.',
-      'Reconstruct the newly revealed background from surrounding source evidence.',
-      workflow.visualRemove.preserveStructure ? 'Preserve continuing architectural lines, joints, texture, perspective, and structure.' : null,
-      'Preserve every other person, object, surface, sign, and text element.'
+      `Remove ${subject}.`,
+      'Also remove the contact shadow and reflection belonging to that same subject, and nothing else.',
+      'Rebuild the floor, wall, furniture and background revealed behind it so the scene reads as if it was never there, continuing every surface, joint, texture, pattern and line that runs behind it.',
+      workflow.visualRemove.preserveStructure ? 'Keep continuing architectural lines, joints, texture, perspective and structure intact.' : null,
+      'Do not replace it with a different object. Preserve every other person, object, surface, sign and piece of text.'
     ]);
   }
 
