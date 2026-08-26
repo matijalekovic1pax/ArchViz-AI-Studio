@@ -235,7 +235,7 @@ const summarizeRenderSettings = (state: AppState): string[] => {
   const { workflow } = state;
   const render = workflow.render3d;
   const renderMode = state.mode === 'render-3d'
-    ? (workflow.renderMode === 'enhance' ? 'enhance' : DEFAULT_RENDER_GENERATION_MODE)
+    ? normalizeRenderGenerationMode(workflow.renderMode)
     : state.mode === 'render-cad'
       ? DEFAULT_RENDER_GENERATION_MODE
       : workflow.renderMode;
@@ -2208,6 +2208,123 @@ const describeVegetation = (count: number): string => {
   return 'profuse, almost wild vegetation integrating nature and architecture';
 };
 
+const describeShadowStrength = (intensity: number): string => {
+  if (intensity < 25) return 'Cast shadows are faint and open, with plenty of bounced light filling them.';
+  if (intensity < 50) return 'Cast shadows are soft and clearly lifted, retaining visible detail throughout.';
+  if (intensity < 75) return 'Cast shadows are well defined with a natural falloff and readable detail in the darker areas.';
+  if (intensity < 90) return 'Cast shadows are deep and firmly anchored, with strong contact darkening under objects.';
+  return 'Cast shadows are very dark and graphic, approaching solid black in the deepest cores.';
+};
+
+const describeShadowColor = (hex: string): string => {
+  const value = /^#[0-9a-fA-F]{6}$/.test(hex || '') ? hex.toLowerCase() : '';
+  if (!value) return '';
+  const red = Number.parseInt(value.slice(1, 3), 16);
+  const green = Number.parseInt(value.slice(3, 5), 16);
+  const blue = Number.parseInt(value.slice(5, 7), 16);
+  const neutral = Math.max(red, green, blue) - Math.min(red, green, blue) < 18;
+  if (neutral) return 'Shadows stay neutral grey rather than taking on a colour cast.';
+  if (blue >= red && blue >= green) return 'Shadows carry a cool blue cast, as if filled by skylight.';
+  if (red >= green && red >= blue) return 'Shadows carry a warm cast, as if filled by bounced light from nearby warm surfaces.';
+  return 'Shadows carry a soft green cast, as if filled by bounced light from surrounding vegetation.';
+};
+
+const describeAmbientFill = (intensity: number): string => {
+  if (intensity < 20) return 'Ambient fill light is minimal, so unlit areas fall away quickly into darkness.';
+  if (intensity < 45) return 'Ambient fill light is restrained, keeping unlit areas moody but still readable.';
+  if (intensity < 70) return 'Ambient fill light is balanced, keeping unlit areas naturally open.';
+  return 'Ambient fill light is generous, so the whole scene stays bright and evenly lit with little deep shadow.';
+};
+
+const describeAmbientOcclusion = (occlusion: number): string => {
+  if (occlusion < 20) return 'Contact darkening where surfaces meet is barely present.';
+  if (occlusion < 45) return 'Surfaces meet with light, subtle contact darkening in the corners and crevices.';
+  if (occlusion < 70) return 'Surfaces meet with natural contact darkening in corners, reveals and under furniture.';
+  return 'Surfaces meet with pronounced contact darkening, giving corners, reveals and undersides strong depth.';
+};
+
+const describeVehicles = (count: number): string => {
+  if (count < 15) return 'one or two vehicles placed naturally, just enough to give the scene scale';
+  if (count < 40) return 'a handful of parked and moving vehicles reading as ordinary daily use';
+  if (count < 70) return 'steady vehicle activity throughout the visible roadways and forecourt';
+  return 'busy vehicle traffic filling the roadways and drop-off areas';
+};
+
+/** Source adherence as a single continuum, replacing the coarse mode split. */
+const describeSourceAdherence = (adherence: number): string => {
+  if (adherence >= 90) {
+    return 'Source adherence: maximum. Trace the source geometry exactly — every wall position, opening, edge, camera angle and proportion stays as drawn.';
+  }
+  if (adherence >= 70) {
+    return 'Source adherence: high. Keep all geometry, openings, proportions and the camera as drawn; interpret only surface finish, light and atmosphere.';
+  }
+  if (adherence >= 45) {
+    return 'Source adherence: moderate. Keep the massing, layout, circulation and camera, and allow secondary detailing, material choices and entourage to be interpreted.';
+  }
+  if (adherence >= 25) {
+    return 'Source adherence: loose. Keep the overall massing, spatial organisation and camera direction recognisable, and treat detail, materials and atmosphere as open to reinterpretation.';
+  }
+  return 'Source adherence: minimal. Use the source only as a compositional scaffold for massing and camera direction; everything else may be reimagined.';
+};
+
+const describeWhiteBalance = (balance: number): string => {
+  if (balance <= -60) return 'a strongly cool white balance, pushing the whole image blue';
+  if (balance <= -20) return 'a cool white balance with a gentle blue cast';
+  if (balance < 20) return 'a neutral white balance where whites read as true white';
+  if (balance < 60) return 'a warm white balance with a gentle amber cast';
+  return 'a strongly warm white balance, pushing the whole image golden';
+};
+
+const describeSaturation = (saturation: number): string => {
+  if (saturation <= -60) return 'Colour is nearly desaturated, close to monochrome with only faint hue left.';
+  if (saturation <= -20) return 'Colour is muted and restrained, well below natural saturation.';
+  if (saturation < 20) return 'Colour sits at natural, unexaggerated saturation.';
+  if (saturation < 60) return 'Colour is richer than natural without becoming artificial.';
+  return 'Colour is vivid and highly saturated.';
+};
+
+const describeContrast = (contrast: number): string => {
+  if (contrast <= -60) return 'Tonal contrast is very flat, with lifted blacks and compressed highlights.';
+  if (contrast <= -20) return 'Tonal contrast is soft, with gently lifted blacks.';
+  if (contrast < 20) return 'Tonal contrast is natural, holding detail in both highlights and shadows.';
+  if (contrast < 60) return 'Tonal contrast is punchy, with clean blacks and bright highlights.';
+  return 'Tonal contrast is very high and graphic, with crushed blacks and brilliant highlights.';
+};
+
+const RENDER3D_GRADE_DESCRIPTIONS: Record<string, string> = {
+  'none': '',
+  'neutral': 'Colour grade: clean and neutral, like a well-calibrated digital capture with no stylisation.',
+  'warm-film': 'Colour grade: warm photographic film, with creamy highlights, gently warm midtones and soft, slightly brown shadows.',
+  'cool-editorial': 'Colour grade: cool editorial architecture photography, with crisp neutral whites, restrained colour and clean blue-leaning shadows.',
+  'muted-matte': 'Colour grade: muted matte, with lifted shadows, desaturated midtones and a soft, papery finish.',
+  'high-key': 'Colour grade: high key and airy, with bright open tones, minimal deep shadow and a light, spacious feeling.',
+  'deep-contrast': 'Colour grade: deep and contrasty, with rich blacks, dense midtones and dramatic separation between lit and unlit areas.',
+  'bleach-bypass': 'Colour grade: bleach bypass, with reduced saturation, raised contrast and a slightly metallic, silvery cast.',
+};
+
+/** "a, b and c" — used wherever a style bundle's word list is inlined. */
+const joinWords = (words: string[]): string => {
+  const list = words.filter(Boolean);
+  if (list.length <= 1) return list[0] || '';
+  return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+};
+
+const describeDepthOfField = (aperture: number): string => {
+  if (aperture <= 2) return 'a shallow depth of field with the background falling well out of focus';
+  if (aperture <= 4) return 'a moderately shallow depth of field with gentle background separation';
+  if (aperture <= 8) return 'a natural depth of field with most of the scene sharp';
+  if (aperture <= 16) return 'a deep depth of field with foreground and background both sharp';
+  return 'near-total depth of field, everything sharp from foreground to horizon';
+};
+
+const describeExposure = (exposure: number): string => {
+  if (exposure <= -60) return 'Expose about two stops down, for a dark, low-key image.';
+  if (exposure <= -20) return 'Expose about a stop down, protecting the highlights.';
+  if (exposure < 20) return 'Expose neutrally, holding detail in both highlights and shadows.';
+  if (exposure < 60) return 'Expose about a stop up, for a bright, open image.';
+  return 'Expose about two stops up, for a bright high-key image that lets some highlights clip.';
+};
+
 const describeResolution = (res: string): string => {
   const descriptions: Record<string, string> = {
     '720p': 'rendered at HD resolution for quick visualization',
@@ -2342,9 +2459,10 @@ function generate3DRenderPrompt(state: AppState): string {
   const r3d = workflow.render3d;
   const hasSourceImage = Boolean(state.sourceImage || state.uploadedImage);
   const hasStyleReference = Boolean(workflow.styleReferenceEnabled && workflow.styleReferenceImage);
-  const renderMode: RenderGenerationMode = workflow.renderMode === 'enhance'
-    ? 'enhance'
-    : DEFAULT_RENDER_GENERATION_MODE;
+  // Every mode reaches its own prompt text. This used to collapse anything that
+  // was not `enhance` back to strict-realism, which made Concept Push a card
+  // that could be selected but never took effect.
+  const renderMode: RenderGenerationMode = normalizeRenderGenerationMode(workflow.renderMode);
   const render3dSourceMode = workflow.render3dSourceMode || DEFAULT_RENDER3D_SOURCE_MODE;
   const isAlterRenderingMode = render3dSourceMode === 'alter-rendering';
   const isEnhanceMode = !isAlterRenderingMode && renderMode === 'enhance';
@@ -2426,8 +2544,39 @@ function generate3DRenderPrompt(state: AppState): string {
     if (style.promptBundle?.renderingLanguage?.atmosphere) {
       const atmosphereWords = style.promptBundle.renderingLanguage.atmosphere;
       parts.push(isAlterRenderingMode
-        ? `Nudge the atmosphere toward ${atmosphereWords.slice(0, -1).join(', ')}${atmosphereWords.length > 1 ? ' and ' : ''}${atmosphereWords[atmosphereWords.length - 1]} while keeping the same render identity.`
-        : `The overall feeling should be ${atmosphereWords.slice(0, -1).join(', ')}${atmosphereWords.length > 1 ? ' and ' : ''}${atmosphereWords[atmosphereWords.length - 1]}.`);
+        ? `Nudge the atmosphere toward ${joinWords(atmosphereWords)} while keeping the same render identity.`
+        : `The overall feeling should be ${joinWords(atmosphereWords)}.`);
+    }
+    // Style bundles carry more than the one-line description exposes. The
+    // description already summarises primary materials and preferred lighting,
+    // so only the parts it leaves out are added here: what the style avoids,
+    // its camera language, and its rendering detail vocabulary.
+    if (!isAlterRenderingMode) {
+      const bundle: any = style.promptBundle;
+      const detail: string[] = [
+        ...(bundle?.renderingLanguage?.detail || []),
+        ...(bundle?.renderingLanguage?.quality || []),
+      ];
+      if (detail.length) {
+        parts.push(`Render it with ${joinWords(detail)}.`);
+      }
+      // Camera bias only applies when no source image locks the view.
+      if (!hasSourceImage) {
+        const angles: string[] = [
+          ...(bundle?.cameraBias?.preferredAngles || []),
+          ...(bundle?.cameraBias?.preferredFraming || []),
+        ];
+        if (angles.length) {
+          parts.push(`Frame it with a ${joinWords(angles)} camera treatment.`);
+        }
+      }
+      const avoid: string[] = [
+        ...(bundle?.materialBias?.avoid || []),
+        ...(bundle?.lightingBias?.avoid || []),
+      ];
+      if (avoid.length) {
+        parts.push(`This style avoids ${joinWords(avoid)}.`);
+      }
     }
   }
 
@@ -2444,10 +2593,21 @@ function generate3DRenderPrompt(state: AppState): string {
 
   if (light.sun.enabled) {
     lightParts.push(`. ${describeLightSourcePosition(light.sun.azimuth, light.sun.elevation)}`);
-    lightParts.push(` with ${describeColorTemperature(light.sun.colorTemp)}`);
+    // Kelvin is a real unit the model reads directly, so the number goes with
+    // the phrase rather than being thrown away by the descriptive banding.
+    lightParts.push(` with ${describeColorTemperature(light.sun.colorTemp)} at roughly ${light.sun.colorTemp}K`);
+    lightParts.push(`, ${describeSunIntensity(light.sun.intensity)}`);
   }
 
   parts.push(`${lightParts.join('')}.`);
+
+  if (light.shadows.enabled) {
+    parts.push(`${describeShadowStrength(light.shadows.intensity)} ${describeShadowColor(light.shadows.color)}`);
+  } else {
+    parts.push('Keep cast shadows very soft and open, close to a fully overcast lighting condition.');
+  }
+
+  parts.push(`${describeAmbientFill(light.ambient.intensity)} ${describeAmbientOcclusion(light.ambient.occlusion)}`);
 
   // 8. ATMOSPHERE & MOOD
   const atm = r3d.atmosphere;
@@ -2488,7 +2648,7 @@ function generate3DRenderPrompt(state: AppState): string {
     }
 
     if (scene.cars.enabled) {
-      sceneParts.push(', with realistically placed vehicles adding to the sense of place');
+      sceneParts.push(`, with ${describeVehicles(scene.cars.count)}`);
     }
 
     parts.push(`${sceneParts.join('')}.`);
@@ -2497,6 +2657,51 @@ function generate3DRenderPrompt(state: AppState): string {
   // 9b. BACKGROUND REFERENCE - Environment matching instruction
   if (workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage) {
     parts.push(getEnvironmentReferenceInstruction());
+  }
+
+  // 9c. COLOUR & GRADE
+  const colour = r3d.color;
+  if (colour.enabled) {
+    const colourParts: string[] = [];
+    if (colour.paletteEnabled) {
+      colourParts.push(`Build the scene's colour around ${colour.dominant} as the dominant surface colour and ${colour.accent} as the accent colour used sparingly on secondary elements.`);
+    }
+    colourParts.push(`Grade the image with ${describeWhiteBalance(colour.whiteBalance)}.`);
+    colourParts.push(describeSaturation(colour.saturation));
+    colourParts.push(describeContrast(colour.contrast));
+    const grade = RENDER3D_GRADE_DESCRIPTIONS[colour.grade];
+    if (grade) colourParts.push(grade);
+    parts.push(colourParts.join(' '));
+  }
+
+  // 9d. CAMERA
+  const camera = r3d.camera;
+  if (camera.enabled && !isAlterRenderingMode) {
+    parts.push([
+      `Camera: shot on a ${camera.focalLength}mm full-frame lens`,
+      `from roughly ${Math.round(camera.eyeHeight)}cm above the floor`,
+      `at f/${camera.aperture}, giving ${describeDepthOfField(camera.aperture)}.`,
+      describeExposure(camera.exposure),
+      `Keep verticals vertical, as an architectural photographer would with a shift lens.`,
+    ].join(' '));
+  }
+
+  // 9e. MATERIAL OVERRIDES
+  const overrides = (r3d.materials || [])
+    .map((override) => {
+      const element = (override.element || '').trim();
+      const material = getMaterialById(override.materialId);
+      if (!element || !material) return null;
+      return `${element}: ${material.label.toLowerCase()} — ${material.description}`;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+  if (overrides.length) {
+    parts.push(`Material assignments, which override any material implied by the style or the source model: ${overrides.join(' ')}`);
+  }
+
+  // 9f. SOURCE ADHERENCE
+  if (hasSourceImage && !isAlterRenderingMode) {
+    parts.push(describeSourceAdherence(r3d.control.adherence));
   }
 
   // 10. RENDER FORMAT & OUTPUT
@@ -2509,6 +2714,11 @@ function generate3DRenderPrompt(state: AppState): string {
   parts.push(isAlterRenderingMode
     ? 'Finish as the same render with more refined lighting, tone, material response, and atmosphere, not as a new composition.'
     : describeRenderModeClosing(renderMode, rend.resolution));
+
+  const excluded = (r3d.control.negativePrompt || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+  if (excluded) {
+    parts.push(`Must not appear in the image: ${excluded}.`);
+  }
 
   return parts.filter(p => p.trim()).join(' ');
 }

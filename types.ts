@@ -150,6 +150,66 @@ export interface Render3DFormat {
   viewType: string;
 }
 
+/** Film-style colour grades offered by the 3D-to-Render colour section. */
+export type Render3DGrade =
+  | 'none'
+  | 'neutral'
+  | 'warm-film'
+  | 'cool-editorial'
+  | 'muted-matte'
+  | 'high-key'
+  | 'deep-contrast'
+  | 'bleach-bypass';
+
+export const RENDER3D_GRADES: readonly Render3DGrade[] = [
+  'none',
+  'neutral',
+  'warm-film',
+  'cool-editorial',
+  'muted-matte',
+  'high-key',
+  'deep-contrast',
+  'bleach-bypass',
+] as const;
+
+export interface Render3DColor {
+  enabled: boolean;
+  /** When on, the palette anchors below are treated as the scene's key colours. */
+  paletteEnabled: boolean;
+  dominant: string;
+  accent: string;
+  /** -100 fully cool .. +100 fully warm. */
+  whiteBalance: number;
+  saturation: number;
+  contrast: number;
+  grade: Render3DGrade;
+}
+
+export interface Render3DCamera {
+  enabled: boolean;
+  /** Millimetres, full-frame equivalent. */
+  focalLength: number;
+  /** Camera height above the floor, in centimetres. */
+  eyeHeight: number;
+  /** f-number. Lower is shallower depth of field. */
+  aperture: number;
+  /** -100 .. +100, in thirds of a stop at the extremes. */
+  exposure: number;
+}
+
+/** One "this element is made of that material" instruction. */
+export interface Render3DMaterialOverride {
+  id: string;
+  element: string;
+  materialId: string;
+}
+
+export interface Render3DControl {
+  /** 0 = reinterpret freely, 100 = trace the source exactly. */
+  adherence: number;
+  negativePrompt: string;
+}
+
 export type RenderGenerationMode = 'strict-realism' | 'enhance' | 'concept-push';
 
 export const DEFAULT_RENDER_GENERATION_MODE: RenderGenerationMode = 'strict-realism';
@@ -174,6 +234,10 @@ export interface Render3DSettings {
   atmosphere: Render3DAtmosphere;
   scenery: Render3DScenery;
   render: Render3DFormat;
+  color: Render3DColor;
+  camera: Render3DCamera;
+  materials: Render3DMaterialOverride[];
+  control: Render3DControl;
 }
 
 export interface WorkflowSettings {

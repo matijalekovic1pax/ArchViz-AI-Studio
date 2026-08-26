@@ -31,6 +31,57 @@ export const SliderControl: React.FC<SliderControlProps> = ({ label, value, min,
   </div>
 );
 
+export interface LevelOption {
+  value: number;
+  label: string;
+}
+
+export interface LevelControlProps {
+  label: string;
+  value: number;
+  levels: LevelOption[];
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+/**
+ * A stepped control for settings the prompt only distinguishes at a handful of
+ * levels. A 0-100 slider here would offer a hundred positions that collapse
+ * into four or five instructions, so the control shows the steps that actually
+ * exist and names them.
+ */
+export const LevelControl: React.FC<LevelControlProps> = ({ label, value, levels, onChange, disabled, className }) => {
+  const activeIndex = levels.reduce(
+    (closest, level, index) =>
+      Math.abs(level.value - value) < Math.abs(levels[closest].value - value) ? index : closest,
+    0
+  );
+  return (
+    <div className={cn('space-y-2 mb-3', className, disabled && 'opacity-50 pointer-events-none')}>
+      <label className="text-xs font-medium text-foreground">{label}</label>
+      <div className="flex gap-1" role="group" aria-label={label}>
+        {levels.map((level, index) => (
+          <button
+            key={level.value}
+            type="button"
+            aria-pressed={index === activeIndex}
+            onClick={() => onChange(level.value)}
+            className={cn(
+              'flex-1 text-[10px] leading-none py-1.5 px-1 rounded border transition-colors',
+              index === activeIndex
+                ? 'bg-foreground text-background border-foreground font-medium'
+                : 'bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+            )}
+          >
+            {level.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export interface VerticalCardProps {
   label: string;
   description: string;

@@ -160,6 +160,7 @@ const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => 
 
 const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
   ...workflow,
+  render3d: normalizeRender3D(workflow.render3d),
   render3dSourceMode: normalizeRender3DSourceMode(workflow.render3dSourceMode),
   renderMode: normalizeRenderMode(workflow.renderMode),
   upscaleMode: workflow.upscaleMode === 'ai-slop' ? 'ai-slop' : 'resolution',
@@ -295,7 +296,47 @@ const initialRender3D: Render3DSettings = {
     aspectRatio: '16:9',
     viewType: 'passenger-pov',
   },
+  color: {
+    enabled: false,
+    paletteEnabled: false,
+    dominant: '#b8b2a7',
+    accent: '#5b2d82',
+    whiteBalance: 0,
+    saturation: 0,
+    contrast: 0,
+    grade: 'none',
+  },
+  camera: {
+    enabled: false,
+    focalLength: 35,
+    eyeHeight: 160,
+    aperture: 8,
+    exposure: 0,
+  },
+  materials: [],
+  control: {
+    adherence: 85,
+    negativePrompt: '',
+  },
 };
+
+/**
+ * Fills in Render3D sections that a saved project may predate. Without this a
+ * project stored before Colour, Camera, Materials or Source existed would read
+ * `settings.color.enabled` off undefined and take the panel down on load.
+ */
+const normalizeRender3D = (render3d: Render3DSettings | undefined): Render3DSettings => ({
+  ...initialRender3D,
+  ...(render3d || {}),
+  lighting: { ...initialRender3D.lighting, ...(render3d?.lighting || {}) },
+  atmosphere: { ...initialRender3D.atmosphere, ...(render3d?.atmosphere || {}) },
+  scenery: { ...initialRender3D.scenery, ...(render3d?.scenery || {}) },
+  render: { ...initialRender3D.render, ...(render3d?.render || {}) },
+  color: { ...initialRender3D.color, ...(render3d?.color || {}) },
+  camera: { ...initialRender3D.camera, ...(render3d?.camera || {}) },
+  materials: Array.isArray(render3d?.materials) ? render3d.materials : [],
+  control: { ...initialRender3D.control, ...(render3d?.control || {}) },
+});
 
 const initialDocumentTranslate: DocumentTranslateState = {
   queue: [],

@@ -5,13 +5,15 @@ import { Toggle } from '../../ui/Toggle';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Accordion } from '../../ui/Accordion';
 import { Sun, User, Wind, Sparkle, Car, Trees } from 'lucide-react';
-import { SliderControl, VerticalCard, SunPositionWidget } from './SharedRightComponents';
+import { SliderControl, LevelControl, VerticalCard, SunPositionWidget, ColorPicker } from './SharedRightComponents';
+import { MATERIAL_SWATCHES } from '../../../lib/materialCatalog';
 import { cn } from '../../../lib/utils';
-import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, RENDER3D_SOURCE_MODES, Render3DSettings, Render3DSourceMode, RenderGenerationMode } from '../../../types';
+import { DEFAULT_RENDER_GENERATION_MODE, RENDER_GENERATION_MODES, RENDER3D_SOURCE_MODES, Render3DSettings, Render3DSourceMode, RenderGenerationMode, Render3DGrade } from '../../../types';
 
 const RENDER_3D_GENERATION_MODES: readonly RenderGenerationMode[] = [
   DEFAULT_RENDER_GENERATION_MODE,
   'enhance',
+  'concept-push',
 ] as const;
 
 interface Render3DPanelProps {
@@ -20,6 +22,52 @@ interface Render3DPanelProps {
   onAccordionChange?: (value: string | null) => void;
   accordionIdPrefix?: string;
 }
+
+// Each stop maps 1:1 onto a distinct phrase in the prompt engine. Values are
+// the bucket centres, so what the user picks is exactly what the model is told.
+const FOG_LEVELS = [
+  { value: 5, label: 'Haze' },
+  { value: 25, label: 'Soft' },
+  { value: 45, label: 'Mist' },
+  { value: 70, label: 'Thick' },
+  { value: 90, label: 'Dense' },
+];
+const BLOOM_LEVELS = [
+  { value: 12, label: 'Subtle' },
+  { value: 37, label: 'Gentle' },
+  { value: 62, label: 'Prominent' },
+  { value: 87, label: 'Intense' },
+];
+const PEOPLE_LEVELS = [
+  { value: 5, label: 'Sparse' },
+  { value: 20, label: 'Modest' },
+  { value: 45, label: 'Lively' },
+  { value: 80, label: 'Bustling' },
+];
+const VEGETATION_LEVELS = [
+  { value: 10, label: 'Minimal' },
+  { value: 30, label: 'Considered' },
+  { value: 50, label: 'Abundant' },
+  { value: 70, label: 'Lush' },
+  { value: 90, label: 'Wild' },
+];
+const VEHICLE_LEVELS = [
+  { value: 5, label: 'A few' },
+  { value: 25, label: 'Some' },
+  { value: 55, label: 'Steady' },
+  { value: 85, label: 'Busy' },
+];
+const GRADE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'none', label: 'Straight' },
+  { value: 'neutral', label: 'Neutral' },
+  { value: 'warm-film', label: 'Warm film' },
+  { value: 'cool-editorial', label: 'Cool editorial' },
+  { value: 'muted-matte', label: 'Muted matte' },
+  { value: 'high-key', label: 'High key' },
+  { value: 'deep-contrast', label: 'Deep contrast' },
+  { value: 'bleach-bypass', label: 'Bleach bypass' },
+];
+const APERTURE_STOPS = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
 
 export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   showGenerationMode = true,
@@ -43,12 +91,17 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
   }, [dispatch, isRender3DWorkflow, wf.renderMode]);
 
   const updateSection = (section: keyof Render3DSettings, updates: any) => {
+    // `materials` is a list, not a record — spreading it into an object would
+    // turn it into { 0: …, 1: … } and silently break the section.
+    const next = Array.isArray(updates)
+      ? updates
+      : { ...(settings[section] as any), ...updates };
     dispatch({
       type: 'UPDATE_WORKFLOW',
       payload: {
         render3d: {
           ...settings,
-          [section]: { ...settings[section], ...updates }
+          [section]: next
         }
       }
     });
@@ -296,14 +349,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                     />
                   </div>
                   {settings.atmosphere.fog.enabled && (
-                    <SliderControl
+                    <LevelControl
                       className="mb-0"
                       label={t('render3dSettings.sections.atmosphere.fog.density')}
                       value={settings.atmosphere.fog.density}
-                      min={0}
-                      max={100}
-                      step={1}
-                      unit="%"
+                      levels={FOG_LEVELS}
                       onChange={(v) => updateSection('atmosphere', { fog: { ...settings.atmosphere.fog, density: v } })}
                     />
                   )}
@@ -322,14 +372,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                     />
                   </div>
                   {settings.atmosphere.bloom.enabled && (
-                    <SliderControl
+                    <LevelControl
                       className="mb-0"
                       label={t('render3dSettings.sections.atmosphere.bloom.intensity')}
                       value={settings.atmosphere.bloom.intensity}
-                      min={0}
-                      max={100}
-                      step={1}
-                      unit="%"
+                      levels={BLOOM_LEVELS}
                       onChange={(v) => updateSection('atmosphere', { bloom: { ...settings.atmosphere.bloom, intensity: v } })}
                     />
                   )}
@@ -358,13 +405,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                       />
                     </div>
                     {settings.scenery.people.enabled && (
-                      <SliderControl
+                      <LevelControl
                         className="mb-0"
                         label={t('render3dSettings.sections.scenery.people.count')}
                         value={settings.scenery.people.count}
-                        min={0}
-                        max={100}
-                        step={1}
+                        levels={PEOPLE_LEVELS}
                         onChange={(v) => updateSection('scenery', { people: { ...settings.scenery.people, count: v } })}
                       />
                     )}
@@ -385,14 +430,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                       />
                     </div>
                     {settings.scenery.trees.enabled && (
-                      <SliderControl
+                      <LevelControl
                         className="mb-0"
                         label={t('render3dSettings.sections.scenery.vegetation.density')}
                         value={settings.scenery.trees.count}
-                        min={0}
-                        max={100}
-                        step={1}
-                        unit="%"
+                        levels={VEGETATION_LEVELS}
                         onChange={(v) => updateSection('scenery', { trees: { ...settings.scenery.trees, count: v } })}
                       />
                     )}
@@ -413,13 +455,11 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                       />
                     </div>
                     {settings.scenery.cars.enabled && (
-                      <SliderControl
+                      <LevelControl
                         className="mb-0"
                         label={t('render3dSettings.sections.scenery.vehicles.count')}
                         value={settings.scenery.cars.count}
-                        min={0}
-                        max={50}
-                        step={1}
+                        levels={VEHICLE_LEVELS}
                         onChange={(v) => updateSection('scenery', { cars: { ...settings.scenery.cars, count: v } })}
                       />
                     )}
@@ -494,6 +534,272 @@ export const Render3DPanel: React.FC<Render3DPanelProps> = ({
                     </optgroup>
                   </select>
                 </div>
+              </div>
+            ),
+          },
+          {
+            id: sectionId('color'),
+            title: t('render3dSettings.sections.color.title', { defaultValue: 'Colour & Grade' }),
+            content: (
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs font-bold text-foreground-secondary">
+                    {t('render3dSettings.sections.color.enable', { defaultValue: 'Control colour' })}
+                  </span>
+                  <Toggle
+                    label=""
+                    checked={settings.color.enabled}
+                    onChange={(v) => updateSection('color', { ...settings.color, enabled: v })}
+                  />
+                </div>
+
+                {settings.color.enabled && (
+                  <div className="animate-fade-in space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-medium text-foreground">
+                        {t('render3dSettings.sections.color.palette', { defaultValue: 'Palette anchors' })}
+                      </span>
+                      <Toggle
+                        label=""
+                        checked={settings.color.paletteEnabled}
+                        onChange={(v) => updateSection('color', { ...settings.color, paletteEnabled: v })}
+                      />
+                    </div>
+
+                    {settings.color.paletteEnabled && (
+                      <div className="grid grid-cols-2 gap-3 pb-1">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wide text-foreground-muted block">
+                            {t('render3dSettings.sections.color.dominant', { defaultValue: 'Dominant' })}
+                          </label>
+                          <ColorPicker
+                            color={settings.color.dominant}
+                            onChange={(c) => updateSection('color', { ...settings.color, dominant: c })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wide text-foreground-muted block">
+                            {t('render3dSettings.sections.color.accent', { defaultValue: 'Accent' })}
+                          </label>
+                          <ColorPicker
+                            color={settings.color.accent}
+                            onChange={(c) => updateSection('color', { ...settings.color, accent: c })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border-t border-border-subtle pt-3">
+                      <SliderControl
+                        label={t('render3dSettings.sections.color.whiteBalance', { defaultValue: 'White balance' })}
+                        value={settings.color.whiteBalance}
+                        min={-100}
+                        max={100}
+                        step={5}
+                        onChange={(v) => updateSection('color', { ...settings.color, whiteBalance: v })}
+                      />
+                      <SliderControl
+                        label={t('render3dSettings.sections.color.saturation', { defaultValue: 'Saturation' })}
+                        value={settings.color.saturation}
+                        min={-100}
+                        max={100}
+                        step={5}
+                        onChange={(v) => updateSection('color', { ...settings.color, saturation: v })}
+                      />
+                      <SliderControl
+                        label={t('render3dSettings.sections.color.contrast', { defaultValue: 'Contrast' })}
+                        value={settings.color.contrast}
+                        min={-100}
+                        max={100}
+                        step={5}
+                        onChange={(v) => updateSection('color', { ...settings.color, contrast: v })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        {t('render3dSettings.sections.color.grade', { defaultValue: 'Grade' })}
+                      </label>
+                      <select
+                        className="w-full bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                        value={settings.color.grade}
+                        onChange={(e) => updateSection('color', { ...settings.color, grade: e.target.value as Render3DGrade })}
+                      >
+                        {GRADE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: sectionId('camera'),
+            title: t('render3dSettings.sections.camera.title', { defaultValue: 'Camera' }),
+            content: (
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs font-bold text-foreground-secondary">
+                    {t('render3dSettings.sections.camera.enable', { defaultValue: 'Specify the lens' })}
+                  </span>
+                  <Toggle
+                    label=""
+                    checked={settings.camera.enabled}
+                    onChange={(v) => updateSection('camera', { ...settings.camera, enabled: v })}
+                  />
+                </div>
+
+                {settings.camera.enabled && (
+                  <div className="animate-fade-in">
+                    <SliderControl
+                      label={t('render3dSettings.sections.camera.focalLength', { defaultValue: 'Focal length' })}
+                      value={settings.camera.focalLength}
+                      min={14}
+                      max={200}
+                      step={1}
+                      unit="mm"
+                      onChange={(v) => updateSection('camera', { ...settings.camera, focalLength: v })}
+                    />
+                    <SliderControl
+                      label={t('render3dSettings.sections.camera.eyeHeight', { defaultValue: 'Camera height' })}
+                      value={settings.camera.eyeHeight}
+                      min={20}
+                      max={400}
+                      step={5}
+                      unit="cm"
+                      onChange={(v) => updateSection('camera', { ...settings.camera, eyeHeight: v })}
+                    />
+                    <div className="mb-3 space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <label className="text-xs font-medium text-foreground">
+                          {t('render3dSettings.sections.camera.aperture', { defaultValue: 'Aperture' })}
+                        </label>
+                        <span className="text-[10px] font-mono text-foreground-muted">f/{settings.camera.aperture}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        {APERTURE_STOPS.map((stop) => (
+                          <button
+                            key={stop}
+                            type="button"
+                            aria-pressed={settings.camera.aperture === stop}
+                            onClick={() => updateSection('camera', { ...settings.camera, aperture: stop })}
+                            className={cn(
+                              'flex-1 text-[9px] leading-none py-1.5 rounded border transition-colors',
+                              settings.camera.aperture === stop
+                                ? 'bg-foreground text-background border-foreground font-medium'
+                                : 'bg-surface-elevated border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted'
+                            )}
+                          >
+                            {stop}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <SliderControl
+                      label={t('render3dSettings.sections.camera.exposure', { defaultValue: 'Exposure' })}
+                      value={settings.camera.exposure}
+                      min={-100}
+                      max={100}
+                      step={5}
+                      onChange={(v) => updateSection('camera', { ...settings.camera, exposure: v })}
+                    />
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: sectionId('materials'),
+            title: t('render3dSettings.sections.materials.title', { defaultValue: 'Material Overrides' }),
+            content: (
+              <div className="space-y-3">
+                <p className="text-[10px] leading-relaxed text-foreground-muted">
+                  {t('render3dSettings.sections.materials.hint', {
+                    defaultValue: 'Name a part of the building and pick what it should be made of. These override the material implied by the style or the source model.',
+                  })}
+                </p>
+
+                {settings.materials.map((override) => (
+                  <div key={override.id} className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={override.element}
+                      placeholder={t('render3dSettings.sections.materials.elementPlaceholder', { defaultValue: 'facade, floor, soffit…' })}
+                      onChange={(e) => updateSection('materials', settings.materials.map((entry) =>
+                        entry.id === override.id ? { ...entry, element: e.target.value } : entry
+                      ))}
+                      className="flex-1 min-w-0 bg-surface-elevated border border-border rounded text-xs h-8 px-2"
+                    />
+                    <select
+                      value={override.materialId}
+                      onChange={(e) => updateSection('materials', settings.materials.map((entry) =>
+                        entry.id === override.id ? { ...entry, materialId: e.target.value } : entry
+                      ))}
+                      className="flex-1 min-w-0 bg-surface-elevated border border-border rounded text-xs h-8 px-1"
+                    >
+                      <option value="">{t('render3dSettings.sections.materials.pick', { defaultValue: 'Material…' })}</option>
+                      {MATERIAL_SWATCHES.map((swatch) => (
+                        <option key={swatch.id} value={swatch.id}>{swatch.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      aria-label={t('render3dSettings.sections.materials.remove', { defaultValue: 'Remove assignment' })}
+                      onClick={() => updateSection('materials', settings.materials.filter((entry) => entry.id !== override.id))}
+                      className="shrink-0 w-7 h-8 rounded border border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => updateSection('materials', [
+                    ...settings.materials,
+                    { id: `mat-${Date.now()}`, element: '', materialId: '' },
+                  ])}
+                  className="w-full text-[11px] py-2 rounded border border-dashed border-border text-foreground-muted hover:text-foreground hover:border-foreground-muted transition-colors"
+                >
+                  {t('render3dSettings.sections.materials.add', { defaultValue: '+ Assign a material' })}
+                </button>
+              </div>
+            ),
+          },
+          {
+            id: sectionId('control'),
+            title: t('render3dSettings.sections.control.title', { defaultValue: 'Source & Exclusions' }),
+            content: (
+              <div>
+                <SliderControl
+                  label={t('render3dSettings.sections.control.adherence', { defaultValue: 'Source adherence' })}
+                  value={settings.control.adherence}
+                  min={0}
+                  max={100}
+                  step={5}
+                  unit="%"
+                  onChange={(v) => updateSection('control', { ...settings.control, adherence: v })}
+                />
+                <p className="text-[10px] leading-relaxed text-foreground-muted -mt-1 mb-4">
+                  {settings.control.adherence >= 90
+                    ? t('render3dSettings.sections.control.adherenceMax', { defaultValue: 'Trace the model exactly. Only surface, light and atmosphere are interpreted.' })
+                    : settings.control.adherence >= 45
+                      ? t('render3dSettings.sections.control.adherenceMid', { defaultValue: 'Keep massing, layout and camera. Detailing and materials may be interpreted.' })
+                      : t('render3dSettings.sections.control.adherenceLow', { defaultValue: 'Use the model as a scaffold. Expect real reinterpretation.' })}
+                </p>
+
+                <label className="text-xs font-medium text-foreground mb-1.5 block">
+                  {t('render3dSettings.sections.control.negative', { defaultValue: 'Keep out of the image' })}
+                </label>
+                <textarea
+                  value={settings.control.negativePrompt}
+                  onChange={(e) => updateSection('control', { ...settings.control, negativePrompt: e.target.value })}
+                  placeholder={t('render3dSettings.sections.control.negativePlaceholder', { defaultValue: 'lens flare, visible watermarks, distorted signage…' })}
+                  rows={2}
+                  className="w-full bg-surface-elevated border border-border rounded text-xs p-2 resize-none leading-relaxed"
+                />
               </div>
             ),
           },

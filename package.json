@@ -13,7 +13,8 @@
     "mcp:test": "node mcp/archwiz-test-mcp-server.mjs",
     "verify:assistant": "node scripts/verify-assistant-integration.mjs",
     "verify:image-edit": "node scripts/verify-image-edit-pipeline.mjs",
-    "verify:image-edit:live": "node scripts/verify-openai-image-edit-live.mjs"
+    "verify:image-edit:live": "node scripts/verify-openai-image-edit-live.mjs",
+    "verify:render3d": "node scripts/verify-render3d-controls.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
