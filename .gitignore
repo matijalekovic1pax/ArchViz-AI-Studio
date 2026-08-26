@@ -37,3 +37,6 @@ dist-ssr
 
 # Supabase local CLI artifacts
 supabase/.temp/
+
+# Vercel env files pulled locally (contain real secrets)
+.vercel/.env*.local
