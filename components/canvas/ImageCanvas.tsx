@@ -2128,6 +2128,14 @@ const StandardCanvas: React.FC = () => {
     setIsPlaying(false);
   }, [state.workflow.videoState.generatedVideoUrl]);
 
+  // The generating overlay blurs and covers the canvas, which puts the player
+  // controls out of reach — pause anything still playing underneath it so a
+  // previous clip cannot keep running through the next generation.
+  useEffect(() => {
+    if (!state.isGenerating && !showVisualAutoSelecting) return;
+    videoRef.current?.pause();
+  }, [state.isGenerating, showVisualAutoSelecting]);
+
 
   useEffect(() => {
     if (!state.uploadedImage || !isSelectTool || selectionMode !== 'brush') {
