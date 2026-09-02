@@ -928,8 +928,8 @@ export interface HeadshotSettings {
 }
 
 // Video Studio Types
-export type VideoModel = 'veo-3.1-generate-preview' | 'kling-2.6';
-export type VideoInputMode = 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
+export type VideoModel = 'veo-3.1-generate-preview' | 'gemini-omni-1.1-flash' | 'kling-2.6';
+export type VideoInputMode = 'text-to-video' | 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
 export type CameraMotionType = 'static' | 'pan' | 'orbit' | 'dolly' | 'crane' | 'drone' | 'rotate' | 'push-in' | 'pull-out' | 'custom';
 
 // Social Media Presets
@@ -971,6 +971,12 @@ export interface ImageData {
 // API Provider Types
 export type KlingProvider = 'piapi' | 'ulazai' | 'wavespeedai';
 
+// Gemini Omni Flash (Interactions API) video tasks
+export type OmniVideoTask = 'text_to_video' | 'image_to_video' | 'reference_to_video' | 'edit' | 'extend';
+
+// How the next Omni generation relates to the previous one
+export type OmniFollowUpMode = 'none' | 'edit' | 'extend';
+
 // Video Generation Progress
 export interface VideoGenerationProgress {
   phase: 'initializing' | 'processing' | 'rendering' | 'complete' | 'error';
@@ -1000,6 +1006,12 @@ export interface VideoState {
   generateAudio?: boolean;
   personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
   negativePrompt?: string;
+
+  // Gemini Omni Flash Specific Parameters
+  // The Interactions API is stateful: the id of the last stored Omni interaction
+  // lets a follow-up request edit or extend that video instead of starting over.
+  omniInteractionId?: string | null;
+  omniFollowUp?: OmniFollowUpMode;
 
   // Veo input images
   videoInputImage: string | null; // base64 data URL for image-animate mode

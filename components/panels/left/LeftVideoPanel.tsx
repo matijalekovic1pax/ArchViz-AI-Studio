@@ -2,7 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
-import { Upload, X, ArrowRight, Wand2, Layers } from 'lucide-react';
+import { Upload, X, ArrowRight, Wand2, Layers, Type } from 'lucide-react';
 
 // ── Reusable image upload zone ────────────────────────────────────────────────
 
@@ -116,8 +116,23 @@ export const LeftVideoPanel = () => {
 
   if (isLocked) return <VideoLockBanner compact />;
 
+  const isOmni = video.model === 'gemini-omni-1.1-flash';
   const isAnimate = video.inputMode === 'image-animate';
   const isInterpolate = video.inputMode === 'image-morph';
+  const isTextToVideo = video.inputMode === 'text-to-video';
+  const modelName = isOmni ? 'Omni Flash' : 'Veo';
+
+  // Omni generates straight from a prompt but cannot interpolate between two
+  // frames; Veo is the opposite.
+  const modes = isOmni
+    ? ([
+        { id: 'image-animate',  icon: Wand2, label: 'Animate Image', sub: 'Image → Video' },
+        { id: 'text-to-video',  icon: Type,  label: 'Text → Video',  sub: 'Prompt only' },
+      ] as const)
+    : ([
+        { id: 'image-animate', icon: Wand2,  label: 'Animate Image',      sub: 'Image → Video' },
+        { id: 'image-morph',   icon: Layers, label: 'Interpolate Frames', sub: 'Start → End' },
+      ] as const);
 
   return (
     <div className="space-y-5">
@@ -126,10 +141,7 @@ export const LeftVideoPanel = () => {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Mode</p>
         <div className="grid grid-cols-2 gap-2">
-          {([
-            { id: 'image-animate', icon: Wand2,  label: 'Animate Image',       sub: 'Image → Video' },
-            { id: 'image-morph',   icon: Layers, label: 'Interpolate Frames',  sub: 'Start → End' },
-          ] as const).map(({ id, icon: Icon, label, sub }) => (
+          {modes.map(({ id, icon: Icon, label, sub }) => (
             <button
               key={id}
               onClick={() => updateVideo({ inputMode: id })}
@@ -167,9 +179,18 @@ export const LeftVideoPanel = () => {
           />
           {!video.videoInputImage && (
             <p className="mt-2 text-[10px] text-foreground-muted text-center opacity-70">
-              Upload an image — Veo will animate it
+              Upload an image — {modelName} will animate it
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── Text → Video: no input image, the prompt carries the whole scene ── */}
+      {isTextToVideo && (
+        <div className="p-2.5 rounded-lg bg-surface-elevated border border-border text-[10px] text-foreground-muted leading-relaxed">
+          {modelName} will generate the video from your prompt alone. Describe the
+          subject, the camera move, the light and the length you want — Omni takes
+          its pacing and its audio from the wording.
         </div>
       )}
 
@@ -178,7 +199,7 @@ export const LeftVideoPanel = () => {
         <div className="space-y-3">
           {/* Info */}
           <div className="p-2.5 rounded-lg bg-surface-elevated border border-border text-[10px] text-foreground-muted leading-relaxed">
-            Veo will generate a smooth video that morphs from the <strong className="text-foreground">start frame</strong> to the <strong className="text-foreground">end frame</strong>.
+            {modelName} will generate a smooth video that morphs from the <strong className="text-foreground">start frame</strong> to the <strong className="text-foreground">end frame</strong>.
           </div>
 
           {/* Start frame */}

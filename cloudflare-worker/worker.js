@@ -78,6 +78,16 @@ const KLING_ENDPOINTS = {
 const QUICK_POLL_ATTEMPTS = 3;
 const POLL_INTERVAL_MS = 2000;
 
+// Gemini Omni Flash (Interactions API) video generation
+const OMNI_DEFAULT_MODEL = 'gemini-omni-1.1-flash';
+const OMNI_ALLOWED_MODELS = new Set(['gemini-omni-1.1-flash', 'gemini-omni-flash-preview']);
+const OMNI_ALLOWED_TASKS = new Set(['text_to_video', 'image_to_video', 'reference_to_video', 'edit', 'extend']);
+const OMNI_ALLOWED_RESOLUTIONS = new Set(['360p', '720p', '1080p', '4k']);
+const OMNI_ALLOWED_ASPECT_RATIOS = new Set(['16:9', '9:16']);
+// Inline base64 above this size is streamed through /api/omni/video instead of
+// being embedded in a JSON status response.
+const OMNI_INLINE_VIDEO_LIMIT_BYTES = 4 * 1024 * 1024;
+
 // Feedback reporting
 const FEEDBACK_SNAPSHOT_INLINE_LIMIT_BYTES = 6 * 1024 * 1024; // 6MB
 const FEEDBACK_ALLOWED_STATUSES = new Set(['new', 'triaged', 'in_progress', 'resolved', 'closed']);
@@ -2013,6 +2023,7 @@ function getLogProviderForPath(path) {
   if (path.startsWith('/api/gemini/')) return 'gemini';
   if (path.startsWith('/api/openai/')) return 'openai';
   if (path.startsWith('/api/veo/')) return 'veo';
+  if (path.startsWith('/api/omni/')) return 'omni';
   if (path.startsWith('/api/kling/')) return 'kling';
   if (path.startsWith('/api/convert/')) return 'convertapi';
   if (path.startsWith('/api/ilovepdf/')) return 'ilovepdf';
@@ -4848,6 +4859,322 @@ async function handleVeoDownload(request, env) {
   }
 }
 
+// ─── Gemini Omni Flash (Interactions API) ────────────────────────────────────
+//
+// Omni is not a predictLongRunning model like Veo — it runs on the Interactions
+// API, which is stateful and returns the video inside the interaction's steps.
+// We ask for `background: true` so the POST returns an interaction id straight
+// away and the client can poll, exactly like the Veo operation flow.
+
+/** Build one Interactions API content block from a gateway image payload */
+function omniImageContent(img) {
+  if (!img?.bytesBase64Encoded || !img?.mimeType) return null;
+  return { type: 'image', data: img.bytesBase64Encoded, mime_type: img.mimeType };
+}
+
+/** Pull the generated video out of an interaction's steps (last model output wins) */
+function extractOmniVideo(interaction) {
+  const steps = Array.isArray(interaction?.steps) ? interaction.steps : [];
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i];
+    if (step?.type !== 'model_output') continue;
+    const content = Array.isArray(step.content) ? step.content : [];
+    for (let j = content.length - 1; j >= 0; j--) {
+      const part = content[j];
+      if (part?.type !== 'video') continue;
+      const mimeType = part.mime_type || part.mimeType || 'video/mp4';
+      if (part.uri) return { uri: part.uri, mimeType };
+      if (part.data) return { data: part.data, mimeType };
+      // Some revisions nest the payload under `video`
+      if (part.video?.uri) return { uri: part.video.uri, mimeType };
+      if (part.video?.data) return { data: part.video.data, mimeType };
+    }
+  }
+  return null;
+}
+
+/** Approximate decoded byte length of a base64 string without decoding it */
+function base64ByteLength(base64) {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+/**
+ * A URI-delivered video points at the Files API, which may still be PROCESSING.
+ * Returns 'active' | 'processing' | 'failed' | 'unknown'.
+ */
+async function checkOmniFileState(uri, env) {
+  const match = uri.match(/\/v1beta\/files\/([^/:?]+)/);
+  if (!match) return 'unknown';
+  try {
+    const resp = await fetch(`${GEMINI_API_BASE}/files/${match[1]}`, {
+      headers: { 'x-goog-api-key': env.GEMINI_API_KEY },
+    });
+    if (!resp.ok) return 'unknown';
+    const data = await resp.json();
+    const state = data?.state;
+    if (state === 'ACTIVE') return 'active';
+    if (state === 'PROCESSING') return 'processing';
+    if (state === 'FAILED') return 'failed';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** Fetch an interaction by id */
+async function fetchOmniInteraction(interactionId, env) {
+  const resp = await fetch(`${GEMINI_API_BASE}/interactions/${encodeURIComponent(interactionId)}`, {
+    headers: { 'x-goog-api-key': env.GEMINI_API_KEY },
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    let msg = `Status check failed (${resp.status})`;
+    try { msg = JSON.parse(text).error?.message || msg; } catch {}
+    const error = new Error(msg);
+    error.httpStatus = resp.status;
+    throw error;
+  }
+  return JSON.parse(text);
+}
+
+/** Map an interaction object onto the shared video status contract */
+async function omniInteractionToStatus(interaction, env) {
+  const interactionId = interaction?.id;
+  const status = interaction?.status;
+
+  if (status === 'failed' || status === 'cancelled' || status === 'incomplete' || status === 'budget_exceeded') {
+    const message =
+      interaction?.error?.message ||
+      interaction?.incomplete_details?.reason ||
+      `Video generation ${status}`;
+    return { status: 'error', error: message };
+  }
+
+  if (status && status !== 'completed') {
+    // in_progress / queued / requires_action
+    return { status: 'processing', interactionId };
+  }
+
+  const video = extractOmniVideo(interaction);
+  if (!video) {
+    // A completed interaction with no video means the model refused or the
+    // output was filtered — surface whatever text it produced instead.
+    const reason = interaction?.output_text || 'No video was returned by the model';
+    return { status: 'error', error: reason };
+  }
+
+  if (video.uri) {
+    const fileState = await checkOmniFileState(video.uri, env);
+    if (fileState === 'processing') return { status: 'processing', interactionId };
+    if (fileState === 'failed') return { status: 'error', error: 'The generated video file failed to process' };
+    return {
+      status: 'complete',
+      videoUrl: video.uri,
+      mimeType: video.mimeType,
+      interactionId,
+      expiresAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+    };
+  }
+
+  // Inline base64: keep large payloads out of the JSON response
+  if (base64ByteLength(video.data) > OMNI_INLINE_VIDEO_LIMIT_BYTES) {
+    return { status: 'complete', interactionId, needsBinaryFetch: true, mimeType: video.mimeType };
+  }
+  return { status: 'complete', videoBase64: video.data, mimeType: video.mimeType, interactionId };
+}
+
+// ─── Route: POST /api/omni/generate ──────────────────────────────────────────
+
+async function handleOmniGenerate(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  try {
+    if (!env.GEMINI_API_KEY) {
+      return corsResponse(origin, { status: 'error', error: 'GEMINI_API_KEY is not configured' }, { status: 500 });
+    }
+
+    const body = await request.json();
+    const {
+      prompt,
+      image,
+      referenceImages,
+      model: requestedModel,
+      task: requestedTask,
+      aspectRatio = '16:9',
+      resolution = '1080p',
+      previousInteractionId,
+    } = body;
+
+    const model = OMNI_ALLOWED_MODELS.has(requestedModel) ? requestedModel : OMNI_DEFAULT_MODEL;
+
+    // Assemble the multimodal input: images first, then the prompt text
+    const input = [];
+    const primaryImage = omniImageContent(image);
+    if (primaryImage) input.push(primaryImage);
+    if (Array.isArray(referenceImages)) {
+      for (const ref of referenceImages.slice(0, 4)) {
+        const content = omniImageContent(ref);
+        if (content) input.push(content);
+      }
+    }
+    if (typeof prompt === 'string' && prompt.trim()) {
+      input.push({ type: 'text', text: prompt.trim() });
+    }
+    if (input.length === 0) {
+      return corsResponse(origin, { status: 'error', error: 'A prompt or an input image is required' }, { status: 400 });
+    }
+
+    // Infer the task from the payload when the client did not pin one
+    const imageCount = input.filter((part) => part.type === 'image').length;
+    const inferredTask = previousInteractionId
+      ? 'edit'
+      : imageCount > 1
+        ? 'reference_to_video'
+        : imageCount === 1
+          ? 'image_to_video'
+          : 'text_to_video';
+    const task = OMNI_ALLOWED_TASKS.has(requestedTask) ? requestedTask : inferredTask;
+
+    const payload = {
+      model,
+      input,
+      response_format: {
+        type: 'video',
+        aspect_ratio: OMNI_ALLOWED_ASPECT_RATIOS.has(aspectRatio) ? aspectRatio : '16:9',
+        resolution: OMNI_ALLOWED_RESOLUTIONS.has(resolution) ? resolution : '720p',
+        // Always hand back a Files API URI so multi-megabyte videos never round
+        // trip through the worker as base64.
+        delivery: 'uri',
+      },
+      generation_config: { video_config: { task } },
+      store: true,
+      background: true,
+    };
+    if (previousInteractionId) payload.previous_interaction_id = previousInteractionId;
+
+    console.log(`[omni-generate] model=${model} task=${task} images=${imageCount} aspect=${payload.response_format.aspect_ratio} res=${payload.response_format.resolution} chained=${!!previousInteractionId}`);
+
+    const postInteraction = async (requestBody) => fetch(`${GEMINI_API_BASE}/interactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    let resp = await postInteraction(payload);
+
+    // If background execution is rejected for this model, fall back to the
+    // synchronous unary call — it blocks until the video is ready.
+    if (resp.status === 400) {
+      const errText = await resp.text();
+      console.log(`[omni-generate] background rejected, retrying synchronously: ${errText.slice(0, 300)}`);
+      const { background, ...syncPayload } = payload;
+      resp = await postInteraction(syncPayload);
+    }
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let msg = `API error (${resp.status})`;
+      try { msg = JSON.parse(errText).error?.message || msg; } catch {}
+      return corsResponse(origin, { status: 'error', error: msg }, { status: resp.status });
+    }
+
+    const interaction = await resp.json();
+    console.log(`[omni-generate] id=${interaction?.id} status=${interaction?.status}`);
+
+    if (!interaction?.id && interaction?.status !== 'completed') {
+      return corsResponse(origin, { status: 'error', error: 'No interaction id returned' }, { status: 500 });
+    }
+
+    let result = await omniInteractionToStatus(interaction, env);
+    if (result.status !== 'processing') return corsResponse(origin, result);
+
+    // Quick-poll a few times so short clips come back on the first request
+    for (let i = 0; i < QUICK_POLL_ATTEMPTS; i++) {
+      await sleep(POLL_INTERVAL_MS);
+      try {
+        result = await omniInteractionToStatus(await fetchOmniInteraction(interaction.id, env), env);
+      } catch (err) {
+        return corsResponse(origin, { status: 'error', error: err.message });
+      }
+      if (result.status !== 'processing') return corsResponse(origin, result);
+    }
+
+    return corsResponse(origin, {
+      status: 'processing',
+      interactionId: interaction.id,
+      message: 'Video generation in progress. Poll /api/omni/status for updates.',
+    });
+  } catch (err) {
+    return corsResponse(origin, { status: 'error', error: err.message }, { status: 500 });
+  }
+}
+
+// ─── Route: GET /api/omni/status ─────────────────────────────────────────────
+
+async function handleOmniStatus(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const url = new URL(request.url);
+  const interactionId = url.searchParams.get('interaction');
+
+  if (!interactionId) {
+    return corsResponse(origin, { error: 'Missing interaction parameter' }, { status: 400 });
+  }
+
+  try {
+    const interaction = await fetchOmniInteraction(interactionId, env);
+    return corsResponse(origin, await omniInteractionToStatus(interaction, env));
+  } catch (err) {
+    return corsResponse(origin, { status: 'error', error: err.message });
+  }
+}
+
+// ─── Route: GET /api/omni/video?interaction=... ──────────────────────────────
+// Streams the finished video as binary so inline base64 never has to be
+// embedded in a JSON payload.
+
+async function handleOmniVideo(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const url = new URL(request.url);
+  const interactionId = url.searchParams.get('interaction');
+
+  if (!interactionId) {
+    return corsResponse(origin, { error: 'Missing interaction parameter' }, { status: 400 });
+  }
+
+  try {
+    const interaction = await fetchOmniInteraction(interactionId, env);
+    const video = extractOmniVideo(interaction);
+    if (!video) return corsResponse(origin, { error: 'No video in interaction' }, { status: 404 });
+
+    const headers = {
+      ...getCorsHeaders(origin),
+      'Content-Type': video.mimeType || 'video/mp4',
+      'Content-Disposition': 'inline',
+      'Cache-Control': 'private, max-age=172800',
+    };
+
+    if (video.uri) {
+      const parsed = new URL(video.uri);
+      if (!parsed.searchParams.has('alt')) parsed.searchParams.set('alt', 'media');
+      const upstream = await fetch(parsed.toString(), { headers: { 'x-goog-api-key': env.GEMINI_API_KEY } });
+      if (!upstream.ok) {
+        return corsResponse(origin, { error: `Video fetch failed (${upstream.status})` }, { status: upstream.status });
+      }
+      return new Response(upstream.body, { status: 200, headers });
+    }
+
+    const binary = atob(video.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Response(bytes, { status: 200, headers });
+  } catch (err) {
+    return corsResponse(origin, { error: err.message }, { status: 500 });
+  }
+}
+
 // ─── Route: POST /api/kling/generate ─────────────────────────────────────────
 
 async function handleKlingGenerate(request, env) {
@@ -6460,6 +6787,17 @@ export default {
     }
     if (path === '/api/veo/video' && request.method === 'GET') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'video', route: '/api/veo/video' }, () => handleVeoVideo(request, env));
+    }
+
+    // Gemini Omni Flash video generation
+    if (path === '/api/omni/generate' && request.method === 'POST') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'generate', route: '/api/omni/generate' }, () => handleOmniGenerate(request, env));
+    }
+    if (path === '/api/omni/status' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'status', route: '/api/omni/status' }, () => handleOmniStatus(request, env));
+    }
+    if (path === '/api/omni/video' && request.method === 'GET') {
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'video', route: '/api/omni/video' }, () => handleOmniVideo(request, env));
     }
 
     // Kling video generation

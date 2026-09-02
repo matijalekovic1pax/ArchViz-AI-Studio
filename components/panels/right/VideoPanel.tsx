@@ -4,6 +4,38 @@ import { cn } from '../../../lib/utils';
 import { Download, Play, RotateCcw, Lock, Unlock } from 'lucide-react';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
 import { downloadFile } from '../../../lib/download';
+import type { VideoModel } from '../../../types';
+
+// ── Selectable video models ───────────────────────────────────────────────────
+// Kling stays out of the picker: it has a service but no UI surface of its own.
+const VIDEO_MODEL_META: Record<string, {
+  label: string;
+  tagline: string;
+  badge: string;
+  vendor: string;
+  blurb: string;
+  dot: string;
+  filePrefix: string;
+}> = {
+  'veo-3.1-generate-preview': {
+    label: 'Veo 3.1',
+    tagline: 'cinematic',
+    badge: 'Veo 3.1 Preview',
+    vendor: 'Google DeepMind',
+    blurb: '4-8s, up to 4K, frame interpolation, seed control and native audio.',
+    dot: 'bg-blue-500',
+    filePrefix: 'veo',
+  },
+  'gemini-omni-1.1-flash': {
+    label: 'Omni Flash',
+    tagline: 'fast + editable',
+    badge: 'Gemini Omni Flash',
+    vendor: 'Google DeepMind',
+    blurb: '3-10s at 24fps, up to 4K, audio always on, and the result stays editable.',
+    dot: 'bg-emerald-500',
+    filePrefix: 'omni',
+  },
+};
 
 // ── Small pill-button group ───────────────────────────────────────────────────
 interface PillGroupProps<T extends string | number> {
@@ -147,32 +179,96 @@ export const VideoPanel = () => {
   const updateVideo = (payload: Partial<typeof video>) =>
     dispatch({ type: 'UPDATE_VIDEO_STATE', payload });
 
-  // ── Veo constraints ──
-  const is4kLocked = video.resolution === '4k' && video.duration < 8;
+  const isOmni = video.model === 'gemini-omni-1.1-flash';
+  const modelMeta = VIDEO_MODEL_META[video.model] ?? VIDEO_MODEL_META['veo-3.1-generate-preview'];
+
+  // Switching models has to drag any unsupported setting back in range
+  const selectModel = (next: VideoModel) => {
+    if (next === video.model) return;
+    const patch: Partial<typeof video> = { model: next };
+
+    if (next === 'gemini-omni-1.1-flash') {
+      // Omni renders 3-10s and cannot interpolate between two frames
+      if (video.duration < 3) patch.duration = 3;
+      if (video.inputMode === 'image-morph') patch.inputMode = 'image-animate';
+    } else {
+      // Veo renders 4-8s
+      if (video.duration < 4) patch.duration = 4;
+      if (video.duration > 8) patch.duration = 8;
+      if (video.inputMode === 'text-to-video') patch.inputMode = 'image-animate';
+      patch.omniFollowUp = 'none';
+    }
+
+    dispatch({ type: 'UPDATE_VIDEO_STATE', payload: patch });
+  };
+
+  // ── Model constraints ──
+  // Veo only renders 4K at its full 8s length; Omni has no such pairing.
+  const needsEightSecondsFor4k = (res: string) => !isOmni && res === '4k' && video.duration < 8;
+  const durationOptions = isOmni
+    ? [
+        { value: 3, label: '3s' },
+        { value: 5, label: '5s' },
+        { value: 8, label: '8s' },
+        { value: 10, label: '10s' },
+      ]
+    : [
+        { value: 4, label: '4s' },
+        { value: 6, label: '6s' },
+        { value: 8, label: '8s', hint: 'Required for 4K' },
+      ];
 
   return (
     <div className="space-y-5">
 
-      {/* Header badge */}
-      <div className="flex items-center gap-2 pb-1 border-b border-border">
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-elevated border border-border">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          <span className="text-[10px] font-bold tracking-wide text-foreground">Veo 3.1 Preview</span>
+      {/* ── Model ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Model</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(Object.keys(VIDEO_MODEL_META) as VideoModel[]).map((id) => {
+            const meta = VIDEO_MODEL_META[id];
+            const isActive = video.model === id;
+            return (
+              <button
+                key={id}
+                onClick={() => selectModel(id)}
+                title={meta.blurb}
+                className={cn(
+                  'py-2 px-2 rounded-lg border transition-all flex flex-col items-center gap-0.5',
+                  isActive
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+                )}
+              >
+                <span className="text-[11px] font-bold leading-tight">{meta.label}</span>
+                <span className="text-[9px] font-normal opacity-60">{meta.tagline}</span>
+              </button>
+            );
+          })}
         </div>
-        <span className="text-[9px] text-foreground-muted">Google DeepMind</span>
+        <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-elevated border border-border">
+            <div className={cn('w-1.5 h-1.5 rounded-full', modelMeta.dot)} />
+            <span className="text-[10px] font-bold tracking-wide text-foreground">{modelMeta.badge}</span>
+          </div>
+          <span className="text-[9px] text-foreground-muted">{modelMeta.vendor}</span>
+        </div>
       </div>
 
       {/* ── Duration ── */}
-      <PillGroup
-        label="Duration"
-        value={video.duration}
-        onChange={(v) => updateVideo({ duration: v })}
-        options={[
-          { value: 4, label: '4s' },
-          { value: 6, label: '6s' },
-          { value: 8, label: '8s', hint: 'Required for 4K' },
-        ]}
-      />
+      <div>
+        <PillGroup
+          label="Duration"
+          value={video.duration}
+          onChange={(v) => updateVideo({ duration: v })}
+          options={durationOptions}
+        />
+        {isOmni && (
+          <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">
+            Omni has no duration parameter — this is written into the prompt as a target length.
+          </p>
+        )}
+      </div>
 
       {/* ── Aspect Ratio ── */}
       <PillGroup
@@ -190,7 +286,7 @@ export const VideoPanel = () => {
         <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Resolution</p>
         <div className="grid grid-cols-3 gap-1.5">
           {(['720p', '1080p', '4k'] as const).map((res) => {
-            const needs8s = res === '4k' && video.duration < 8;
+            const needs8s = needsEightSecondsFor4k(res);
             const isActive = video.resolution === res;
             return (
               <button
@@ -218,68 +314,107 @@ export const VideoPanel = () => {
       </div>
 
       {/* ── Toggles ── */}
-      <div className="space-y-2">
-        <ToggleRow
-          label="Generate Audio"
-          value={!!video.generateAudio}
-          onChange={(v) => updateVideo({ generateAudio: v })}
-        />
-      </div>
+      {!isOmni && (
+        <div className="space-y-2">
+          <ToggleRow
+            label="Generate Audio"
+            value={!!video.generateAudio}
+            onChange={(v) => updateVideo({ generateAudio: v })}
+          />
+        </div>
+      )}
 
-      {/* ── Person Generation ── */}
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">People in Scene</p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {([
-            { value: 'dont_allow',  label: 'Off',              sub: 'no people' },
-            { value: 'allow_adult', label: 'Animate',          sub: 'existing' },
-            { value: 'allow_all',   label: 'Add new',          sub: 'people' },
-          ] as const).map((opt) => (
+      {/* ── Person Generation (Veo only) ── */}
+      {!isOmni && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">People in Scene</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {([
+              { value: 'dont_allow',  label: 'Off',              sub: 'no people' },
+              { value: 'allow_adult', label: 'Animate',          sub: 'existing' },
+              { value: 'allow_all',   label: 'Add new',          sub: 'people' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => updateVideo({ personGeneration: opt.value })}
+                className={cn(
+                  'py-2 px-1 text-[11px] font-bold rounded-lg border transition-all flex flex-col items-center gap-0.5',
+                  (video.personGeneration ?? 'allow_adult') === opt.value
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+                )}
+              >
+                <span>{opt.label}</span>
+                <span className="text-[9px] font-normal opacity-60">{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Seed (Veo only — Omni has no seed parameter) ── */}
+      {!isOmni && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Seed</p>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              value={video.seed}
+              onChange={(e) => updateVideo({ seed: parseInt(e.target.value) || 0 })}
+              disabled={!video.seedLocked}
+              className="flex-1 h-9 px-3 text-xs bg-surface-elevated border border-border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
+            />
             <button
-              key={opt.value}
-              onClick={() => updateVideo({ personGeneration: opt.value })}
+              onClick={() => updateVideo({ seedLocked: !video.seedLocked })}
+              title={video.seedLocked ? 'Unlock seed (random)' : 'Lock seed (reproducible)'}
               className={cn(
-                'py-2 px-1 text-[11px] font-bold rounded-lg border transition-all flex flex-col items-center gap-0.5',
-                (video.personGeneration ?? 'allow_adult') === opt.value
+                'w-9 h-9 flex items-center justify-center rounded-lg border transition-all',
+                video.seedLocked
                   ? 'bg-foreground text-background border-foreground'
-                  : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+                  : 'bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted'
               )}
             >
-              <span>{opt.label}</span>
-              <span className="text-[9px] font-normal opacity-60">{opt.sub}</span>
+              {video.seedLocked ? <Lock size={13} /> : <Unlock size={13} />}
             </button>
-          ))}
+          </div>
+          {!video.seedLocked && (
+            <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">Random seed each generation</p>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* ── Seed ── */}
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Seed</p>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={video.seed}
-            onChange={(e) => updateVideo({ seed: parseInt(e.target.value) || 0 })}
-            disabled={!video.seedLocked}
-            className="flex-1 h-9 px-3 text-xs bg-surface-elevated border border-border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
-          />
-          <button
-            onClick={() => updateVideo({ seedLocked: !video.seedLocked })}
-            title={video.seedLocked ? 'Unlock seed (random)' : 'Lock seed (reproducible)'}
-            className={cn(
-              'w-9 h-9 flex items-center justify-center rounded-lg border transition-all',
-              video.seedLocked
-                ? 'bg-foreground text-background border-foreground'
-                : 'bg-surface-elevated border-border text-foreground-muted hover:border-foreground-muted'
-            )}
-          >
-            {video.seedLocked ? <Lock size={13} /> : <Unlock size={13} />}
-          </button>
+      {/* ── Omni follow-up: the Interactions API keeps the last video in context ── */}
+      {isOmni && video.omniInteractionId && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Next Generation</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {([
+              { value: 'none',   label: 'New',    sub: 'from scratch' },
+              { value: 'edit',   label: 'Edit',   sub: 'last video' },
+              { value: 'extend', label: 'Extend', sub: 'continue it' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => updateVideo({ omniFollowUp: opt.value })}
+                className={cn(
+                  'py-2 px-1 text-[11px] font-bold rounded-lg border transition-all flex flex-col items-center gap-0.5',
+                  (video.omniFollowUp ?? 'none') === opt.value
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-surface-elevated border-border hover:border-foreground-muted text-foreground'
+                )}
+              >
+                <span>{opt.label}</span>
+                <span className="text-[9px] font-normal opacity-60">{opt.sub}</span>
+              </button>
+            ))}
+          </div>
+          {(video.omniFollowUp ?? 'none') !== 'none' && (
+            <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">
+              Your prompt is applied to the video you just generated.
+            </p>
+          )}
         </div>
-        {!video.seedLocked && (
-          <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">Random seed each generation</p>
-        )}
-      </div>
+      )}
 
       {/* ── Generation Progress ── */}
       {isGenerating && progress && (
@@ -312,7 +447,7 @@ export const VideoPanel = () => {
           <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Output</p>
           <VideoPlayer
             src={video.generatedVideoUrl}
-            onDownload={() => downloadFile(video.generatedVideoUrl!, `veo-${Date.now()}.mp4`)}
+            onDownload={() => downloadFile(video.generatedVideoUrl!, `${modelMeta.filePrefix}-${Date.now()}.mp4`)}
           />
           <button
             onClick={() => updateVideo({ generatedVideoUrl: null, generationProgress: null })}

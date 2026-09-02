@@ -5246,6 +5246,7 @@ function generateVideoPrompt(state: AppState): string {
   const userBrief = state.prompt?.trim() || video.scenario?.trim();
 
   const modeDesc: Record<string, string> = {
+    'text-to-video': 'Generate an architectural visualization video from the written brief alone.',
     'image-animate': 'Animate the attached architectural image into a coherent short video.',
     'image-morph': 'Create a smooth architectural video transition between the provided start frame and end frame.',
     'camera-path': 'Generate an architectural visualization video with a deliberate camera path.',
@@ -5261,6 +5262,8 @@ function generateVideoPrompt(state: AppState): string {
     parts.push('Input relationship: the attached image is the locked first frame. Preserve its architecture, materials, lighting mood, signage/text shapes, camera perspective, horizon, crop, and object placement at the start of the video.');
   } else if (video.inputMode === 'image-morph') {
     parts.push('Input relationship: the first frame and final frame are authoritative keyframes. Preserve each keyframe composition at its endpoint and interpolate only the physically plausible motion between them.');
+  } else if (video.inputMode === 'text-to-video') {
+    parts.push(TEXT_TO_IMAGE_FRAMEWORK);
   } else if (video.keyframes.length > 0) {
     parts.push(`Input relationship: use the ${video.keyframes.length} provided keyframe images as authoritative continuity anchors. Preserve project identity, proportions, materials, signage/text shapes, lighting logic, and viewpoint continuity between shots.`);
   } else {

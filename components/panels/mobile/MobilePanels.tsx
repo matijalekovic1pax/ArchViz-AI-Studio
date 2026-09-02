@@ -487,6 +487,9 @@ export const MobilePanels: React.FC<{
   const videoReady = isVideoMode
     ? (() => {
         const videoState = state.workflow.videoState;
+        if (videoState.inputMode === 'text-to-video') {
+          return Boolean(state.prompt?.trim() || videoState.scenario?.trim());
+        }
         if (videoState.inputMode === 'image-animate') {
           return Boolean(videoState.videoInputImage || state.uploadedImage);
         }

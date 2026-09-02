@@ -176,6 +176,9 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   const videoReady = isVideoMode
     ? (() => {
         const vs = state.workflow.videoState;
+        if (vs.inputMode === 'text-to-video') {
+          return !!(state.prompt?.trim() || vs.scenario?.trim());
+        }
         if (vs.inputMode === 'image-animate') {
           return !!(vs.videoInputImage || state.uploadedImage);
         }

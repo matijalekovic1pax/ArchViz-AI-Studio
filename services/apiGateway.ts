@@ -19,6 +19,7 @@ import type {
   CvConversionModel,
   DocumentTranslateDocument,
   GenerationMode,
+  OmniVideoTask,
 } from '../types';
 
 const DEFAULT_GATEWAY_URL = import.meta.env.PROD
@@ -396,6 +397,7 @@ const getGatewayLogRouteInfo = (path: string) => {
   if (path.startsWith('/api/openai/responses')) return { provider: 'openai', action: 'responses' };
   if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2.5-sunburst', action: 'images' };
   if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
+  if (path.startsWith('/api/omni/')) return { provider: 'omni', model: 'gemini-omni-1.1-flash', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/kling/')) return { provider: 'kling', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/convert/')) return { provider: 'convertapi', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/ilovepdf/')) return { provider: 'ilovepdf', action: path.replace('/api/ilovepdf/', '') };
@@ -1193,6 +1195,50 @@ export async function veoDownloadVideo(videoUrl: string): Promise<string> {
 export async function veoFetchVideo(operationName: string): Promise<string> {
   const params = new URLSearchParams({ op: operationName });
   const resp = await gatewayFetch(`/api/veo/video?${params}`, { timeoutMs: 300_000 }); // 5 min for large videos
+  if (!resp.ok) throw new Error(`Video fetch failed (${resp.status})`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
+// ─── Gemini Omni Flash Video Generation ──────────────────────────────────────
+
+export interface OmniGenerateRequest {
+  prompt: string;
+  image?: { bytesBase64Encoded: string; mimeType: string };
+  referenceImages?: Array<{ bytesBase64Encoded: string; mimeType: string }>;
+  model?: string;
+  task?: OmniVideoTask;
+  aspectRatio?: string;
+  resolution?: string;
+  /** Chains onto a stored interaction so the model edits/extends that video */
+  previousInteractionId?: string;
+}
+
+export interface OmniStatusResult {
+  status: 'complete' | 'processing' | 'error';
+  videoUrl?: string;
+  videoBase64?: string;
+  mimeType?: string;
+  interactionId?: string;
+  /** true when the video is ready but must be streamed via /api/omni/video */
+  needsBinaryFetch?: boolean;
+  expiresAt?: string;
+  error?: string;
+}
+
+export async function omniGenerate(request: OmniGenerateRequest): Promise<OmniStatusResult> {
+  return gatewayPost('/api/omni/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
+}
+
+export async function omniCheckStatus(interactionId: string): Promise<OmniStatusResult> {
+  const params = new URLSearchParams({ interaction: interactionId });
+  return gatewayGet(`/api/omni/status?${params}`, { timeoutMs: 15_000 });
+}
+
+/** Stream a completed Omni video through the gateway and return a local blob URL */
+export async function omniFetchVideo(interactionId: string): Promise<string> {
+  const params = new URLSearchParams({ interaction: interactionId });
+  const resp = await gatewayFetch(`/api/omni/video?${params}`, { timeoutMs: 300_000 });
   if (!resp.ok) throw new Error(`Video fetch failed (${resp.status})`);
   const blob = await resp.blob();
   return URL.createObjectURL(blob);

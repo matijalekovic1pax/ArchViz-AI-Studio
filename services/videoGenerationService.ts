@@ -2,7 +2,8 @@
  * Video Generation Service - Unified Interface
  * All API calls go through the API gateway — no API keys in the client.
  *
- * Abstracts Veo and Kling services, routing requests to the appropriate API
+ * Abstracts Veo, Gemini Omni Flash and Kling services, routing requests to the
+ * appropriate API
  * Handles model capability detection
  * Provides a single interface for video generation across different providers
  */
@@ -11,7 +12,9 @@ import type {
   VideoState,
   VideoGenerationProgress,
   ImageData,
-  KlingProvider
+  KlingProvider,
+  VideoModel,
+  OmniVideoTask
 } from '../types';
 
 import {
@@ -24,6 +27,15 @@ import {
 } from './veoService';
 
 import {
+  initOmniService,
+  getOmniService,
+  isOmniServiceInitialized,
+  type OmniGenerationOptions,
+  type OmniResponse,
+  OmniError
+} from './omniService';
+
+import {
   initKlingService,
   getKlingService,
   isKlingServiceInitialized,
@@ -34,7 +46,7 @@ import {
 
 // Unified Generation Options
 export interface VideoGenerationOptions {
-  model: 'veo-3.1-generate-preview' | 'kling-2.6';
+  model: VideoModel;
   prompt: string;
   inputImage?: ImageData;
   keyframes?: ImageData[];
@@ -53,6 +65,10 @@ export interface VideoGenerationOptions {
   personGeneration?: 'allow_adult' | 'dont_allow' | 'allow_all';
   negativePrompt?: string;
   klingProvider: KlingProvider;
+  // Gemini Omni Flash only
+  referenceImages?: ImageData[];
+  omniTask?: OmniVideoTask;
+  previousInteractionId?: string;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -61,12 +77,15 @@ export interface VideoGenerationOptions {
 export interface VideoGenerationResponse {
   videoUrl: string;
   thumbnailUrl?: string;
-  model: 'veo-3.1-generate-preview' | 'kling-2.6';
+  model: VideoModel;
+  /** Gemini Omni Flash: handle for editing or extending this video later */
+  interactionId?: string;
   expiresAt?: Date;
 }
 
 // Model Capabilities
 export interface ModelCapabilities {
+  minDuration: number;
   maxDuration: number;
   maxResolution: '720p' | '1080p' | '4k';
   supportsCameraControls: boolean;
@@ -78,7 +97,7 @@ export interface ModelCapabilities {
 export class VideoGenerationError extends Error {
   constructor(
     message: string,
-    public model?: 'veo-3.1-generate-preview' | 'kling-2.6',
+    public model?: VideoModel,
     public code?: string,
     public details?: unknown
   ) {
@@ -103,6 +122,8 @@ class VideoGenerationService {
     // Route to appropriate service
     if (model === 'veo-3.1-generate-preview') {
       return this.generateWithVeo(options);
+    } else if (model === 'gemini-omni-1.1-flash') {
+      return this.generateWithOmni(options);
     } else if (model === 'kling-2.6') {
       return this.generateWithKling(options);
     } else {
@@ -147,6 +168,57 @@ class VideoGenerationService {
         throw new VideoGenerationError(
           error.message,
           'veo-3.1-generate-preview',
+          error.code,
+          error.details
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video using Gemini Omni Flash
+   *
+   * Omni has no duration/seed/person-generation parameters — length, motion and
+   * audio are all steered through the prompt — so those options are ignored here
+   * rather than silently mistranslated.
+   */
+  private async generateWithOmni(options: VideoGenerationOptions): Promise<VideoGenerationResponse> {
+    const omniService = getOmniService();
+
+    // Omni renders 16:9 or 9:16 only
+    const aspectRatio = options.aspectRatio === '9:16' ? '9:16' : '16:9';
+
+    const omniOptions: OmniGenerationOptions = {
+      prompt: options.prompt,
+      inputImage: options.inputImage,
+      referenceImages:
+        options.referenceImages ||
+        options.keyframes ||
+        [options.startFrame, options.endFrame].filter((img): img is ImageData => !!img),
+      aspectRatio,
+      resolution: options.resolution,
+      task: options.omniTask,
+      previousInteractionId: options.previousInteractionId,
+      onProgress: options.onProgress,
+      abortSignal: options.abortSignal
+    };
+
+    try {
+      const response: OmniResponse = await omniService.generateVideo(omniOptions);
+
+      return {
+        videoUrl: response.videoUrl,
+        thumbnailUrl: response.thumbnailUrl,
+        model: 'gemini-omni-1.1-flash',
+        interactionId: response.interactionId,
+        expiresAt: response.expiresAt
+      };
+    } catch (error) {
+      if (error instanceof OmniError) {
+        throw new VideoGenerationError(
+          error.message,
+          'gemini-omni-1.1-flash',
           error.code,
           error.details
         );
@@ -203,12 +275,16 @@ class VideoGenerationService {
    * No API keys needed — gateway handles auth
    */
   private ensureServiceInitialized(
-    model: 'veo-3.1-generate-preview' | 'kling-2.6',
+    model: VideoModel,
     klingProvider: KlingProvider
   ): void {
     if (model === 'veo-3.1-generate-preview') {
       if (!isVeoServiceInitialized()) {
         initVeoService();
+      }
+    } else if (model === 'gemini-omni-1.1-flash') {
+      if (!isOmniServiceInitialized()) {
+        initOmniService();
       }
     } else if (model === 'kling-2.6') {
       if (!isKlingServiceInitialized()) {
@@ -224,17 +300,30 @@ class VideoGenerationService {
   /**
    * Get model capabilities
    */
-  getModelCapabilities(model: 'veo-3.1-generate-preview' | 'kling-2.6'): ModelCapabilities {
+  getModelCapabilities(model: VideoModel): ModelCapabilities {
     if (model === 'veo-3.1-generate-preview') {
       return {
+        minDuration: 4,
         maxDuration: 8,
         maxResolution: '4k',
         supportsCameraControls: false,
         supportedAspectRatios: ['16:9', '9:16'],
         supportsMultipleKeyframes: false
       };
+    } else if (model === 'gemini-omni-1.1-flash') {
+      return {
+        // Omni has no duration parameter — 3-10s is steered by the prompt
+        minDuration: 3,
+        maxDuration: 10,
+        maxResolution: '4k',
+        supportsCameraControls: false,
+        supportedAspectRatios: ['16:9', '9:16'],
+        // Extra images act as references, not timed keyframes
+        supportsMultipleKeyframes: true
+      };
     } else {
       return {
+        minDuration: 5,
         maxDuration: 10,
         maxResolution: '1080p',
         supportsCameraControls: true,
@@ -253,6 +342,10 @@ class VideoGenerationService {
 
     if (options.duration > capabilities.maxDuration) {
       errors.push(`${options.model} supports max ${capabilities.maxDuration}s videos (requested: ${options.duration}s)`);
+    }
+
+    if (options.duration < capabilities.minDuration) {
+      errors.push(`${options.model} supports min ${capabilities.minDuration}s videos (requested: ${options.duration}s)`);
     }
 
     if (options.resolution === '4k' && capabilities.maxResolution !== '4k') {
@@ -282,7 +375,7 @@ class VideoGenerationService {
 
     return {
       ...options,
-      duration: Math.min(options.duration, capabilities.maxDuration),
+      duration: Math.min(Math.max(options.duration, capabilities.minDuration), capabilities.maxDuration),
       resolution: options.resolution === '4k' && capabilities.maxResolution !== '4k'
         ? capabilities.maxResolution
         : options.resolution,
@@ -321,5 +414,5 @@ export function initVideoGenerationService(): VideoGenerationService {
  * Check if any video service is initialized
  */
 export function isVideoServiceInitialized(): boolean {
-  return isVeoServiceInitialized() || isKlingServiceInitialized();
+  return isVeoServiceInitialized() || isOmniServiceInitialized() || isKlingServiceInitialized();
 }

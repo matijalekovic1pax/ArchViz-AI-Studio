@@ -208,9 +208,12 @@ const getGenerationLogRoute = (
   videoState: AppState['workflow']['videoState']
 ) => {
   if (mode === 'video') {
-    const usesKling = videoState.model === 'kling-2.6';
+    const videoProviders: Record<string, string> = {
+      'kling-2.6': 'kling',
+      'gemini-omni-1.1-flash': 'omni',
+    };
     return {
-      provider: usesKling ? 'kling' : 'veo',
+      provider: videoProviders[videoState.model] || 'veo',
       model: videoState.model,
     };
   }
@@ -4622,6 +4625,12 @@ export function useGeneration(): UseGenerationReturn {
         const videoService = getVideoGenerationService();
         // Prepare input image for image-animate mode
         // Prefer videoState.videoInputImage, fall back to global uploadedImage
+        const isOmniModel = videoState.model === 'gemini-omni-1.1-flash';
+        // Editing or extending only makes sense while the previous Omni
+        // interaction id is still around to chain onto.
+        const omniFollowUp = isOmniModel && videoState.omniInteractionId
+          ? (videoState.omniFollowUp ?? 'none')
+          : 'none';
         let inputImage: ImageData | undefined;
         if (videoState.inputMode === 'image-animate') {
           const src = videoState.videoInputImage || state.uploadedImage;
@@ -4636,7 +4645,7 @@ export function useGeneration(): UseGenerationReturn {
         // Prepare start/end frames for Veo interpolation (image-morph mode)
         let startFrame: ImageData | undefined;
         let endFrame: ImageData | undefined;
-        if (videoState.inputMode === 'image-morph' && videoState.model === 'veo-3.1-generate-preview') {
+        if (videoState.inputMode === 'image-morph') {
           if (videoState.startFrame) {
             const sf = dataUrlToImageData(videoState.startFrame);
             if (sf) startFrame = { ...sf, dataUrl: videoState.startFrame };
@@ -4678,11 +4687,12 @@ export function useGeneration(): UseGenerationReturn {
           const videoResult = await runWithRetry(
             'video generation',
             () => videoService.generateVideo({
-              model: 'veo-3.1-generate-preview',
+              model: videoState.model,
               prompt: fullPrompt,
               inputImage,
               startFrame,
               endFrame,
+              keyframes,
               duration: videoState.duration,
               resolution: videoState.resolution,
               fps: 30,
@@ -4696,6 +4706,21 @@ export function useGeneration(): UseGenerationReturn {
               personGeneration: videoState.personGeneration,
               negativePrompt: videoState.negativePrompt || undefined,
               klingProvider: 'piapi',
+              // Gemini Omni Flash: pin the task to the chosen input mode and
+              // chain onto the last stored interaction when editing/extending.
+              // A follow-up is only possible while we still hold its id.
+              omniTask: isOmniModel
+                ? (omniFollowUp === 'extend'
+                    ? 'extend'
+                    : omniFollowUp === 'edit'
+                      ? 'edit'
+                      : videoState.inputMode === 'text-to-video'
+                        ? 'text_to_video'
+                        : videoState.inputMode === 'image-animate'
+                          ? 'image_to_video'
+                          : undefined)
+                : undefined,
+              previousInteractionId: omniFollowUp === 'none' ? undefined : videoState.omniInteractionId || undefined,
               onProgress: onVideoProgress,
               abortSignal
             }),
@@ -4706,6 +4731,8 @@ export function useGeneration(): UseGenerationReturn {
             type: 'UPDATE_VIDEO_STATE',
             payload: {
               generatedVideoUrl: videoResult.videoUrl,
+              omniInteractionId: videoResult.interactionId ?? null,
+              omniFollowUp: 'none',
               generationProgress: {
                 phase: 'complete',
                 progress: 100,
