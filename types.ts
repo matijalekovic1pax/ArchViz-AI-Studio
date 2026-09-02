@@ -20,6 +20,29 @@ export type GenerationMode =
   | 'pdf-compression'
   | 'headshot';
 
+/** Every GenerationMode, for validating values that arrive from outside the app. */
+export const GENERATION_MODES: readonly GenerationMode[] = [
+  'generate-text',
+  'render-3d',
+  'scene-compose',
+  'render-cad',
+  'masterplan',
+  'visual-edit',
+  'angle-change',
+  'exploded',
+  'section',
+  'render-sketch',
+  'multi-angle',
+  'upscale',
+  'img-to-cad',
+  'video',
+  'material-validation',
+  'document-translate',
+  'cv-convert',
+  'pdf-compression',
+  'headshot',
+];
+
 export type ImageGenerationModel = 'nano-banana' | 'chatgpt-image-generation-2';
 
 export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';

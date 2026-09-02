@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, PropsWithChildren } from 'react';
+import { clearPersistedMode } from '../../lib/sessionPrefs';
 import { AuthUser, loadAuthSession, clearAuthSession } from '../../lib/googleAuth';
 import { clearGatewayToken, isGatewayAuthenticated, setOnSessionExpired } from '../../services/apiGateway';
 import { LoginPage } from './LoginPage';
@@ -66,6 +67,8 @@ export function AuthGate({ children }: PropsWithChildren) {
     logoutCalledRef.current = true;
     clearGatewayToken();
     clearAuthSession();
+    // Do not strand the next person on this machine in the previous user's tab.
+    clearPersistedMode();
     setUser(null);
     if (reload) {
       window.location.reload();
