@@ -1,4 +1,5 @@
 import React, { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { getVideoReadiness } from '../lib/videoReadiness';
 import { Bot, ChevronDown, FileText, Loader2, MessageCircle, Paperclip, RefreshCw, Send, SquareMousePointer, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
@@ -767,24 +768,10 @@ const getAssistantGenerationReadiness = (
         return { ready: false, message: 'Video Studio access is currently locked.' };
       }
       const video = state.workflow.videoState;
-      if (video.inputMode === 'text-to-video') {
-        return state.prompt?.trim() || video.scenario?.trim()
-          ? { ready: true, prompt: video.scenario || safePromptOverride }
-          : { ready: false, message: 'Write a prompt before generating video from text.' };
-      }
-      if (video.inputMode === 'image-animate') {
-        return video.videoInputImage || state.uploadedImage
-          ? { ready: true, prompt: video.scenario || safePromptOverride }
-          : { ready: false, message: 'Add a video input image before generating video.' };
-      }
-      if (video.inputMode === 'image-morph') {
-        return video.startFrame && video.endFrame
-          ? { ready: true, prompt: video.scenario || safePromptOverride }
-          : { ready: false, message: 'Add start and end frames before interpolating video.' };
-      }
-      return video.keyframes.length > 0
+      const videoReadiness = getVideoReadiness(state);
+      return videoReadiness.ready
         ? { ready: true, prompt: video.scenario || safePromptOverride }
-        : { ready: false, message: 'Add video keyframes before generating.' };
+        : { ready: false, message: videoReadiness.message };
     }
     case 'headshot':
       return state.workflow.headshot.leftImage || state.workflow.headshot.frontImage || state.workflow.headshot.rightImage
