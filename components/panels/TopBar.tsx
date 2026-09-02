@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, FileStack, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
+import { getVideoReadiness } from '../../lib/videoReadiness';
 import { Toggle } from '../ui/Toggle';
 import { Slider } from '../ui/Slider';
 import { useGeneration } from '../../hooks/useGeneration';
@@ -173,21 +174,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
   };
 
   // Video mode validation
-  const videoReady = isVideoMode
-    ? (() => {
-        const vs = state.workflow.videoState;
-        if (vs.inputMode === 'text-to-video') {
-          return !!(state.prompt?.trim() || vs.scenario?.trim());
-        }
-        if (vs.inputMode === 'image-animate') {
-          return !!(vs.videoInputImage || state.uploadedImage);
-        }
-        if (vs.inputMode === 'image-morph') {
-          return !!(vs.startFrame && vs.endFrame);
-        }
-        return vs.keyframes.length > 0;
-      })()
-    : true;
+  const videoReady = isVideoMode ? getVideoReadiness(state).ready : true;
 
   const isDisabled = state.mode === 'material-validation'
     ? false

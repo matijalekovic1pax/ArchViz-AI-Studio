@@ -5046,13 +5046,20 @@ async function handleOmniGenerate(request, env) {
         // trip through the worker as base64.
         delivery: 'uri',
       },
-      generation_config: { video_config: { task } },
       store: true,
       background: true,
     };
-    if (previousInteractionId) payload.previous_interaction_id = previousInteractionId;
 
-    console.log(`[omni-generate] model=${model} task=${task} images=${imageCount} aspect=${payload.response_format.aspect_ratio} res=${payload.response_format.resolution} chained=${!!previousInteractionId}`);
+    // The API rejects previous_interaction_id alongside an explicit video task
+    // ("previous_interaction_id is not allowed when video task is set") — when
+    // chaining onto a stored interaction the task is inferred from context.
+    if (previousInteractionId) {
+      payload.previous_interaction_id = previousInteractionId;
+    } else {
+      payload.generation_config = { video_config: { task } };
+    }
+
+    console.log(`[omni-generate] model=${model} task=${previousInteractionId ? 'inferred (chained)' : task} images=${imageCount} aspect=${payload.response_format.aspect_ratio} res=${payload.response_format.resolution} chained=${!!previousInteractionId}`);
 
     const postInteraction = async (requestBody) => fetch(`${GEMINI_API_BASE}/interactions`, {
       method: 'POST',

@@ -5245,6 +5245,25 @@ function generateVideoPrompt(state: AppState): string {
   const parts: string[] = [];
   const userBrief = state.prompt?.trim() || video.scenario?.trim();
 
+  // A chained Omni turn acts on the video the model already holds. The full
+  // scene-building framework would fight that footage instead of guiding it, so
+  // send the instruction and the continuity contract only.
+  const omniFollowUp = video.model === 'gemini-omni-1.1-flash' && video.omniInteractionId
+    ? (video.omniFollowUp ?? 'none')
+    : 'none';
+  if (omniFollowUp !== 'none') {
+    if (omniFollowUp === 'extend') {
+      parts.push('Continue the video from where it ends, as one seamless shot.');
+      if (userBrief) parts.push(`Continuation direction: ${userBrief}.`);
+      parts.push('Match the existing camera motion, lighting, materials, people and pacing so the join is invisible.');
+    } else {
+      parts.push('Edit the video you just generated.');
+      parts.push(userBrief ? `Requested change: ${userBrief}.` : 'Refine the video.');
+      parts.push('Change only what the request names. Everything else — architecture, materials, lighting, camera path, people, and any visible text or signage — must stay exactly as it is.');
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
   const modeDesc: Record<string, string> = {
     'text-to-video': 'Generate an architectural visualization video from the written brief alone.',
     'image-animate': 'Animate the attached architectural image into a coherent short video.',

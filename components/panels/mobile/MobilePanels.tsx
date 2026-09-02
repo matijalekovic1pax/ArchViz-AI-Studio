@@ -1,4 +1,5 @@
 import React from 'react';
+import { getVideoReadiness } from '../../../lib/videoReadiness';
 import { useTranslation } from 'react-i18next';
 import {
   Palette,
@@ -484,21 +485,7 @@ export const MobilePanels: React.FC<{
     visualEditRequiresSelection(state.workflow.activeTool) &&
     !hasUsableVisualSelection(state.workflow.visualSelections);
   const visualEditBusy = state.mode === 'visual-edit' && state.workflow.visualAutoSelecting;
-  const videoReady = isVideoMode
-    ? (() => {
-        const videoState = state.workflow.videoState;
-        if (videoState.inputMode === 'text-to-video') {
-          return Boolean(state.prompt?.trim() || videoState.scenario?.trim());
-        }
-        if (videoState.inputMode === 'image-animate') {
-          return Boolean(videoState.videoInputImage || state.uploadedImage);
-        }
-        if (videoState.inputMode === 'image-morph') {
-          return Boolean(videoState.startFrame && videoState.endFrame);
-        }
-        return videoState.keyframes.length > 0;
-      })()
-    : true;
+  const videoReady = isVideoMode ? getVideoReadiness(state).ready : true;
   const generateDisabled = state.mode === 'generate-text'
     ? true
     : state.mode === 'material-validation'

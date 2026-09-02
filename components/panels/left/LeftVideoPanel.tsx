@@ -117,10 +117,40 @@ export const LeftVideoPanel = () => {
   if (isLocked) return <VideoLockBanner compact />;
 
   const isOmni = video.model === 'gemini-omni-1.1-flash';
-  const isAnimate = video.inputMode === 'image-animate';
-  const isInterpolate = video.inputMode === 'image-morph';
-  const isTextToVideo = video.inputMode === 'text-to-video';
+  const followUp = isOmni && video.omniInteractionId ? (video.omniFollowUp ?? 'none') : 'none';
+  const isFollowUp = followUp !== 'none';
+  const isAnimate = video.inputMode === 'image-animate' && !isFollowUp;
+  const isInterpolate = video.inputMode === 'image-morph' && !isFollowUp;
+  const isTextToVideo = video.inputMode === 'text-to-video' && !isFollowUp;
   const modelName = isOmni ? 'Omni Flash' : 'Veo';
+
+  // The Prompt tab compiles this brief into the full instruction. A manual edit
+  // down there becomes an override, and then this box no longer reaches the model.
+  const promptOverridden = Boolean(state.prompt?.trim());
+
+  const briefCopy = isFollowUp
+    ? followUp === 'extend'
+      ? {
+          label: 'Continuation',
+          placeholder: 'e.g. the camera keeps pushing toward the far window as the concourse empties',
+          hint: 'Describe what should happen next in the clip you just generated.',
+        }
+      : {
+          label: 'Edit Instruction',
+          placeholder: 'e.g. warmer evening light, remove the people on the left',
+          hint: 'Describe the change to apply to the clip you just generated.',
+        }
+    : isTextToVideo
+      ? {
+          label: 'Prompt',
+          placeholder: 'e.g. slow dolly through a sunlit concrete atrium, travellers crossing the frame, soft ambient noise',
+          hint: 'Subject, setting, camera move, light and length — Omni takes its pacing from the wording.',
+        }
+      : {
+          label: 'Motion Prompt',
+          placeholder: 'e.g. slow push-in, people walking, gentle light shift',
+          hint: 'Describe the motion you want. Feeds the full prompt in the Prompt tab.',
+        };
 
   // Omni generates straight from a prompt but cannot interpolate between two
   // frames; Veo is the opposite.
@@ -144,7 +174,9 @@ export const LeftVideoPanel = () => {
           {modes.map(({ id, icon: Icon, label, sub }) => (
             <button
               key={id}
-              onClick={() => updateVideo({ inputMode: id })}
+              // Choosing an input mode means starting fresh, so drop any
+              // pending edit/extend rather than leaving a dead end.
+              onClick={() => updateVideo({ inputMode: id, omniFollowUp: 'none' })}
               className={cn(
                 'flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all',
                 video.inputMode === id
@@ -191,6 +223,15 @@ export const LeftVideoPanel = () => {
           {modelName} will generate the video from your prompt alone. Describe the
           subject, the camera move, the light and the length you want — Omni takes
           its pacing and its audio from the wording.
+        </div>
+      )}
+
+      {/* ── Follow-up turn: the model already holds the clip, so no inputs ── */}
+      {isFollowUp && (
+        <div className="p-2.5 rounded-lg bg-surface-elevated border border-border text-[10px] text-foreground-muted leading-relaxed">
+          {followUp === 'extend' ? 'Extending' : 'Editing'} the clip you just generated —
+          no input image needed. Switch <strong className="text-foreground">Next Generation</strong> back
+          to <strong className="text-foreground">New</strong> in the right panel to start from scratch.
         </div>
       )}
 
@@ -244,6 +285,49 @@ export const LeftVideoPanel = () => {
           )}
         </div>
       )}
+
+      {/* ── Brief ── the raw instruction, compiled into the Prompt tab below ── */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+            {briefCopy.label}
+          </span>
+          {video.scenario?.trim() && (
+            <button
+              type="button"
+              onClick={() => updateVideo({ scenario: '' })}
+              className="text-[9px] text-foreground-muted hover:text-foreground transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <textarea
+          value={video.scenario}
+          onChange={(e) => updateVideo({ scenario: e.target.value })}
+          placeholder={briefCopy.placeholder}
+          rows={4}
+          className="w-full resize-none rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-[11px] leading-relaxed text-foreground placeholder:text-foreground-muted/50 focus:outline-none focus:border-foreground/40 transition-colors"
+        />
+        <p className="mt-1.5 text-[9px] text-foreground-muted leading-relaxed opacity-70">
+          {briefCopy.hint}
+        </p>
+        {promptOverridden && (
+          <div className="mt-2 flex items-start gap-2 p-2 rounded-lg border border-amber-500/30 bg-amber-500/10">
+            <p className="flex-1 text-[9px] leading-relaxed text-foreground-muted">
+              The <strong className="text-foreground">Prompt</strong> tab has a hand-edited
+              prompt, which overrides this box.
+            </p>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_PROMPT', payload: '' })}
+              className="shrink-0 text-[9px] font-bold text-foreground hover:opacity-70 transition-opacity"
+            >
+              Use this
+            </button>
+          </div>
+        )}
+      </div>
 
     </div>
   );

@@ -4631,8 +4631,11 @@ export function useGeneration(): UseGenerationReturn {
         const omniFollowUp = isOmniModel && videoState.omniInteractionId
           ? (videoState.omniFollowUp ?? 'none')
           : 'none';
+        // A chained turn operates on the stored video, so re-sending the
+        // original still would just compete with it.
+        const isOmniFollowUp = omniFollowUp !== 'none';
         let inputImage: ImageData | undefined;
-        if (videoState.inputMode === 'image-animate') {
+        if (videoState.inputMode === 'image-animate' && !isOmniFollowUp) {
           const src = videoState.videoInputImage || state.uploadedImage;
           if (src) {
             const converted = dataUrlToImageData(src);
@@ -4706,19 +4709,15 @@ export function useGeneration(): UseGenerationReturn {
               personGeneration: videoState.personGeneration,
               negativePrompt: videoState.negativePrompt || undefined,
               klingProvider: 'piapi',
-              // Gemini Omni Flash: pin the task to the chosen input mode and
-              // chain onto the last stored interaction when editing/extending.
-              // A follow-up is only possible while we still hold its id.
-              omniTask: isOmniModel
-                ? (omniFollowUp === 'extend'
-                    ? 'extend'
-                    : omniFollowUp === 'edit'
-                      ? 'edit'
-                      : videoState.inputMode === 'text-to-video'
-                        ? 'text_to_video'
-                        : videoState.inputMode === 'image-animate'
-                          ? 'image_to_video'
-                          : undefined)
+              // Gemini Omni Flash: pin the task to the chosen input mode, but
+              // never alongside previousInteractionId — the API rejects the two
+              // together and infers the task from the chained interaction.
+              omniTask: isOmniModel && omniFollowUp === 'none'
+                ? (videoState.inputMode === 'text-to-video'
+                    ? 'text_to_video'
+                    : videoState.inputMode === 'image-animate'
+                      ? 'image_to_video'
+                      : undefined)
                 : undefined,
               previousInteractionId: omniFollowUp === 'none' ? undefined : videoState.omniInteractionId || undefined,
               onProgress: onVideoProgress,
