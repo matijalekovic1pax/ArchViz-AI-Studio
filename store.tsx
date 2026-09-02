@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
+import { readPersistedMode, persistMode } from './lib/sessionPrefs';
 import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, LEGACY_IMAGE_GENERATION_MODEL_ALIASES, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
@@ -1305,12 +1306,22 @@ const StoreContext = createContext<{
 } | undefined>(undefined);
 
 export function AppProvider({ children }: PropsWithChildren) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  // Restore the feature the user was last in, so a refresh does not throw them
+  // back to the default tab. Done as a lazy initializer rather than by mutating
+  // initialState, which RESET_PROJECT still needs as the canonical default.
+  const [state, dispatch] = useReducer(appReducer, initialState, (base) => {
+    const persistedMode = readPersistedMode();
+    return persistedMode ? { ...base, mode: persistedMode } : base;
+  });
   const stateRef = useRef(state);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    persistMode(state.mode);
+  }, [state.mode]);
 
   useEffect(() => {
     if (!isArchwizTestBridgeEnabled()) return;
