@@ -969,11 +969,11 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('imgToCadFormat', 'CAD export format', 'string', ['img-to-cad'], { values: ['dxf', 'dwg', 'svg', 'pdf'] }),
 
   workflow('videoState.inputMode', 'Video input mode', 'string', ['video'], {
-    values: ['image-animate', 'camera-path', 'image-morph', 'multi-shot'],
+    values: ['text-to-video', 'image-animate', 'camera-path', 'image-morph', 'multi-shot'],
   }),
-  workflow('videoState.model', 'Video model', 'string', ['video'], { values: ['veo-3.1-generate-preview', 'kling-2.6'] }),
+  workflow('videoState.model', 'Video model', 'string', ['video'], { values: ['veo-3.1-generate-preview', 'gemini-omni-1.1-flash', 'kling-2.6'] }),
   workflow('videoState.scenario', 'Video motion prompt', 'string', ['video']),
-  workflow('videoState.duration', 'Video duration', 'number', ['video'], { min: 4, max: 12 }),
+  workflow('videoState.duration', 'Video duration', 'number', ['video'], { min: 3, max: 12 }),
   workflow('videoState.resolution', 'Video resolution', 'string', ['video'], { values: ['720p', '1080p', '4k'] }),
   workflow('videoState.aspectRatio', 'Video aspect ratio', 'string', ['video'], {
     values: ['16:9', '9:16', '1:1', '4:3', '21:9'],

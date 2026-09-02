@@ -767,6 +767,11 @@ const getAssistantGenerationReadiness = (
         return { ready: false, message: 'Video Studio access is currently locked.' };
       }
       const video = state.workflow.videoState;
+      if (video.inputMode === 'text-to-video') {
+        return state.prompt?.trim() || video.scenario?.trim()
+          ? { ready: true, prompt: video.scenario || safePromptOverride }
+          : { ready: false, message: 'Write a prompt before generating video from text.' };
+      }
       if (video.inputMode === 'image-animate') {
         return video.videoInputImage || state.uploadedImage
           ? { ready: true, prompt: video.scenario || safePromptOverride }

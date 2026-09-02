@@ -238,6 +238,8 @@ const initialVideoState: VideoState = {
   generateAudio: false,
   personGeneration: 'allow_adult',
   negativePrompt: '',
+  omniInteractionId: null,
+  omniFollowUp: 'none',
   videoInputImage: null,
   startFrame: null,
   endFrame: null,

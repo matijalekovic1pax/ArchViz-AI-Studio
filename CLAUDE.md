@@ -70,7 +70,7 @@ Authoritative list is the `GenerationMode` union in `types.ts`.
 ### Services Layer (`services/`)
 - `geminiService.ts` - Gemini API client (routes through gateway)
 - `apiGateway.ts` - JWT management + all gateway routing
-- `videoGenerationService.ts`, `veoService.ts`, `klingService.ts` - Video generation (Veo2 + Kling)
+- `videoGenerationService.ts`, `veoService.ts`, `omniService.ts`, `klingService.ts` - Video generation (Veo 3.1 + Gemini Omni Flash + Kling)
 - `documentTranslationService.ts`, `docxParserService.ts`, `docxRebuilderService.ts` - DOCX pipeline
 - `xlsxParserService.ts`, `xlsxRebuilderService.ts` - Excel pipeline
 - `pdfParser.ts`, `pdfConverterService.ts`, `ilovepdfService.ts` - PDF processing
