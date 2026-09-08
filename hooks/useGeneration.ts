@@ -1,3 +1,4 @@
+import { buildGenerateContext } from '../lib/generateConversation';
 /**
  * Generation Hook
  * Wires Gemini API service with app state for all generation features
@@ -323,7 +324,6 @@ const SOURCE_FIDELITY_CONTRACT = [
 
 const ISOLATED_BACKGROUND_REQUEST_PATTERN = /(?:transparent|transparente|alpha|png)\s+(?:background|fondo)|(?:background|fondo)\s+(?:transparent|transparente)|(?:no|without|remove)\s+(?:background|fondo)|sin\s+fondo|fondo\s+transparente|png\s+transparente/i;
 const ISOLATED_ASSET_PATTERN = /\b(emoji|emojis|emoticon|emoticono|emoticonos|emote|sticker|stickers|icon|icons|icono|iconos|avatar|badge|badges|cutout|cut-out)\b/i;
-const PLAIN_FOLLOW_UP_PATTERN = /^(change|make|turn|set|replace|modify|edit|adjust|update|remove|add|keep|preserve|only|just|now|same|try|haz|cambia|cambiar|pon|poner|quita|editar|modifica)\b|\b(her|his|their|its|the same|same image|helmet|casco|color)\b/i;
 
 const ISOLATED_ASSET_OUTPUT_INSTRUCTION = [
   'Isolated asset output:',
@@ -336,60 +336,6 @@ const shouldUseIsolatedAssetOutput = (prompt: string): boolean => {
   const normalized = prompt.trim();
   if (!normalized) return false;
   return ISOLATED_BACKGROUND_REQUEST_PATTERN.test(normalized) || ISOLATED_ASSET_PATTERN.test(normalized);
-};
-
-const getRecentPlainGenerateHistory = (history: AppState['history'], limit = 4): AppState['history'] =>
-  history
-    .filter((item) => item.mode === 'generate-text' && item.settings?.kind !== 'source')
-    .slice(-limit);
-
-const getLatestPlainGenerateImage = (state: AppState): string | null => {
-  if (state.uploadedImage?.startsWith('data:image/')) return state.uploadedImage;
-  const latestHistoryImage = [...state.history]
-    .reverse()
-    .find((item) =>
-      item.mode === 'generate-text' &&
-      item.settings?.kind !== 'source' &&
-      item.thumbnail?.startsWith('data:image/')
-    );
-  return latestHistoryImage?.thumbnail || null;
-};
-
-const isLikelyPlainGenerateFollowUp = (prompt: string): boolean =>
-  PLAIN_FOLLOW_UP_PATTERN.test(prompt.trim());
-
-const buildPlainGenerateConversationPrompt = (
-  currentPrompt: string,
-  history: AppState['history'],
-  options: {
-    hasContextImage: boolean;
-    isLikelyFollowUp: boolean;
-    wantsIsolatedAssetOutput: boolean;
-  }
-): string => {
-  const recentHistory = getRecentPlainGenerateHistory(history);
-  if (!recentHistory.length && !options.hasContextImage && !options.wantsIsolatedAssetOutput) {
-    return currentPrompt;
-  }
-
-  const historyLines = recentHistory.map((item, index) =>
-    `${index + 1}. User asked: ${item.prompt.replace(/\s+/g, ' ').trim().slice(0, 500) || '(image prompt not recorded)'}`
-  );
-
-  return [
-    'You are continuing a plain image-generation conversation.',
-    historyLines.length > 0
-      ? ['Recent image-generation turns, oldest to newest:', ...historyLines].join('\n')
-      : '',
-    options.hasContextImage
-      ? 'A reference image is attached. Treat it as the latest generated image when the current request is a follow-up edit.'
-      : '',
-    `Current user request: ${currentPrompt}`,
-    options.isLikelyFollowUp
-      ? 'Apply the current request as an edit to the latest generated image. Preserve subject identity, composition, style, and all unchanged details.'
-      : 'If the current request is a follow-up, edit the latest generated image and preserve unchanged details. If it is a standalone new request, ignore unrelated prior turns and create a new image from the current request.',
-    options.wantsIsolatedAssetOutput ? ISOLATED_ASSET_OUTPUT_INSTRUCTION : ''
-  ].filter(Boolean).join('\n\n');
 };
 
 const loadCanvasImage = (src: string): Promise<HTMLImageElement> =>
@@ -2446,6 +2392,7 @@ export function useGeneration(): UseGenerationReturn {
    * Main generation function
    */
   const generate = useCallback(async (options: GenerationOptions = {}) => {
+    if (latestStateRef.current.isGenerating) return;
     if (!ensureServiceInitialized()) {
       dispatch({
         type: 'SET_APP_ALERT',
@@ -2525,6 +2472,16 @@ export function useGeneration(): UseGenerationReturn {
       updateProgress(start + ((end - start) * progress.progress) / 100);
     };
 
+    const conversationReplyId = state.mode === 'generate-text' ? nanoid() : null;
+    const conversationContext = buildGenerateContext(state.generateMessages, state.generateReferenceImage);
+    if (conversationReplyId) {
+      dispatch({ type: 'ADD_GENERATE_MESSAGE', payload: {
+        id: nanoid(), role: 'user', content: options.prompt ?? state.prompt,
+        attachments: [...(state.generateReferenceImage ? [state.generateReferenceImage] : []), ...(options.attachments || []).map(item => typeof item === 'string' ? item : item.dataUrl)]
+      } });
+      dispatch({ type: 'ADD_GENERATE_MESSAGE', payload: { id: conversationReplyId, role: 'assistant', content: '', status: 'pending', model: effectiveImageGenerationModel } });
+      dispatch({ type: 'SET_GENERATE_REFERENCE', payload: null });
+    }
     dispatch({ type: 'SET_GENERATING', payload: true });
     let multiAngleHistoryHandled = false;
     dispatch({ type: 'SET_PROGRESS', payload: 0 });
@@ -2567,13 +2524,13 @@ export function useGeneration(): UseGenerationReturn {
         state.mode === 'render-3d' && state.workflow.render3dSourceMode === 'alter-rendering';
       const usesSceneComposeCurrentCanvas = state.mode === 'scene-compose';
       const sourceImage = state.sourceImage || state.uploadedImage;
-      const baseImage = usesRender3DAlterSource || usesSceneComposeCurrentCanvas
+      const baseImage = state.mode === 'generate-text' ? null : usesRender3DAlterSource || usesSceneComposeCurrentCanvas
         ? state.uploadedImage || sourceImage
         : isSourceLockedMode
           ? sourceImage
           : state.uploadedImage;
       const plainGenerateContextImage = state.mode === 'generate-text'
-        ? getLatestPlainGenerateImage(state)
+        ? conversationContext.images[0] || null
         : null;
 
       // Build prompt. Source-based modes always keep the structured prompt so
@@ -2581,7 +2538,7 @@ export function useGeneration(): UseGenerationReturn {
       let basePrompt = '';
       let explicitPrompt = state.mode === 'visual-edit'
         ? options.prompt?.trim() || state.workflow.visualPrompt?.trim() || ''
-        : state.prompt?.trim() || options.prompt?.trim() || '';
+        : options.prompt?.trim() || state.prompt?.trim() || '';
       if (explicitPrompt && needsTranslation(i18n.language)) {
         try {
           explicitPrompt = await translateToEnglish(explicitPrompt, i18n.language);
@@ -2612,7 +2569,7 @@ export function useGeneration(): UseGenerationReturn {
             ].join('\n\n')
           : structuredPrompt;
       } else {
-        basePrompt = explicitPrompt || generatePrompt(state);
+        basePrompt = explicitPrompt || (state.mode === 'generate-text' ? 'Create an image using the attached references.' : generatePrompt(state));
       }
 
       const modePrefix = getModePromptPrefix(state.mode, state.workflow.renderMode);
@@ -2629,11 +2586,7 @@ export function useGeneration(): UseGenerationReturn {
             usesStrictSourceFidelity && baseImage ? SOURCE_FIDELITY_CONTRACT : ''
           ].filter(Boolean).join('\n\n');
       if (state.mode === 'generate-text') {
-        fullPrompt = buildPlainGenerateConversationPrompt(fullPrompt, state.history, {
-          hasContextImage: Boolean(plainGenerateContextImage),
-          isLikelyFollowUp: isLikelyPlainGenerateFollowUp(explicitPrompt || basePrompt),
-          wantsIsolatedAssetOutput: isolatedPlainOutput
-        });
+        fullPrompt = [conversationContext.prompt, `Current user request: ${fullPrompt}`, isolatedPlainOutput ? ISOLATED_ASSET_OUTPUT_INSTRUCTION : ''].filter(Boolean).join('\n\n');
       }
       const attachmentUrls = options.attachments
         ? options.attachments.map((attachment) =>
@@ -2673,15 +2626,10 @@ export function useGeneration(): UseGenerationReturn {
         }
       }
 
-      if (
-        state.mode === 'generate-text' &&
-        !baseImage &&
-        plainGenerateContextImage &&
-        isLikelyPlainGenerateFollowUp(explicitPrompt || basePrompt)
-      ) {
-        const imgData = dataUrlToImageData(plainGenerateContextImage);
-        if (imgData) {
-          images.push(imgData);
+      if (state.mode === 'generate-text') {
+        for (const url of conversationContext.images) {
+          const image = dataUrlToImageData(url);
+          if (image) images.push(image);
         }
       }
 
@@ -2720,8 +2668,9 @@ export function useGeneration(): UseGenerationReturn {
       }
 
       // Add attachments
-      if (options.attachments) {
-        for (const attachment of options.attachments) {
+      const requestAttachments = [...(state.mode === 'generate-text' ? conversationContext.files : []), ...(options.attachments || [])];
+      if (requestAttachments.length) {
+        for (const attachment of requestAttachments) {
           const dataUrl = typeof attachment === 'string' ? attachment : attachment.dataUrl;
           const parsed = parseDataUrl(dataUrl);
           if (!parsed) continue;
@@ -3136,6 +3085,7 @@ export function useGeneration(): UseGenerationReturn {
         if (effectiveImageGenerationModel === 'chatgpt-image-generation-2') {
           const result = await service.generateImages({
             ...request,
+            attachments,
             prompt: promptForModel,
             imageGenerationModel: effectiveImageGenerationModel,
             ...promptPreparationFlags
@@ -3156,6 +3106,7 @@ export function useGeneration(): UseGenerationReturn {
 
         for await (const chunk of service.generateStream({
           ...request,
+          attachments,
           prompt: promptForModel,
           model: IMAGE_MODEL,
           ...promptPreparationFlags
@@ -3686,7 +3637,7 @@ export function useGeneration(): UseGenerationReturn {
         const hasSourceEntry = sourceForHistory
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
           : false;
-        if (sourceForHistory && !hasSourceEntry) {
+        if (state.mode !== 'generate-text' && sourceForHistory && !hasSourceEntry) {
           dispatch({
             type: 'ADD_HISTORY',
             payload: {
@@ -4788,6 +4739,19 @@ export function useGeneration(): UseGenerationReturn {
       updateProgress(95);
       assertVisualEditSessionCurrent();
 
+      if (abortSignal.aborted) throw new DOMException('Request aborted', 'AbortError');
+      if (conversationReplyId) {
+        const outputImages = result.images?.map(image => image.dataUrl).filter(Boolean) || [];
+        dispatch({ type: 'UPDATE_GENERATE_MESSAGE', payload: { id: conversationReplyId, updates: {
+          content: result.text || (outputImages.length ? '' : 'No image was returned. Please try again.'), images: outputImages,
+          status: outputImages.length || result.text ? 'complete' : 'error'
+        } } });
+        for (const url of outputImages) {
+          dispatch({ type: 'ADD_HISTORY', payload: { id: nanoid(), timestamp: Date.now(), thumbnail: url, prompt: options.prompt ?? state.prompt, mode: 'generate-text' } });
+        }
+        dispatch({ type: 'SET_ACTIVE_BOTTOM_TAB', payload: 'history' });
+      }
+
       // Process result
       if (result.images && result.images.length > 0 && !isUpscaleMode && !multiAngleHistoryHandled) {
         assertVisualEditSessionCurrent();
@@ -4798,7 +4762,7 @@ export function useGeneration(): UseGenerationReturn {
           ? state.history.some((item) => item.thumbnail === sourceForHistory && item.settings?.kind === 'source')
           : false;
 
-        if (sourceForHistory && !hasSourceEntry) {
+        if (state.mode !== 'generate-text' && sourceForHistory && !hasSourceEntry) {
               dispatch({
                 type: 'ADD_HISTORY',
                 payload: {
@@ -4864,8 +4828,8 @@ export function useGeneration(): UseGenerationReturn {
           });
         }
 
-        // Add to history
-        dispatch({
+        // Generate conversations already record every returned image above.
+        if (state.mode !== 'generate-text') dispatch({
           type: 'ADD_HISTORY',
           payload: {
             id: nanoid(),
@@ -5008,6 +4972,9 @@ export function useGeneration(): UseGenerationReturn {
       dispatch({ type: 'SET_GENERATION_STAGE', payload: null });
 
     } catch (error) {
+      if (conversationReplyId) dispatch({ type: 'UPDATE_GENERATE_MESSAGE', payload: { id: conversationReplyId, updates: {
+        status: 'error', content: (error as DOMException)?.name === 'AbortError' ? 'Generation cancelled. You can send another message.' : (error instanceof Error ? error.message : 'Generation failed. Please try again.')
+      } } });
       const resetUpscaleProcessing = () => {
         if (state.mode !== 'upscale') return;
         const snapshot = upscaleBatchSnapshotRef.current ?? state.workflow.upscaleBatch;

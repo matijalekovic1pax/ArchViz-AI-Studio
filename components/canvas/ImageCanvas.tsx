@@ -1,3 +1,4 @@
+import { GenerateConversation } from './GenerateConversation';
 
 import React, { useRef, useState, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -65,7 +66,9 @@ const PromptBar: React.FC = () => {
   const generationStageLabel = state.generationStage
     ? t(GENERATION_STAGE_LABEL_KEYS[state.generationStage])
     : t('generation.generating');
-  const promptPlaceholder = useCompactPlaceholder
+  const promptPlaceholder = state.mode === 'generate-text'
+    ? (state.generateMessages.length ? 'Describe a change or ask for a new image…' : 'Describe an image…')
+    : useCompactPlaceholder
     ? t('canvas.promptBar.placeholderShort', { defaultValue: t('canvas.promptBar.placeholder') })
     : t('canvas.promptBar.placeholder');
 
@@ -150,7 +153,7 @@ const PromptBar: React.FC = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleGenerate();
     }
@@ -3095,12 +3098,12 @@ export const ImageCanvas: React.FC = () => {
   
   if (state.mode === 'generate-text') {
       return (
-        <div className="flex flex-col h-full bg-background w-full">
+        <div className="flex flex-col flex-1 min-h-0 bg-background w-full">
            <div className="flex-1 relative overflow-hidden min-h-0 flex flex-col">
-               <StandardCanvas />
+               <GenerateConversation />
            </div>
-           <div className="shrink-0 z-30 px-6 py-6 flex justify-center bg-background border-t border-border-subtle/50">
-              <PromptBar />
+           <div className="shrink-0 z-30 px-3 py-3 sm:px-6 sm:py-4 flex justify-center bg-background border-t border-border-subtle/50">
+              <PromptBar key={state.generateConversationId} />
            </div>
         </div>
       );

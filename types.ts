@@ -1539,6 +1539,16 @@ export type GenerationProgressStage =
   | 'finalizing'
   | 'complete';
 
+export interface GenerateMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  attachments?: string[];
+  images?: string[];
+  model?: ImageGenerationModel;
+  status?: 'pending' | 'complete' | 'error';
+}
+
 export interface AppState {
   mode: GenerationMode;
   imageGenerationModel: ImageGenerationModel;
@@ -1553,6 +1563,9 @@ export interface AppState {
   workflow: WorkflowSettings;
   materialValidation: MaterialValidationState;
   
+  generateConversationId: string;
+  generateMessages: GenerateMessage[];
+  generateReferenceImage: string | null;
   chatMessages: ChatMessage[];
   customStyles: StyleConfiguration[];
 
@@ -1580,7 +1593,11 @@ export interface AppState {
   activeBottomTab: string;
 }
 
-export type Action = 
+export type Action =
+  | { type: 'ADD_GENERATE_MESSAGE'; payload: GenerateMessage }
+  | { type: 'UPDATE_GENERATE_MESSAGE'; payload: { id: string; updates: Partial<GenerateMessage> } }
+  | { type: 'NEW_GENERATE_CONVERSATION' }
+  | { type: 'SET_GENERATE_REFERENCE'; payload: string | null }
   | { type: 'SET_MODE'; payload: GenerationMode }
   | { type: 'SET_IMAGE_GENERATION_MODEL'; payload: ImageGenerationModel }
   | { type: 'SET_STYLE'; payload: string }

@@ -159,7 +159,7 @@ const Layout: React.FC = () => {
           )}
           <FloatingGenerateButton />
           {state.mode !== 'document-translate' && state.mode !== 'cv-convert' && state.mode !== 'pdf-compression' && (
-            <div className="hidden lg:block">
+            <div className="hidden lg:block shrink-0">
               <BottomPanel />
             </div>
           )}

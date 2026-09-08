@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
 import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
@@ -1117,6 +1118,9 @@ const initialState: AppState = {
   prompt: '',
   workflow: initialWorkflow,
   materialValidation: initialMaterialValidation,
+  generateConversationId: nanoid(),
+  generateMessages: [],
+  generateReferenceImage: null,
   chatMessages: [],
   customStyles: [],
   geometry: initialGeometry,
@@ -1233,6 +1237,10 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'TOGGLE_LEFT_SIDEBAR': return { ...state, leftSidebarOpen: !state.leftSidebarOpen };
     case 'TOGGLE_RIGHT_PANEL': return { ...state, rightPanelOpen: !state.rightPanelOpen };
 
+    case 'ADD_GENERATE_MESSAGE': return { ...state, generateMessages: [...state.generateMessages, action.payload] };
+    case 'UPDATE_GENERATE_MESSAGE': return { ...state, generateMessages: state.generateMessages.map(message => message.id === action.payload.id ? { ...message, ...action.payload.updates } : message) };
+    case 'SET_GENERATE_REFERENCE': return { ...state, generateReferenceImage: action.payload };
+    case 'NEW_GENERATE_CONVERSATION': return state.isGenerating ? state : { ...state, generateConversationId: nanoid(), generateMessages: [], generateReferenceImage: null, prompt: '' };
     case 'ADD_HISTORY': return { ...state, history: [...state.history, action.payload] };
     case 'SET_APP_ALERT': return { ...state, appAlert: action.payload };
     case 'LOAD_PROJECT': {
@@ -1241,6 +1249,9 @@ function appReducer(state: AppState, action: Action): AppState {
       const workflow = clearVisualSelectionDerivedArtifacts(normalizeWorkflow(action.payload.workflow));
       return {
         ...action.payload,
+        generateConversationId: nanoid(),
+        generateMessages: [],
+        generateReferenceImage: null,
         imageGenerationModel: getLockedImageGenerationModel(action.payload.mode, workflow) ?? normalizeImageGenerationModel(action.payload?.imageGenerationModel),
         workflow,
         sourceImage: action.payload?.sourceImage ?? action.payload?.uploadedImage ?? null,

@@ -340,6 +340,10 @@ export const BottomPanel: React.FC = () => {
                               toggleHistorySelection(item.id);
                               return;
                             }
+                            if (isGenerateTextMode) {
+                              dispatch({ type: 'SET_GENERATE_REFERENCE', payload: item.thumbnail });
+                              return;
+                            }
                             dispatch({ type: 'SET_IMAGE', payload: item.thumbnail });
                             if (item.settings?.kind === 'source') {
                               dispatch({ type: 'SET_SOURCE_IMAGE', payload: item.thumbnail });
