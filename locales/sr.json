@@ -59,8 +59,8 @@
         "bestFor": "Use for render polish"
       },
       "chatgpt": {
-        "label": "ChatGPT Image Generation 2",
-        "shortLabel": "GPT Img 2",
+        "label": "ChatGPT Images 2.5",
+        "shortLabel": "GPT Img 2.5",
         "description": "Best for precise edits to existing renders, preservation, masks, and text.",
         "bestFor": "Use for targeted edits"
       }

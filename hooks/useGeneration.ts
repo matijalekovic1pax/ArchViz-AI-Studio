@@ -218,8 +218,8 @@ const getGenerationLogRoute = (
     return { provider: 'pdf-compression', model: null };
   }
 
-  if (imageGenerationModel === 'chatgpt-image-generation-2' && !TEXT_ONLY_MODES.includes(mode)) {
-    return { provider: 'openai', model: 'gpt-image-2' };
+  if (imageGenerationModel === 'chatgpt-images-2-5' && !TEXT_ONLY_MODES.includes(mode)) {
+    return { provider: 'openai', model: 'gpt-image-2.5-sunburst' };
   }
 
   return {
@@ -394,7 +394,7 @@ const VISUAL_EXTEND_SEAM_MAX_PX = 96;
 const VISUAL_EXTEND_SEAM_RATIO = 0.018;
 
 /**
- * Everything needed to map one GPT Image 2 whole-frame result back onto the
+ * Everything needed to map one GPT Images 2.5 whole-frame result back onto the
  * untouched source image. `providerAlpha` is the dilated editable plane that
  * was actually sent, in source pixels.
  */
@@ -409,7 +409,7 @@ type FullFrameEditLayout = {
 };
 
 /**
- * Legal GPT Image 2 request canvas for a whole source frame. Shared by the
+ * Legal GPT Images 2.5 request canvas for a whole source frame. Shared by the
  * outpaint and non-masked provider routes so every OpenAI request lands on the
  * same multiple-of-16 grid with the same aspect fidelity.
  */
@@ -571,7 +571,7 @@ const prepareFullFrameOpenAIEditInputs = async (
       })
     : frame && { requestWidth: frame.width, requestHeight: frame.height, providerExpansion: 0, compositeFeather: 0 };
   if (!plan) {
-    throw new Error('GPT Image 2 cannot edit this image because its aspect ratio is more extreme than 3:1.');
+    throw new Error('GPT Images 2.5 cannot edit this image because its aspect ratio is more extreme than 3:1.');
   }
 
   // OpenAI documents the mask as guidance rather than a hard boundary and
@@ -585,7 +585,7 @@ const prepareFullFrameOpenAIEditInputs = async (
   sourceCanvas.width = plan.requestWidth;
   sourceCanvas.height = plan.requestHeight;
   const sourceCtx = sourceCanvas.getContext('2d');
-  if (!sourceCtx) throw new Error('Failed to prepare the source image for GPT Image 2.');
+  if (!sourceCtx) throw new Error('Failed to prepare the source image for GPT Images 2.5.');
   sourceCtx.imageSmoothingEnabled = true;
   sourceCtx.imageSmoothingQuality = 'high';
   // The whole frame is sent, so the model keeps the camera, perspective,
@@ -603,7 +603,7 @@ const prepareFullFrameOpenAIEditInputs = async (
   requestMaskCanvas.width = plan.requestWidth;
   requestMaskCanvas.height = plan.requestHeight;
   const requestMaskCtx = requestMaskCanvas.getContext('2d');
-  if (!requestMaskCtx) throw new Error('Failed to prepare the GPT Image 2 selection mask.');
+  if (!requestMaskCtx) throw new Error('Failed to prepare the GPT Images 2.5 selection mask.');
   requestMaskCtx.imageSmoothingEnabled = true;
   requestMaskCtx.imageSmoothingQuality = 'high';
   requestMaskCtx.drawImage(providerMaskCanvas, 0, 0, plan.requestWidth, plan.requestHeight);
@@ -632,7 +632,7 @@ const prepareFullFrameOpenAIEditInputs = async (
   }
   const sourceData = ImageUtils.dataUrlToImageData(encodedSourceDataUrl);
   const maskData = ImageUtils.dataUrlToImageData(requestMaskCanvas.toDataURL('image/png'));
-  if (!sourceData || !maskData) throw new Error('Failed to serialize the GPT Image 2 edit inputs.');
+  if (!sourceData || !maskData) throw new Error('Failed to serialize the GPT Images 2.5 edit inputs.');
   const requestPixels = plan.requestWidth * plan.requestHeight;
   const sourcePixels = sourceWidth * sourceHeight;
 
@@ -679,7 +679,7 @@ const renderPngDataUrlAtSize = async (
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to prepare image for GPT Image 2 edit.');
+  if (!ctx) throw new Error('Failed to prepare image for GPT Images 2.5 edit.');
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -703,7 +703,7 @@ const prepareGenericOpenAIEditInputs = async (
   const height = sourceImage.naturalHeight || sourceImage.height;
   const size = getPreciseEditSize(width, height);
   if (!size) {
-    throw new Error('The image aspect ratio is too extreme for GPT Image 2 editing.');
+    throw new Error('The image aspect ratio is too extreme for GPT Images 2.5 editing.');
   }
 
   const sourcePng = await renderPngDataUrlAtSize(sourceDataUrl, size.width, size.height, { fill: '#ffffff' });
@@ -711,7 +711,7 @@ const prepareGenericOpenAIEditInputs = async (
   const sourceImageData = ImageUtils.dataUrlToImageData(sourcePng);
   const maskImageData = ImageUtils.dataUrlToImageData(maskPng);
   if (!sourceImageData || !maskImageData) {
-    throw new Error('Failed to prepare source image and selection mask for GPT Image 2 edit.');
+    throw new Error('Failed to prepare source image and selection mask for GPT Images 2.5 edit.');
   }
 
   return {
@@ -841,10 +841,10 @@ const prepareVisualExtendOutpaintInputs = async (
     throw new Error('Choose an extension direction or target ratio before generating.');
   }
 
-  if (imageGenerationModel === 'chatgpt-image-generation-2') {
+  if (imageGenerationModel === 'chatgpt-images-2-5') {
     const preciseSize = getPreciseEditSize(layout.targetWidth, layout.targetHeight);
     if (!preciseSize) {
-      throw new Error('This extension is too wide or tall for GPT Image 2. Reduce the amount or switch Extend to Nano Banana.');
+      throw new Error('This extension is too wide or tall for GPT Images 2.5. Reduce the amount or switch Extend to Nano Banana.');
     }
     layout = scaleVisualExtendCanvasLayout(layout, preciseSize.width, preciseSize.height);
   }
@@ -868,7 +868,7 @@ const prepareVisualExtendOutpaintInputs = async (
 
   const sourceImageData = ImageUtils.dataUrlToImageData(sourceCanvas.toDataURL('image/png'));
   const maskImageData = ImageUtils.dataUrlToImageData(
-    getVisualExtendMaskDataUrl(layout, imageGenerationModel === 'chatgpt-image-generation-2')
+    getVisualExtendMaskDataUrl(layout, imageGenerationModel === 'chatgpt-images-2-5')
   );
   if (!sourceImageData || !maskImageData) {
     throw new Error('Failed to prepare outpaint source and mask images.');
@@ -1010,7 +1010,7 @@ const getVisualExtendSourceRestoreMask = (
 };
 
 /**
- * Tools that run as a GPT Image 2 masked edit against the whole frame.
+ * Tools that run as a GPT Images 2.5 masked edit against the whole frame.
  * `background` inverts the drawn selection; `adjust` and `extend` keep their
  * own geometry pipelines.
  */
@@ -1599,9 +1599,9 @@ class UnrenderedEditError extends Error {
 }
 
 /**
- * Maps one GPT Image 2 whole-frame result back onto the source image.
+ * Maps one GPT Images 2.5 whole-frame result back onto the source image.
  *
- * gpt-image-2 re-renders the entire canvas even when a mask is supplied, and
+ * gpt-image-2.5-sunburst re-renders the entire canvas even when a mask is supplied, and
  * OpenAI explicitly does not guarantee that protected pixels come back
  * byte-identical. Compositing the returned frame over the original through the
  * dilated selection is what turns "mostly preserved" into "exactly preserved":
@@ -1630,7 +1630,7 @@ const compositeFullFrameVisualEditResult = async (
   outputCanvas.width = sourceWidth;
   outputCanvas.height = sourceHeight;
   const outputCtx = outputCanvas.getContext('2d');
-  if (!outputCtx) throw new Error('Failed to composite the GPT Image 2 edit.');
+  if (!outputCtx) throw new Error('Failed to composite the GPT Images 2.5 edit.');
 
   // Whole-frame runs (People / Auto, Quick Remove) deliberately regenerate the
   // entire scene, so the returned frame is the result — there is nothing to
@@ -1652,7 +1652,7 @@ const compositeFullFrameVisualEditResult = async (
   generatedCanvas.width = sourceWidth;
   generatedCanvas.height = sourceHeight;
   const generatedCtx = generatedCanvas.getContext('2d');
-  if (!generatedCtx) throw new Error('Failed to read the GPT Image 2 edit.');
+  if (!generatedCtx) throw new Error('Failed to read the GPT Images 2.5 edit.');
   generatedCtx.imageSmoothingEnabled = true;
   generatedCtx.imageSmoothingQuality = 'high';
   // The request canvas is within a fraction of a percent of the source aspect
@@ -1662,7 +1662,7 @@ const compositeFullFrameVisualEditResult = async (
   generatedCtx.drawImage(generatedImage, 0, 0, sourceWidth, sourceHeight);
   const generatedData = generatedCtx.getImageData(0, 0, sourceWidth, sourceHeight);
 
-  // gpt-image-2 shows itself the masked area as an erased hole and sometimes
+  // gpt-image-2.5-sunburst shows itself the masked area as an erased hole and sometimes
   // hands that hole straight back — either as alpha 0, or painted flat black.
   // Copying either into the frame destroys the very region the user selected,
   // so measure the selection before trusting the result.
@@ -1689,14 +1689,14 @@ const compositeFullFrameVisualEditResult = async (
   const unrenderedRatio = unrenderedPixels / Math.max(editablePixels, 1);
   if (unrenderedRatio > 0.5) {
     throw new UnrenderedEditError(
-      `GPT Image 2 returned the selected area unrendered: ${Math.round(unrenderedRatio * 100)}% of it came back ` +
+      `GPT Images 2.5 returned the selected area unrendered: ${Math.round(unrenderedRatio * 100)}% of it came back ` +
       `${unrenderedPixels === 0 ? 'empty' : 'blank'} instead of edited. Your image was left unchanged.`
     );
   }
   // Anything the provider left transparent now falls back to the original
   // rather than compositing as black.
   const flattenCtx = generatedCanvas.getContext('2d');
-  if (!flattenCtx) throw new Error('Failed to read the GPT Image 2 edit.');
+  if (!flattenCtx) throw new Error('Failed to read the GPT Images 2.5 edit.');
   flattenCtx.globalCompositeOperation = 'destination-over';
   flattenCtx.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   flattenCtx.globalCompositeOperation = 'source-over';
@@ -3082,7 +3082,7 @@ export function useGeneration(): UseGenerationReturn {
             ? { skipPromptOptimization: true }
           : {};
 
-        if (effectiveImageGenerationModel === 'chatgpt-image-generation-2') {
+        if (effectiveImageGenerationModel === 'chatgpt-images-2-5') {
           const result = await service.generateImages({
             ...request,
             attachments,
@@ -4141,14 +4141,14 @@ export function useGeneration(): UseGenerationReturn {
           activeVisualTool !== 'extend' &&
           !(activeVisualTool === 'adjust' && state.workflow.visualAdjust.aspectRatio !== 'same');
         const editOutsideSelection = activeVisualTool === 'background';
-        const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-image-generation-2';
+        const isOpenAIVisualEdit = effectiveImageGenerationModel === 'chatgpt-images-2-5';
         const willUseFullFrameOpenAIEdit = Boolean(
           isOpenAIVisualEdit &&
           OPENAI_MASKED_EDIT_TOOLS.has(activeVisualTool) &&
           activeVisualTool !== 'extend' &&
           (visualEditScope.wholeFrame || (shouldUseSelectionMask && selectionSnapshot))
         );
-        // The GPT Image 2 route re-encodes the frame at the provider's request
+        // The GPT Images 2.5 route re-encodes the frame at the provider's request
         // size, so the untouched full-resolution copy is never materialized.
         const sourceImage = willUseFullFrameOpenAIEdit
           ? null
@@ -4156,7 +4156,7 @@ export function useGeneration(): UseGenerationReturn {
         if (!willUseFullFrameOpenAIEdit && !sourceImage) {
           throw new Error('Failed to prepare the source image for visual edit.');
         }
-        // The GPT Image 2 route consumes the rasterized alpha plane directly.
+        // The GPT Images 2.5 route consumes the rasterized alpha plane directly.
         // Serialize a full-resolution PNG only for the other providers.
         const selectedMaskDataUrl = selectionSnapshot && !willUseFullFrameOpenAIEdit
           ? selectionSnapshot.canvas.toDataURL('image/png')
@@ -4286,7 +4286,7 @@ export function useGeneration(): UseGenerationReturn {
             if (!requestSourceImage) {
               throw new Error('Failed to prepare the source image for visual edit.');
             }
-            if (effectiveImageGenerationModel !== 'chatgpt-image-generation-2' || !requestMaskImage || !editableMaskDataUrl) {
+            if (effectiveImageGenerationModel !== 'chatgpt-images-2-5' || !requestMaskImage || !editableMaskDataUrl) {
               return { sourceImage: requestSourceImage, maskImage: requestMaskImage || null };
             }
             if (normalizedInputsForMaskedOpenAIEdit) {
@@ -5045,8 +5045,8 @@ export function useGeneration(): UseGenerationReturn {
         });
       }
       if (isServiceUnavailable) {
-        const providerName = effectiveImageGenerationModel === 'chatgpt-image-generation-2'
-          ? 'ChatGPT Image Generation 2'
+        const providerName = effectiveImageGenerationModel === 'chatgpt-images-2-5'
+          ? 'ChatGPT Images 2.5'
           : 'Nano Banana Pro';
         dispatch({
           type: 'SET_APP_ALERT',

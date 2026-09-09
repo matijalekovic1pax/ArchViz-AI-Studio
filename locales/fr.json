@@ -59,8 +59,8 @@
         "bestFor": "Pour polir les rendus"
       },
       "chatgpt": {
-        "label": "ChatGPT Image Generation 2",
-        "shortLabel": "GPT Img 2",
+        "label": "ChatGPT Images 2.5",
+        "shortLabel": "GPT Img 2.5",
         "description": "Idéal pour modifier précisément des rendus existants, préserver, masquer et gérer le texte.",
         "bestFor": "Pour les éditions ciblées"
       }

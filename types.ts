@@ -20,16 +20,26 @@ export type GenerationMode =
   | 'pdf-compression'
   | 'headshot';
 
-export type ImageGenerationModel = 'nano-banana' | 'chatgpt-image-generation-2';
+export type ImageGenerationModel = 'nano-banana' | 'chatgpt-images-2-5';
 
 export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';
-export const AI_SLOP_UPSCALE_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-image-generation-2';
-export const VISUAL_EDIT_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-image-generation-2';
+export const AI_SLOP_UPSCALE_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-images-2-5';
+export const VISUAL_EDIT_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-images-2-5';
 
 export const IMAGE_GENERATION_MODELS: readonly ImageGenerationModel[] = [
   'nano-banana',
-  'chatgpt-image-generation-2',
+  'chatgpt-images-2-5',
 ] as const;
+
+/**
+ * Older values that must keep working. A project saved while the app was on
+ * GPT Image 2 stores the previous identifier; without this it would fail
+ * validation and silently fall back to the default model, quietly changing
+ * the user's saved setup.
+ */
+export const LEGACY_IMAGE_GENERATION_MODEL_ALIASES: Readonly<Record<string, ImageGenerationModel>> = {
+  'chatgpt-image-generation-2': 'chatgpt-images-2-5',
+};
 
 export const DOCUMENT_TRANSLATION_MODELS = [
   'gpt-5.4-mini',

@@ -472,7 +472,7 @@ const appendVisualEditRoutingFallbackRequests = (
     request.type === 'set_mode' && getAssistantModeFromRequest(request) === 'visual-edit'
   );
   const hasImageModelRequest = requests.some((request) =>
-    request.type === 'set_image_generation_model' && request.value === 'chatgpt-image-generation-2'
+    request.type === 'set_image_generation_model' && request.value === 'chatgpt-images-2-5'
   );
   const hasWorkflowPath = (path: string) => requests.some((request) =>
     request.type === 'set_workflow' && request.path === path
@@ -492,8 +492,8 @@ const appendVisualEditRoutingFallbackRequests = (
   if (!hasImageModelRequest) {
     fallbackRequests.push({
       type: 'set_image_generation_model',
-      value: 'chatgpt-image-generation-2',
-      label: 'Use ChatGPT Image Generation 2',
+      value: 'chatgpt-images-2-5',
+      label: 'Use ChatGPT Images 2.5',
       reason: 'Precise local edits to an existing render need stronger preservation.',
     });
   }
@@ -1949,7 +1949,7 @@ export const AppAssistant: React.FC = () => {
 
     const setupReady =
       state.mode === 'visual-edit' &&
-      state.imageGenerationModel === 'chatgpt-image-generation-2' &&
+      state.imageGenerationModel === 'chatgpt-images-2-5' &&
       state.prompt === 'Replace the selected flooring with warm oak planks.' &&
       Boolean(state.uploadedImage) &&
       Boolean(state.workflow.visualMaterial.referenceImage) &&
@@ -2036,7 +2036,7 @@ export const AppAssistant: React.FC = () => {
     if (smoke.phase === 'idle') {
       const setupActions = normalizeAppAssistantActions([
         { type: 'set_mode', mode: 'visual-edit' },
-        { type: 'set_image_generation_model', value: 'chatgpt-image-generation-2' },
+        { type: 'set_image_generation_model', value: 'chatgpt-images-2-5' },
         { type: 'set_prompt', value: 'Replace the selected flooring with warm oak planks.' },
         { type: 'set_workflow', path: 'activeTool', value: 'material' },
         { type: 'set_workflow', path: 'visualMaterial.category', value: 'Flooring' },

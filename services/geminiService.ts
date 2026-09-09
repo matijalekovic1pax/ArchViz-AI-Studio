@@ -17,8 +17,10 @@ export const IMAGE_MODEL = 'gemini-3-pro-image';
 export const TEXT_MODEL = 'gemini-3.5-flash';
 export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
 export const PROMPT_OPTIMIZER_MODEL = 'gemini-3.5-flash';
-export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
-const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana Pro|regular Nano Banana|ChatGPT Image Generation 2)\b/i;
+export const OPENAI_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+// Includes the pre-2.5 spelling so prompts adapted before the model swap are
+// still recognised as already-adapted and are not adapted a second time.
+const ADAPTED_IMAGE_PROMPT_PATTERN = /^\s*Model:\s*(?:Nano Banana 2|Nano Banana Pro|regular Nano Banana|ChatGPT Images? (?:Generation )?2(?:\.5)?)\b/i;
 const PROMPT_OPTIMIZER_MIN_PROMPT_CHARS_WITHOUT_IMAGES = 420;
 const PROMPT_OPTIMIZER_MAX_INPUT_CHARS = 14000;
 const PROMPT_OPTIMIZER_MAX_OUTPUT_TOKENS = 900;
@@ -694,7 +696,7 @@ export class GeminiService {
     let editPrompt = request.prompt;
     const referenceCount = request.referenceImages?.length || 0;
     const maskMode = request.maskMode ?? 'guided';
-    const usesOpenAIAlphaMask = request.imageGenerationModel === 'chatgpt-image-generation-2' && Boolean(request.maskImage);
+    const usesOpenAIAlphaMask = request.imageGenerationModel === 'chatgpt-images-2-5' && Boolean(request.maskImage);
     const referenceInstructions = referenceCount > 0
       ? ` Additional reference image${referenceCount > 1 ? 's' : ''} follow the source${request.maskImage && !usesOpenAIAlphaMask ? ' and selection guidance' : ''}. Reference relationship: use ${referenceCount > 1 ? 'these references' : 'this reference'} only for the explicit visual target described in the edit prompt, such as material color, pattern, texture scale, roughness, reflectivity, grain direction, joints, seams, object identity, or style cues. Do not copy unrelated reference-image framing, camera angle, background, people, signage, logos, or composition; do not add a reference image as a pasted object unless the edit prompt explicitly asks for object insertion.`
       : '';
@@ -856,14 +858,14 @@ export class GeminiService {
     );
     this.emitProgress(request.generationConfig, 'ai-middle-layer', 100, 'AI middle layer complete.');
 
-    if (request.imageGenerationModel === 'chatgpt-image-generation-2') {
+    if (request.imageGenerationModel === 'chatgpt-images-2-5') {
       const openAISourceImage = request.maskImage && request.sourceImage.mimeType !== request.maskImage.mimeType
         ? await ImageUtils.convertImageFormat(request.sourceImage, request.maskImage.mimeType)
         : request.sourceImage;
       const openAIMaskImage = request.maskImage;
       if (openAIMaskImage) {
         if (openAIMaskImage.mimeType !== 'image/png' || openAISourceImage.mimeType !== 'image/png') {
-          throw new Error('GPT Image 2 masked edits require PNG source and mask images with an alpha channel.');
+          throw new Error('GPT Images 2.5 masked edits require PNG source and mask images with an alpha channel.');
         }
         const dimensionsKnown = Boolean(
           openAISourceImage.width &&
@@ -875,7 +877,7 @@ export class GeminiService {
           dimensionsKnown &&
           (openAISourceImage.width !== openAIMaskImage.width || openAISourceImage.height !== openAIMaskImage.height)
         ) {
-          throw new Error('GPT Image 2 masked edits require the source image and mask to have the same dimensions.');
+          throw new Error('GPT Images 2.5 masked edits require the source image and mask to have the same dimensions.');
         }
       }
       const maskedEditSizeOverride = openAIMaskImage &&
@@ -1339,8 +1341,8 @@ export class GeminiService {
         : imageCount === 1
           ? 'Attached image: image 1 is the primary source or visual reference.'
           : `Attached images: image 1 is the primary source/current image, and images 2-${imageCount} are secondary references.`;
-    const modelName = context.imageGenerationModel === 'chatgpt-image-generation-2'
-      ? 'ChatGPT Image Generation 2'
+    const modelName = context.imageGenerationModel === 'chatgpt-images-2-5'
+      ? 'ChatGPT Images 2.5'
       : 'Nano Banana Pro / Gemini image';
     const originalUserLine = context.originalUserPrompt?.trim()
       ? `Original user request, before app expansion:\n${this.truncatePromptForOptimizer(context.originalUserPrompt.trim(), 1800)}`
@@ -1403,7 +1405,7 @@ export class GeminiService {
   }
 
   private isOpenAIImageRequest(request: GeminiRequest): boolean {
-    return request.imageGenerationModel === 'chatgpt-image-generation-2';
+    return request.imageGenerationModel === 'chatgpt-images-2-5';
   }
 
   private prepareImagePrompt(

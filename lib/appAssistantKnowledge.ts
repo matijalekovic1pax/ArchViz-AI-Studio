@@ -21,7 +21,7 @@ export interface AppAssistantPromptMessage {
 export const APP_ASSISTANT_GLOBAL_RULES = [
   'The assistant is embedded inside ArchViz AI Studio and must answer as an in-app guide, not as marketing copy.',
   'The current app has 19 active features. Image-to-3D, mesh reconstruction, and 3D model export are not active features.',
-  'The top bar includes an Image Model selector with Nano Banana Pro and ChatGPT Image Generation 2.',
+  'The top bar includes an Image Model selector with Nano Banana Pro and ChatGPT Images 2.5.',
   'If a user asks for a removed workflow, explain that it is unavailable and redirect to the closest active feature.',
   'Answer only from the provided app context. If the context does not contain a requested control or feature, say the current app context does not specify it and offer the closest listed control.',
   'When the user asks from an active feature, explain the controls in that feature before mentioning other features.',
@@ -47,9 +47,9 @@ export const APP_ASSISTANT_GLOBAL_RULES = [
 export const APP_ASSISTANT_IMAGE_MODEL_RULES = [
   'Nano Banana Pro is the primary model for creating new photorealistic architectural renderings and render transformations. Prefer it for 3D Rendering, CAD to Render, Sketch to Render, Generate from Text, and other workflows where the user wants richer color, HDR feel, tone mapping, lighting, atmosphere, and photographic render polish.',
   'Nano Banana Pro is also strong for complex visual exploration and natural prompt following, but do not present it as the first choice for precise local edits to an already rendered image.',
-  'ChatGPT Image Generation 2 is routed through the gateway to OpenAI gpt-image-2. It is best for specific editing of existing or already rendered images, stronger preservation, controlled local changes, text-heavy image requests, and cases where the user wants only a named object/material/region changed.',
-  'ChatGPT Image Generation 2 can be selected directly from the top-bar Image Model selector when the gateway has an OPENAI_API_KEY configured.',
-  'When the user wants to recolor, retouch, replace, remove, relight, or materially edit a finished render or photo, guide them to Visual Edit rather than rerunning a full render workflow. Visual Edit selects ChatGPT Image Generation 2 on its own, so present it as a property of the feature rather than a setting the user must change.',
+  'ChatGPT Images 2.5 is routed through the gateway to OpenAI gpt-image-2.5-sunburst. It is best for specific editing of existing or already rendered images, stronger preservation, controlled local changes, text-heavy image requests, and cases where the user wants only a named object/material/region changed.',
+  'ChatGPT Images 2.5 can be selected directly from the top-bar Image Model selector when the gateway has an OPENAI_API_KEY configured.',
+  'When the user wants to recolor, retouch, replace, remove, relight, or materially edit a finished render or photo, guide them to Visual Edit rather than rerunning a full render workflow. Visual Edit selects ChatGPT Images 2.5 on its own, so present it as a property of the feature rather than a setting the user must change.',
   'The app adapts image prompts per model. Do not expose those internal prompt-adaptation details unless the user asks why prompts look structured.',
   'For transparent-background, alpha, or no-background requests, explain that the current image models do not guarantee true alpha output. The app steers those requests toward a clean pure white or opaque PNG-style background.',
 ];
@@ -58,7 +58,7 @@ export const APP_ASSISTANT_ROUTING_RULES = [
   'Classify the user intent before answering: new image/render creation, source-to-render transformation, targeted existing-image edit, object insertion, camera angle change, upscale/restoration, video, material/document/PDF operation, or export/download.',
   '3D Rendering is for turning model/clay/viewport screenshots into polished renders. It is not the right feature for changing one chair, wall, material, sign, person, sky, or other isolated part of an already rendered image.',
   'Visual Edit is the right feature for targeted edits to a photo or finished render. If the user asks to change chair color, seating material, wall paint, flooring, sky, lighting, people, or any selected area, route them to Visual Edit.',
-  'For a user who uploaded an image/render into 3D Rendering and asks to change chair color, explain that they are using the wrong feature, switch to Visual Edit when allowed, set the Select tool, help them mark the chairs with Rect/Brush/Lasso or Auto Seating, and write a direct Edit Prompt. Visual Edit already uses ChatGPT Image Generation 2 automatically, so do not ask them to change the image model.',
+  'For a user who uploaded an image/render into 3D Rendering and asks to change chair color, explain that they are using the wrong feature, switch to Visual Edit when allowed, set the Select tool, help them mark the chairs with Rect/Brush/Lasso or Auto Seating, and write a direct Edit Prompt. Visual Edit already uses ChatGPT Images 2.5 automatically, so do not ask them to change the image model.',
   'Scene Compose is for adding referenced objects to a base scene. If the user wants to modify pixels that already exist, route to Visual Edit instead.',
   'Generate from Text is for creating a new image from a written brief. If the user already has an image and wants a specific edit, route to Visual Edit instead.',
   'Upscale is for final resolution/detail restoration after the composition is approved. Do not recommend it for semantic edits such as changing colors, furniture, materials, or scene content.',
@@ -120,7 +120,7 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
       'Good answers should help the user specify building type, site/context, style, materials, camera, lighting, weather, and mood.',
       'If the user needs to alter an existing image, redirect to Visual Edit, Scene Compose, or 3D Rendering instead of treating this as text generation.',
       'Use Nano Banana Pro when the user wants a new photorealistic rendering with stronger color, HDR-like tone, atmosphere, lighting, and render polish.',
-      'Use ChatGPT Image Generation 2 when the user brings an already rendered image and needs precise preservation, targeted editing, or clean rendered text.',
+      'Use ChatGPT Images 2.5 when the user brings an already rendered image and needs precise preservation, targeted editing, or clean rendered text.',
       'For transparent-background requests, tell the user the app will aim for a clean pure white or opaque PNG-style background rather than promising real alpha transparency.',
     ],
     watchOut: ['Vague prompts produce generic buildings.', 'Text generation is for ideation, not measured documentation.'],
@@ -240,7 +240,7 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     specificGuidance: [
       'The core guarantee: every pixel outside the user\'s selection comes back identical to the original. Signage, text, furniture, people and reflections elsewhere in the frame do not drift. This is what makes Visual Edit safe to run on an already approved render.',
       'The selection marks where to look, not a stencil to paint inside. The edit follows the real edges of the target, so a comfortable selection around the object works better than a tight tracing.',
-      'Visual Edit always uses ChatGPT Image Generation 2 automatically. Do not ask the user to switch the top-bar image model for Visual Edit, and do not present the model as a choice here. Extend is the only tool with its own model option.',
+      'Visual Edit always uses ChatGPT Images 2.5 automatically. Do not ask the user to switch the top-bar image model for Visual Edit, and do not present the model as a choice here. Extend is the only tool with its own model option.',
       'Auto selection is reliable. Its target categories are Building, Facade, Windows, Doors, Roof, Walls, Floors, Ceilings, Columns, Structure, Glass, Signage, Lighting, Seating, Furniture, Counters, People, Vehicles, Aircraft, Trains, Buses, Jet Bridges, Luggage Carts, Platforms, Roads, Parking, Ground, Water, Vegetation, Sky and Background. Offer Auto by naming the matching category; use manual Rect, Brush or Lasso when the target is one specific instance rather than a whole category.',
       'Tools needing a selection before Apply Edits: Select, Material, Object, Remove, Background. People/Auto and Remove with Quick Remove targets run on the whole image and need no selection.',
       'Select is the free-form tool: mark an area and describe the change in plain language. It is the right choice for recolouring and for anything the dedicated tools do not cover.',
@@ -665,7 +665,7 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
   });
   const lines = [
     `Active mode: ${state.mode}`,
-    `Image model: ${state.imageGenerationModel === 'chatgpt-image-generation-2' ? 'ChatGPT Image Generation 2' : 'Nano Banana Pro'}`,
+    `Image model: ${state.imageGenerationModel === 'chatgpt-images-2-5' ? 'ChatGPT Images 2.5' : 'Nano Banana Pro'}`,
     `Active style id: ${state.activeStyleId}`,
     `Custom styles: ${state.customStyles.length}`,
     `Canvas image uploaded: ${state.uploadedImage ? 'yes' : 'no'}`,

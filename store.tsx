@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, LEGACY_IMAGE_GENERATION_MODEL_ALIASES, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -154,8 +154,11 @@ const normalizeRender3DSourceMode = (mode: unknown): Render3DSourceMode => {
 };
 
 const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => {
-  return IMAGE_GENERATION_MODELS.includes(model as ImageGenerationModel)
-    ? model as ImageGenerationModel
+  const aliased = typeof model === 'string'
+    ? LEGACY_IMAGE_GENERATION_MODEL_ALIASES[model] ?? model
+    : model;
+  return IMAGE_GENERATION_MODELS.includes(aliased as ImageGenerationModel)
+    ? aliased as ImageGenerationModel
     : DEFAULT_IMAGE_GENERATION_MODEL;
 };
 

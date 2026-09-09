@@ -36,7 +36,7 @@ const LOG_PROMPT_MAX_CHARS = 80_000;
 const LOG_JSON_MAX_DEPTH = 6;
 const LOG_JSON_MAX_ARRAY_ITEMS = 80;
 const LOG_JSON_MAX_OBJECT_KEYS = 100;
-const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+const OPENAI_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
 const OPENAI_IMAGE_MAX_OUTPUTS = 10;
 const IMAGE_EDIT_TIMEOUT_MS = 10 * 60_000;
 const OPENAI_IMAGE_ALLOWED_SIZES = ['1024x1024', '1024x1536', '1536x1024', 'auto'] as const;
@@ -391,10 +391,10 @@ const getGatewayLogRouteInfo = (path: string) => {
     const match = path.match(/^\/api\/gemini\/models\/([^:]+):([^?]+)/);
     return { provider: 'gemini', model: match?.[1], action: match?.[2] || 'request' };
   }
-  if (path.startsWith('/api/image-edits')) return { provider: 'openai', model: 'gpt-image-2', action: 'image-edit' };
+  if (path.startsWith('/api/image-edits')) return { provider: 'openai', model: 'gpt-image-2.5-sunburst', action: 'image-edit' };
   if (path.startsWith('/api/cv-document-agent')) return { provider: 'openai', model: 'gpt-5', action: 'document-agent' };
   if (path.startsWith('/api/openai/responses')) return { provider: 'openai', action: 'responses' };
-  if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2', action: 'images' };
+  if (path.startsWith('/api/openai/')) return { provider: 'openai', model: 'gpt-image-2.5-sunburst', action: 'images' };
   if (path.startsWith('/api/veo/')) return { provider: 'veo', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/kling/')) return { provider: 'kling', action: path.split('/').pop() || 'request' };
   if (path.startsWith('/api/convert/')) return { provider: 'convertapi', action: path.split('/').pop() || 'request' };
@@ -915,7 +915,7 @@ const getOpenAIImageOptions = (generationConfig: any = {}) => {
       normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
     quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
-    // GPT Image 2 currently does not support transparent backgrounds.
+    // GPT Images 2.5 currently does not support transparent backgrounds.
     background: normalizedBackground === 'transparent' ? 'opaque' : normalizedBackground,
   };
 };
@@ -1092,7 +1092,7 @@ export async function imageEditRequest(
     timeoutMs: IMAGE_EDIT_TIMEOUT_MS,
     requestLogPrompt: body.prompt,
     requestLogSummary: {
-      bodyType: 'gpt-image-2-masked-edit',
+      bodyType: 'gpt-image-2-5-masked-edit',
       chars: serializedBody.length,
       operation: body.operation,
       variants: body.variants || 1,

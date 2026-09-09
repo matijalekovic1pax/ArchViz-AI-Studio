@@ -4216,12 +4216,12 @@ export const VisualEditPanel = () => {
                   value={wf.visualExtend.imageGenerationModel}
                   options={[
                     { label: 'Nano Banana', value: 'nano-banana' },
-                    { label: 'GPT Image 2', value: 'chatgpt-image-generation-2' },
+                    { label: 'GPT Images 2.5', value: 'chatgpt-images-2-5' },
                   ]}
                   onChange={(value) => updateExtend({ imageGenerationModel: value as ImageGenerationModel })}
                 />
                 <div className="mt-2 text-[10px] text-foreground-muted leading-relaxed">
-                  Nano Banana is available for natural scene continuation. GPT Image 2 remains available for precise masked outpainting.
+                  Nano Banana is available for natural scene continuation. GPT Images 2.5 remains available for precise masked outpainting.
                 </div>
               </div>
 

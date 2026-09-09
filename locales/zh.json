@@ -59,8 +59,8 @@
         "bestFor": "用于渲染润色"
       },
       "chatgpt": {
-        "label": "ChatGPT Image Generation 2",
-        "shortLabel": "GPT Img 2",
+        "label": "ChatGPT Images 2.5",
+        "shortLabel": "GPT Img 2.5",
         "description": "适合精确编辑已有渲染图、保留原貌、蒙版和文字。",
         "bestFor": "用于局部编辑"
       }

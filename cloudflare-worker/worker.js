@@ -44,7 +44,14 @@ const OPENAI_DOCUMENT_AGENT_MODEL = 'gpt-5';
 const OPENAI_DOCUMENT_AGENT_UPSTREAM_TIMEOUT_MS = 10 * 60 * 1000;
 const OPENAI_DOCUMENT_AGENT_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const OPENAI_DOCUMENT_AGENT_MAX_BRIEF_CHARS = 80_000;
-const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+// GPT Images 2.5 ships two variants. Sunburst is the precision-editing model
+// and backs every masked or image-input request; Flare is the faster model for
+// generating from a text prompt alone. Both accept the same canvas limits as
+// GPT Images 2.5, so the geometry pipeline is unchanged.
+const OPENAI_IMAGE_EDIT_MODEL = 'gpt-image-2.5-sunburst';
+const OPENAI_IMAGE_GENERATION_MODEL = 'gpt-image-2.5-flare';
+/** Every model this worker is allowed to forward. */
+const OPENAI_IMAGE_MODELS = [OPENAI_IMAGE_EDIT_MODEL, OPENAI_IMAGE_GENERATION_MODEL];
 const OPENAI_IMAGE_UPSTREAM_TIMEOUT_MS = 9 * 60 * 1000;
 const OPENAI_SELECTION_ALPHA_THRESHOLD = 16;
 // The localized route carries base64 JSON, so its safe application limit must
@@ -2889,10 +2896,11 @@ function normalizeOpenAIQuality(imageSize) {
   return 'medium';
 }
 
+/** GPT Images 2.5 adds the xhigh and max tiers above high. */
+const OPENAI_IMAGE_QUALITIES = ['low', 'medium', 'high', 'xhigh', 'max', 'auto'];
+
 function normalizeOpenAIQualityValue(value) {
-  return value === 'low' || value === 'medium' || value === 'high' || value === 'auto'
-    ? value
-    : 'medium';
+  return OPENAI_IMAGE_QUALITIES.includes(value) ? value : 'medium';
 }
 
 function normalizeOpenAIOutputFormat(value) {
@@ -3446,7 +3454,7 @@ async function handleCvDocumentAgent(request, env) {
   }
 }
 
-function normalizeOpenAIImageResponse(data) {
+function normalizeOpenAIImageResponse(data, model = OPENAI_IMAGE_GENERATION_MODEL) {
   const outputFormat = data?.output_format || 'png';
   const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
   const images = Array.isArray(data?.data)
@@ -3467,7 +3475,7 @@ function normalizeOpenAIImageResponse(data) {
     text: null,
     images,
     usage: data?.usage || null,
-    model: OPENAI_IMAGE_MODEL,
+    model,
   };
 }
 
@@ -3838,17 +3846,25 @@ function normalizeImageEditQuality(value) {
   return 'standard';
 }
 
-function mapImageEditQualityToOpenAI(value) {
+/**
+ * The top tier stays at `high` by default so switching to 2.5 does not silently
+ * change cost or latency. GPT Images 2.5 also offers `xhigh` and `max`; set
+ * IMAGE_EDIT_FINAL_QUALITY to one of those to raise it.
+ */
+function mapImageEditQualityToOpenAI(value, env) {
   if (value === 'draft') return 'low';
-  if (value === 'final') return 'high';
+  if (value === 'final') {
+    const override = env?.IMAGE_EDIT_FINAL_QUALITY;
+    return OPENAI_IMAGE_QUALITIES.includes(override) ? override : 'high';
+  }
   return 'medium';
 }
 
 /**
- * Builds the GPT Image 2 edit prompt for one masked whole-frame request.
+ * Builds the GPT Images 2.5 edit prompt for one masked whole-frame request.
  *
  * The prompt describes the picture that should come back and never describes
- * the mask. gpt-image-2 sees the masked area as an erased hole, so naming
+ * the mask. gpt-image-2.5-sunburst sees the masked area as an erased hole, so naming
  * "the transparent region" in the prompt reads to the model as an instruction
  * about transparency and it renders the selection empty — which an opaque PNG
  * resolves to a solid black patch. Spatial containment is the mask's job;
@@ -4024,7 +4040,7 @@ async function readOpenAIUploadPngDimensions(upload, label) {
 
   const mimeType = getOpenAIUploadMimeType(upload);
   if (mimeType && mimeType !== 'application/octet-stream' && mimeType !== 'image/png') {
-    throw new Error(`${label} must be a PNG image for masked GPT Image 2 edits.`);
+    throw new Error(`${label} must be a PNG image for masked GPT Images 2.5 edits.`);
   }
 
   const bytes = upload?.bytes instanceof Uint8Array
@@ -4047,10 +4063,10 @@ async function validateOpenAIMaskedEditUploads(origin, images, maskUpload) {
       return badRequest(origin, 'Mask PNG must include an alpha channel.');
     }
     if (sourcePng.width !== maskPng.width || sourcePng.height !== maskPng.height) {
-      return badRequest(origin, 'Source image and mask must be the same PNG size for masked GPT Image 2 edits.');
+      return badRequest(origin, 'Source image and mask must be the same PNG size for masked GPT Images 2.5 edits.');
     }
   } catch (err) {
-    return badRequest(origin, err?.message || 'Invalid source image or mask for masked GPT Image 2 edit.');
+    return badRequest(origin, err?.message || 'Invalid source image or mask for masked GPT Images 2.5 edit.');
   }
 
   return null;
@@ -4062,7 +4078,7 @@ async function handleOpenAIMultipartImages(request, env, origin) {
   if (!prompt) return badRequest(origin, 'Missing prompt');
 
   const form = new FormData();
-  form.append('model', OPENAI_IMAGE_MODEL);
+  form.append('model', OPENAI_IMAGE_EDIT_MODEL);
   form.append('prompt', prompt);
   form.append('n', String(Math.max(1, Math.min(
     OPENAI_IMAGE_MAX_OUTPUTS,
@@ -4149,7 +4165,7 @@ async function handleImageEdit(request, env, user) {
       return badRequest(origin, 'Selection mask dimensions must match the source image.');
     }
     if (sourceSize.width % 16 !== 0 || sourceSize.height % 16 !== 0) {
-      return badRequest(origin, 'The image dimensions must be multiples of 16 for GPT Image 2 editing.');
+      return badRequest(origin, 'The image dimensions must be multiples of 16 for GPT Images 2.5 editing.');
     }
 
     const longEdge = Math.max(sourceSize.width, sourceSize.height);
@@ -4216,12 +4232,12 @@ async function handleImageEdit(request, env, user) {
     const outputMimeType = 'image/png';
 
     const form = new FormData();
-    const model = OPENAI_IMAGE_MODEL;
+    const model = OPENAI_IMAGE_EDIT_MODEL;
     form.append('model', model);
     form.append('prompt', prompt);
     form.append('n', String(variants));
     form.append('size', `${sourceSize.width}x${sourceSize.height}`);
-    form.append('quality', mapImageEditQualityToOpenAI(quality));
+    form.append('quality', mapImageEditQualityToOpenAI(quality, env));
     form.append('output_format', outputFormat);
     form.append('background', 'opaque');
     form.append(
@@ -4270,7 +4286,7 @@ async function handleImageEdit(request, env, user) {
         const rawBase64 = entry?.b64_json;
         if (!rawBase64 || typeof rawBase64 !== 'string') return null;
         // Bound the encoded response before atob allocates a second full-size copy.
-        // A legal GPT Image 2 PNG is comfortably below the 50 MB per-image limit.
+        // A legal GPT Images 2.5 PNG is comfortably below the 50 MB per-image limit.
         if (rawBase64.length > Math.ceil(OPENAI_IMAGE_MAX_INPUT_BYTES * 4 / 3) + 4) return null;
         try {
           const outputBytes = base64Decode(rawBase64);
@@ -4294,7 +4310,7 @@ async function handleImageEdit(request, env, user) {
             variantIndex: index,
             userEmail: user?.email || null,
             quality,
-            openAIQuality: mapImageEditQualityToOpenAI(quality),
+            openAIQuality: mapImageEditQualityToOpenAI(quality, env),
             outputFormat,
             width: sourceSize.width,
             height: sourceSize.height,
@@ -4372,7 +4388,11 @@ async function handleOpenAIImages(request, env) {
       Math.floor(clampNumber(body.numberOfImages, 1, OPENAI_IMAGE_MAX_OUTPUTS, 1))
     ));
     const { size, quality, outputFormat, background } = getOpenAIImageOptions(body.generationConfig);
-    const model = body.model === OPENAI_IMAGE_MODEL ? body.model : OPENAI_IMAGE_MODEL;
+    // Image inputs mean this is an edit, which is what Sunburst is for.
+    // A bare text prompt is a generation, where Flare is faster at the same quality.
+    const requestedModel = OPENAI_IMAGE_MODELS.includes(body.model) ? body.model : null;
+    const model = requestedModel
+      || (images.length > 0 ? OPENAI_IMAGE_EDIT_MODEL : OPENAI_IMAGE_GENERATION_MODEL);
     if (maskImage && images.length === 0) {
       return badRequest(origin, 'Missing source image for masked edit.');
     }
@@ -4438,7 +4458,7 @@ async function handleOpenAIImages(request, env) {
       return createOpenAIUpstreamErrorResponse(origin, upstreamResp, data, 'OpenAI image API');
     }
 
-    const normalized = normalizeOpenAIImageResponse(data);
+    const normalized = normalizeOpenAIImageResponse(data, model);
     if (normalized.images.length === 0) {
       return corsResponse(origin, { error: 'OpenAI image API returned no image data.' }, { status: 502 });
     }
@@ -6348,7 +6368,7 @@ export default {
         env,
         ctx,
         user,
-        { provider: 'openai', model: OPENAI_IMAGE_MODEL, action: 'images', route: '/api/openai/images' },
+        { provider: 'openai', model: OPENAI_IMAGE_GENERATION_MODEL, action: 'images', route: '/api/openai/images' },
         () => handleOpenAIImages(request, env)
       );
     }
@@ -6359,7 +6379,7 @@ export default {
         env,
         ctx,
         user,
-        { provider: 'openai', model: OPENAI_IMAGE_MODEL, action: 'image-edit', route: '/api/image-edits' },
+        { provider: 'openai', model: OPENAI_IMAGE_EDIT_MODEL, action: 'image-edit', route: '/api/image-edits' },
         () => handleImageEdit(request, env, user)
       );
     }

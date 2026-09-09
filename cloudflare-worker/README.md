@@ -6,7 +6,7 @@ This Cloudflare Worker is the server-side gateway for ArchViz AI Studio. It keep
 
 - Google ID token verification and app JWT issuance
 - Gemini text/image requests, including the Nano Banana Pro image model path
-- ChatGPT Image Generation 2 through OpenAI `gpt-image-2`
+- ChatGPT Images 2.5 through OpenAI `gpt-image-2.5-sunburst`
 - Vertex AI Veo and Kling video generation/status endpoints
 - ConvertAPI document conversion for PDF translation
 - iLovePDF auth/process flows for PDF compression
@@ -60,7 +60,7 @@ wrangler secret put APPWRITE_ADMINS_COLLECTION_ID
 wrangler secret put APPWRITE_SNAPSHOTS_BUCKET_ID
 ```
 
-`OPENAI_API_KEY` enables GPT document translation and the ChatGPT Image Generation 2 option.
+`OPENAI_API_KEY` enables GPT document translation and the ChatGPT Images 2.5 option.
 
 ## Localized image-edit protection
 
@@ -123,7 +123,7 @@ After deployment, update the frontend `VITE_API_GATEWAY_URL` to the Worker URL.
 ## Notes
 
 - The Worker keeps the request body limit below Cloudflare's 100 MB Free/Pro cap so high-resolution image edits fail predictably before the edge limit.
-- ChatGPT Image Generation 2 normalizes requested size/quality and can force an opaque output background for unsupported transparent-background requests.
+- ChatGPT Images 2.5 normalizes requested size/quality and can force an opaque output background for unsupported transparent-background requests.
 - Vertex AI and video jobs may require repeated polling; the frontend handles progress and status checks through this gateway.
 - Feedback snapshots are stored in Appwrite Storage when `APPWRITE_*` secrets are configured. Supabase remains as a legacy fallback only if Appwrite is not configured.
 - Generation/request logs are stored in Supabase through the Worker using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Direct client access remains blocked by RLS; admins browse logs through the existing feedback admin dashboard.

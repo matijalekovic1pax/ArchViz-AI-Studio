@@ -924,7 +924,7 @@ const getModelSpecificGuidance = (
     ]
   };
 
-  if (model === 'chatgpt-image-generation-2') {
+  if (model === 'chatgpt-images-2-5') {
     return compactItems([
       'Use a structured artifact plan: preserve/source constraints first, then visible changes, then style and quality.',
       ...(gptModeGuidance[mode] || []),
@@ -1072,9 +1072,9 @@ export function adaptPromptForImageGenerationModel(
     ? `Model-specific guidance:\n- ${modelGuidance.join('\n- ')}`
     : '';
 
-  if (model === 'chatgpt-image-generation-2') {
+  if (model === 'chatgpt-images-2-5') {
     return [
-      'Model: ChatGPT Image Generation 2 / GPT Image 2.',
+      'Model: ChatGPT Images 2.5.',
       instructionLabel,
       `Output artifact: ${intent.artifact}.`,
       `Primary task: ${intent.task}`,

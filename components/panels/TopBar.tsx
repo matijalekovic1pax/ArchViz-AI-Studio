@@ -677,7 +677,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     ? [VISUAL_EDIT_IMAGE_MODEL]
     : IMAGE_GENERATION_MODELS;
   const getModelCopy = (model: ImageGenerationModel) => {
-    if (model === 'chatgpt-image-generation-2') {
+    if (model === 'chatgpt-images-2-5') {
       return {
         label: t('topBar.modelSelector.chatgpt.label'),
         shortLabel: t('topBar.modelSelector.chatgpt.shortLabel'),
@@ -708,11 +708,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           "flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-sunken px-2.5 py-1.5 text-[10px] font-semibold text-foreground-secondary transition-colors hover:bg-surface-elevated hover:text-foreground",
           isAiSlopModelLocked && "cursor-not-allowed border-foreground/10 bg-surface-elevated text-foreground"
         )}
-        title={isAiSlopModelLocked ? "AI Slop is locked to ChatGPT Image Generation 2" : t('topBar.modelSelector.title')}
+        title={isAiSlopModelLocked ? "AI Slop is locked to ChatGPT Images 2.5" : t('topBar.modelSelector.title')}
         aria-label={t('topBar.modelSelector.title')}
         aria-expanded={isAiSlopModelLocked ? false : showModelMenu}
       >
-        {activeImageGenerationModel === 'chatgpt-image-generation-2' ? (
+        {activeImageGenerationModel === 'chatgpt-images-2-5' ? (
           <Shield size={12} className="text-foreground-muted" />
         ) : (
           <Sparkles size={12} className="text-foreground-muted" />
@@ -738,7 +738,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
             {selectableImageGenerationModels.map((model) => {
               const copy = getModelCopy(model);
               const selected = activeImageGenerationModel === model;
-              const Icon = model === 'chatgpt-image-generation-2' ? Shield : Sparkles;
+              const Icon = model === 'chatgpt-images-2-5' ? Shield : Sparkles;
 
               return (
                 <div key={model}>
