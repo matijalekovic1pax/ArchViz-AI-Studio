@@ -1,3 +1,4 @@
+import { IMAGE_GENERATION_MODEL_LABELS } from '../../types';
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Plus, Sparkles, X } from 'lucide-react';
 import { useAppStore } from '../../store';
@@ -27,7 +28,7 @@ export const GenerateConversation: React.FC = () => {
       <div className="mx-auto max-w-3xl space-y-7 px-4 py-8 sm:px-6">
         {state.generateMessages.length === 0 && <div className="py-12 text-center text-foreground-muted"><Sparkles className="mx-auto mb-4" size={28} /><h2 className="text-xl text-foreground">What would you like to create?</h2><p className="mt-2 text-sm">Describe an image or upload a reference. Then keep refining it here.</p></div>}
         {state.generateMessages.map(message => <article key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-surface-sunken px-4 py-3' : 'mr-auto w-full'}>
-          <p className="mb-2 text-xs text-foreground-muted">{message.role === 'user' ? 'You' : message.model === 'chatgpt-image-generation-2' ? 'GPT Image' : 'Nano Banana'}</p>
+          <p className="mb-2 text-xs text-foreground-muted">{message.role === 'user' ? 'You' : message.model ? IMAGE_GENERATION_MODEL_LABELS[message.model] : 'Nano Banana'}</p>
           {message.content && <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${message.status === 'error' ? 'text-red-500' : ''}`}>{message.content}</p>}
           {message.attachments?.map((url, index) => url.startsWith('data:image/') ? <button type="button" key={index} onClick={() => setPreview(url)} className="mt-3 mr-2 inline-block"><img src={url} alt={`Uploaded reference ${index + 1}`} className="h-24 w-24 rounded-lg object-cover" /></button> : <p key={index} className="text-xs">Attached file {index + 1}</p>)}
           {message.images?.map((url, index) => <div key={index} className="mt-3">

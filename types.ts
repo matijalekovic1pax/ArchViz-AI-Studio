@@ -32,6 +32,16 @@ export const IMAGE_GENERATION_MODELS: readonly ImageGenerationModel[] = [
 ] as const;
 
 /**
+ * Display names, kept beside the union so adding a model is a compile error
+ * until it is labelled. A hardcoded id comparison in the UI silently
+ * mislabels every message the moment an id changes.
+ */
+export const IMAGE_GENERATION_MODEL_LABELS: Readonly<Record<ImageGenerationModel, string>> = {
+  'nano-banana': 'Nano Banana',
+  'chatgpt-images-2-5': 'GPT Image',
+};
+
+/**
  * Older values that must keep working. A project saved while the app was on
  * GPT Image 2 stores the previous identifier; without this it would fail
  * validation and silently fall back to the default model, quietly changing
