@@ -1935,7 +1935,9 @@ export function useGeneration(): UseGenerationReturn {
     state.mode === 'visual-edit'
       ? state.workflow.activeTool === 'extend'
         ? state.workflow.visualExtend.imageGenerationModel
-        : VISUAL_EDIT_IMAGE_MODEL
+        : state.workflow.activeTool === 'adjust'
+          ? state.workflow.visualAdjust.imageGenerationModel
+          : VISUAL_EDIT_IMAGE_MODEL
       : state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop'
       ? AI_SLOP_UPSCALE_IMAGE_MODEL
       : state.imageGenerationModel;

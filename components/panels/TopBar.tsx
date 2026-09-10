@@ -451,6 +451,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       setShowModelMenu(false);
       return;
     }
+    if (state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust') {
+      dispatch({
+        type: 'UPDATE_WORKFLOW',
+        payload: {
+          visualAdjust: {
+            ...state.workflow.visualAdjust,
+            imageGenerationModel: model
+          }
+        }
+      });
+      setShowModelMenu(false);
+      return;
+    }
     if (state.mode === 'visual-edit') {
       dispatch({ type: 'SET_IMAGE_GENERATION_MODEL', payload: VISUAL_EDIT_IMAGE_MODEL });
       setShowModelMenu(false);
@@ -664,10 +677,19 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
 
   const activeLanguage = (i18n.language || 'en').split('-')[0];
 
-  const isVisualEditModelLocked = state.mode === 'visual-edit' && state.workflow.activeTool !== 'extend';
+  // Extend and Adjust each choose their own model; every other Visual Edit tool
+  // is fixed to the precision editing model.
+  const visualEditToolModel = state.mode === 'visual-edit'
+    ? state.workflow.activeTool === 'extend'
+      ? state.workflow.visualExtend.imageGenerationModel
+      : state.workflow.activeTool === 'adjust'
+        ? state.workflow.visualAdjust.imageGenerationModel
+        : null
+    : null;
+  const isVisualEditModelLocked = state.mode === 'visual-edit' && visualEditToolModel === null;
   const isAiSlopModelLocked = state.mode === 'upscale' && state.workflow.upscaleMode === 'ai-slop';
-  const activeImageGenerationModel = state.mode === 'visual-edit' && state.workflow.activeTool === 'extend'
-    ? state.workflow.visualExtend.imageGenerationModel
+  const activeImageGenerationModel = visualEditToolModel
+    ? visualEditToolModel
     : isVisualEditModelLocked
     ? VISUAL_EDIT_IMAGE_MODEL
     : isAiSlopModelLocked

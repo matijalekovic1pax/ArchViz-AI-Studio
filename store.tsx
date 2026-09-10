@@ -174,6 +174,12 @@ const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
         imageGenerationModel: normalizeImageGenerationModel(workflow.visualExtend.imageGenerationModel),
       }
     : workflow.visualExtend,
+  visualAdjust: workflow.visualAdjust
+    ? {
+        ...workflow.visualAdjust,
+        imageGenerationModel: normalizeImageGenerationModel(workflow.visualAdjust.imageGenerationModel),
+      }
+    : workflow.visualAdjust,
 });
 
 const updateWorkflow = (
@@ -633,6 +639,7 @@ const initialWorkflow: WorkflowSettings = {
   },
   visualAdjust: {
     aspectRatio: 'same',
+    imageGenerationModel: VISUAL_EDIT_IMAGE_MODEL,
     exposure: 0,
     contrast: 0,
     highlights: 0,
