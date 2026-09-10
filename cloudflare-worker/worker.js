@@ -3847,15 +3847,19 @@ function normalizeImageEditQuality(value) {
 }
 
 /**
- * The top tier stays at `high` by default so switching to 2.5 does not silently
- * change cost or latency. GPT Images 2.5 also offers `xhigh` and `max`; set
- * IMAGE_EDIT_FINAL_QUALITY to one of those to raise it.
+ * Final edits run at `xhigh`. This studio's edits are usually delicate work on
+ * an approved render — recolouring signage, restyling a finish, removing a
+ * subject from a finished frame — where fidelity in the edited region matters
+ * more than turnaround. Set IMAGE_EDIT_FINAL_QUALITY to `high` to dial it back,
+ * or `max` to go further.
  */
+const IMAGE_EDIT_FINAL_QUALITY_DEFAULT = 'xhigh';
+
 function mapImageEditQualityToOpenAI(value, env) {
   if (value === 'draft') return 'low';
   if (value === 'final') {
     const override = env?.IMAGE_EDIT_FINAL_QUALITY;
-    return OPENAI_IMAGE_QUALITIES.includes(override) ? override : 'high';
+    return OPENAI_IMAGE_QUALITIES.includes(override) ? override : IMAGE_EDIT_FINAL_QUALITY_DEFAULT;
   }
   return 'medium';
 }
