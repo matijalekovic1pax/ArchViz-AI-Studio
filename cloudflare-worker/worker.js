@@ -2861,13 +2861,73 @@ function parseAspectRatio(aspectRatio) {
   return Math.min(3, Math.max(1 / 3, ratio));
 }
 
+/** Target pixel budget per requested output resolution. */
+const OPENAI_IMAGE_PIXEL_BUDGETS = {
+  '1K': 1_048_576,
+  '2K': 3_686_400,
+  '4K': OPENAI_IMAGE_MAX_PIXELS,
+};
+
+/**
+ * Solves an exact WIDTHxHEIGHT for a requested aspect ratio and resolution.
+ *
+ * This used to bucket every ratio into 1536x1024, 1024x1536 or 1024x1024, so
+ * eight of the app's eleven ratios silently came back the wrong shape — ask for
+ * 16:9 and you got 3:2 — and the resolution setting did nothing at all. GPT
+ * Images 2.5 accepts any canvas whose edges are multiples of 16, whose ratio is
+ * within 3:1, whose long edge is at most 3840 and whose area is between 655,360
+ * and 8,294,400, so the requested shape can simply be honoured.
+ */
 function normalizeOpenAISize(aspectRatio, imageSize) {
   if (OPENAI_IMAGE_ALLOWED_SIZES.has(imageSize)) return imageSize;
 
   const ratio = parseAspectRatio(aspectRatio);
-  if (ratio > 1.05) return '1536x1024';
-  if (ratio < 0.95) return '1024x1536';
-  return '1024x1024';
+  const budget = OPENAI_IMAGE_PIXEL_BUDGETS[imageSize] || OPENAI_IMAGE_PIXEL_BUDGETS['2K'];
+
+  const round16 = (value) => Math.max(
+    OPENAI_IMAGE_SIZE_MULTIPLE,
+    Math.round(value / OPENAI_IMAGE_SIZE_MULTIPLE) * OPENAI_IMAGE_SIZE_MULTIPLE
+  );
+
+  // Start from the ideal continuous solution, then bring it inside every limit.
+  let height = Math.sqrt(budget / ratio);
+  let width = height * ratio;
+
+  const edgeScale = OPENAI_IMAGE_MAX_EDGE / Math.max(width, height);
+  if (edgeScale < 1) { width *= edgeScale; height *= edgeScale; }
+
+  const area = width * height;
+  if (area > OPENAI_IMAGE_MAX_PIXELS) {
+    const scale = Math.sqrt(OPENAI_IMAGE_MAX_PIXELS / area);
+    width *= scale; height *= scale;
+  } else if (area < OPENAI_IMAGE_MIN_PIXELS) {
+    const scale = Math.sqrt(OPENAI_IMAGE_MIN_PIXELS / area);
+    width *= scale; height *= scale;
+  }
+
+  // Search the multiple-of-16 grid around that solution for the legal canvas
+  // closest to the requested ratio; rounding alone can land just outside a limit.
+  const baseWidth = round16(width);
+  const baseHeight = round16(height);
+  let best = null;
+  for (let dw = -4; dw <= 4; dw += 1) {
+    for (let dh = -4; dh <= 4; dh += 1) {
+      const candidateWidth = baseWidth + dw * OPENAI_IMAGE_SIZE_MULTIPLE;
+      const candidateHeight = baseHeight + dh * OPENAI_IMAGE_SIZE_MULTIPLE;
+      if (candidateWidth < OPENAI_IMAGE_SIZE_MULTIPLE || candidateHeight < OPENAI_IMAGE_SIZE_MULTIPLE) continue;
+      if (Math.max(candidateWidth, candidateHeight) > OPENAI_IMAGE_MAX_EDGE) continue;
+      if (Math.max(candidateWidth, candidateHeight) / Math.min(candidateWidth, candidateHeight) > 3) continue;
+      const pixels = candidateWidth * candidateHeight;
+      if (pixels < OPENAI_IMAGE_MIN_PIXELS || pixels > OPENAI_IMAGE_MAX_PIXELS) continue;
+
+      const ratioError = Math.abs(candidateWidth / candidateHeight - ratio) / ratio;
+      const areaError = Math.abs(pixels / Math.max(width * height, 1) - 1);
+      const score = ratioError * 1000 + areaError;
+      if (!best || score < best.score) best = { width: candidateWidth, height: candidateHeight, score };
+    }
+  }
+
+  return best ? `${best.width}x${best.height}` : '1024x1024';
 }
 
 function normalizeOpenAISizeValue(size, fallback = 'auto') {
