@@ -1590,6 +1590,51 @@ const materialPreviewToImageData = async (previewUrl: string, fallbackUrl?: stri
   }
 };
 
+/**
+ * Draws numbered light-source markers onto a downscaled copy of the source.
+ * The copy is attached as a reference so the model can see which door, window
+ * or fixture each marker sits on; the edited image itself never has markers.
+ */
+const buildLightingGuideImage = async (
+  sourceDataUrl: string,
+  points: Array<{ x: number; y: number }>
+): Promise<ImageData | null> => {
+  const source = await loadCanvasImage(sourceDataUrl);
+  const naturalWidth = source.naturalWidth || source.width;
+  const naturalHeight = source.naturalHeight || source.height;
+  const scale = Math.min(1, 1536 / Math.max(naturalWidth, naturalHeight));
+  const width = Math.max(1, Math.round(naturalWidth * scale));
+  const height = Math.max(1, Math.round(naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(source, 0, 0, width, height);
+  const radius = Math.max(14, Math.round(Math.min(width, height) * 0.025));
+  points.forEach((point, index) => {
+    const cx = point.x * width;
+    const cy = point.y * height;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 1.9, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+    ctx.lineWidth = Math.max(3, radius * 0.22);
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.round(radius * 1.1)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(index + 1), cx, cy + 1);
+  });
+  return ImageUtils.dataUrlToImageData(canvas.toDataURL('image/jpeg', 0.9));
+};
+
 /** Raised when the provider hands back the selection unrendered. */
 class UnrenderedEditError extends Error {
   constructor(message: string) {
@@ -4218,10 +4263,21 @@ export function useGeneration(): UseGenerationReturn {
           state.workflow.visualBackground.referenceImage
           ? dataUrlToImageData(state.workflow.visualBackground.referenceImage)
           : null;
+        const lightingSettings = state.workflow.visualLighting;
+        const usesLightingPoints = activeVisualTool === 'lighting' &&
+          lightingSettings.mode === 'sun' &&
+          lightingSettings.useDirectionGrid === false;
+        if (usesLightingPoints && (lightingSettings.sourcePoints || []).length === 0) {
+          throw new Error('Click the image to place at least one light source, or turn the direction grid back on.');
+        }
+        const lightingGuideImage = usesLightingPoints
+          ? await buildLightingGuideImage(sourceImageUrl!, lightingSettings.sourcePoints)
+          : null;
         const visualEditReferenceImages = (await Promise.all([
           materialReferenceImage,
           generalReferenceImage,
           backgroundReferenceImage,
+          lightingGuideImage,
         ].map(normalizeGatewayImageEditReference))).filter(
           (image): image is GatewayImageEditReference => image !== null
         );

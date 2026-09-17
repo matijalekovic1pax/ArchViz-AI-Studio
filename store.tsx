@@ -174,6 +174,13 @@ const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
         imageGenerationModel: normalizeImageGenerationModel(workflow.visualExtend.imageGenerationModel),
       }
     : workflow.visualExtend,
+  visualLighting: workflow.visualLighting
+    ? {
+        ...workflow.visualLighting,
+        useDirectionGrid: workflow.visualLighting.useDirectionGrid ?? true,
+        sourcePoints: Array.isArray(workflow.visualLighting.sourcePoints) ? workflow.visualLighting.sourcePoints : [],
+      }
+    : workflow.visualLighting,
   visualAdjust: workflow.visualAdjust
     ? {
         ...workflow.visualAdjust,
@@ -595,6 +602,8 @@ const initialWorkflow: WorkflowSettings = {
     artificial: { type: 'point', position: { x: 50, y: 50 }, intensity: 80, color: '#ffffff', falloff: 40 },
     ambient: 35,
     preserveShadows: true,
+    useDirectionGrid: true,
+    sourcePoints: [],
   },
   visualSky: {
     preset: 'Clear Blue',

@@ -451,6 +451,10 @@ export interface WorkflowSettings {
     artificial: { type: 'point' | 'spot' | 'area'; position: { x: number; y: number }; intensity: number; color: string; falloff: number };
     ambient: number;
     preserveShadows: boolean;
+    /** Grid of image-relative directions. When off, sourcePoints drive the light. */
+    useDirectionGrid: boolean;
+    /** Places on the image light should enter from, normalised 0-1. Never rendered. */
+    sourcePoints: Array<{ id: string; x: number; y: number }>;
   };
   visualSky: {
     preset: string;

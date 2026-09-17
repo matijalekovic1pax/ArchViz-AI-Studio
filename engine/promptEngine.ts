@@ -2956,19 +2956,44 @@ export const buildLocalizedVisualEditInstruction = (
 
   if (tool === 'lighting') {
     const lighting = workflow.visualLighting;
+    const points = lighting.sourcePoints || [];
+    const usePoints = lighting.useDirectionGrid === false && points.length > 0;
+    const tone = [
+      `Colour temperature about ${lighting.sun.colorTemp}K.`,
+      describeSunIntensity(lighting.sun.intensity) ? `The key light is ${describeSunIntensity(lighting.sun.intensity)}.` : null,
+      `Ambient fill ${lighting.ambient}%.`,
+    ];
+    if (usePoints) {
+      // Light positions are marked on a guide copy of the photograph, attached
+      // after it. Coordinates alone are unreliable for image models; a marked
+      // image anchors the source to the actual door, window or fixture.
+      const where = points
+        .map((point, index) => `marker ${index + 1} at ${describeCanvasPosition({ x: point.x * 100, y: point.y * 100 })}`)
+        .join('; ');
+      return compactLocalizedInstruction([
+        `Relight this scene so the light enters from the positions marked on the attached light-source guide (${where}).`,
+        'The guide is a copy of this photograph with numbered markers drawn on it. The markers only show where light comes from — never draw markers, dots, rings or numbers in the result.',
+        'For each marker, identify what is underneath it. If it is a door, window, glazing, skylight or other opening, the light is daylight entering through that opening from outside: bright at the opening, spilling in as a shaped beam or pool on the floor and nearby surfaces, with shadows cast away from the opening. If it is a lamp or fixture, treat that fixture as the emitter.',
+        'Let the light fall off naturally with distance, wrap onto people and objects facing the source, and darken what faces away.',
+        ...tone,
+        lighting.preserveShadows ? 'Keep existing shadow shapes consistent with the new source rather than inventing unrelated shadows.' : null,
+        'Do not add, remove, replace, move or redesign any object, person, material, text or architecture. Change only the light.',
+      ]);
+    }
     const setup = lighting.mode === 'sun'
-      ? `Use sun azimuth ${lighting.sun.azimuth} degrees, elevation ${lighting.sun.elevation} degrees, intensity ${lighting.sun.intensity}, color temperature ${lighting.sun.colorTemp}K, and shadow softness ${lighting.sun.shadowSoftness}.`
+      ? describeLightSourcePosition(lighting.sun.azimuth, lighting.sun.elevation)
       : lighting.mode === 'hdri'
-        ? `Use the ${lighting.hdri.preset} HDRI look at intensity ${lighting.hdri.intensity} and rotation ${lighting.hdri.rotation} degrees.`
+        ? `Use the ${lighting.hdri.preset} HDRI look at intensity ${lighting.hdri.intensity}.`
         : `Use a ${lighting.artificial.type} light with color ${lighting.artificial.color}, intensity ${lighting.artificial.intensity}, and falloff ${lighting.artificial.falloff}.`;
     return compactLocalizedInstruction([
-      'Relight only the selected area with natural falloff into its immediate surroundings.',
+      'Relight this scene.',
       setup,
-      `Ambient fill ${lighting.ambient}.`,
-      lighting.preserveShadows ? 'Preserve the identity and direction of existing shadows.' : null,
-      'Do not add, remove, replace, move, or redesign any object, material, text, or architecture.'
+      ...tone,
+      lighting.preserveShadows ? 'Keep shadows physically consistent with the light source.' : null,
+      'Do not add, remove, replace, move or redesign any object, person, material, text or architecture. Change only the light.',
     ]);
   }
+
 
   if (tool === 'object') {
     const object = workflow.visualObject;

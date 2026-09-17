@@ -455,6 +455,11 @@ const StandardCanvas: React.FC = () => {
   const showVisualAutoSelecting = isVisualEdit && state.workflow.visualAutoSelecting;
   const isSceneCompose = state.mode === 'scene-compose';
   const isSelectTool = isVisualEdit && state.workflow.activeTool !== 'extend';
+  // Lighting with the direction grid off: clicks place light-source markers.
+  const isLightingPointMode = isVisualEdit &&
+    state.workflow.activeTool === 'lighting' &&
+    state.workflow.visualLighting.useDirectionGrid === false;
+  const lightingSourcePoints = state.workflow.visualLighting.sourcePoints || [];
   const isSelectionAdjustMode = isSelectTool && state.workflow.visualSelection.mode === 'adjust';
   const isMasterplan = state.mode === 'masterplan';
   const isBoundaryTool = isMasterplan && state.workflow.mpBoundary.mode === 'custom';
@@ -1895,6 +1900,29 @@ const StandardCanvas: React.FC = () => {
     sceneComposeReferences,
   ]);
 
+  const handleLightingPointPlacement = useCallback((e: CanvasPointerEvent) => {
+    const point = getSelectionPoint(e);
+    const layout = getImageLayout();
+    if (!point || !layout || layout.naturalWidth <= 0 || layout.naturalHeight <= 0) return;
+    const x = Math.min(Math.max(point.x / layout.naturalWidth, 0), 1);
+    const y = Math.min(Math.max(point.y / layout.naturalHeight, 0), 1);
+    // Clicking an existing marker removes it; anywhere else adds one.
+    const hit = lightingSourcePoints.find((existing) =>
+      Math.hypot((existing.x - x) * layout.width, (existing.y - y) * layout.height) < 16
+    );
+    dispatch({
+      type: 'UPDATE_WORKFLOW',
+      payload: {
+        visualLighting: {
+          ...state.workflow.visualLighting,
+          sourcePoints: hit
+            ? lightingSourcePoints.filter((existing) => existing.id !== hit.id)
+            : [...lightingSourcePoints, { id: `light-${Date.now()}`, x, y }],
+        },
+      },
+    });
+  }, [dispatch, getImageLayout, getSelectionPoint, lightingSourcePoints, state.workflow.visualLighting]);
+
   const updateSelectionAdjustHover = useCallback((e: CanvasPointerEvent) => {
     const point = getSelectionPoint(e);
     if (!point) {
@@ -1923,6 +1951,10 @@ const StandardCanvas: React.FC = () => {
 
     if (isSceneComposePlacementArmed) {
       handleSceneComposePlacement(e);
+      return;
+    }
+    if (isLightingPointMode) {
+      handleLightingPointPlacement(e);
       return;
     }
     if (isBoundaryTool) {
@@ -2562,6 +2594,25 @@ const StandardCanvas: React.FC = () => {
     );
   };
 
+  const renderLightingSourcePoints = () => {
+    if (!currentImageLayout || lightingSourcePoints.length === 0) return null;
+    return (
+      <>
+        {lightingSourcePoints.map((point, index) => {
+          const cx = currentImageLayout.offsetX + point.x * currentImageLayout.width;
+          const cy = currentImageLayout.offsetY + point.y * currentImageLayout.height;
+          return (
+            <g key={point.id} style={{ pointerEvents: 'none' }}>
+              <circle cx={cx} cy={cy} r={22} fill="#fbbf24" opacity={0.18} />
+              <circle cx={cx} cy={cy} r={12} fill="#f59e0b" stroke="white" strokeWidth={2.5} />
+              <text x={cx} y={cy + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill="white">{index + 1}</text>
+            </g>
+          );
+        })}
+      </>
+    );
+  };
+
   const renderSceneComposePins = () => {
     if (!currentImageLayout || sceneComposePins.length === 0) return null;
     const previewSize = 34;
@@ -3005,6 +3056,7 @@ const StandardCanvas: React.FC = () => {
                                           ))}
                                           {isSelectionAdjustMode && renderSelectionAdjustHandles()}
                                           {isSceneCompose && renderSceneComposePins()}
+                                          {isLightingPointMode && renderLightingSourcePoints()}
                                        </svg>
                                     </div>
                                  )}

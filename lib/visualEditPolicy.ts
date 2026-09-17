@@ -336,6 +336,11 @@ export const resolveVisualEditScope = ({
     // original visible for footprint, scale and perspective.
     return { wholeFrame: false, useProviderMask: objectPlacementMode === 'place' };
   }
+  if (activeTool === 'lighting' && !hasSelection) {
+    // Light entering through a door lands on the floor, walls and people far
+    // from the opening, so a relight without a selection is scene-wide.
+    return { wholeFrame: true, useProviderMask: false };
+  }
   if (activeTool === 'sky' || activeTool === 'background') {
     return { wholeFrame: false, useProviderMask: true };
   }

@@ -3064,12 +3064,44 @@ export const VisualEditPanel = () => {
 
             {wf.visualLighting.mode === 'sun' && (
               <div className="space-y-3">
-                <SunPositionWidget
-                  azimuth={wf.visualLighting.sun.azimuth}
-                  elevation={wf.visualLighting.sun.elevation}
-                  helperText="Directions are image-relative. Right means light enters from visible doors, windows, or bright openings on the right side of this view."
-                  onChange={(azimuth, elevation) => updateLightingSun({ azimuth, elevation })}
-                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-foreground">Direction grid</span>
+                  <Toggle
+                    label=""
+                    checked={wf.visualLighting.useDirectionGrid !== false}
+                    onChange={(value) => updateLighting({ useDirectionGrid: value })}
+                  />
+                </div>
+                {wf.visualLighting.useDirectionGrid !== false ? (
+                  <SunPositionWidget
+                    azimuth={wf.visualLighting.sun.azimuth}
+                    elevation={wf.visualLighting.sun.elevation}
+                    helperText="Directions are image-relative. Right means light enters from visible doors, windows, or bright openings on the right side of this view."
+                    onChange={(azimuth, elevation) => updateLightingSun({ azimuth, elevation })}
+                  />
+                ) : (
+                  <div className="rounded-md border border-border bg-surface-sunken/60 px-3 py-2.5 space-y-2">
+                    <p className="text-[11px] leading-relaxed text-foreground-muted">
+                      Click the image where light should come from — a door, window or lamp. Click a marker to remove it. Markers only guide the model and never appear in the result.
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-foreground">
+                        {(wf.visualLighting.sourcePoints || []).length === 0
+                          ? 'No light sources placed'
+                          : `${wf.visualLighting.sourcePoints.length} light source${wf.visualLighting.sourcePoints.length === 1 ? '' : 's'}`}
+                      </span>
+                      {(wf.visualLighting.sourcePoints || []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => updateLighting({ sourcePoints: [] })}
+                          className="text-[11px] text-foreground-muted hover:text-foreground underline underline-offset-2"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <SliderControl
                   label="Intensity"
                   value={wf.visualLighting.sun.intensity}
