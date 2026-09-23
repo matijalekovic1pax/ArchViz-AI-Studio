@@ -44,7 +44,7 @@ export interface MasterplanSiteFootprint {
 
 export type ImageGenerationModel = 'nano-banana' | 'chatgpt-images-2-5';
 
-export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';
+export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'chatgpt-images-2-5';
 export const AI_SLOP_UPSCALE_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-images-2-5';
 export const VISUAL_EDIT_IMAGE_MODEL: ImageGenerationModel = 'chatgpt-images-2-5';
 
