@@ -739,7 +739,7 @@
     },
     "angleChange": {
       "title": "Angle Change",
-      "description": "Set the full-frame angle and tilt for a new view of the current photo or render."
+      "description": "Set the full-frame angle and camera height for a new view of the current photo or render."
     },
     "exploded": {
       "title": "Exploded View",

@@ -919,7 +919,7 @@ const PATH_DESCRIPTORS: PathDescriptor[] = [
   workflow('visualExtend.customRatio.height', 'Outpaint custom ratio height', 'number', ['visual-edit'], { min: 1, max: 64 }),
 
   workflow('angleChangeDegrees', 'Frame angle', 'number', ['angle-change'], { min: -45, max: 45 }),
-  workflow('angleChangePitch', 'Angle Change tilt', 'number', ['angle-change'], { min: -30, max: 30 }),
+  workflow('angleChangePitch', 'Angle Change camera height (positive = higher)', 'number', ['angle-change'], { min: -30, max: 30 }),
 
   workflow('explodedDetection', 'Exploded detection', 'string', ['exploded'], { values: ['auto', 'manual', 'category'] }),
   workflow('explodedDirection', 'Explosion direction', 'string', ['exploded'], { values: ['vertical', 'radial', 'custom'] }),

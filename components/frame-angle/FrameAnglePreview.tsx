@@ -25,7 +25,7 @@ export const FrameAnglePreview: React.FC<FrameAnglePreviewProps> = ({ imageUrl, 
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Image Preview</h3>
         <span className="font-mono text-[10px] text-foreground-muted">
-          Angle {formatSignedDegrees(next.angleDeg)} · Tilt {formatSignedDegrees(next.tiltDeg)}
+          Angle {formatSignedDegrees(next.angleDeg)} · Height {formatSignedDegrees(next.tiltDeg)}
         </span>
       </div>
       <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-border bg-surface-sunken">

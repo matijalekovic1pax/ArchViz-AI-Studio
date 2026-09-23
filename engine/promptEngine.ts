@@ -219,9 +219,9 @@ const getPromptIntent = (mode?: string, activeTool?: ImagePromptTool): PromptInt
     },
     'angle-change': {
       artifact: 'new camera-view image',
-      task: 'Reshoot the same scene from the requested angle and pitch.',
+      task: 'Reshoot the same scene from the requested angle and camera height.',
       keep: 'Preserve design, layout, materials, lighting, people, source identity, and overall style.',
-      change: 'Create a new upright camera view with the requested rotation and tilt.',
+      change: 'Create a new upright camera view with the requested rotation and a visibly raised or lowered camera height.',
       textRule: 'Preserve existing text/signage; do not add captions.'
     },
     headshot: {
@@ -722,7 +722,7 @@ const summarizeWorkflowSettings = (state: AppState): string[] => {
   if (state.mode === 'angle-change') {
     return compactItems([
       `rotate ${Math.round(workflow.angleChangeDegrees)} degrees`,
-      `pitch ${Math.round(workflow.angleChangePitch)} degrees`
+      `camera height ${Math.round(workflow.angleChangePitch)} degrees (positive = higher)`
     ]);
   }
   if (state.mode === 'img-to-cad') {
@@ -877,7 +877,7 @@ const getModelSpecificGuidance = (
     ],
     'angle-change': [
       'Ask for a new view of the same place, not a rotated existing image.',
-      'Name the requested turn and tilt in simple camera language.'
+      'Name the requested turn and camera height in simple camera language; a higher or lower value moves the camera up or down around the subject, not only its pitch.'
     ],
     headshot: [
       'Ask for a natural professional portrait while keeping the person recognizable.',
@@ -4533,18 +4533,23 @@ function generateAngleChangePrompt(state: AppState): string {
       : angleDeg > 0
         ? `as if the photographer turned ${angleAbs}° to the right`
         : `as if the photographer turned ${angleAbs}° to the left`;
-  const tilt =
+  // The vertical axis moves the camera itself (orbit elevation), not just its
+  // pitch: a pitch-only instruction leaves the eye level unchanged.
+  const height =
     Math.abs(tiltDeg) < 3
-      ? 'with a level camera'
+      ? 'at the same camera height as the reference'
       : tiltDeg > 0
-        ? `with the camera tilted ${tiltAbs}° up, showing more ceiling`
-        : `with the camera tilted ${tiltAbs}° down, showing more floor`;
+        ? `from a camera raised ${tiltAbs}° higher on an arc around the subject, looking down on it from above eye level so more of the ground or floor and the tops of roofs, balconies and furniture are visible`
+        : `from a camera lowered ${tiltAbs}° on an arc around the subject, close to the ground and looking up at it so more of the sky or ceiling and the undersides of overhangs are visible`;
 
   return [
-    `Show the same space ${angle}, ${tilt}.`,
+    `Show the same space ${angle}, ${height}.`,
+    Math.abs(tiltDeg) < 3
+      ? null
+      : `The camera height must visibly change from the reference: ${tiltDeg > 0 ? 'a higher, more elevated' : 'a lower, closer-to-the-ground'} vantage point, not the same eye level with the lens pointed ${tiltDeg > 0 ? 'down' : 'up'}. Keep vertical lines upright.`,
     'Keep the design, layout, materials, lighting, and any people consistent with the reference image.',
     'Do not rotate, flip, or crop the existing picture; create a new upright camera view.',
-  ].join(' ');
+  ].filter(Boolean).join(' ');
 }
 
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');

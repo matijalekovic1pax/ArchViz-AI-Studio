@@ -82,12 +82,12 @@ export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, d
 
   return (
     <section className="space-y-3">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Angle + Tilt</h3>
+      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground-muted">Angle + Height</h3>
       <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-4">
         <div
           tabIndex={disabled ? -1 : 0}
           role="application"
-          aria-label="Frame angle and tilt control"
+          aria-label="Frame angle and camera height control"
           aria-valuetext={describeFrameAngle(next)}
           onKeyDown={handleKeyDown}
           className="relative flex aspect-square w-full items-center justify-center touch-none rounded-lg border border-border bg-surface-elevated outline-none transition-colors focus:border-foreground/60 focus:ring-2 focus:ring-foreground/10"
@@ -135,7 +135,7 @@ export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, d
           <div className="pointer-events-none absolute top-3 right-3 font-mono text-[10px] text-foreground-muted">{formatSignedDegrees(next.angleDeg)}</div>
         </div>
         <div className="flex h-full min-h-[190px] flex-col items-center justify-between rounded-lg border border-border bg-surface-elevated px-3 py-4">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Up</span>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Higher</span>
           <div
             className="relative h-32 w-7 touch-none rounded-full bg-surface-sunken"
             onPointerDown={(event) => {
@@ -160,12 +160,12 @@ export const FrameAnglePad: React.FC<FrameAnglePadProps> = ({ value, onChange, d
               style={{ top: `${tiltPercent}%` }}
             />
           </div>
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Tilt Down</span>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-foreground-muted">Lower</span>
           <span className="font-mono text-[10px] text-foreground-muted">{formatSignedDegrees(next.tiltDeg)}</span>
         </div>
       </div>
       <p className="text-center text-xs text-foreground-secondary">{describeFrameAngle(next)}</p>
-      <p className="text-center text-[10px] text-foreground-muted">Drag the circle for angle. Drag the vertical slider for tilt.</p>
+      <p className="text-center text-[10px] text-foreground-muted">Drag the circle for angle. Drag the vertical slider to raise or lower the camera.</p>
     </section>
   );
 };

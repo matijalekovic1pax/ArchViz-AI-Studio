@@ -4899,8 +4899,8 @@ export function useGeneration(): UseGenerationReturn {
             ? 'Original Angle'
             : `${Math.abs(angleDeg)}° ${angleDeg < 0 ? 'Left' : 'Right'} Angle`;
           const tiltLabel = Math.abs(tiltDeg) < 3
-            ? 'Level Tilt'
-            : `${Math.abs(tiltDeg)}° Tilt ${tiltDeg > 0 ? 'Up' : 'Down'}`;
+            ? 'Same Height'
+            : `${Math.abs(tiltDeg)}° ${tiltDeg > 0 ? 'Higher' : 'Lower'}`;
 
           dispatch({
             type: 'UPDATE_WORKFLOW',
