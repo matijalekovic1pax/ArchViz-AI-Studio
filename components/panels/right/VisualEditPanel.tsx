@@ -281,7 +281,7 @@ const buildAutoSelectionPrompt = (
   return [
     `Give the segmentation masks for the ${targetNames} in this architectural visualization.`,
     'Output a JSON list of segmentation masks where each entry contains the 2D bounding box in the key "box_2d", the segmentation mask in the key "mask", and the text label in the key "label".',
-    'The box_2d must be [ymin, xmin, ymax, xmax] normalized to 0-1000. The mask must be a polygon of [x, y] points, also normalized to 0-1000, tracing the outline of that one instance.',
+    'The box_2d must be [ymin, xmin, ymax, xmax] normalized to 0-1000. The mask must be a polygon of [y, x] points (y first, same order as box_2d), also normalized to 0-1000, tracing the outline of that one instance.',
     'What each requested target means here:',
     targetLines,
     hardRuleBlock,
@@ -1812,6 +1812,27 @@ export const VisualEditPanel = () => {
       return union > 0 ? intersection / union : 0;
     };
 
+    // Returns the mask as [x, y] pairs. Without a box to check against, trust
+    // the y-first order the prompt asks for.
+    const orientMaskPoints = (
+      mask: unknown[],
+      box: ReturnType<typeof getBounds> | null
+    ): unknown[] => {
+      const pairs = mask
+        .filter((point): point is unknown[] => Array.isArray(point) && point.length >= 2)
+        .map((point) => [toNumber(point[0]), toNumber(point[1])])
+        .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b));
+      // Object points ({x, y}) name their axes, so there is nothing to orient.
+      if (pairs.length < 3) return mask;
+
+      const yFirst = pairs.map(([a, b]) => ({ x: b, y: a }));
+      if (!box) return yFirst;
+      const xFirst = pairs.map(([a, b]) => ({ x: a, y: b }));
+      return getBoundsIoU(getBounds(xFirst), box) > getBoundsIoU(getBounds(yFirst), box)
+        ? xFirst
+        : yFirst;
+    };
+
     const normalizePoints = (points: unknown[]) => {
       const normalizedPoints: Array<{ x: number; y: number }> = points
         .map((point: any) => {
@@ -1880,45 +1901,44 @@ export const VisualEditPanel = () => {
       }
 
       let points: unknown[] | null = null;
-      // Gemini's documented segmentation entry is {box_2d, mask, label}, where
-      // `mask` is a polygon of [x, y] normalized to 0-1000. Read that first:
-      // it is what the model actually emits when left in its trained format.
-      const maskSource = Array.isArray(item?.mask) ? item.mask : null;
+      // box_2d is [ymin, xmin, ymax, xmax] — y first. Reading it as
+      // [x1, y1, x2, y2] transposes the selection, which lands it somewhere
+      // unrelated unless the box happens to be square.
+      const box2d = (() => {
+        const boxArray = parseMaybeArray(item?.box_2d ?? item?.box2d);
+        if (!boxArray || boxArray.length < 4) return null;
+        const [ymin, xmin, ymax, xmax] = boxArray.slice(0, 4).map(toNumber);
+        if (![ymin, xmin, ymax, xmax].every((value) => Number.isFinite(value))) return null;
+        if (xmax <= xmin || ymax <= ymin) return null;
+        return { x1: xmin, y1: ymin, x2: xmax, y2: ymax };
+      })();
+
       const pointSource =
         (Array.isArray(item) ? item : null) ||
         item?.points ||
         item?.polygon ||
         item?.contour ||
         item?.outline ||
-        item?.vertices ||
-        maskSource;
+        item?.vertices;
+      // Gemini's segmentation entry is {box_2d, mask, label}. Gemini writes
+      // points y-first like box_2d, but it does not reliably honour whichever
+      // order the prompt asks for, and a swapped polygon mirrors the selection
+      // across the diagonal (a floor comes back as a wall). The box_2d is
+      // reliably y-first, so pick the reading whose outline fits it.
+      const maskArray = parseMaybeArray(item?.mask);
 
       const pointArray = parseMaybeArray(pointSource);
       if (pointArray) {
         points = pointArray;
-      } else if (item?.box_2d || item?.box2d) {
-        // box_2d is [ymin, xmin, ymax, xmax] — y first. Reading it as
-        // [x1, y1, x2, y2] transposes the selection, which lands it somewhere
-        // unrelated unless the box happens to be square.
-        const boxArray = parseMaybeArray(item.box_2d || item.box2d);
-        if (boxArray && boxArray.length >= 4) {
-          const ymin = toNumber(boxArray[0]);
-          const xmin = toNumber(boxArray[1]);
-          const ymax = toNumber(boxArray[2]);
-          const xmax = toNumber(boxArray[3]);
-          if (
-            [ymin, xmin, ymax, xmax].every((value) => Number.isFinite(value)) &&
-            xmax > xmin &&
-            ymax > ymin
-          ) {
-            points = [
-              [xmin, ymin],
-              [xmax, ymin],
-              [xmax, ymax],
-              [xmin, ymax],
-            ];
-          }
-        }
+      } else if (maskArray) {
+        points = orientMaskPoints(maskArray, box2d);
+      } else if (box2d) {
+        points = [
+          [box2d.x1, box2d.y1],
+          [box2d.x2, box2d.y1],
+          [box2d.x2, box2d.y2],
+          [box2d.x1, box2d.y2],
+        ];
       } else if (item?.bbox || item?.box || item?.boundingBox || item?.bounding_box) {
         const box = item.bbox || item.box || item.boundingBox || item.bounding_box;
         const boxArray = parseMaybeArray(box);
