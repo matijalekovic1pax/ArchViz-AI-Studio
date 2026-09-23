@@ -41,7 +41,7 @@ import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../../lib/generationProgress';
-import { generatePrompt } from '../../../engine/promptEngine';
+import { generatePrompt, isMasterplanSiteContext } from '../../../engine/promptEngine';
 import { useGeneration } from '../../../hooks/useGeneration';
 import { downloadImage } from '../../../lib/download';
 import { hasUsableVisualSelection, visualEditRequiresSelection } from '../../../lib/visualEditPolicy';
@@ -512,7 +512,7 @@ export const MobilePanels: React.FC<{
               ? !videoReady || !videoUnlocked
               : isHeadshotMode
                 ? !headshotReady
-                : !state.uploadedImage || visualEditNeedsSelection || visualEditBusy;
+                : (!state.uploadedImage && !isMasterplanSiteContext(state)) || visualEditNeedsSelection || visualEditBusy;
   const generateLabel = getGenerateLabel(state.mode, t);
   const generationProgress = getGenerationProgressPercent(state.progress);
   const generationStageLabel = state.generationStage

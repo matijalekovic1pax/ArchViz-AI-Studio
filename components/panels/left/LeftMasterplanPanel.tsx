@@ -9,6 +9,24 @@ import { ZoneItem } from '../../../types';
 import { nanoid } from 'nanoid';
 import { LocationPickerModal } from '../../modals/LocationPickerModal';
 import { useTranslation } from 'react-i18next';
+import { getGeminiService, isGeminiServiceInitialized, ImageUtils } from '../../../services/geminiService';
+import { getFootprintPolygon } from '../../../services/siteContextService';
+
+const extractJson = (raw: string) => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    try {
+      return JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+  }
+};
 
 const planTypes = [
   { id: 'site', labelKey: 'masterplan.planTypes.site', icon: Building2 },
@@ -67,6 +85,19 @@ export const LeftMasterplanPanel = () => {
     }
   }, [dispatch, wf.mpBoundary]);
 
+  const context = wf.mpContext;
+  const latestContextRef = useRef(context);
+  latestContextRef.current = context;
+  const siteThumbnail = useMemo(() => {
+    if (!context.aerialImage || !context.aerialMeta || !context.coordinates) return null;
+    const polygon = getFootprintPolygon(context.coordinates, context.footprint, context.aerialMeta);
+    return {
+      width: context.aerialMeta.width,
+      height: context.aerialMeta.height,
+      points: polygon.map((point) => `${point.x},${point.y}`).join(' '),
+    };
+  }, [context.aerialImage, context.aerialMeta, context.coordinates, context.footprint]);
+
   const totalArea = useMemo(() => {
     const sum = wf.mpZones.reduce((acc, zone) => acc + (zone.areaHa || 0), 0);
     return sum > 0 ? sum : 0;
@@ -109,32 +140,44 @@ export const LeftMasterplanPanel = () => {
 
   const handleAutoDetectZones = async () => {
     if (isDetectingZones) return;
-    const sourceImage = wf.mpInputImage || state.sourceImage || state.uploadedImage;
+    const sourceImage = wf.mpInputImage || state.sourceImage || state.uploadedImage || wf.mpContext.aerialImage;
     if (!sourceImage) {
       setZoneDetectError(t('masterplan.zones.errors.uploadFirst'));
+      return;
+    }
+    if (!isGeminiServiceInitialized()) {
+      setZoneDetectError(t('masterplan.zones.errors.failed'));
       return;
     }
     setZoneDetectError(null);
     setIsDetectingZones(true);
     dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpZoneDetection: 'auto' } });
     try {
-      const response = await fetch('/api/masterplan/zones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: sourceImage }),
+      const allowedTypes = zoneTypeOptions.map((option) => option.type).join('|');
+      const responseText = await getGeminiService().generateText({
+        prompt: [
+          'Analyze this site plan, masterplan drawing or aerial image and list the distinct land-use zones visible in it.',
+          'Return ONLY valid JSON with this shape:',
+          `{ "zones": [ { "name": "...", "type": "${allowedTypes}", "areaHa": 1.2 } ] }`,
+          'Use at most 10 zones. Give areaHa only when a scale bar or dimensions make it measurable; otherwise omit it. No commentary.'
+        ].join(' '),
+        images: [ImageUtils.dataUrlToImageData(sourceImage)],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1200,
+          responseMimeType: 'application/json'
+        }
       });
-      if (!response.ok) {
-        throw new Error('Zone detection failed.');
-      }
-      const payload = await response.json();
+      const payload = extractJson(responseText || '');
       const zones = Array.isArray(payload?.zones) ? (payload.zones as Partial<ZoneItem>[]) : [];
-      const normalized = zones.map((zone, index) => {
-        const fallbackType = zoneTypeOptions[index % zoneTypeOptions.length];
+      const normalized = zones.slice(0, 10).map((zone, index) => {
+        const knownType = zoneTypeOptions.find((option) => option.type === zone.type);
+        const fallbackType = knownType || zoneTypeOptions[index % zoneTypeOptions.length];
         return {
-          id: zone.id || nanoid(),
+          id: nanoid(),
           name: zone.name || t('masterplan.zones.defaultName', { index: index + 1 }),
-          type: zone.type || fallbackType.type,
-          color: zone.color || fallbackType.color,
+          type: fallbackType.type,
+          color: fallbackType.color,
           selected: zone.selected ?? true,
           areaHa: typeof zone.areaHa === 'number' ? zone.areaHa : undefined,
         };
@@ -161,6 +204,79 @@ export const LeftMasterplanPanel = () => {
 
   return (
     <div className="space-y-6">
+      <div>
+        <SectionHeader title={t('masterplan.context.title')} />
+        <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
+          {context.coordinates ? (
+            <div className="space-y-2">
+              {siteThumbnail && (
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="relative block w-full overflow-hidden rounded border border-border"
+                  style={{ aspectRatio: `${siteThumbnail.width} / ${siteThumbnail.height}` }}
+                  title={t('common.edit')}
+                >
+                  <img src={context.aerialImage!} alt="" className="absolute inset-0 w-full h-full" />
+                  <svg viewBox={`0 0 ${siteThumbnail.width} ${siteThumbnail.height}`} className="absolute inset-0 w-full h-full">
+                    <polygon points={siteThumbnail.points} fill="rgba(255, 0, 170, 0.3)" stroke="#ff00aa" strokeWidth={6} />
+                  </svg>
+                </button>
+              )}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin size={14} className="text-accent shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">{context.location}</div>
+                    <div className="text-[10px] text-foreground-muted">
+                      {context.footprint.width} × {context.footprint.depth} m · {context.storeys} {t('locationModal.storeys', 'Storeys').toLowerCase()} · {context.radius} m
+                    </div>
+                    {context.loadedData && (
+                      <div className="text-[10px] text-foreground-muted">
+                        {context.loadedData.buildings} buildings · {context.loadedData.roads} roads
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => dispatch({
+                    type: 'UPDATE_WORKFLOW',
+                    payload: { mpContext: { ...context, location: '', coordinates: null, loadedData: null, aerialImage: null, aerialMeta: null } }
+                  })}
+                  className="p-1 rounded hover:bg-surface-elevated text-foreground-muted hover:text-foreground transition-colors shrink-0"
+                  title={t('masterplan.context.clear')}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <button
+                onClick={() => setIsLocationModalOpen(true)}
+                className="w-full py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated transition-colors"
+              >
+                {t('common.edit')}
+              </button>
+              {!(state.sourceImage || state.uploadedImage) && (
+                <div className="text-[10px] text-foreground-muted">
+                  {t('masterplan.context.uploadDesignHint', 'Upload a photo or render of your design to place it on this site. Without one, a building is designed from the settings.')}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsLocationModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors"
+              >
+                <MapPin size={14} /> {t('masterplan.context.load')}
+              </button>
+              <div className="text-[10px] text-foreground-muted">
+                {t('masterplan.context.intro', 'Pin your building on the map to see it in its real neighbourhood, from satellite imagery.')}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       <div>
         <SectionHeader title={t('masterplan.planType.title')} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -384,56 +500,26 @@ export const LeftMasterplanPanel = () => {
         </div>
       </div>
 
-      <div>
-        <SectionHeader title={t('masterplan.context.title')} />
-        <div className="bg-surface-sunken p-3 rounded-lg space-y-3 border border-border-subtle">
-          {wf.mpContext.loadedData ? (
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <MapPin size={14} className="text-accent shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium truncate">{wf.mpContext.location}</div>
-                    <div className="text-[10px] text-foreground-muted">
-                      {wf.mpContext.loadedData.buildings} buildings · {wf.mpContext.loadedData.roads} roads · {wf.mpContext.radius}m
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...wf.mpContext, location: '', coordinates: null, loadedData: null } } })}
-                  className="p-1 rounded hover:bg-surface-elevated text-foreground-muted hover:text-foreground transition-colors shrink-0"
-                  title={t('masterplan.context.clear')}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsLocationModalOpen(true)}
-                  className="flex-1 py-1.5 text-[10px] font-medium border border-border rounded hover:bg-surface-elevated transition-colors"
-                >
-                  {t('common.edit')}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsLocationModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 py-2 bg-surface-elevated border border-border rounded text-xs font-medium hover:border-foreground transition-colors"
-            >
-              <MapPin size={14} /> {t('masterplan.context.load')}
-            </button>
-          )}
-          
-        </div>
-      </div>
-
       <LocationPickerModal
         isOpen={isLocationModalOpen}
         onClose={() => setIsLocationModalOpen(false)}
         initialData={wf.mpContext}
+        onFeatureCounts={(coordinates, counts) => {
+          const latest = latestContextRef.current;
+          // The site may have been cleared or moved while Overpass answered.
+          if (latest.coordinates?.lat !== coordinates.lat || latest.coordinates?.lng !== coordinates.lng) return;
+          dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: { ...latest, loadedData: counts } } });
+        }}
         onLoad={(data) => {
-          dispatch({ type: 'UPDATE_WORKFLOW', payload: { mpContext: data } });
+          dispatch({
+            type: 'UPDATE_WORKFLOW',
+            payload: {
+              mpContext: data,
+              // A site preview is an aerial photo; the diagram default would
+              // redraw the real neighbourhood as flat blocks on first try.
+              ...(!context.aerialImage && wf.mpOutputStyle === 'diagrammatic' ? { mpOutputStyle: 'photorealistic' as const } : {}),
+            },
+          });
         }}
       />
     </div>

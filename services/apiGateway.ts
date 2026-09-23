@@ -904,6 +904,9 @@ const normalizeOpenAIQuality = (imageSize: unknown): string => {
   return 'medium';
 };
 
+const normalizeOpenAIQualityOverride = (quality: unknown): string | null =>
+  quality === 'low' || quality === 'medium' || quality === 'high' || quality === 'xhigh' ? quality : null;
+
 const getOpenAIImageOptions = (generationConfig: any = {}) => {
   const imageConfig = generationConfig.imageConfig || generationConfig.responseFormat?.image || {};
   const background = generationConfig.openAI?.background || imageConfig.background;
@@ -913,7 +916,8 @@ const getOpenAIImageOptions = (generationConfig: any = {}) => {
   return {
     size: normalizeOpenAISizeOverride(generationConfig.openAI?.size) ||
       normalizeOpenAISize(imageConfig.aspectRatio || '16:9', imageConfig.imageSize || '2K'),
-    quality: normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
+    quality: normalizeOpenAIQualityOverride(generationConfig.openAI?.quality) ||
+      normalizeOpenAIQuality(imageConfig.imageSize || '2K'),
     outputFormat: 'png',
     // GPT Images 2.5 currently does not support transparent backgrounds.
     background: normalizedBackground === 'transparent' ? 'opaque' : normalizedBackground,

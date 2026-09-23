@@ -20,6 +20,28 @@ export type GenerationMode =
   | 'pdf-compression'
   | 'headshot';
 
+/** Geometry of a site capture, for mapping between capture pixels and coordinates. */
+export interface MasterplanSiteAerialMeta {
+  width: number;
+  height: number;
+  metersPerPixel: number;
+  center: { lat: number; lng: number };
+  /** Web Mercator zoom level of the source tiles. */
+  zoom: number;
+  /** Capture pixels per tile pixel. */
+  scale: number;
+  capturedAt: number;
+}
+
+export interface MasterplanSiteFootprint {
+  /** East-west extent in metres before rotation. */
+  width: number;
+  /** North-south extent in metres before rotation. */
+  depth: number;
+  /** Degrees clockwise from north. */
+  rotation: number;
+}
+
 export type ImageGenerationModel = 'nano-banana' | 'chatgpt-images-2-5';
 
 export const DEFAULT_IMAGE_GENERATION_MODEL: ImageGenerationModel = 'nano-banana';
@@ -344,6 +366,12 @@ export interface WorkflowSettings {
       terrain: boolean;
       transit: number;
     } | null;
+    /** North-up satellite capture centred on the site (JPEG data URL). */
+    aerialImage: string | null;
+    aerialMeta: MasterplanSiteAerialMeta | null;
+    /** Proposed building footprint, centred on `coordinates`. */
+    footprint: MasterplanSiteFootprint;
+    storeys: number;
   };
   mpOutputStyle: 'photorealistic' | 'diagrammatic' | 'hybrid' | 'illustrative';
   mpViewAngle: 'top' | 'iso-ne' | 'iso-nw' | 'iso-se' | 'iso-sw' | 'custom';

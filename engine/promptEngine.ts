@@ -32,7 +32,36 @@ const DEFAULT_PROMPT_INTENT: PromptIntent = {
   textRule: 'Preserve existing visible text and render new visible text only when the user explicitly requests it.'
 };
 
+/**
+ * Masterplan with a captured satellite site: the proposed building is placed
+ * into real surroundings, which needs different framing from rendering a
+ * plan drawing, so it gets its own prompt intent.
+ */
+export const MASTERPLAN_SITE_PROMPT_MODE = 'masterplan-site';
+/** Same, re-presented as an oblique aerial, so the capture's camera is not kept. */
+export const MASTERPLAN_SITE_OBLIQUE_PROMPT_MODE = 'masterplan-site-oblique';
+
+const MASTERPLAN_SITE_INTENT: PromptIntent = {
+  artifact: 'aerial site-context visualization of a proposed building',
+  task: 'Show the proposed building built on its real plot, surrounded by the real neighbourhood from the satellite capture.',
+  keep: 'Keep the real surroundings from image 1: every existing building, road, tree, vehicle and surface, plus the camera, framing and north-up orientation.',
+  change: 'Only the outlined plot changes, unless the view or style settings ask for the whole site to be re-presented.',
+  textRule: 'No text, labels, outlines or markers unless annotation settings request them.'
+};
+
+const MASTERPLAN_SITE_OBLIQUE_INTENT: PromptIntent = {
+  ...MASTERPLAN_SITE_INTENT,
+  keep: 'Keep the real site layout from image 1: every existing building\'s position, footprint, height and roof, and every road, tree and open space.',
+  change: 'Re-present the whole site from the requested oblique camera, with the proposed building on the outlined plot.'
+};
+
+export const isMasterplanSiteContext = (state: Pick<AppState, 'mode' | 'workflow'>): boolean =>
+  state.mode === 'masterplan' &&
+  Boolean(state.workflow.mpContext?.aerialImage && state.workflow.mpContext.aerialMeta && state.workflow.mpContext.coordinates);
+
 const getPromptIntent = (mode?: string, activeTool?: ImagePromptTool): PromptIntent => {
+  if (mode === MASTERPLAN_SITE_PROMPT_MODE) return MASTERPLAN_SITE_INTENT;
+  if (mode === MASTERPLAN_SITE_OBLIQUE_PROMPT_MODE) return MASTERPLAN_SITE_OBLIQUE_INTENT;
   if (mode === 'visual-edit') {
     const tool = activeTool === 'replace' ? 'object' : activeTool;
     const visualEditIntents: Record<string, PromptIntent> = {
@@ -571,6 +600,24 @@ const summarizeWorkflowSettings = (state: AppState): string[] => {
       workflow.backgroundReferenceEnabled && workflow.backgroundReferenceImage ? 'environment reference enabled' : null
     ]);
   }
+  if (isMasterplanSiteContext(state)) {
+    const context = workflow.mpContext;
+    const meta = context.aerialMeta!;
+    const counts = context.loadedData;
+    return compactItems([
+      `site ${context.location || 'pinned location'} (${context.coordinates!.lat.toFixed(5)}, ${context.coordinates!.lng.toFixed(5)})`,
+      `capture ${Math.round(meta.width * meta.metersPerPixel)} x ${Math.round(meta.height * meta.metersPerPixel)} m, ${meta.metersPerPixel.toFixed(2)} m per pixel, north up`,
+      `footprint ${context.footprint.width} x ${context.footprint.depth} m, rotated ${Math.round(context.footprint.rotation)} degrees, ${context.storeys} storeys`,
+      `style ${workflow.mpOutputStyle}, view ${workflow.mpViewAngle}`,
+      counts ? `mapped nearby: ${compactItems([
+        context.loadBuildings ? `${counts.buildings} buildings` : null,
+        context.loadRoads ? `${counts.roads} road segments` : null,
+        context.loadWater && counts.water ? `${counts.water} water features` : null,
+        context.loadTransit && counts.transit ? `${counts.transit} transit stops` : null
+      ]).join(', ')}` : null,
+      `plot landscape ${workflow.mpLandscape.season}, ${describeSettingStrength(workflow.mpLandscape.vegetationDensity, 'minimal', 'balanced', 'lush')} planting`
+    ]);
+  }
   if (state.mode === 'masterplan') {
     const annotations = compactItems([
       workflow.mpAnnotations.zoneLabels ? 'zone labels' : null,
@@ -924,6 +971,24 @@ const getModelSpecificGuidance = (
     ]
   };
 
+  if (isMasterplanSiteContext(state)) {
+    const preservesCamera = state.workflow.mpViewAngle === 'top';
+    return model === 'chatgpt-images-2-5'
+      ? compactItems([
+          preservesCamera
+            ? 'Treat image 1 as the photograph being edited: this is a localized insertion on one plot, not a new aerial image.'
+            : 'Treat image 1 as the ground truth for the site layout: every existing building keeps its position, footprint, height and roof.',
+          'Read the position, size and orientation of the plot from image 2 only; never reproduce its magenta outline, tint, dimming or yellow edge.',
+          'Size the building against the stated metres per pixel and against nearby cars, road widths and neighbouring buildings.',
+          'Match light direction and shadow softness to the existing shadows in image 1.'
+        ])
+      : compactItems([
+          'Keep the real neighbourhood from image 1 and change only the outlined plot.',
+          'Use image 2 only to find where the building goes; do not draw its outline or colour.',
+          'Keep the new building in scale with nearby cars, roads and buildings, lit like the rest of the photo.'
+        ]);
+  }
+
   if (model === 'chatgpt-images-2-5') {
     return compactItems([
       'Use a structured artifact plan: preserve/source constraints first, then visible changes, then style and quality.',
@@ -1111,7 +1176,9 @@ export function adaptImagePromptForModel(
   options: ImagePromptAdapterOptions = {}
 ): string {
   return adaptPromptForImageGenerationModel(prompt, state.imageGenerationModel, {
-    mode: state.mode,
+    mode: isMasterplanSiteContext(state)
+      ? state.workflow.mpViewAngle === 'top' ? MASTERPLAN_SITE_PROMPT_MODE : MASTERPLAN_SITE_OBLIQUE_PROMPT_MODE
+      : state.mode,
     activeTool: state.mode === 'visual-edit' ? state.workflow.activeTool : undefined,
     hasSourceImage: Boolean(state.sourceImage || state.uploadedImage),
     hasReferenceImages: Boolean(
@@ -4482,7 +4549,115 @@ function generateAngleChangePrompt(state: AppState): string {
 
 const formatYesNo = (value: boolean) => (value ? 'yes' : 'no');
 
+const SITE_VIEW_DIRECTIONS: Record<string, string> = {
+  'iso-ne': 'north-east',
+  'iso-nw': 'north-west',
+  'iso-se': 'south-east',
+  'iso-sw': 'south-west',
+};
+
+const roundTo = (value: number, step: number) => Math.round(value / step) * step;
+
+/**
+ * Site-context masterplan. Image 1 is the clean satellite capture, image 2 the
+ * same capture with the plot outlined, image 3 (when uploaded) the design.
+ */
+function generateMasterplanSitePrompt(state: AppState): string {
+  const { workflow } = state;
+  const context = workflow.mpContext;
+  const meta = context.aerialMeta!;
+  const hasDesign = Boolean(state.sourceImage || state.uploadedImage);
+  const style = workflow.mpOutputStyle;
+  const view = workflow.mpViewAngle;
+  const footprint = context.footprint;
+  const buildingHeight = Math.round(context.storeys * workflow.mpBuildings.floorHeight);
+  const spanX = roundTo(meta.width * meta.metersPerPixel, 10);
+  const spanY = roundTo(meta.height * meta.metersPerPixel, 10);
+  const place = context.location ? ` in ${context.location}` : '';
+  const parts: string[] = [];
+
+  parts.push(
+    `Image 1 is a real north-up satellite photo of the site${place}. Image 2 is the same photo with the plot for a proposed building outlined in magenta; its yellow edge is the front.` +
+    (hasDesign ? ' Image 3 shows the proposed building design.' : '')
+  );
+
+  parts.push(
+    `Scale: the photo covers about ${spanX} by ${spanY} m (${meta.metersPerPixel.toFixed(2)} m per pixel). ` +
+    `The footprint is ${footprint.width} by ${footprint.depth} m, rotated ${Math.round(footprint.rotation)} degrees clockwise from north, ` +
+    `and the building has ${context.storeys} storeys, about ${buildingHeight} m tall.`
+  );
+
+  parts.push(
+    'Replace whatever currently stands inside the outline with the proposed building, filling exactly that footprint with its front on the yellow edge.'
+  );
+
+  if (hasDesign) {
+    parts.push('Take the massing, roof form, facade materials, colours and window rhythm from image 3; the proposed building must be recognisably that design.');
+  } else {
+    parts.push(`Design the building as ${workflow.mpBuildings.style.toLowerCase()} architecture with a ${workflow.mpBuildings.roofStyle} roof.`);
+  }
+
+  if (view === 'top') {
+    parts.push(
+      style === 'photorealistic' || style === 'hybrid'
+        ? 'Seen from directly above, show its true roof plan. Keep everything outside the plot exactly as in image 1: buildings, roads, trees, cars, road markings, colours, the top-down camera, framing and north-up orientation.'
+        : 'Seen from directly above, show its true roof plan. Every existing building, road, tree and open space keeps its position and shape from image 1, in the same top-down, north-up framing.'
+    );
+  } else {
+    const direction = view === 'custom'
+      ? `at ${workflow.mpViewCustom.elevation} degrees elevation, rotated ${workflow.mpViewCustom.rotation} degrees from north`
+      : `at about 45 degrees, looking from the ${SITE_VIEW_DIRECTIONS[view] || 'south-east'}`;
+    parts.push(
+      `Show the whole site as an oblique aerial view ${direction}. Every existing building keeps its position, footprint, roof shape and height from image 1 (read heights from their shadows); roads, trees and open spaces stay where they are.`
+    );
+  }
+
+  if (workflow.mpBuildings.showShadows) {
+    parts.push('Cast the new building\'s shadow in the same direction and softness as the existing shadows, with a length that matches its height.');
+  }
+
+  const plotLandscape = compactItems([
+    workflow.mpLandscape.trees ? 'trees' : null,
+    workflow.mpLandscape.grass ? 'lawn' : null,
+    workflow.mpLandscape.pathways ? 'paths' : null,
+    workflow.mpLandscape.vehicles ? 'parked cars' : null,
+    workflow.mpLandscape.people ? 'people' : null
+  ]);
+  if (plotLandscape.length > 0) {
+    parts.push(`Finish only the ground directly around the new building with ${plotLandscape.join(', ')}, in ${workflow.mpLandscape.season} character.`);
+  }
+
+  if (style === 'photorealistic') {
+    parts.push('The result must read as an unretouched aerial photograph: same sharpness, colour grading and light as image 1.');
+  } else {
+    const styleLine: Record<string, string> = {
+      diagrammatic: 'Redraw the real site as a clean site-plan diagram: existing buildings as light grey footprints, roads and open spaces in flat muted tones, and the proposed building as the one strongly highlighted accent-coloured volume.',
+      hybrid: 'Keep the aerial photograph as the base, then overlay clean diagram graphics: a crisp site boundary around the plot and a highlighted proposed building.',
+      illustrative: 'Render the real site as an elegant architectural illustration, with the proposed building as the clear focal point.'
+    };
+    parts.push(styleLine[style] || `Use ${style} styling.`);
+
+    // Street and building names would be invented; the capture carries none.
+    const annotations = compactItems([
+      workflow.mpAnnotations.scaleBar ? 'a scale bar' : null,
+      workflow.mpAnnotations.northArrow ? 'a north arrow' : null,
+      workflow.mpAnnotations.dimensions ? `footprint dimensions reading "${footprint.width} m" and "${footprint.depth} m"` : null
+    ]);
+    if (annotations.length > 0) {
+      parts.push(`Add ${annotations.join(', ')} in ${workflow.mpAnnotations.labelStyle} typography.`);
+    }
+  }
+
+  parts.push('Do not reproduce the magenta outline, tint, dimming or yellow edge from image 2, and add no text beyond what is requested.');
+
+  return parts.join(' ');
+}
+
 function generateMasterplanPrompt(state: AppState): string {
+  if (isMasterplanSiteContext(state)) {
+    return generateMasterplanSitePrompt(state);
+  }
+
   const { workflow } = state;
   const parts: string[] = [];
 

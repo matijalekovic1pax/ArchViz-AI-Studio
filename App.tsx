@@ -16,6 +16,7 @@ import { CvConvertView } from './components/CvConvertView';
 import { PdfCompressionView } from './components/PdfCompressionView';
 import { AppAssistant } from './components/AppAssistant';
 import { GenerationMode } from './types';
+import { isMasterplanSiteContext } from './engine/promptEngine';
 import { cn } from './lib/utils';
 import { VideoLockBanner } from './components/video/VideoLockBanner';
 import { MobilePanels, MobilePanelType } from './components/panels/mobile/MobilePanels';
@@ -42,7 +43,7 @@ const ShortcutsListener: React.FC = () => {
       // Cmd/Ctrl + Enter = Generate
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (state.uploadedImage && !state.isGenerating) {
+        if ((state.uploadedImage || isMasterplanSiteContext(state)) && !state.isGenerating) {
            const btn = document.querySelector('button[aria-label="generate-trigger"]') as HTMLButtonElement;
            if (btn) btn.click();
         }

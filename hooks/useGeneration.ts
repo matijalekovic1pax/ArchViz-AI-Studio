@@ -7,7 +7,8 @@ import { buildGenerateContext } from '../lib/generateConversation';
 import { useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
-import { adaptImagePromptForModel, buildLocalizedVisualEditInstruction, generatePrompt } from '../engine/promptEngine';
+import { adaptImagePromptForModel, buildLocalizedVisualEditInstruction, generatePrompt, isMasterplanSiteContext } from '../engine/promptEngine';
+import { buildSitePlacementGuide } from '../services/siteContextService';
 import {
   getGeminiService,
   isGeminiServiceInitialized,
@@ -2579,6 +2580,10 @@ export function useGeneration(): UseGenerationReturn {
       const plainGenerateContextImage = state.mode === 'generate-text'
         ? conversationContext.images[0] || null
         : null;
+      // Masterplan with a captured site: the satellite image is the canvas the
+      // design is placed onto, so it leads the image list and sets the ratio.
+      const usesMasterplanSite = isMasterplanSiteContext(state);
+      const masterplanSiteAerial = usesMasterplanSite ? state.workflow.mpContext.aerialImage : null;
 
       // Build prompt. Source-based modes always keep the structured prompt so
       // preservation constraints cannot be bypassed by a freeform prompt.
@@ -2619,7 +2624,7 @@ export function useGeneration(): UseGenerationReturn {
         basePrompt = explicitPrompt || (state.mode === 'generate-text' ? 'Create an image using the attached references.' : generatePrompt(state));
       }
 
-      const modePrefix = getModePromptPrefix(state.mode, state.workflow.renderMode);
+      const modePrefix = usesMasterplanSite ? '' : getModePromptPrefix(state.mode, state.workflow.renderMode);
       const isolatedPlainOutput = state.mode === 'generate-text' && shouldUseIsolatedAssetOutput([
         explicitPrompt,
         basePrompt,
@@ -2641,7 +2646,7 @@ export function useGeneration(): UseGenerationReturn {
           )
         : [];
 
-      const primaryRatioSource = baseImage || plainGenerateContextImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
+      const primaryRatioSource = masterplanSiteAerial || baseImage || plainGenerateContextImage || attachmentUrls.find((url) => url.startsWith('data:image/'));
       const inputAspectRatio = await resolveClosestAspectRatio(primaryRatioSource);
       const adjustAspectRatio = state.mode === 'visual-edit' && state.workflow.activeTool === 'adjust'
         ? state.workflow.visualAdjust.aspectRatio
@@ -2664,6 +2669,22 @@ export function useGeneration(): UseGenerationReturn {
       // Collect images from state and attachments
       const images: ImageData[] = [];
       const attachments: AttachmentData[] = [];
+
+      // Image 1 is the clean capture to build on, image 2 the same capture with
+      // the plot marked, and the uploaded design follows as image 3.
+      if (usesMasterplanSite && masterplanSiteAerial) {
+        const siteContext = state.workflow.mpContext;
+        const placementGuide = await buildSitePlacementGuide(
+          masterplanSiteAerial,
+          siteContext.aerialMeta!,
+          siteContext.coordinates!,
+          siteContext.footprint
+        );
+        for (const siteImage of [masterplanSiteAerial, placementGuide]) {
+          const imgData = dataUrlToImageData(siteImage);
+          if (imgData) images.push(imgData);
+        }
+      }
 
       // Add uploaded image if available (skip for material validation and headshot — headshot adds its own reference images below)
       if (baseImage && state.mode !== 'material-validation' && state.mode !== 'headshot') {
@@ -2744,10 +2765,14 @@ export function useGeneration(): UseGenerationReturn {
       const isVideoMode = state.mode === 'video';
       const isPdfCompressionMode = state.mode === 'pdf-compression';
       const isHeadshotMode = state.mode === 'headshot';
+      // The site prompt carries per-image roles and metric scale that the
+      // optimizer's generic rewrite ("image 1 primary, the rest references")
+      // would flatten, so it goes to the image model as written.
       const excludesAiMiddleLayer =
         state.mode === 'generate-text' ||
         isHeadshotMode ||
-        isUpscaleMode;
+        isUpscaleMode ||
+        usesMasterplanSite;
 
       // Add headshot reference images (front first as primary, then left, then right)
       if (isHeadshotMode) {
@@ -3009,8 +3034,12 @@ export function useGeneration(): UseGenerationReturn {
         return;
       }
 
+      // The labels end in a colon, so they cannot sit inside the trailing \b:
+      // there is no word boundary between ":" and the space after it. When they
+      // did, an adapted prompt without one of the verbs got this prefix, stopped
+      // looking adapted, and was adapted again and trimmed to 270 words.
       const buildImagePrompt = (prompt: string) => (
-        /\b(generate|create|edit|convert|transform|model:|task:|output artifact:)\b/i.test(prompt)
+        /\b(generate|create|edit|convert|transform)\b|\b(model|task|output artifact):/i.test(prompt)
           ? prompt
           : `Generate an image: ${prompt}`
       );
@@ -3259,7 +3288,11 @@ export function useGeneration(): UseGenerationReturn {
         abortSignal,
         openAI: isolatedPlainOutput
           ? { background: 'opaque' }
-          : undefined,
+          : usesMasterplanSite
+            // Fitting a design into real surroundings is fidelity work; medium
+            // quality smears the neighbouring roofs and street detail.
+            ? { quality: generationConfig.imageConfig?.imageSize === '4K' ? 'xhigh' : 'high' }
+            : undefined,
         onProgress: updateImagePipelineProgress
       };
 
@@ -3267,6 +3300,7 @@ export function useGeneration(): UseGenerationReturn {
       let generationOutputSummary: Record<string, any> = {};
       const isTextOnlyMode = TEXT_ONLY_MODES.includes(state.mode);
       const hasImageSourceForPrompt = Boolean(
+        masterplanSiteAerial ||
         baseImage ||
         plainGenerateContextImage ||
         (isHeadshotMode && images.length > 0)

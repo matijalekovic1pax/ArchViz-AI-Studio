@@ -15,6 +15,7 @@ import { FeedbackAdminDashboard } from '../admin/FeedbackAdminDashboard';
 import { AI_SLOP_UPSCALE_IMAGE_MODEL, DEFAULT_IMAGE_GENERATION_MODEL, IMAGE_GENERATION_MODELS, VISUAL_EDIT_IMAGE_MODEL, type ImageGenerationModel } from '../../types';
 import { GENERATION_STAGE_LABEL_KEYS, getGenerationProgressPercent } from '../../lib/generationProgress';
 import { hasUsableVisualSelection, visualEditRequiresSelection } from '../../lib/visualEditPolicy';
+import { isMasterplanSiteContext } from '../../engine/promptEngine';
 
 const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'generate-text': 'workflows.generateText',
@@ -197,7 +198,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
           ? !upscaleReady
           : isVideoMode
             ? !videoReady || !videoUnlocked
-            : !state.uploadedImage || visualEditNeedsSelection || visualEditBusy;
+            : (!state.uploadedImage && !isMasterplanSiteContext(state)) || visualEditNeedsSelection || visualEditBusy;
   const resolutionOptions: Array<{ value: '2k' | '4k'; label: string; title?: string }> = [
     { value: '2k', label: '2K' },
     { value: '4k', label: '4K' },
@@ -276,7 +277,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       await generate();
       return;
     }
-    if (!state.uploadedImage || visualEditNeedsSelection || visualEditBusy) return;
+    if ((!state.uploadedImage && !isMasterplanSiteContext(state)) || visualEditNeedsSelection || visualEditBusy) return;
     await generate();
   };
 

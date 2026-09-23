@@ -162,8 +162,33 @@ const normalizeImageGenerationModel = (model: unknown): ImageGenerationModel => 
     : DEFAULT_IMAGE_GENERATION_MODEL;
 };
 
+const DEFAULT_MP_CONTEXT: WorkflowSettings['mpContext'] = {
+  location: '',
+  coordinates: null,
+  // 150 m either side keeps a typical building large enough to read at 1024 px.
+  radius: 150,
+  loadBuildings: true,
+  loadRoads: true,
+  loadWater: false,
+  loadTerrain: false,
+  loadTransit: false,
+  loadedData: null,
+  aerialImage: null,
+  aerialMeta: null,
+  footprint: { width: 24, depth: 18, rotation: 0 },
+  storeys: 5,
+};
+
+/** Projects saved before site capture existed lack its fields. */
+const normalizeMasterplanContext = (context: WorkflowSettings['mpContext'] | undefined): WorkflowSettings['mpContext'] => ({
+  ...DEFAULT_MP_CONTEXT,
+  ...(context || {}),
+  footprint: { ...DEFAULT_MP_CONTEXT.footprint, ...(context?.footprint || {}) },
+});
+
 const normalizeWorkflow = (workflow: WorkflowSettings): WorkflowSettings => ({
   ...workflow,
+  mpContext: normalizeMasterplanContext(workflow.mpContext),
   render3d: normalizeRender3D(workflow.render3d),
   render3dSourceMode: normalizeRender3DSourceMode(workflow.render3dSourceMode),
   renderMode: normalizeRenderMode(workflow.renderMode),
@@ -485,17 +510,7 @@ const initialWorkflow: WorkflowSettings = {
   mpBoundary: { mode: 'auto', points: [] },
   mpBoundaryUndoStack: [],
   mpBoundaryRedoStack: [],
-  mpContext: {
-    location: '',
-    coordinates: null,
-    radius: 300,
-    loadBuildings: true,
-    loadRoads: true,
-    loadWater: false,
-    loadTerrain: false,
-    loadTransit: false,
-    loadedData: null,
-  },
+  mpContext: DEFAULT_MP_CONTEXT,
   mpOutputStyle: 'diagrammatic',
   mpViewAngle: 'top',
   mpViewCustom: { elevation: 30, rotation: 45, perspective: 15 },

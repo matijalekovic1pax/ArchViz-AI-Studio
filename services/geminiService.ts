@@ -136,6 +136,8 @@ export interface GenerationConfig {
   openAI?: {
     background?: 'transparent' | 'opaque' | 'auto';
     size?: string;
+    /** Overrides the quality otherwise derived from the requested resolution. */
+    quality?: 'low' | 'medium' | 'high' | 'xhigh';
   };
   onProgress?: ImageGenerationProgressCallback;
 }
@@ -571,7 +573,7 @@ export class GeminiService {
       return this.withOptimizedPrompt(await this.generateOpenAIImages(preparedRequest), preparedRequest);
     }
 
-    const imagePrompt = /\b(generate|create|edit|convert|transform|model:|task:|output artifact:)\b/i.test(preparedRequest.prompt)
+    const imagePrompt = /\b(generate|create|edit|convert|transform)\b|\b(model|task|output artifact):/i.test(preparedRequest.prompt)
       ? preparedRequest.prompt
       : `Generate an image: ${preparedRequest.prompt}`;
 

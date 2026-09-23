@@ -592,9 +592,11 @@
       "instructions": "Draw a green lasso directly on the canvas to set the site boundary."
     },
     "context": {
-      "title": "Context",
+      "title": "Site",
       "clear": "Clear context",
-      "load": "Load from Location"
+      "load": "Pin site on map",
+      "intro": "Pin your building on the map to see it in its real neighbourhood, from satellite imagery.",
+      "uploadDesignHint": "Upload a photo or render of your design to place it on this site. Without one, a building is designed from the settings."
     },
     "outputStyles": {
       "photorealistic": "Photorealistic",
@@ -1425,10 +1427,10 @@
   "locationModal": {
     "title": "Load Context from Location",
     "mapPreview": "Map Preview",
-    "empty": "Search for a location on the right",
+    "empty": "Search for a place to load satellite imagery",
     "searchPlaceholder": "Search address or coordinates...",
     "radius": "Radius",
-    "radiusHint": "{{radius}}m around center point",
+    "radiusHint": "Shows {{radius}} m of surroundings above and below the building",
     "dataToLoad": "Data to Load",
     "data": {
       "buildings": "Buildings",
@@ -1438,6 +1440,17 @@
       "transit": "Transit Lines"
     },
     "loading": "Loading...",
-    "loadContext": "Load Context"
+    "loadContext": "Load Context",
+    "searchUnavailable": "Search unavailable — enter coordinates manually",
+    "manualCoords": "Enter coordinates manually",
+    "apply": "Apply",
+    "capturing": "Loading satellite imagery…",
+    "placeHint": "Click the image to place the building",
+    "building": "Proposed building",
+    "footprintWidth": "Width (m, east–west)",
+    "footprintDepth": "Depth (m, north–south)",
+    "footprintRotation": "Rotation (°)",
+    "storeys": "Storeys",
+    "frontHint": "The yellow edge is the front of the building."
   }
 }
