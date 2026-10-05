@@ -952,7 +952,7 @@ export interface HeadshotSettings {
 
 // Video Studio Types
 export type VideoModel = 'veo-3.1-generate-preview' | 'gemini-omni-1.1-flash' | 'kling-2.6';
-export type VideoInputMode = 'text-to-video' | 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
+export type VideoInputMode = 'video-upload' | 'text-to-video' | 'image-animate' | 'camera-path' | 'image-morph' | 'multi-shot';
 export type CameraMotionType = 'static' | 'pan' | 'orbit' | 'dolly' | 'crane' | 'drone' | 'rotate' | 'push-in' | 'pull-out' | 'custom';
 
 // Social Media Presets
@@ -1035,6 +1035,9 @@ export interface VideoState {
   // lets a follow-up request edit or extend that video instead of starting over.
   omniInteractionId?: string | null;
   omniFollowUp?: OmniFollowUpMode;
+  omniInteractionExpiresAt?: string | null;
+  /** Private gateway capability, never a Gemini API key or arbitrary file URI. */
+  omniSourceVideo?: { fileToken: string; name: string; durationSeconds: number; mimeType: string; expiresAt: string } | null;
 
   // Veo input images
   videoInputImage: string | null; // base64 data URL for image-animate mode
@@ -1077,6 +1080,8 @@ export interface VideoState {
     thumbnail: string;
     timestamp: number;
     settings: Partial<VideoState>;
+    interactionId?: string;
+    interactionExpiresAt?: string;
   }>;
 }
 

@@ -156,6 +156,7 @@ interface HistoryItemProps {
 const HistoryItem: React.FC<HistoryItemProps> = ({ url, timestamp, onClick }) => (
   <button
     onClick={onClick}
+    aria-label={`Select video from ${new Date(timestamp).toLocaleTimeString()}`}
     className="relative aspect-video rounded-lg overflow-hidden bg-black border border-border hover:border-foreground-muted transition-colors group"
     title={new Date(timestamp).toLocaleTimeString()}
   >
@@ -195,7 +196,7 @@ export const VideoPanel = () => {
       // Veo renders 4-8s
       if (video.duration < 4) patch.duration = 4;
       if (video.duration > 8) patch.duration = 8;
-      if (video.inputMode === 'text-to-video') patch.inputMode = 'image-animate';
+      if (video.inputMode === 'text-to-video' || video.inputMode === 'video-upload') patch.inputMode = 'image-animate';
       patch.omniFollowUp = 'none';
     }
 
@@ -384,13 +385,13 @@ export const VideoPanel = () => {
       )}
 
       {/* ── Omni follow-up: the Interactions API keeps the last video in context ── */}
-      {isOmni && video.omniInteractionId && (
+      {isOmni && video.omniInteractionId && video.inputMode !== 'video-upload' && (
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Next Generation</p>
           <div className="grid grid-cols-3 gap-1.5">
             {([
               { value: 'none',   label: 'New',    sub: 'from scratch' },
-              { value: 'edit',   label: 'Edit',   sub: 'last video' },
+              { value: 'edit',   label: 'Edit',   sub: 'selected video' },
               { value: 'extend', label: 'Extend', sub: 'continue it' },
             ] as const).map((opt) => (
               <button
@@ -410,7 +411,7 @@ export const VideoPanel = () => {
           </div>
           {(video.omniFollowUp ?? 'none') !== 'none' && (
             <p className="text-[9px] text-foreground-muted mt-1.5 opacity-60">
-              Your prompt is applied to the video you just generated.
+              Your prompt is applied to the selected generated video.
             </p>
           )}
         </div>
@@ -471,7 +472,9 @@ export const VideoPanel = () => {
                 key={item.id}
                 url={item.url}
                 timestamp={item.timestamp}
-                onClick={() => updateVideo({ generatedVideoUrl: item.url })}
+                onClick={() => updateVideo({ generatedVideoUrl: item.url, model: item.settings.model || video.model,
+                  inputMode: item.settings.inputMode === 'video-upload' ? 'text-to-video' : item.settings.inputMode || 'text-to-video',
+                  omniInteractionId: item.interactionId || null, omniInteractionExpiresAt: item.interactionExpiresAt || null, omniFollowUp: 'none' })}
               />
             ))}
           </div>

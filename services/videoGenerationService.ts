@@ -69,6 +69,7 @@ export interface VideoGenerationOptions {
   referenceImages?: ImageData[];
   omniTask?: OmniVideoTask;
   previousInteractionId?: string;
+  sourceVideoToken?: string;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -200,6 +201,7 @@ class VideoGenerationService {
       resolution: options.resolution,
       task: options.omniTask,
       previousInteractionId: options.previousInteractionId,
+      sourceVideoToken: options.sourceVideoToken,
       onProgress: options.onProgress,
       abortSignal: options.abortSignal
     };

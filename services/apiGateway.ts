@@ -288,6 +288,7 @@ const summarizeStringForLog = (value: string, maxLength = LOG_STRING_PREVIEW_CHA
 const summarizeValueForLog = (value: unknown, depth = 0, fieldName = ''): unknown => {
   if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'string') {
+    if (/token|secret|authorization/i.test(fieldName)) return '[redacted]';
     if (/base64|b64_json|bytesBase64Encoded/i.test(fieldName)) {
       return {
         kind: 'redacted-binary',
@@ -559,7 +560,7 @@ async function gatewayFetch(
   const { timeoutMs, requestLogSummary, requestLogPrompt, ...restInit } = init;
   const method = restInit.method || 'GET';
   const traceId = _activeGenerationTraceId || createGatewayTraceId('req');
-  const shouldLogRequest = !path.startsWith('/api/logs/');
+  const shouldLogRequest = !path.startsWith('/api/logs/') && !path.startsWith('/api/omni/uploads');
   const routeInfo = getGatewayLogRouteInfo(path);
   const { summary: requestSummary, prompt } = shouldLogRequest
     ? requestLogSummary
@@ -1212,6 +1213,7 @@ export interface OmniGenerateRequest {
   resolution?: string;
   /** Chains onto a stored interaction so the model edits/extends that video */
   previousInteractionId?: string;
+  sourceVideoToken?: string;
 }
 
 export interface OmniStatusResult {
@@ -1604,4 +1606,27 @@ export async function listAppGenerationLogs(
 
 export async function getAppGenerationLog(identifier: string): Promise<AppGenerationLogDetailResult> {
   return gatewayGet(`/api/logs/generations/${encodeURIComponent(identifier)}`, { timeoutMs: 30_000 });
+}
+
+export interface OmniUploadResult {
+  status: 'processing' | 'ready';
+  fileToken: string;
+  name?: string;
+  durationSeconds?: number;
+  mimeType?: string;
+  expiresAt: string;
+}
+export async function omniUploadAvailability(): Promise<{ available: boolean; message: string }> {
+  return gatewayGet('/api/omni/uploads/availability');
+}
+export async function omniUploadVideo(file: File, signal: AbortSignal): Promise<OmniUploadResult> {
+  const response = await gatewayFetch('/api/omni/uploads', { method: 'POST', body: file, signal, timeoutMs: 240_000,
+    headers: { 'Content-Type': file.type, 'X-Video-Name': encodeURIComponent(file.name) } });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `Video upload failed (${response.status})`);
+  return response.json();
+}
+export async function omniInspectUpload(token: string, remove = false): Promise<OmniUploadResult> {
+  const response = await gatewayFetch(remove ? '/api/omni/uploads' : '/api/omni/uploads/status', { method: remove ? 'DELETE' : 'POST', body: JSON.stringify({ fileToken: token }), timeoutMs: 30_000 });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `Video processing failed (${response.status})`);
+  return response.json();
 }

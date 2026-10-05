@@ -3,7 +3,7 @@ import { GenerateConversation } from './GenerateConversation';
 import React, { useRef, useState, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History, Volume2, VolumeX, Volume1 } from 'lucide-react';
+import { UploadCloud, Columns, Minimize2, MoveHorizontal, Move, AlertCircle, Play, Pause, RefreshCw, Send, Video, Paperclip, Image as ImageIcon, Plus, Bot, User, Trash2, Sparkles, X, ChevronDown, Download, Wand2, Maximize2, ZoomIn, Eraser, History, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getSceneComposeMarkerColor } from '../../lib/sceneComposePlacement';
 import { nanoid } from 'nanoid';
@@ -3085,7 +3085,13 @@ const StandardCanvas: React.FC = () => {
                onDragLeave={isGenerateText ? undefined : () => setIsDragging(false)}
                onDrop={isGenerateText ? undefined : handleDrop}
             >
-               {isGenerateText ? (
+               {isVideo && state.workflow.videoState.inputMode === 'video-upload' ? (
+                   <div className="text-center space-y-3 max-w-sm px-6">
+                       <Video size={36} className="mx-auto text-foreground-muted" />
+                       <h3 className="text-lg font-medium">Edit or extend your source video</h3>
+                       <p className="text-sm text-foreground-muted">Choose and preview a clip in the Input panel, prepare a segment of 10 seconds or less, then describe your edit or continuation.</p>
+                   </div>
+               ) : isGenerateText ? (
                    <div className="text-center space-y-4 max-w-md select-none opacity-40 animate-fade-in">
                        <div className="w-24 h-24 bg-surface-elevated rounded-[2rem] shadow-soft flex items-center justify-center mx-auto border border-border">
                            <Wand2 size={40} className="text-accent" />

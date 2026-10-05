@@ -4628,7 +4628,8 @@ export function useGeneration(): UseGenerationReturn {
         const isOmniModel = videoState.model === 'gemini-omni-1.1-flash';
         // Editing or extending only makes sense while the previous Omni
         // interaction id is still around to chain onto.
-        const omniFollowUp = isOmniModel && videoState.omniInteractionId
+        const isUploadedVideo = isOmniModel && videoState.inputMode === 'video-upload';
+        const omniFollowUp = isOmniModel && (isUploadedVideo || videoState.omniInteractionId)
           ? (videoState.omniFollowUp ?? 'none')
           : 'none';
         // A chained turn operates on the stored video, so re-sending the
@@ -4661,7 +4662,7 @@ export function useGeneration(): UseGenerationReturn {
 
         // Prepare keyframes for multi-frame modes
         let keyframes: ImageData[] | undefined;
-        if (videoState.inputMode !== 'image-animate' && videoState.inputMode !== 'image-morph' && videoState.keyframes.length > 0) {
+        if (!isOmniFollowUp && videoState.inputMode !== 'image-animate' && videoState.inputMode !== 'image-morph' && videoState.keyframes.length > 0) {
           keyframes = videoState.keyframes
             .map((kf) => dataUrlToImageData(kf.url))
             .filter((img): img is ImageData => img !== null);
@@ -4712,14 +4713,15 @@ export function useGeneration(): UseGenerationReturn {
               // Gemini Omni Flash: pin the task to the chosen input mode, but
               // never alongside previousInteractionId — the API rejects the two
               // together and infers the task from the chained interaction.
-              omniTask: isOmniModel && omniFollowUp === 'none'
+              omniTask: isUploadedVideo ? (omniFollowUp === 'extend' ? 'extend' : 'edit') : isOmniModel && omniFollowUp === 'none'
                 ? (videoState.inputMode === 'text-to-video'
                     ? 'text_to_video'
                     : videoState.inputMode === 'image-animate'
                       ? 'image_to_video'
                       : undefined)
                 : undefined,
-              previousInteractionId: omniFollowUp === 'none' ? undefined : videoState.omniInteractionId || undefined,
+              previousInteractionId: isUploadedVideo || omniFollowUp === 'none' ? undefined : videoState.omniInteractionId || undefined,
+              sourceVideoToken: isUploadedVideo ? videoState.omniSourceVideo?.fileToken : undefined,
               onProgress: onVideoProgress,
               abortSignal
             }),
@@ -4731,6 +4733,8 @@ export function useGeneration(): UseGenerationReturn {
             payload: {
               generatedVideoUrl: videoResult.videoUrl,
               omniInteractionId: videoResult.interactionId ?? null,
+              omniInteractionExpiresAt: videoResult.expiresAt?.toISOString() ?? null,
+              inputMode: isUploadedVideo ? 'text-to-video' : videoState.inputMode,
               omniFollowUp: 'none',
               generationProgress: {
                 phase: 'complete',
@@ -4745,7 +4749,11 @@ export function useGeneration(): UseGenerationReturn {
                   url: videoResult.videoUrl,
                   thumbnail: videoResult.thumbnailUrl || videoResult.videoUrl,
                   timestamp: Date.now(),
-                  settings: { ...videoState }
+                  interactionId: videoResult.interactionId,
+                  interactionExpiresAt: videoResult.expiresAt?.toISOString(),
+                  settings: { ...videoState, generationHistory: [], omniInteractionId: videoResult.interactionId ?? null,
+                    omniInteractionExpiresAt: videoResult.expiresAt?.toISOString() ?? null, omniFollowUp: 'none',
+                    omniSourceVideo: null, inputMode: isUploadedVideo ? 'text-to-video' : videoState.inputMode }
                 }
               ].slice(-10) // Keep last 10
             }

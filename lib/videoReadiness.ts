@@ -11,6 +11,16 @@ export function getVideoReadiness(state: AppState): { ready: boolean; message?: 
   const video = state.workflow.videoState;
   const hasBrief = Boolean(state.prompt?.trim() || video.scenario?.trim());
 
+  if (video.inputMode === 'video-upload') {
+    const source = video.omniSourceVideo;
+    if (video.model !== 'gemini-omni-1.1-flash') return { ready: false, message: 'Select Omni Flash to use uploaded videos.' };
+    if (!source) return { ready: false, message: 'Prepare and upload a source clip of 10 seconds or less.' };
+    if (!Number.isFinite(Date.parse(source.expiresAt)) || Date.parse(source.expiresAt) <= Date.now()) return { ready: false, message: 'The source upload expired. Upload the clip again.' };
+    if (!hasBrief) return { ready: false, message: 'Describe the edit or continuation for your uploaded clip.' };
+    if (!['edit', 'extend'].includes(video.omniFollowUp || '')) return { ready: false, message: 'Choose Edit or Extend for the uploaded clip.' };
+    return { ready: true };
+  }
+
   // A chained Omni edit/extend operates on the stored video, so it wants an
   // instruction rather than an input image.
   const isOmniFollowUp =
@@ -19,6 +29,8 @@ export function getVideoReadiness(state: AppState): { ready: boolean; message?: 
     (video.omniFollowUp ?? 'none') !== 'none';
 
   if (isOmniFollowUp) {
+    if (video.omniInteractionExpiresAt && Date.parse(video.omniInteractionExpiresAt) <= Date.now())
+      return { ready: false, message: 'This generated-video interaction expired. Generate a new clip or upload a source clip.' };
     if (hasBrief) return { ready: true };
     return {
       ready: false,

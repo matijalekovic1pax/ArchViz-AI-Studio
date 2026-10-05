@@ -1,6 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
+import { UploadedVideoEditor } from '../../video/UploadedVideoEditor';
 import { VideoLockBanner } from '../../video/VideoLockBanner';
 import { Upload, X, ArrowRight, Wand2, Layers, Type } from 'lucide-react';
 
@@ -117,7 +118,8 @@ export const LeftVideoPanel = () => {
   if (isLocked) return <VideoLockBanner compact />;
 
   const isOmni = video.model === 'gemini-omni-1.1-flash';
-  const followUp = isOmni && video.omniInteractionId ? (video.omniFollowUp ?? 'none') : 'none';
+  const isUploadedVideo = isOmni && video.inputMode === 'video-upload';
+  const followUp = isOmni && (isUploadedVideo || video.omniInteractionId) ? (video.omniFollowUp ?? 'none') : 'none';
   const isFollowUp = followUp !== 'none';
   const isAnimate = video.inputMode === 'image-animate' && !isFollowUp;
   const isInterpolate = video.inputMode === 'image-morph' && !isFollowUp;
@@ -133,12 +135,12 @@ export const LeftVideoPanel = () => {
       ? {
           label: 'Continuation',
           placeholder: 'e.g. the camera keeps pushing toward the far window as the concourse empties',
-          hint: 'Describe what should happen next in the clip you just generated.',
+          hint: 'Describe what should happen next in the selected source clip.',
         }
       : {
           label: 'Edit Instruction',
           placeholder: 'e.g. warmer evening light, remove the people on the left',
-          hint: 'Describe the change to apply to the clip you just generated.',
+          hint: 'Describe the change to apply to the selected source clip.',
         }
     : isTextToVideo
       ? {
@@ -158,6 +160,7 @@ export const LeftVideoPanel = () => {
     ? ([
         { id: 'image-animate',  icon: Wand2, label: 'Animate Image', sub: 'Image → Video' },
         { id: 'text-to-video',  icon: Type,  label: 'Text → Video',  sub: 'Prompt only' },
+        { id: 'video-upload', icon: Upload, label: 'Upload Video', sub: 'Edit or extend' },
       ] as const)
     : ([
         { id: 'image-animate', icon: Wand2,  label: 'Animate Image',      sub: 'Image → Video' },
@@ -176,7 +179,7 @@ export const LeftVideoPanel = () => {
               key={id}
               // Choosing an input mode means starting fresh, so drop any
               // pending edit/extend rather than leaving a dead end.
-              onClick={() => updateVideo({ inputMode: id, omniFollowUp: 'none' })}
+              onClick={() => updateVideo({ inputMode: id, omniFollowUp: id === 'video-upload' ? 'edit' : 'none' })}
               className={cn(
                 'flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all',
                 video.inputMode === id
@@ -198,6 +201,8 @@ export const LeftVideoPanel = () => {
           ))}
         </div>
       </div>
+
+      {isUploadedVideo && <UploadedVideoEditor />}
 
       {/* ── Image Animate: single upload ── */}
       {isAnimate && (
@@ -229,9 +234,8 @@ export const LeftVideoPanel = () => {
       {/* ── Follow-up turn: the model already holds the clip, so no inputs ── */}
       {isFollowUp && (
         <div className="p-2.5 rounded-lg bg-surface-elevated border border-border text-[10px] text-foreground-muted leading-relaxed">
-          {followUp === 'extend' ? 'Extending' : 'Editing'} the clip you just generated —
-          no input image needed. Switch <strong className="text-foreground">Next Generation</strong> back
-          to <strong className="text-foreground">New</strong> in the right panel to start from scratch.
+          {followUp === 'extend' ? 'Extending' : 'Editing'} the selected source clip —
+          no input image needed. Choose an image or text mode to start a new video.
         </div>
       )}
 

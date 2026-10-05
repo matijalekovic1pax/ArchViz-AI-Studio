@@ -49,6 +49,7 @@ export interface OmniGenerationOptions {
   task?: OmniVideoTask;
   /** Chain onto a previous interaction to edit or extend that video */
   previousInteractionId?: string;
+  sourceVideoToken?: string;
   onProgress?: (progress: VideoGenerationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -105,6 +106,7 @@ class OmniService {
       resolution = '1080p',
       task,
       previousInteractionId,
+      sourceVideoToken,
       onProgress,
       abortSignal,
     } = options;
@@ -138,6 +140,7 @@ class OmniService {
         aspectRatio,
         resolution,
         previousInteractionId,
+        sourceVideoToken,
       });
 
       if (result.status === 'error') {

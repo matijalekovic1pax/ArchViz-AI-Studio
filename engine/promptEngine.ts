@@ -5248,7 +5248,7 @@ function generateVideoPrompt(state: AppState): string {
   // A chained Omni turn acts on the video the model already holds. The full
   // scene-building framework would fight that footage instead of guiding it, so
   // send the instruction and the continuity contract only.
-  const omniFollowUp = video.model === 'gemini-omni-1.1-flash' && video.omniInteractionId
+  const omniFollowUp = video.model === 'gemini-omni-1.1-flash' && (video.inputMode === 'video-upload' || video.omniInteractionId)
     ? (video.omniFollowUp ?? 'none')
     : 'none';
   if (omniFollowUp !== 'none') {
@@ -5257,7 +5257,7 @@ function generateVideoPrompt(state: AppState): string {
       if (userBrief) parts.push(`Continuation direction: ${userBrief}.`);
       parts.push('Match the existing camera motion, lighting, materials, people and pacing so the join is invisible.');
     } else {
-      parts.push('Edit the video you just generated.');
+      parts.push(video.inputMode === 'video-upload' ? 'Edit the attached source video.' : 'Edit the selected generated video.');
       parts.push(userBrief ? `Requested change: ${userBrief}.` : 'Refine the video.');
       parts.push('Change only what the request names. Everything else — architecture, materials, lighting, camera path, people, and any visible text or signage — must stay exactly as it is.');
     }

@@ -20,6 +20,8 @@
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
+import { uploadVideo, inspectUpload, uploadAvailability, sourceVideoContent, uploadTokenFromBody } from './omniUploads.js';
+
 const ALLOWED_ORIGINS = [
   'https://arch-viz-ai-studio.vercel.app',
   'https://archviz-ai-studio.matija-lekovic.workers.dev',
@@ -735,7 +737,7 @@ function getCorsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Archviz-Trace-Id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Archviz-Trace-Id, X-Video-Name',
     'Access-Control-Expose-Headers': 'Content-Disposition',
     'Access-Control-Max-Age': '86400',
   };
@@ -1984,7 +1986,7 @@ function sanitizeLogJson(value, depth = 0) {
   const entries = Object.entries(value).slice(0, APP_LOG_JSON_MAX_OBJECT_KEYS);
   const output = {};
   for (const [key, item] of entries) {
-    output[String(key).slice(0, 120)] = sanitizeLogJson(item, depth + 1);
+    output[String(key).slice(0, 120)] = /token|secret|authorization/i.test(key) ? '[redacted]' : sanitizeLogJson(item, depth + 1);
   }
   if (Object.keys(value).length > APP_LOG_JSON_MAX_OBJECT_KEYS) {
     output.__truncatedKeys = Object.keys(value).length - APP_LOG_JSON_MAX_OBJECT_KEYS;
@@ -4986,7 +4988,7 @@ async function omniInteractionToStatus(interaction, env) {
 
 // ─── Route: POST /api/omni/generate ──────────────────────────────────────────
 
-async function handleOmniGenerate(request, env) {
+async function handleOmniGenerate(request, env, user) {
   const origin = request.headers.get('Origin') || '';
   try {
     if (!env.GEMINI_API_KEY) {
@@ -5003,12 +5005,20 @@ async function handleOmniGenerate(request, env) {
       aspectRatio = '16:9',
       resolution = '1080p',
       previousInteractionId,
+      sourceVideoToken,
     } = body;
 
     const model = OMNI_ALLOWED_MODELS.has(requestedModel) ? requestedModel : OMNI_DEFAULT_MODEL;
 
     // Assemble the multimodal input: images first, then the prompt text
     const input = [];
+    if (sourceVideoToken) {
+      if (previousInteractionId || image || referenceImages?.length || !['edit', 'extend'].includes(requestedTask) || !prompt?.trim())
+        return corsResponse(origin, { status: 'error', error: 'Uploaded-video requests require an edit/extend instruction and cannot also chain a generated video or include images.' }, { status: 400 });
+      input.push(await sourceVideoContent(request, env, user, sourceVideoToken));
+    } else if (!previousInteractionId && ['edit', 'extend'].includes(requestedTask)) {
+      return corsResponse(origin, { status: 'error', error: 'Select a generated video or upload a source clip before editing or extending.' }, { status: 400 });
+    }
     const primaryImage = omniImageContent(image);
     if (primaryImage) input.push(primaryImage);
     if (Array.isArray(referenceImages)) {
@@ -5075,10 +5085,12 @@ async function handleOmniGenerate(request, env) {
     // If background execution is rejected for this model, fall back to the
     // synchronous unary call — it blocks until the video is ready.
     if (resp.status === 400) {
-      const errText = await resp.text();
-      console.log(`[omni-generate] background rejected, retrying synchronously: ${errText.slice(0, 300)}`);
-      const { background, ...syncPayload } = payload;
-      resp = await postInteraction(syncPayload);
+      const errText = await resp.clone().text();
+      if (/background.*(not supported|unsupported|not allowed)|does not support.*background/i.test(errText)) {
+        console.log('[omni-generate] background unsupported, retrying synchronously');
+        const { background, ...syncPayload } = payload;
+        resp = await postInteraction(syncPayload);
+      }
     }
 
     if (!resp.ok) {
@@ -5115,7 +5127,7 @@ async function handleOmniGenerate(request, env) {
       message: 'Video generation in progress. Poll /api/omni/status for updates.',
     });
   } catch (err) {
-    return corsResponse(origin, { status: 'error', error: err.message }, { status: 500 });
+    return corsResponse(origin, { status: 'error', error: err.message }, { status: err.status || 500 });
   }
 }
 
@@ -6675,6 +6687,18 @@ export default {
     const user = await authenticateRequest(request, env);
     if (!user) return unauthorized(origin);
 
+    if (path === '/api/omni/uploads/availability' && request.method === 'GET')
+      return corsResponse(origin, uploadAvailability(request));
+    if ((path === '/api/omni/uploads' && ['POST', 'DELETE'].includes(request.method)) || (path === '/api/omni/uploads/status' && request.method === 'POST')) {
+      try {
+        const result = path === '/api/omni/uploads' && request.method === 'POST' ? await uploadVideo(request, env, user)
+          : await inspectUpload(request, env, user, await uploadTokenFromBody(request), request.method === 'DELETE');
+        return corsResponse(origin, result);
+      } catch (err) {
+        return corsResponse(origin, { error: err.message }, { status: err.status || 500 });
+      }
+    }
+
     const isFeedbackRoute = path.startsWith('/api/feedback/');
     const isAppLogRoute = path.startsWith('/api/logs/');
     const needsFeedbackAdmin =
@@ -6798,7 +6822,7 @@ export default {
 
     // Gemini Omni Flash video generation
     if (path === '/api/omni/generate' && request.method === 'POST') {
-      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'generate', route: '/api/omni/generate' }, () => handleOmniGenerate(request, env));
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'generate', route: '/api/omni/generate' }, () => handleOmniGenerate(request, env, user));
     }
     if (path === '/api/omni/status' && request.method === 'GET') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'status', route: '/api/omni/status' }, () => handleOmniStatus(request, env));
