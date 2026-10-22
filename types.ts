@@ -99,13 +99,25 @@ export const LEGACY_IMAGE_GENERATION_MODEL_ALIASES: Readonly<Record<string, Imag
 };
 
 export const DOCUMENT_TRANSLATION_MODELS = [
-  'gpt-5.4-mini',
-  'gemini-3.5-flash',
+  'gpt-6-luna',
+  'gemini-3.8-flash',
 ] as const;
 
 export type DocumentTranslationModel = typeof DOCUMENT_TRANSLATION_MODELS[number];
 
-export const DEFAULT_DOCUMENT_TRANSLATION_MODEL: DocumentTranslationModel = 'gpt-5.4-mini';
+export const DEFAULT_DOCUMENT_TRANSLATION_MODEL: DocumentTranslationModel = 'gpt-6-luna';
+
+/**
+ * Map a stored or requested translation model onto a current one, so a
+ * project saved with an older model keeps the same provider.
+ */
+export function normalizeDocumentTranslationModel(model: string | null | undefined): DocumentTranslationModel {
+  if (model && (DOCUMENT_TRANSLATION_MODELS as readonly string[]).includes(model)) {
+    return model as DocumentTranslationModel;
+  }
+  if (model?.startsWith('gemini-')) return 'gemini-3.8-flash';
+  return DEFAULT_DOCUMENT_TRANSLATION_MODEL;
+}
 
 /** Models reserved for tender-CV conversion, where schema matching matters more than speed. */
 export const CV_CONVERSION_MODELS = [

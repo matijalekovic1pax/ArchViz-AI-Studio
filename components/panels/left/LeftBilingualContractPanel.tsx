@@ -25,8 +25,8 @@ const LANGUAGE_CODES = [
 ] as const;
 
 const TRANSLATION_MODEL_OPTIONS: Array<{ model: DocumentTranslationModel; label: string; provider: string }> = [
-  { model: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', provider: 'OpenAI' },
-  { model: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', provider: 'Google' },
+  { model: 'gpt-6-luna', label: 'GPT-6 Luna', provider: 'OpenAI' },
+  { model: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', provider: 'Google' },
 ];
 
 /** Miniature page showing how each layout arranges the two languages. */

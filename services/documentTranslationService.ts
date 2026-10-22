@@ -18,7 +18,7 @@ import { rebuildXlsx } from './xlsxRebuilderService';
 import { parsePptx } from './pptxParserService';
 import { rebuildPptx } from './pptxRebuilderService';
 import { convertPdfToDocxWithConvertApi, isConvertApiConfigured } from './convertApiService';
-import { DEFAULT_DOCUMENT_TRANSLATION_MODEL } from '../types';
+import { DEFAULT_DOCUMENT_TRANSLATION_MODEL, normalizeDocumentTranslationModel } from '../types';
 import type {
   DocumentTranslateDocument,
   DocumentTranslationResult,
@@ -582,7 +582,8 @@ Return ONLY the JSON:`;
       prompt,
       model,
       temperature: 0.3,
-      maxOutputTokens: 500,
+      // Thinking and reasoning tokens count toward this limit.
+      maxOutputTokens: 4096,
       abortSignal,
     });
 
@@ -661,7 +662,7 @@ Return the JSON now:`;
 }
 
 function resolveTranslationModel(model?: DocumentTranslationModel): DocumentTranslationModel {
-  return model || DEFAULT_DOCUMENT_TRANSLATION_MODEL;
+  return normalizeDocumentTranslationModel(model);
 }
 
 function isOpenAITranslationModel(model: DocumentTranslationModel): boolean {
@@ -678,11 +679,13 @@ async function generateTextWithTranslationModel(options: {
   const { prompt, model, temperature, maxOutputTokens, abortSignal } = options;
 
   if (isOpenAITranslationModel(model)) {
+    // GPT-6 models reason before answering and take a reasoning effort, not a
+    // temperature. Low effort keeps batches fast while still checking terms.
     const response = await openAITextRequest({
       model,
       input: prompt,
-      temperature,
       maxOutputTokens,
+      reasoningEffort: 'low',
     }, { signal: abortSignal });
     return response.text || '';
   }
@@ -737,7 +740,8 @@ export async function detectLanguageCode(
     prompt: `Which language is this text written in? Reply with only its two-letter ISO 639-1 code, nothing else.\n\nTEXT:\n${sample.slice(0, 2000)}`,
     model: resolveTranslationModel(model),
     temperature: 0,
-    maxOutputTokens: 10,
+    // Thinking and reasoning tokens count toward this limit.
+    maxOutputTokens: 1024,
     abortSignal,
   });
   const code = response.trim().toLowerCase().match(/\b[a-z]{2}\b/)?.[0];

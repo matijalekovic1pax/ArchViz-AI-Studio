@@ -38,7 +38,8 @@ const JWT_EXPIRY_SECONDS = 86400; // 24 hours
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_API_BASE_V1 = 'https://generativelanguage.googleapis.com/v1';
 const OPENAI_API_BASE = 'https://api.openai.com/v1';
-const OPENAI_TEXT_DEFAULT_MODEL = 'gpt-5.4-mini';
+const OPENAI_TEXT_DEFAULT_MODEL = 'gpt-6-luna';
+const OPENAI_REASONING_EFFORTS = new Set(['none', 'low', 'medium', 'high']);
 const OPENAI_TEXT_UPSTREAM_TIMEOUT_MS = 3 * 60 * 1000;
 const OPENAI_TEXT_MAX_INPUT_CHARS = 80_000;
 const OPENAI_TEXT_MAX_OUTPUT_TOKENS = 32_000;
@@ -3265,6 +3266,9 @@ async function handleOpenAIResponses(request, env) {
 
     const temperature = clampNumber(body?.temperature, 0, 2, null);
     if (temperature !== null) payload.temperature = temperature;
+
+    const reasoningEffort = sanitizeEnum(body?.reasoningEffort, OPENAI_REASONING_EFFORTS, null);
+    if (reasoningEffort) payload.reasoning = { effort: reasoningEffort };
 
     const maxOutputTokens = clampNumber(
       body?.maxOutputTokens ?? body?.max_output_tokens,

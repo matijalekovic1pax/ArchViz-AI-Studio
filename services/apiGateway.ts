@@ -734,6 +734,8 @@ export interface OpenAITextRequest {
   input: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** Reasoning models only; they reject sampling parameters such as temperature. */
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
 }
 
 export interface OpenAITextResponse {

@@ -14,7 +14,7 @@ import { adaptPromptForImageGenerationModel } from '../engine/promptEngine';
 
 export const DEFAULT_MODEL = 'gemini-3-pro-image';
 export const IMAGE_MODEL = 'gemini-3-pro-image';
-export const TEXT_MODEL = 'gemini-3.5-flash';
+export const TEXT_MODEL = 'gemini-3.8-flash';
 export const AUTO_SELECTION_MODEL = 'gemini-3.5-flash';
 export const PROMPT_OPTIMIZER_MODEL = 'gemini-3.5-flash';
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
