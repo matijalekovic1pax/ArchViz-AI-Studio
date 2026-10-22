@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, FileStack, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield } from 'lucide-react';
+import { Undo, Redo, ZoomIn, ZoomOut, FolderOpen, RotateCcw, FileJson, Save, Video, Download, Sparkles, Loader2, X, ChevronDown, CheckCircle2, FileDown, FileStack, Maximize2, Minimize2, Film, MonitorPlay, Trash2, Columns, SlidersHorizontal, Languages, MoreVertical, LogOut, BookOpen, Flag, Shield, Columns2 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { getVideoReadiness } from '../../lib/videoReadiness';
@@ -28,6 +28,7 @@ const MOBILE_WORKFLOW_LABEL_KEYS: Record<string, string> = {
   'angle-change': 'workflows.angleChange',
   'material-validation': 'workflows.materialValidation',
   'document-translate': 'workflows.documentTranslate',
+  'bilingual-contract': 'workflows.bilingualContract',
   'pdf-compression': 'workflows.pdfCompression',
   exploded: 'workflows.exploded',
   section: 'workflows.section',
@@ -180,6 +181,8 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     ? false
     : state.mode === 'document-translate'
       ? (state.workflow.documentTranslate.queue || []).length === 0
+      : state.mode === 'bilingual-contract'
+        ? !state.workflow.bilingualContract.sourceDocument
       : state.mode === 'cv-convert'
         ? state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument
       : isPdfCompressionMode
@@ -240,6 +243,11 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     }
     if (state.mode === 'document-translate') {
       if ((state.workflow.documentTranslate.queue || []).length === 0) return;
+      await generate();
+      return;
+    }
+    if (state.mode === 'bilingual-contract') {
+      if (!state.workflow.bilingualContract.sourceDocument) return;
       await generate();
       return;
     }
@@ -706,7 +714,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
     };
   };
   const activeModelCopy = getModelCopy(activeImageGenerationModel);
-  const showTopBarImageModelSelector = state.mode !== 'document-translate' && state.mode !== 'cv-convert';
+  const showTopBarImageModelSelector = state.mode !== 'document-translate' && state.mode !== 'bilingual-contract' && state.mode !== 'cv-convert';
   const renderModelSelector = (menuPositionClassName = 'left-0 origin-top-left') => (
     <div className="relative shrink-0">
       <button
@@ -802,6 +810,7 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
       case 'material-validation': return t('generation.runValidation');
       case 'render-sketch': return t('generation.renderSketch');
       case 'document-translate': return t('generation.translateDocument');
+      case 'bilingual-contract': return t('generation.createBilingualContract');
       case 'cv-convert': return t('generation.convertCvs');
       default: return t('generation.generateRender');
     }
@@ -1326,6 +1335,8 @@ export const TopBar: React.FC<{ onToggleMobilePanel?: (panel: MobilePanelType) =
                   <>
                     {state.mode === 'document-translate' ? (
                       <Languages size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
+                    ) : state.mode === 'bilingual-contract' ? (
+                      <Columns2 size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     ) : state.mode === 'cv-convert' ? (
                       <FileStack size={18} className={cn("relative z-10 shrink-0", !isDisabled && "group-hover:text-accent transition-colors")} />
                     ) : (

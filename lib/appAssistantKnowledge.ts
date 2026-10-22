@@ -465,6 +465,29 @@ export const APP_ASSISTANT_FEATURES: Record<GenerationMode, AppAssistantFeatureG
     watchOut: ['PDF translation converts to Word first and outputs DOCX.', 'Complex PDFs may need cleanup after conversion.'],
     suggestions: ['What happens to PPTX animations?', 'Why does PDF output as DOCX?', 'Which file formats are supported?'],
   },
+  'bilingual-contract': {
+    mode: 'bilingual-contract',
+    title: 'Bilingual Contracts',
+    summary: 'Turn a contract in its original language into one Word document with both languages, in two columns or paragraph by paragraph.',
+    bestFor: ['bilingual contracts', 'side-by-side contract translations', 'agreements signed in two languages'],
+    steps: [
+      'Open the Bilingual Contracts workflow, right under Doc Translator.',
+      'Upload the contract in its original language as DOCX or PDF.',
+      'Choose the original language (or Auto-detect) and the language to translate into.',
+      'Pick the layout: two columns per page, or paragraph by paragraph, and which language comes first.',
+      'Create the bilingual contract, check the preview, then download the Word document.',
+    ],
+    controls: ['contract upload', 'original language', 'target language', 'layout', 'left column / first paragraph', 'language headings', 'column divider', 'italic translation', 'translation model'],
+    specificGuidance: [
+      'Two columns puts each paragraph and table of the original in a row next to its translation, with optional language headings repeated on every page.',
+      'Paragraph by paragraph places each translated paragraph directly after (or before) its original, including inside table cells.',
+      'The translation uses legal terminology, keeps defined terms consistent, and leaves clause numbers, names, amounts and dates as written.',
+      'Clause and list numbering counts the same in both languages; styles, headers and footers come from the original.',
+      'Output is always a Word (.docx) document; PDFs are converted to Word first.',
+    ],
+    watchOut: ['Machine translation is a draft: have the translation reviewed before signing.', 'Text in text boxes and shapes stays in the original language only.'],
+    suggestions: ['Which layout should I use?', 'Can the translation be on the left?', 'Does it keep clause numbering?'],
+  },
   'cv-convert': {
     mode: 'cv-convert',
     title: 'Tender CV Converter',
@@ -850,6 +873,17 @@ export function buildAppAssistantWorkspaceSnapshot(state: AppState): string {
         `Target language: ${wf.documentTranslate.targetLanguage}`,
         'Preserve formatting: always enabled',
         `Progress phase: ${wf.documentTranslate.progress.phase}`
+      );
+      break;
+    case 'bilingual-contract':
+      lines.push(
+        `Contract: ${wf.bilingualContract.sourceDocument?.name || 'none'}`,
+        `Original language: ${wf.bilingualContract.sourceLanguage}`,
+        `Target language: ${wf.bilingualContract.targetLanguage}`,
+        `Layout: ${wf.bilingualContract.layout}`,
+        `Order: ${wf.bilingualContract.order}`,
+        `Bilingual outputs: ${wf.bilingualContract.outputs.length}`,
+        `Progress phase: ${wf.bilingualContract.progress.phase}`
       );
       break;
     case 'cv-convert':

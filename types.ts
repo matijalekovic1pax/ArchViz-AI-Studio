@@ -16,6 +16,7 @@ export type GenerationMode =
   | 'video'
   | 'material-validation'
   | 'document-translate'
+  | 'bilingual-contract'
   | 'cv-convert'
   | 'pdf-compression'
   | 'headshot';
@@ -38,6 +39,7 @@ export const GENERATION_MODES: readonly GenerationMode[] = [
   'video',
   'material-validation',
   'document-translate',
+  'bilingual-contract',
   'cv-convert',
   'pdf-compression',
   'headshot',
@@ -899,6 +901,7 @@ export interface WorkflowSettings {
 
   // 13. Document Translation
   documentTranslate: DocumentTranslateState;
+  bilingualContract: BilingualContractState;
   cvConversion: CvConversionState;
 
   // 14. PDF Compression
@@ -1416,6 +1419,53 @@ export interface DocumentTranslateState {
   error: string | null;
 }
 
+// --- Bilingual Contract Types ---
+
+/** Side by side: two columns per page. Alternating: each paragraph followed by its translation. */
+export type BilingualContractLayout = 'side-by-side' | 'alternating';
+
+/** Which language leads: the left column, or the first paragraph of each pair. */
+export type BilingualContractOrder = 'original-first' | 'translation-first';
+
+export interface BilingualContractOutput {
+  id: string;
+  sourceName: string;
+  name: string;
+  dataUrl: string;
+  layout: BilingualContractLayout;
+  sourceLanguageLabel: string;
+  targetLanguageLabel: string;
+  warnings: string[] | null;
+  createdAt: number;
+}
+
+export interface BilingualContractProgress {
+  phase: 'idle' | 'converting' | 'translating' | 'building' | 'complete' | 'error';
+  percent: number;
+  message?: string;
+}
+
+export interface BilingualContractState {
+  /** The contract in its original language. */
+  sourceDocument: DocumentTranslateDocument | null;
+  /** Language of the uploaded contract, or 'auto' to detect it. */
+  sourceLanguage: string;
+  targetLanguage: string;
+  layout: BilingualContractLayout;
+  order: BilingualContractOrder;
+  translationModel: DocumentTranslationModel;
+  /** Side by side only: a repeating header row naming each column's language. */
+  columnHeaders: boolean;
+  /** Side by side only: a vertical rule between the two columns. */
+  columnDivider: boolean;
+  /** Set the translated text in italics so the two languages are easy to tell apart. */
+  italicTranslation: boolean;
+  progress: BilingualContractProgress;
+  outputs: BilingualContractOutput[];
+  activeOutputId: string | null;
+  error: string | null;
+}
+
 // --- Tender CV Conversion Types ---
 
 export interface CvConversionOutput {
@@ -1712,6 +1762,7 @@ export type Action =
   | { type: 'UPDATE_VIDEO_TIMELINE'; payload: Partial<VideoState['timeline']> }
   | { type: 'UPDATE_MATERIAL_VALIDATION'; payload: Partial<MaterialValidationState> }
   | { type: 'UPDATE_CV_CONVERSION'; payload: Partial<CvConversionState> }
+  | { type: 'UPDATE_BILINGUAL_CONTRACT'; payload: Partial<BilingualContractState> }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'UPDATE_CHAT_MESSAGE'; payload: { id: string; updates: Partial<ChatMessage> } }
   | { type: 'ADD_CUSTOM_STYLE'; payload: StyleConfiguration }

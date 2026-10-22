@@ -31,6 +31,7 @@ import { createMaterialValidationService } from '../services/materialValidationS
 import { translateToEnglish, needsTranslation } from '../services/translationService';
 import { translateDocument } from '../services/documentTranslationService';
 import { convertCvBatch } from '../services/cvConversionService';
+import { createBilingualContract } from '../services/bilingualContractService';
 import {
   createGatewayTraceId,
   getImageEditGatewayErrorInfo,
@@ -73,9 +74,9 @@ import {
   type VisualEditScope,
 } from '../lib/visualEditPolicy';
 import { nanoid } from 'nanoid';
-import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateOutput, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
+import { AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL, type AppState, type BilingualContractOutput, type CvConversionOutput, type CvConversionProgress, type DocumentTranslateOutput, type DocumentTranslateQueueItem, type GenerationMode, type GenerationProgressStage, type TranslationProgress, type VideoGenerationProgress, type VisualSelectionShape, type XlsxTranslationStats } from '../types';
 
-const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'cv-convert'];
+const TEXT_ONLY_MODES: GenerationMode[] = ['material-validation', 'document-translate', 'bilingual-contract', 'cv-convert'];
 const RENDER_FORMAT_MODES: GenerationMode[] = ['render-3d', 'render-cad', 'render-sketch'];
 const SOURCE_LOCKED_MODES: GenerationMode[] = [
   'render-3d',
@@ -2476,6 +2477,14 @@ export function useGeneration(): UseGenerationReturn {
       return;
     }
 
+    if (state.mode === 'bilingual-contract' && !state.workflow.bilingualContract.sourceDocument) {
+      dispatch({
+        type: 'UPDATE_BILINGUAL_CONTRACT',
+        payload: { error: 'Upload the contract in its original language first.' }
+      });
+      return;
+    }
+
     if (state.mode === 'cv-convert' && (
       state.workflow.cvConversion.sourceDocuments.length === 0 ||
       !state.workflow.cvConversion.templateDocument
@@ -3585,6 +3594,68 @@ export function useGeneration(): UseGenerationReturn {
                 }
               });
             }
+          }
+          result = { text: null, images: [] };
+        } else if (state.mode === 'bilingual-contract') {
+          const contract = state.workflow.bilingualContract;
+          const sourceDocument = contract.sourceDocument!;
+          dispatch({
+            type: 'UPDATE_BILINGUAL_CONTRACT',
+            payload: { error: null, progress: { phase: 'translating', percent: 2, message: 'Preparing contract…' } },
+          });
+
+          try {
+            const contractResult = await runWithRetry(
+              'bilingual contract',
+              () => createBilingualContract({
+                sourceDocument,
+                sourceLanguage: contract.sourceLanguage,
+                targetLanguage: contract.targetLanguage,
+                layout: contract.layout,
+                order: contract.order,
+                translationModel: contract.translationModel,
+                columnHeaders: contract.columnHeaders,
+                columnDivider: contract.columnDivider,
+                italicTranslation: contract.italicTranslation,
+                onProgress: (progress) => {
+                  updateGenerationStage(progress.phase === 'building' ? 'finalizing' : 'generation');
+                  dispatch({ type: 'UPDATE_BILINGUAL_CONTRACT', payload: { progress } });
+                  updateProgress(progress.percent);
+                },
+                abortSignal,
+              }),
+              { timeoutMs: 15 * 60 * 1000, maxRetries: 1 }
+            );
+
+            const output: BilingualContractOutput = {
+              id: nanoid(),
+              sourceName: sourceDocument.name,
+              name: contractResult.name,
+              dataUrl: contractResult.dataUrl,
+              layout: contract.layout,
+              sourceLanguageLabel: contractResult.sourceLanguageLabel,
+              targetLanguageLabel: contractResult.targetLanguageLabel,
+              warnings: contractResult.warnings.length > 0 ? contractResult.warnings : null,
+              createdAt: Date.now(),
+            };
+            dispatch({
+              type: 'UPDATE_BILINGUAL_CONTRACT',
+              payload: {
+                outputs: [...contract.outputs, output],
+                activeOutputId: output.id,
+                error: null,
+                progress: { phase: 'complete', percent: 100, message: 'Bilingual contract ready.' },
+              },
+            });
+          } catch (error) {
+            const cancelled = (error as DOMException)?.name === 'AbortError';
+            dispatch({
+              type: 'UPDATE_BILINGUAL_CONTRACT',
+              payload: {
+                error: cancelled ? 'Bilingual contract cancelled.' : error instanceof Error ? error.message : 'Could not create the bilingual contract.',
+                progress: { phase: cancelled ? 'idle' : 'error', percent: 0 },
+              },
+            });
           }
           result = { text: null, images: [] };
         } else if (state.mode === 'cv-convert') {
@@ -5291,6 +5362,12 @@ export function useGeneration(): UseGenerationReturn {
             ),
           progress: { phase: 'idle', currentSegment: 0, totalSegments: 0, currentBatch: 0, totalBatches: 0 }
         }
+      });
+    }
+    if (state.mode === 'bilingual-contract') {
+      dispatch({
+        type: 'UPDATE_BILINGUAL_CONTRACT',
+        payload: { error: 'Bilingual contract cancelled.', progress: { phase: 'idle', percent: 0 } }
       });
     }
     if (state.mode === 'cv-convert') {

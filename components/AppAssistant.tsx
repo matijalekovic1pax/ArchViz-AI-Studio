@@ -346,6 +346,7 @@ const ASSISTANT_MODE_ROUTES: Array<{ mode: GenerationMode; label: string; aliase
   { mode: 'video', label: 'Video Studio', aliases: ['video', 'video studio'] },
   { mode: 'material-validation', label: 'Material Validation', aliases: ['material validation'] },
   { mode: 'document-translate', label: 'Doc Translator', aliases: ['document translate', 'document translator', 'doc translator'] },
+  { mode: 'bilingual-contract', label: 'Bilingual Contracts', aliases: ['bilingual contract', 'bilingual contracts', 'contract translator', 'two column contract'] },
   { mode: 'pdf-compression', label: 'PDF Compressor', aliases: ['pdf compressor', 'pdf compression'] },
   { mode: 'headshot', label: 'AI Headshots', aliases: ['headshot', 'headshots', 'ai headshots'] },
 ];
@@ -740,6 +741,10 @@ const getAssistantGenerationReadiness = (
       return (state.workflow.documentTranslate.queue || []).length > 0
         ? { ready: true }
         : { ready: false, message: 'Upload at least one document to the queue before running translation.' };
+    case 'bilingual-contract':
+      return state.workflow.bilingualContract.sourceDocument
+        ? { ready: true }
+        : { ready: false, message: 'Upload the contract in its original language before creating the bilingual version.' };
     case 'cv-convert':
       return state.workflow.cvConversion.sourceDocuments.length > 0 && state.workflow.cvConversion.templateDocument
         ? { ready: true }

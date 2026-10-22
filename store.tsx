@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 
 import React, { createContext, useContext, useReducer, useEffect, useRef, PropsWithChildren } from 'react';
 import { readPersistedMode, persistMode } from './lib/sessionPrefs';
-import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, LEGACY_IMAGE_GENERATION_MODEL_ALIASES, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
+import { AppState, Action, GeometryState, CameraState, LightingState, MaterialState, ContextState, OutputState, WorkflowSettings, CanvasState, VideoState, MaterialValidationState, Render3DSettings, DocumentTranslateState, BilingualContractState, CvConversionState, PdfCompressionState, HeadshotSettings, RenderGenerationMode, RENDER_GENERATION_MODES, DEFAULT_RENDER_GENERATION_MODE, Render3DSourceMode, RENDER3D_SOURCE_MODES, DEFAULT_RENDER3D_SOURCE_MODE, ImageGenerationModel, IMAGE_GENERATION_MODELS, DEFAULT_IMAGE_GENERATION_MODEL, LEGACY_IMAGE_GENERATION_MODEL_ALIASES, DEFAULT_DOCUMENT_TRANSLATION_MODEL, DEFAULT_CV_CONVERSION_MODEL, AI_SLOP_UPSCALE_IMAGE_MODEL, VISUAL_EDIT_IMAGE_MODEL } from './types';
 import { generatePrompt } from './engine/promptEngine';
 
 type ArchwizTestAssetSummary = {
@@ -403,6 +403,22 @@ const initialDocumentTranslate: DocumentTranslateState = {
   translatedDocumentUrl: null,
   warnings: null,
   xlsxStats: null,
+  error: null,
+};
+
+const initialBilingualContract: BilingualContractState = {
+  sourceDocument: null,
+  sourceLanguage: 'auto',
+  targetLanguage: 'en',
+  layout: 'side-by-side',
+  order: 'original-first',
+  translationModel: DEFAULT_DOCUMENT_TRANSLATION_MODEL,
+  columnHeaders: true,
+  columnDivider: true,
+  italicTranslation: false,
+  progress: { phase: 'idle', percent: 0 },
+  outputs: [],
+  activeOutputId: null,
   error: null,
 };
 
@@ -975,7 +991,10 @@ const initialWorkflow: WorkflowSettings = {
   // 13. Document Translation
   documentTranslate: initialDocumentTranslate,
 
-  // 14. Tender CV Conversion
+  // 14. Bilingual Contracts
+  bilingualContract: initialBilingualContract,
+
+  // 14b. Tender CV Conversion
   cvConversion: initialCvConversion,
 
   // 15. PDF Compression
@@ -1246,6 +1265,7 @@ function appReducer(state: AppState, action: Action): AppState {
 
     // Tender CV Conversion Reducer
     case 'UPDATE_CV_CONVERSION': return { ...state, workflow: { ...state.workflow, cvConversion: { ...state.workflow.cvConversion, ...action.payload } } };
+    case 'UPDATE_BILINGUAL_CONTRACT': return { ...state, workflow: { ...state.workflow, bilingualContract: { ...state.workflow.bilingualContract, ...action.payload } } };
 
     // Chat Reducers
     case 'ADD_CHAT_MESSAGE': return { ...state, chatMessages: [...state.chatMessages, action.payload] };

@@ -36,7 +36,8 @@ import {
   Minimize2,
   Columns,
   Download,
-  Orbit
+  Orbit,
+  Columns2
 } from 'lucide-react';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
@@ -62,6 +63,7 @@ import { LeftVideoPanel } from '../left/LeftVideoPanel';
 import { LeftValidationPanel } from '../left/LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from '../left/LeftDocumentTranslatePanel';
 import { LeftCvConvertPanel } from '../left/LeftCvConvertPanel';
+import { LeftBilingualContractPanel } from '../left/LeftBilingualContractPanel';
 import { LeftPdfCompressionPanel } from '../left/LeftPdfCompressionPanel';
 import { LeftHeadshotPanel } from '../left/LeftHeadshotPanel';
 import { Render3DPanel } from '../right/Render3DPanel';
@@ -78,6 +80,7 @@ import { VideoPanel } from '../right/VideoPanel';
 import { ValidationPanel } from '../right/ValidationPanel';
 import { DocumentTranslatePanel } from '../right/DocumentTranslatePanel';
 import { CvConvertPanel } from '../right/CvConvertPanel';
+import { BilingualContractPanel } from '../right/BilingualContractPanel';
 import { PdfCompressionPanel } from '../right/PdfCompressionPanel';
 import { SceneComposePanel } from '../right/SceneComposePanel';
 import { HeadshotPanel } from '../right/HeadshotPanel';
@@ -100,6 +103,7 @@ const MOBILE_WORKFLOWS: WorkflowItem[] = [
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
+  { id: 'bilingual-contract', labelKey: 'workflows.bilingualContract', icon: Columns2 },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
   { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
   { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
@@ -118,6 +122,7 @@ const renderLeftPanel = (mode: GenerationMode) => {
     case 'render-cad': return <LeftRenderCADPanel />;
     case 'material-validation': return <LeftValidationPanel />;
     case 'document-translate': return <LeftDocumentTranslatePanel />;
+    case 'bilingual-contract': return <LeftBilingualContractPanel />;
     case 'cv-convert': return <LeftCvConvertPanel />;
     case 'pdf-compression': return <LeftPdfCompressionPanel />;
     case 'masterplan': return <LeftMasterplanPanel />;
@@ -152,6 +157,7 @@ const renderRightPanel = (mode: GenerationMode) => {
     case 'video': return <VideoPanel />;
     case 'material-validation': return <ValidationPanel />;
     case 'document-translate': return <DocumentTranslatePanel />;
+    case 'bilingual-contract': return <BilingualContractPanel />;
     case 'cv-convert': return <CvConvertPanel />;
     case 'pdf-compression': return <PdfCompressionPanel />;
     case 'headshot': return <HeadshotPanel />;
@@ -208,6 +214,8 @@ const getRightPanelConfig = (mode: GenerationMode, t: (key: string, options?: an
       return { title: t('rightPanel.materialValidation.title'), description: t('rightPanel.materialValidation.description'), icon: CheckCircle2, meta };
     case 'document-translate':
       return { title: t('rightPanel.documentTranslate.title'), description: t('rightPanel.documentTranslate.description'), icon: Languages, meta };
+    case 'bilingual-contract':
+      return { title: t('rightPanel.bilingualContract.title'), description: t('rightPanel.bilingualContract.description'), icon: Columns2, meta };
     case 'cv-convert':
       return { title: t('rightPanel.cvConvert.title'), description: t('rightPanel.cvConvert.description'), icon: FileStack, meta };
     case 'pdf-compression':
@@ -239,6 +247,7 @@ const getGenerateLabel = (mode: GenerationMode, t: (key: string, options?: any) 
     case 'material-validation': return t('generation.runValidation');
     case 'render-sketch': return t('generation.renderSketch');
     case 'document-translate': return t('generation.translateDocument');
+    case 'bilingual-contract': return t('generation.createBilingualContract');
     case 'cv-convert': return t('generation.convertCvs');
     case 'headshot': return t('generation.generateHeadshot', { defaultValue: 'Generate Headshot' } as any);
     default: return t('generation.generateRender');
@@ -492,6 +501,8 @@ export const MobilePanels: React.FC<{
       ? false
       : state.mode === 'document-translate'
         ? (state.workflow.documentTranslate.queue || []).length === 0
+        : state.mode === 'bilingual-contract'
+          ? !state.workflow.bilingualContract.sourceDocument
         : state.mode === 'cv-convert'
           ? state.workflow.cvConversion.sourceDocuments.length === 0 || !state.workflow.cvConversion.templateDocument
         : isPdfCompressionMode

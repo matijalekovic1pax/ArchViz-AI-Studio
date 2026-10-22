@@ -92,6 +92,7 @@
     "generateRender": "Generate Render",
     "generateOutputFirst": "Generate output first",
     "translateDocument": "Translate Document",
+    "createBilingualContract": "Create Bilingual Contract",
     "convertCvs": "Convert CVs",
     "cancel": "Cancel"
   },
@@ -367,6 +368,52 @@
       "sr": "Serbian"
     }
   },
+  "bilingualContract": {
+    "contract": "Contract",
+    "uploadContract": "Upload the contract",
+    "uploadHint": "Word or PDF, in its original language",
+    "unsupportedFile": "Upload the contract as a Word (.docx) or PDF file.",
+    "readError": "Could not read {{name}}.",
+    "replace": "Replace contract",
+    "removeContract": "Remove contract",
+    "languages": "Languages",
+    "originalLanguage": "Original",
+    "targetLanguage": "Translate into",
+    "sameLanguage": "Pick a target language different from the original.",
+    "layout": "Layout",
+    "layouts": {
+      "side-by-side": {
+        "label": "Two columns",
+        "description": "Original and translation side by side on every page"
+      },
+      "alternating": {
+        "label": "Paragraph by paragraph",
+        "description": "Each paragraph followed by its translation"
+      }
+    },
+    "leftColumn": "Left column",
+    "firstParagraph": "First in each pair",
+    "orderOriginal": "Original",
+    "orderTranslation": "Translation",
+    "formatting": "Formatting",
+    "columnHeaders": "Language headings on every page",
+    "columnDivider": "Line between columns",
+    "italicTranslation": "Translation in italics",
+    "note": "The contract is translated with legal terminology and consistent defined terms. Clause numbers, names, amounts and dates are kept as written, and the original's styles, headers and footers are preserved.",
+    "outputs": "Bilingual contracts",
+    "creating": "Creating bilingual contract",
+    "noOutputs": "No bilingual contract yet",
+    "noOutputsDescription": "Upload a contract, choose the target language and layout, then select Create Bilingual Contract.",
+    "download": "Download Word document",
+    "downloadWord": "Download .docx",
+    "remove": "Remove",
+    "reviewNote": "Machine translation is a draft. Have the translated version reviewed by a qualified translator or lawyer before anyone signs it.",
+    "workspaceTitle": "Bilingual contract creator",
+    "workspaceDescription": "Upload a contract in its original language. It comes back as one Word document with both languages, either in two columns on each page or paragraph by paragraph.",
+    "preparingPreview": "Preparing document preview…",
+    "previewError": "The contract was created, but its preview could not be rendered. You can still download it.",
+    "originalPreview": "Original contract"
+  },
   "cvConversion": {
     "companyCvs": "Company CVs",
     "uploadCvs": "Upload company CVs",
@@ -405,6 +452,7 @@
     "angleChange": "Angle Change",
     "materialValidation": "Material Validation",
     "documentTranslate": "Doc Translator",
+    "bilingualContract": "Bilingual Contracts",
     "cvConvert": "CV Converter",
     "pdfCompression": "PDF Compressor",
     "exploded": "Exploded Views",
@@ -1003,6 +1051,10 @@
     "documentTranslate": {
       "title": "Translation",
       "description": "Configure translation settings and download translated documents."
+    },
+    "bilingualContract": {
+      "title": "Bilingual contracts",
+      "description": "Preview and download the bilingual Word documents."
     },
     "cvConvert": {
       "title": "CV outputs",

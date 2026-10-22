@@ -13,6 +13,7 @@ import { FloatingGenerateButton } from './components/FloatingGenerateButton';
 import { MaterialValidationView } from './components/MaterialValidationView';
 import { DocumentTranslateView } from './components/DocumentTranslateView';
 import { CvConvertView } from './components/CvConvertView';
+import { BilingualContractView } from './components/BilingualContractView';
 import { PdfCompressionView } from './components/PdfCompressionView';
 import { AppAssistant } from './components/AppAssistant';
 import { GenerationMode } from './types';
@@ -151,6 +152,8 @@ const Layout: React.FC = () => {
             <MaterialValidationView />
           ) : state.mode === 'document-translate' ? (
             <DocumentTranslateView />
+          ) : state.mode === 'bilingual-contract' ? (
+            <BilingualContractView />
           ) : state.mode === 'cv-convert' ? (
             <CvConvertView />
           ) : state.mode === 'pdf-compression' ? (
@@ -159,7 +162,7 @@ const Layout: React.FC = () => {
             <ImageCanvas />
           )}
           <FloatingGenerateButton />
-          {state.mode !== 'document-translate' && state.mode !== 'cv-convert' && state.mode !== 'pdf-compression' && (
+          {state.mode !== 'document-translate' && state.mode !== 'bilingual-contract' && state.mode !== 'cv-convert' && state.mode !== 'pdf-compression' && (
             <div className="hidden lg:block shrink-0">
               <BottomPanel />
             </div>

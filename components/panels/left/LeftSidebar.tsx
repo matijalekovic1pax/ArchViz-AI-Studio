@@ -5,7 +5,7 @@ import { useAppStore } from '../../../store';
 import {
   Palette, FileCode, Map, Eraser, Layers, RectangleVertical,
   Pencil, Maximize, PenTool, Video, Sparkles, ClipboardCheck, Camera, Orbit,
-  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine
+  ChevronsLeft, ChevronsRight, Languages, FileDown, UserCircle, Combine, Columns2
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { GenerationMode } from '../../../types';
@@ -25,6 +25,7 @@ import { LeftVideoPanel } from './LeftVideoPanel';
 import { LeftValidationPanel } from './LeftValidationPanel';
 import { LeftDocumentTranslatePanel } from './LeftDocumentTranslatePanel';
 import { LeftCvConvertPanel } from './LeftCvConvertPanel';
+import { LeftBilingualContractPanel } from './LeftBilingualContractPanel';
 import { LeftPdfCompressionPanel } from './LeftPdfCompressionPanel';
 import { LeftHeadshotPanel } from './LeftHeadshotPanel';
 
@@ -39,6 +40,7 @@ const WORKFLOWS: { id: GenerationMode; labelKey: string; icon: React.ElementType
   { id: 'angle-change', labelKey: 'workflows.angleChange', icon: Orbit },
   { id: 'material-validation', labelKey: 'workflows.materialValidation', icon: ClipboardCheck },
   { id: 'document-translate', labelKey: 'workflows.documentTranslate', icon: Languages },
+  { id: 'bilingual-contract', labelKey: 'workflows.bilingualContract', icon: Columns2 },
   { id: 'pdf-compression', labelKey: 'workflows.pdfCompression', icon: FileDown },
   { id: 'exploded', labelKey: 'workflows.exploded', icon: Layers },
   { id: 'section', labelKey: 'workflows.section', icon: RectangleVertical },
@@ -67,6 +69,7 @@ export const LeftSidebar: React.FC = () => {
       case 'render-cad': return <LeftRenderCADPanel />;
       case 'material-validation': return <LeftValidationPanel />;
       case 'document-translate': return <LeftDocumentTranslatePanel />;
+      case 'bilingual-contract': return <LeftBilingualContractPanel />;
       case 'cv-convert': return <LeftCvConvertPanel />;
       case 'pdf-compression': return <LeftPdfCompressionPanel />;
       case 'masterplan': return <LeftMasterplanPanel />;

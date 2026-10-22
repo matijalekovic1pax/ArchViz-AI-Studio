@@ -46,6 +46,8 @@ export interface TranslationOptions {
   translationModel?: DocumentTranslationModel;
   translateHeaders?: boolean;
   translateFootnotes?: boolean;
+  /** Extra guidance appended to every batch prompt, e.g. for legal contracts. */
+  additionalInstructions?: string;
   onProgress: (progress: TranslationProgress) => void;
   abortSignal?: AbortSignal;
 }
@@ -68,6 +70,7 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     abortSignal,
     translateHeaders = true,
     translateFootnotes = true,
+    additionalInstructions,
   } = options;
   const translationModel = resolveTranslationModel(options.translationModel);
 
@@ -160,7 +163,8 @@ export async function translateDocument(options: TranslationOptions): Promise<Do
     targetLanguage,
     translationModel,
     onProgress,
-    abortSignal
+    abortSignal,
+    additionalInstructions
   );
 
   // Phase 5: Rebuild DOCX document
@@ -390,7 +394,8 @@ async function runTranslationPipeline(
   targetLanguage: string,
   translationModel: DocumentTranslationModel,
   onProgress: (progress: TranslationProgress) => void,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  additionalInstructions?: string
 ): Promise<Map<string, string>> {
   // Analyze document context (sample first 15 segments)
   onProgress({
@@ -442,7 +447,8 @@ async function runTranslationPipeline(
           targetLanguage,
           documentContext,
           translationModel,
-          abortSignal
+          abortSignal,
+          additionalInstructions
         );
 
         batch.segments.forEach((segment, idx) => {
@@ -603,7 +609,8 @@ async function translateBatch(
   targetLanguage: string,
   documentContext: string,
   model: DocumentTranslationModel,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  additionalInstructions?: string
 ): Promise<string[]> {
   const texts = segments.map((s) => s.text);
 
@@ -617,7 +624,7 @@ DOCUMENT CONTEXT:
 ${documentContext}
 
 Use this context to ensure accurate translation of specialized terms and domain-specific vocabulary.
-
+${additionalInstructions ? `\n${additionalInstructions}\n` : ''}
 CRITICAL INSTRUCTIONS:
 1. You MUST return EXACTLY ${texts.length} translations in a JSON array
 2. Each translation corresponds to the input segment at the same index
@@ -690,6 +697,51 @@ async function generateTextWithTranslationModel(options: {
       abortSignal,
     },
   });
+}
+
+/**
+ * Translate a few standalone strings, such as list numbering labels, with the
+ * same prompt and model as document segments.
+ */
+export async function translateTexts(
+  texts: string[],
+  sourceLanguage: string,
+  targetLanguage: string,
+  context: string,
+  model?: DocumentTranslationModel,
+  abortSignal?: AbortSignal,
+  additionalInstructions?: string
+): Promise<string[]> {
+  if (texts.length === 0) return [];
+  const segments = texts.map((text, index) => ({
+    id: `text-${index}`,
+    text,
+    xmlPath: '',
+    paragraphIndex: index,
+    context: { location: 'body' as const },
+    status: 'pending' as const,
+  }));
+  return translateBatch(segments, sourceLanguage, targetLanguage, context, resolveTranslationModel(model), abortSignal, additionalInstructions);
+}
+
+/**
+ * Identify the language of a text sample. Returns an ISO 639-1 code, or null
+ * when the model gives no usable answer.
+ */
+export async function detectLanguageCode(
+  sample: string,
+  model?: DocumentTranslationModel,
+  abortSignal?: AbortSignal
+): Promise<string | null> {
+  const response = await generateTextWithTranslationModel({
+    prompt: `Which language is this text written in? Reply with only its two-letter ISO 639-1 code, nothing else.\n\nTEXT:\n${sample.slice(0, 2000)}`,
+    model: resolveTranslationModel(model),
+    temperature: 0,
+    maxOutputTokens: 10,
+    abortSignal,
+  });
+  const code = response.trim().toLowerCase().match(/\b[a-z]{2}\b/)?.[0];
+  return code || null;
 }
 
 // ============================================================================
