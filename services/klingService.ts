@@ -124,7 +124,7 @@ class KlingService {
           smoothness: camera.smoothness
         } : undefined,
         seed,
-      });
+      }, abortSignal);
 
       onProgress?.({
         phase: 'rendering',

@@ -146,7 +146,7 @@ class VeoService {
         negativePrompt: negativePrompt || undefined,
         seed,
         numberOfVideos: responseCount > 1 ? Math.min(Math.max(1, responseCount), 4) : undefined,
-      });
+      }, abortSignal);
 
       // Handle error response
       if (result.status === 'error') {

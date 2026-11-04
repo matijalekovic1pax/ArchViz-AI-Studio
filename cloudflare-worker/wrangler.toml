@@ -10,9 +10,17 @@ head_sampling_rate = 1
 name = "IMAGE_EDIT_LIMITER"
 class_name = "ImageEditLimiter"
 
+[[durable_objects.bindings]]
+name = "VIDEO_START_LEDGER"
+class_name = "VideoStartLedger"
+
 [[migrations]]
 tag = "v1_image_edit_limiter"
 new_sqlite_classes = ["ImageEditLimiter"]
+
+[[migrations]]
+tag = "v2_video_start_ledger"
+new_sqlite_classes = ["VideoStartLedger"]
 
 [vars]
 APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"
@@ -60,9 +68,17 @@ name = "archviz-api-gateway-prod"
 name = "IMAGE_EDIT_LIMITER"
 class_name = "ImageEditLimiter"
 
+[[env.production.durable_objects.bindings]]
+name = "VIDEO_START_LEDGER"
+class_name = "VideoStartLedger"
+
 [[env.production.migrations]]
 tag = "v1_image_edit_limiter"
 new_sqlite_classes = ["ImageEditLimiter"]
+
+[[env.production.migrations]]
+tag = "v2_video_start_ledger"
+new_sqlite_classes = ["VideoStartLedger"]
 
 [env.production.vars]
 APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"

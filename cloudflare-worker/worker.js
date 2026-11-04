@@ -21,6 +21,9 @@
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 import { uploadVideo, inspectUpload, uploadAvailability, sourceVideoContent, uploadTokenFromBody } from './omniUploads.js';
+import { VideoStartLedger, runVideoStart, lookupVideoStart, VIDEO_REQUEST_ID_HEADER } from './videoStartLedger.js';
+
+export { VideoStartLedger };
 
 const ALLOWED_ORIGINS = [
   'https://arch-viz-ai-studio.vercel.app',
@@ -78,8 +81,6 @@ const KLING_ENDPOINTS = {
 };
 
 // Vertex AI polling
-const QUICK_POLL_ATTEMPTS = 3;
-const POLL_INTERVAL_MS = 2000;
 
 // Gemini Omni Flash (Interactions API) video generation
 const OMNI_DEFAULT_MODEL = 'gemini-omni-1.1-flash';
@@ -738,7 +739,7 @@ function getCorsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Archviz-Trace-Id, X-Video-Name',
+    'Access-Control-Allow-Headers': `Content-Type, Authorization, X-Archviz-Trace-Id, X-Video-Name, ${VIDEO_REQUEST_ID_HEADER}`,
     'Access-Control-Expose-Headers': 'Content-Disposition',
     'Access-Control-Max-Age': '86400',
   };
@@ -4652,18 +4653,8 @@ async function handleVeoGenerate(request, env) {
       return corsResponse(origin, { status: 'error', error: 'No operation name returned', debug: JSON.stringify(data).slice(0, 300) }, { status: 500 });
     }
 
-    // Quick-poll a few times
-    const token = useVertexAi ? env.VERTEX_AI_TOKEN : null;
-    const projectId = useVertexAi ? env.GOOGLE_PROJECT_ID : null;
-
-    for (let i = 0; i < QUICK_POLL_ATTEMPTS; i++) {
-      await sleep(POLL_INTERVAL_MS);
-      const result = await checkVeoOperation(data.name, env, useVertexAi);
-      if (result.status === 'complete' || result.status === 'error') {
-        return corsResponse(origin, result);
-      }
-    }
-
+    // Answer as soon as the job exists: the browser polls /api/veo/status, and a
+    // long-held connection is more likely to drop on a poor network.
     return corsResponse(origin, {
       status: 'processing',
       operationName: data.name,
@@ -5111,20 +5102,11 @@ async function handleOmniGenerate(request, env, user) {
       return corsResponse(origin, { status: 'error', error: 'No interaction id returned' }, { status: 500 });
     }
 
-    let result = await omniInteractionToStatus(interaction, env);
+    const result = await omniInteractionToStatus(interaction, env);
     if (result.status !== 'processing') return corsResponse(origin, result);
 
-    // Quick-poll a few times so short clips come back on the first request
-    for (let i = 0; i < QUICK_POLL_ATTEMPTS; i++) {
-      await sleep(POLL_INTERVAL_MS);
-      try {
-        result = await omniInteractionToStatus(await fetchOmniInteraction(interaction.id, env), env);
-      } catch (err) {
-        return corsResponse(origin, { status: 'error', error: err.message });
-      }
-      if (result.status !== 'processing') return corsResponse(origin, result);
-    }
-
+    // Answer as soon as the job exists: the browser polls /api/omni/status, and a
+    // long-held connection is more likely to drop on a poor network.
     return corsResponse(origin, {
       status: 'processing',
       interactionId: interaction.id,
@@ -6812,7 +6794,7 @@ export default {
 
     // Veo video generation
     if (path === '/api/veo/generate' && request.method === 'POST') {
-      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'generate', route: '/api/veo/generate' }, () => handleVeoGenerate(request, env));
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'generate', route: '/api/veo/generate' }, () => runVideoStart(request, env, ctx, user, corsResponse, () => handleVeoGenerate(request, env)));
     }
     if (path === '/api/veo/status' && request.method === 'GET') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'status', route: '/api/veo/status' }, () => handleVeoStatus(request, env));
@@ -6824,9 +6806,14 @@ export default {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'veo', action: 'video', route: '/api/veo/video' }, () => handleVeoVideo(request, env));
     }
 
+    // Lets a client that lost a video start response find out what happened
+    if (path === '/api/video/start' && request.method === 'GET') {
+      return lookupVideoStart(request, env, user, corsResponse);
+    }
+
     // Gemini Omni Flash video generation
     if (path === '/api/omni/generate' && request.method === 'POST') {
-      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'generate', route: '/api/omni/generate' }, () => handleOmniGenerate(request, env, user));
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'generate', route: '/api/omni/generate' }, () => runVideoStart(request, env, ctx, user, corsResponse, () => handleOmniGenerate(request, env, user)));
     }
     if (path === '/api/omni/status' && request.method === 'GET') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'omni', model: OMNI_DEFAULT_MODEL, action: 'status', route: '/api/omni/status' }, () => handleOmniStatus(request, env));
@@ -6837,7 +6824,7 @@ export default {
 
     // Kling video generation
     if (path === '/api/kling/generate' && request.method === 'POST') {
-      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'kling', action: 'generate', route: '/api/kling/generate' }, () => handleKlingGenerate(request, env));
+      return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'kling', action: 'generate', route: '/api/kling/generate' }, () => runVideoStart(request, env, ctx, user, corsResponse, () => handleKlingGenerate(request, env)));
     }
     if (path === '/api/kling/status' && request.method === 'GET') {
       return withLoggedGatewayRequest(request, env, ctx, user, { provider: 'kling', action: 'status', route: '/api/kling/status' }, () => handleKlingStatus(request, env));

@@ -141,7 +141,7 @@ class OmniService {
         resolution,
         previousInteractionId,
         sourceVideoToken,
-      });
+      }, abortSignal);
 
       if (result.status === 'error') {
         throw new OmniError(result.error || 'Video generation failed');

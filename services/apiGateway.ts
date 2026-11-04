@@ -6,6 +6,7 @@
  */
 
 import { fetchWithTimeout } from '../lib/fetchWithTimeout';
+import { startVideoWithRecovery, type VideoStartOutcome, type VideoStartProbe } from '../lib/videoStartRecovery';
 import type {
   FeedbackActivityItem,
   FeedbackDocumentAttachment,
@@ -560,7 +561,7 @@ async function gatewayFetch(
   const { timeoutMs, requestLogSummary, requestLogPrompt, ...restInit } = init;
   const method = restInit.method || 'GET';
   const traceId = _activeGenerationTraceId || createGatewayTraceId('req');
-  const shouldLogRequest = !path.startsWith('/api/logs/') && !path.startsWith('/api/omni/uploads');
+  const shouldLogRequest = !path.startsWith('/api/logs/') && !path.startsWith('/api/omni/uploads') && !path.startsWith('/api/video/start');
   const routeInfo = getGatewayLogRouteInfo(path);
   const { summary: requestSummary, prompt } = shouldLogRequest
     ? requestLogSummary
@@ -1145,6 +1146,38 @@ export async function imageEditRequest(
   return resp.json();
 }
 
+// ─── Video Start Recovery ────────────────────────────────────────────────────
+
+/** Starts a billed video job; a lost response recovers the job instead of paying twice. */
+async function startVideoJob<T>(path: string, request: unknown, signal?: AbortSignal): Promise<T> {
+  const requestId = createGatewayTraceId('video');
+  const body = JSON.stringify(request);
+
+  const send = async (): Promise<VideoStartOutcome<T>> => {
+    const resp = await gatewayFetch(path, {
+      method: 'POST',
+      body,
+      signal,
+      headers: { 'X-Video-Request-Id': requestId },
+      timeoutMs: VIDEO_GENERATE_TIMEOUT_MS,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: `Request failed (${resp.status})` }));
+      throw new Error(err.error || `Request failed (${resp.status})`);
+    }
+    if (resp.status === 202) return { state: 'pending' };
+    return { state: 'done', result: await resp.json() };
+  };
+
+  const lookup = async (): Promise<VideoStartProbe<T>> => {
+    const resp = await gatewayFetch(`/api/video/start?id=${encodeURIComponent(requestId)}`, { signal, timeoutMs: 30_000 });
+    if (!resp.ok) throw new TypeError(`Video start lookup failed (${resp.status})`);
+    return resp.json();
+  };
+
+  return startVideoWithRecovery({ send, lookup, signal });
+}
+
 // ─── Veo Video Generation ────────────────────────────────────────────────────
 
 export interface VeoGenerateRequest {
@@ -1175,8 +1208,8 @@ export interface VeoStatusResult {
   debug?: string;
 }
 
-export async function veoGenerate(request: VeoGenerateRequest): Promise<VeoStatusResult> {
-  return gatewayPost('/api/veo/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
+export async function veoGenerate(request: VeoGenerateRequest, signal?: AbortSignal): Promise<VeoStatusResult> {
+  return startVideoJob('/api/veo/generate', request, signal);
 }
 
 export async function veoCheckStatus(operationName: string, useVertexAi = false): Promise<VeoStatusResult> {
@@ -1230,8 +1263,8 @@ export interface OmniStatusResult {
   error?: string;
 }
 
-export async function omniGenerate(request: OmniGenerateRequest): Promise<OmniStatusResult> {
-  return gatewayPost('/api/omni/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
+export async function omniGenerate(request: OmniGenerateRequest, signal?: AbortSignal): Promise<OmniStatusResult> {
+  return startVideoJob('/api/omni/generate', request, signal);
 }
 
 export async function omniCheckStatus(interactionId: string): Promise<OmniStatusResult> {
@@ -1261,8 +1294,8 @@ export interface KlingGenerateRequest {
   seed?: number;
 }
 
-export async function klingGenerate(request: KlingGenerateRequest): Promise<{ taskId: string; provider: string }> {
-  return gatewayPost('/api/kling/generate', request, { timeoutMs: VIDEO_GENERATE_TIMEOUT_MS });
+export async function klingGenerate(request: KlingGenerateRequest, signal?: AbortSignal): Promise<{ taskId: string; provider: string }> {
+  return startVideoJob('/api/kling/generate', request, signal);
 }
 
 export async function klingCheckStatus(taskId: string, provider = 'piapi'): Promise<any> {
