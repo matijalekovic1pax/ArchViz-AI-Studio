@@ -40,3 +40,8 @@ supabase/.temp/
 
 # Vercel env files pulled locally (contain real secrets)
 .vercel/.env*.local
+
+# Local scratch / large assets that should never be committed
+presentation-videos/
+photos/
+.freebuff/

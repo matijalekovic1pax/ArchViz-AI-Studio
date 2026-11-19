@@ -3013,8 +3013,12 @@ export const buildLocalizedVisualEditInstruction = (
       : material.roughness < 60
         ? 'natural surface roughness'
         : 'matte and textured';
+    const selectedSurface = workflow.visualSelection.mode === 'ai' && workflow.visualSelection.autoTargets.length
+      ? `selected ${workflow.visualSelection.autoTargets.join(' and ').toLowerCase()}`
+      : 'selected existing surface or object';
     return compactLocalizedInstruction([
-      `Apply ${finish} only to the selected existing surface or object.`,
+      `Apply ${finish} only to the ${selectedSurface}.`,
+      !material.referenceEnabled && selected?.description ? `Material appearance: ${selected.description}` : null,
       `Use a ${roughness} response.`,
       material.colorTint && material.colorTint !== '#ffffff' ? `Use color tint ${material.colorTint}.` : null,
       'Preserve its exact geometry, edges, joints, seams, perspective, source lighting, shadows, reflections, and every overlapping or adjacent object.'
@@ -3065,7 +3069,9 @@ export const buildLocalizedVisualEditInstruction = (
   if (tool === 'object') {
     const object = workflow.visualObject;
     const replacement = workflow.visualReplace;
-    const objectName = [object.subcategory, object.category].filter(Boolean).join(' ').toLowerCase() || 'object';
+    const objectName = object.assetId
+      ? object.assetId.replace(/-/g, ' ')
+      : [object.subcategory, object.category].filter(Boolean).join(' ').toLowerCase() || 'object';
     if (object.placementMode === 'replace') {
       // Replacement is shown the original so it can match footprint and scale.
       return compactLocalizedInstruction([
